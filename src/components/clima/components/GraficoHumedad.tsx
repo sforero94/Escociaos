@@ -1,5 +1,4 @@
 import {
-  ComposedChart,
   Line,
   LineChart,
   XAxis,
@@ -8,7 +7,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ReferenceArea,
 } from 'recharts';
 import type { LecturaClimaAgregada, SerieAnual } from '@/types/clima';
 
@@ -28,12 +26,12 @@ const formatFecha = (fecha: string) => {
   return `${parts[2]}/${parts[1]}`;
 };
 
-interface GraficoHumedadRadiacionProps {
+interface GraficoHumedadProps {
   data: LecturaClimaAgregada[];
   dataAnual?: SerieAnual | null;
 }
 
-export function GraficoHumedadRadiacion({ data, dataAnual }: GraficoHumedadRadiacionProps) {
+export function GraficoHumedad({ data, dataAnual }: GraficoHumedadProps) {
   if (dataAnual && dataAnual.datos.length > 0) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -74,7 +72,7 @@ export function GraficoHumedadRadiacion({ data, dataAnual }: GraficoHumedadRadia
   if (data.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Humedad y Radiacion Solar</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Humedad Relativa</h3>
         <div className="flex items-center justify-center h-[300px] text-gray-400">Sin datos</div>
       </div>
     );
@@ -82,23 +80,19 @@ export function GraficoHumedadRadiacion({ data, dataAnual }: GraficoHumedadRadia
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Humedad y Radiación Solar</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Humedad Relativa</h3>
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={data}>
+        <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="fecha" tickFormatter={formatFecha} tick={{ fontSize: 11 }} stroke="#999" />
-          <YAxis yAxisId="left" label={{ value: '% Humedad', angle: -90, position: 'insideLeft' }} domain={[0, 100]} tick={{ fontSize: 11 }} stroke="#999" />
-          <YAxis yAxisId="right" orientation="right" label={{ value: 'W/m²', angle: 90, position: 'insideRight' }} tick={{ fontSize: 11 }} stroke="#999" />
+          <YAxis label={{ value: '%', angle: -90, position: 'insideLeft' }} domain={[0, 100]} tick={{ fontSize: 11 }} stroke="#999" />
           <Tooltip
             contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem' }}
             formatter={(value) => (typeof value === 'number' ? value.toFixed(1) : value)}
           />
           <Legend />
-          {/* Optimal radiation band: 5–7 sun-hours/day = 208–292 W/m² avg */}
-          <ReferenceArea yAxisId="right" y1={208} y2={292} fill="#16a34a" fillOpacity={0.08} />
-          <Line yAxisId="left" type="monotone" dataKey="humedad_pct_promedio" stroke="#3b82f6" strokeWidth={2} dot={false} name="Humedad (%)" />
-          <Line yAxisId="right" type="monotone" dataKey="radiacion_wm2_promedio" stroke="#f59e0b" strokeWidth={2} dot={false} name="Radiación (W/m²)" />
-        </ComposedChart>
+          <Line type="monotone" dataKey="humedad_pct_promedio" stroke="#3b82f6" strokeWidth={2} dot={false} name="Humedad (%)" />
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

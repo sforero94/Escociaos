@@ -42,7 +42,7 @@ import type {
 } from '../types/reporteSemanal';
 import { SECCIONES_DEFAULT } from '../types/reporteSemanal';
 import { calcularDistribucionCE } from './calculosMonitoreoV2';
-import { aggregateRadiation, getRadiationStatus } from './calculosRadiacion';
+import { aggregateRadiation, calcularTiempoSolHoras, getRadiationStatus, wm2ToEnergiaDiaria } from './calculosRadiacion';
 import { lluviaConfiableDeResumen } from './calculosClima';
 import type { LecturaCE } from '../types/monitoreo';
 import type { Insight } from '../types/monitoreo';
@@ -1800,7 +1800,7 @@ async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<a
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('clima_lecturas' as any)
-    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, lluvia_diaria_actualizada_en, radiacion_wm2')
+    .select('timestamp, temp_c, humedad_pct, viento_kmh, lluvia_diaria_mm, lluvia_diaria_actualizada_en, radiacion_wm2')
     .order('timestamp', { ascending: true });
 
   if (error || !data || data.length === 0) return [];
@@ -1855,6 +1855,8 @@ async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<a
       lluvia_total_mm: lluviaConfiableDelDia(lecturas, fecha),
       radiacion_wm2_max: radiaciones.length > 0 ? Math.max(...radiaciones) : null,
       radiacion_wm2_avg: promedio(radiaciones),
+      horas_sol_duracion: calcularTiempoSolHoras(lecturas),
+      viento_kmh_avg: promedio(soloNumeros(lecturas, 'viento_kmh')),
     });
   }
 
@@ -1869,12 +1871,29 @@ async function fetchClimaResumenSemanal(
 
   // Use clima_resumen_diario (permanent daily summaries) instead of
   // clima_lecturas (rolling 24h window pruned by cron).
-  const { data, error } = await supabase
+  const COLS_CON_DURACION = 'fecha, temp_c_min, temp_c_max, temp_c_avg, humedad_pct_avg, viento_kmh_avg, rafaga_kmh_max, lluvia_total_mm, lluvia_confianza, radiacion_wm2_max, radiacion_wm2_avg, horas_sol_duracion';
+  const COLS_SIN_DURACION = 'fecha, temp_c_min, temp_c_max, temp_c_avg, humedad_pct_avg, viento_kmh_avg, rafaga_kmh_max, lluvia_total_mm, lluvia_confianza, radiacion_wm2_max, radiacion_wm2_avg';
+  const COLS_HIST_CON_DURACION = 'fecha, temp_c_avg, humedad_pct_avg, viento_kmh_avg, lluvia_total_mm, lluvia_confianza, radiacion_wm2_avg, horas_sol_duracion';
+  const COLS_HIST_SIN_DURACION = 'fecha, temp_c_avg, humedad_pct_avg, viento_kmh_avg, lluvia_total_mm, lluvia_confianza, radiacion_wm2_avg';
+
+  // horas_sol_duracion is additive (migración 151): if the column is not
+  // applied yet, PostgREST answers PGRST204 and we retry without it so the
+  // whole climate section does not disappear.
+  let { data, error } = await supabase
     .from('clima_resumen_diario' as any)
-    .select('fecha, temp_c_min, temp_c_max, temp_c_avg, humedad_pct_avg, lluvia_total_mm, lluvia_confianza, radiacion_wm2_max, radiacion_wm2_avg')
+    .select(COLS_CON_DURACION)
     .gte('fecha', inicio)
     .lte('fecha', fin)
     .order('fecha', { ascending: true });
+
+  if (error && /horas_sol_duracion/i.test(error.message ?? '')) {
+    ({ data, error } = await supabase
+      .from('clima_resumen_diario' as any)
+      .select(COLS_SIN_DURACION)
+      .gte('fecha', inicio)
+      .lte('fecha', fin)
+      .order('fecha', { ascending: true }));
+  }
 
   if (error) return undefined;
 
@@ -1898,12 +1917,23 @@ async function fetchClimaResumenSemanal(
   histInicio.setDate(histInicio.getDate() - 28);
   const histInicioStr = histInicio.toISOString().slice(0, 10);
 
-  const { data: histData } = await supabase
+  const histPrimero = await supabase
     .from('clima_resumen_diario' as any)
-    .select('fecha, temp_c_avg, humedad_pct_avg, lluvia_total_mm, lluvia_confianza, radiacion_wm2_avg')
+    .select(COLS_HIST_CON_DURACION)
     .gte('fecha', histInicioStr)
     .lt('fecha', inicio)
     .order('fecha', { ascending: true });
+
+  let histData = histPrimero.data;
+  if (histPrimero.error && /horas_sol_duracion/i.test(histPrimero.error.message ?? '')) {
+    const histRetry = await supabase
+      .from('clima_resumen_diario' as any)
+      .select(COLS_HIST_SIN_DURACION)
+      .gte('fecha', histInicioStr)
+      .lt('fecha', inicio)
+      .order('fecha', { ascending: true });
+    histData = histRetry.data;
+  }
 
   return construirDatosClimaSemanal(rows, (histData as any[]) ?? []);
 }
@@ -1922,8 +1952,10 @@ export function construirDatosClimaSemanal(
   let tempMin = Infinity, tempMax = -Infinity, tempSuma = 0, tempCount = 0;
   let humSuma = 0, humCount = 0;
   let radMax = 0, radSuma = 0, radCount = 0;
+  let vientoSuma = 0, vientoCount = 0, rafagaMax = 0;
   let lluviaTotal = 0;
   let diasSinDatoLluvia = 0;
+  let diasCoberturaParcial = 0;
 
   for (const d of rows) {
     if (d.temp_c_min != null) {
@@ -1950,6 +1982,15 @@ export function construirDatosClimaSemanal(
       radSuma += Number(d.radiacion_wm2_avg);
       radCount++;
     }
+    if (d.viento_kmh_avg != null) {
+      vientoSuma += Number(d.viento_kmh_avg);
+      vientoCount++;
+    }
+    if (d.rafaga_kmh_max != null) {
+      const raf = Number(d.rafaga_kmh_max);
+      if (raf > rafagaMax) rafagaMax = raf;
+    }
+    if (d.lluvia_confianza === 'cobertura_parcial') diasCoberturaParcial++;
     const lluviaDia = lluviaConfiableDeResumen(d);
     if (lluviaDia != null) {
       lluviaTotal += Number(lluviaDia);
@@ -1967,17 +2008,25 @@ export function construirDatosClimaSemanal(
       radiacionMaxWm2: d.radiacion_wm2_max != null ? +Number(d.radiacion_wm2_max).toFixed(0) : 0,
       tempMax: d.temp_c_max != null ? +Number(d.temp_c_max).toFixed(1) : null,
       tempMin: d.temp_c_min != null ? +Number(d.temp_c_min).toFixed(1) : null,
+      humedadPct: d.humedad_pct_avg != null ? +Number(d.humedad_pct_avg).toFixed(0) : null,
+      vientoKmh: d.viento_kmh_avg != null ? +Number(d.viento_kmh_avg).toFixed(1) : null,
+      energiaKwhM2: d.radiacion_wm2_avg != null
+        ? +(wm2ToEnergiaDiaria(Number(d.radiacion_wm2_avg))).toFixed(1)
+        : null,
+      tiempoSolHoras: d.horas_sol_duracion != null ? +Number(d.horas_sol_duracion).toFixed(1) : null,
+      coberturaParcial: d.lluvia_confianza === 'cobertura_parcial',
     };
   });
 
   let historico: DatosClimaSemanal['historico'];
   if (histData && histData.length > 0) {
-    let hTemp = 0, hTempC = 0, hHum = 0, hHumC = 0, hRad = 0, hRadC = 0;
+    let hTemp = 0, hTempC = 0, hHum = 0, hHumC = 0, hRad = 0, hRadC = 0, hViento = 0, hVientoC = 0;
     let totalLluviaHist = 0, diasConLluviaHist = 0;
     for (const d of histData) {
       if (d.temp_c_avg != null) { hTemp += Number(d.temp_c_avg); hTempC++; }
       if (d.humedad_pct_avg != null) { hHum += Number(d.humedad_pct_avg); hHumC++; }
       if (d.radiacion_wm2_avg != null) { hRad += Number(d.radiacion_wm2_avg); hRadC++; }
+      if (d.viento_kmh_avg != null) { hViento += Number(d.viento_kmh_avg); hVientoC++; }
       const lluviaHist = lluviaConfiableDeResumen(d);
       if (lluviaHist != null) { totalLluviaHist += Number(lluviaHist); diasConLluviaHist++; }
     }
@@ -1994,13 +2043,29 @@ export function construirDatosClimaSemanal(
         : null,
       humedadPromedio: hHumC > 0 ? +(hHum / hHumC).toFixed(0) : null,
       radiacionPromedio: hRadC > 0 ? +(hRad / hRadC).toFixed(0) : null,
+      vientoPromedio: hVientoC > 0 ? +(hViento / hVientoC).toFixed(1) : null,
+      energiaKwhM2: hRadC > 0 ? +wm2ToEnergiaDiaria(hRad / hRadC).toFixed(1) : null,
+      tiempoSolHoras: (() => {
+        const durs = histData.map((d: any) => d.horas_sol_duracion).filter((v: unknown) => v != null).map(Number);
+        return durs.length > 0 ? +(durs.reduce((s: number, v: number) => s + v, 0) / durs.length).toFixed(1) : null;
+      })(),
       semanasAnalizadas: numSemanas,
     };
   }
 
   // Compute sun-hours context for the week vs prior 4 weeks
-  const weekRows = rows.map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
-  const priorRows = histData.map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
+  const weekRows = rows.map((d: any) => ({
+    fecha: d.fecha as string,
+    radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null,
+    horas_sol_duracion: d.horas_sol_duracion != null ? Number(d.horas_sol_duracion) : null,
+    lluvia_confianza: d.lluvia_confianza ?? null,
+  }));
+  const priorRows = histData.map((d: any) => ({
+    fecha: d.fecha as string,
+    radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null,
+    horas_sol_duracion: d.horas_sol_duracion != null ? Number(d.horas_sol_duracion) : null,
+    lluvia_confianza: d.lluvia_confianza ?? null,
+  }));
 
   const weekAgg = aggregateRadiation(weekRows);
   const priorAgg = aggregateRadiation(priorRows);
@@ -2018,16 +2083,21 @@ export function construirDatosClimaSemanal(
     lluviaTotal: diasSinDatoLluvia === rows.length ? null : +lluviaTotal.toFixed(1),
     diasSinDatoLluvia,
     humedadPromedio: humCount > 0 ? +(humSuma / humCount).toFixed(0) : null,
+    vientoPromedio: vientoCount > 0 ? +(vientoSuma / vientoCount).toFixed(1) : null,
+    rafagaMax: rafagaMax > 0 ? +rafagaMax.toFixed(0) : null,
     radiacionPromedio: radCount > 0 ? +(radSuma / radCount).toFixed(0) : null,
     radiacionMax: radMax > 0 ? +radMax.toFixed(0) : null,
     radiacionSolar: {
+      energiaKwhM2: weekAgg.avgEnergiaKwhM2,
       horasSolDia: weekAgg.avgSunHours,
+      tiempoSolHoras: weekAgg.avgTiempoSolHoras,
       status: status?.band ?? null,
       statusLabel: status?.label ?? null,
       deltaVs4Semanas,
       diasEnOptimo: weekAgg.daysInOptimal,
       diasBajoOptimo: weekAgg.daysBelowOptimal,
       diasSobreOptimo: weekAgg.daysAboveOptimal,
+      diasCoberturaParcial: diasCoberturaParcial || weekAgg.daysCoberturaParcial,
     },
     diario,
     historico,

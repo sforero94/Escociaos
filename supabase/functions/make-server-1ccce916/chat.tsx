@@ -493,19 +493,19 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_climate_data',
-    description: 'Datos climáticos de la estación meteorológica de la finca: temperatura, lluvia, humedad, viento (velocidad/ráfaga/dirección), radiación solar, índice UV. Hay historial diario completo desde 2020-07-01 hasta hoy, más las condiciones actuales. IMPORTANTE: toda respuesta incluye SIEMPRE un bloque `lluvia` con `ultima_lluvia_fecha` y `dias_sin_lluvia` calculados sobre todo el historial, independientemente del rango que pidas — para "hace cuánto no llueve" basta UNA llamada sin parámetros, nunca busques rango por rango. Si un día tiene el pluviómetro con el contador congelado, su lluvia viene como null (sin dato) y se cuenta en `lluvia_dias_sin_dato`: eso significa "no se sabe", nunca "no llovió".',
+    description: 'Datos climáticos de la estación meteorológica de la finca: los 6 indicadores del histórico (temperatura, humedad, precipitación, energía solar kWh/m²/día, tiempo de sol en horas con radiación ≥ 120 W/m², viento), más índice UV. La ENERGÍA solar es (radiación promedio × 24) / 1000 y NO son horas de reloj con sol — un día soleado en Aguadas suele dar ~3 kWh/m² con picos de 1000–1200 W/m². El TIEMPO DE SOL es lo que el campo percibe. Hay historial diario completo desde 2020-07-01 hasta hoy, más las condiciones actuales. Días cobertura_parcial no son un día completo. IMPORTANTE: toda respuesta incluye SIEMPRE un bloque `lluvia` con `ultima_lluvia_fecha` y `dias_sin_lluvia` calculados sobre todo el historial, independientemente del rango que pidas — para "hace cuánto no llueve" basta UNA llamada sin parámetros, nunca busques rango por rango. Si un día tiene el pluviómetro con el contador congelado, su lluvia viene como null (sin dato) y se cuenta en `lluvia_dias_sin_dato`: eso significa "no se sabe", nunca "no llovió".',
     parameters: {
       type: 'object',
       properties: {
         date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional, default: últimos 7 días). Hay datos desde 2020-07-01.' },
         date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional, default: hoy)' },
-        metric: { type: 'string', description: 'Métrica específica: temperatura, lluvia, humedad, viento, radiacion, uv (opcional, retorna resumen completo si no se especifica)' },
+        metric: { type: 'string', description: 'Métrica específica: temperatura, lluvia, humedad, viento, radiacion/energia/sol, uv (opcional, retorna resumen completo si no se especifica)' },
       },
     },
   },
   {
     name: 'get_radiation_context',
-    description: 'Contexto agronómico de radiación solar: convierte W/m² a horas-sol equivalentes/día con bandas de estado (Crítico bajo <3.5h, Bajo 3.5-5h, Óptimo 5-7h, Alto 7-8.5h, Excesivo >8.5h) para aguacate Hass a 2200m. Incluye comparativo vs periodo anterior y conteo de días fuera del rango óptimo.',
+    description: 'Contexto agronómico de radiación solar. Distingue DOS métricas: (1) ENERGÍA solar diaria en kWh/m² = (W/m² promedio × 24) / 1000, la serie histórica que antes se llamaba "horas-sol equivalentes" — NO son horas de reloj con sol; (2) TIEMPO DE SOL = horas con radiación ≥ 120 W/m² (umbral WMO), que es lo que el campo percibe. Bandas Hass sobre la ENERGÍA (Crítico bajo <3.5, Bajo 3.5-5, Óptimo 5-7, Alto 7-8.5, Excesivo >8.5 kWh/m²/día) a 2200m. Incluye comparativo vs periodo anterior, días fuera de óptimo y días con cobertura_parcial.',
     parameters: {
       type: 'object',
       properties: {
@@ -2235,6 +2235,7 @@ interface FilaResumenClima {
   uv_index_max: number | null;
   lluvia_total_mm: number | null;
   lluvia_confianza: string | null;
+  horas_sol_duracion?: number | null;
 }
 
 /**
@@ -2318,14 +2319,25 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   const from = validated.date_from || sumarDias(hoy, -7);
   const to = validated.date_to || hoy;
 
-  const COLS_RESUMEN = 'fecha,temp_c_avg,temp_c_max,temp_c_min,humedad_pct_avg,viento_kmh_avg,rafaga_kmh_max,radiacion_wm2_avg,radiacion_wm2_max,uv_index_max,lluvia_total_mm,lluvia_confianza';
+  const COLS_RESUMEN = 'fecha,temp_c_avg,temp_c_max,temp_c_min,humedad_pct_avg,viento_kmh_avg,rafaga_kmh_max,radiacion_wm2_avg,radiacion_wm2_max,uv_index_max,lluvia_total_mm,lluvia_confianza,horas_sol_duracion';
+  const COLS_RESUMEN_SIN_DURACION = 'fecha,temp_c_avg,temp_c_max,temp_c_min,humedad_pct_avg,viento_kmh_avg,rafaga_kmh_max,radiacion_wm2_avg,radiacion_wm2_max,uv_index_max,lluvia_total_mm,lluvia_confianza';
 
   const rangoIncluyeHoy = to >= hoy;
 
-  const [resumenRaw, lecturasRaw, ultimaLluviaRaw] = await Promise.all([
+  const queryResumen = async (cols: string) =>
     supabaseQuery('clima_resumen_diario',
-      `select=${COLS_RESUMEN}&fecha=gte.${e(from)}&fecha=lte.${e(to)}&order=fecha.asc&limit=3000`,
-    ) as Promise<FilaResumenClima[]>,
+      `select=${cols}&fecha=gte.${e(from)}&fecha=lte.${e(to)}&order=fecha.asc&limit=3000`,
+    ) as Promise<FilaResumenClima[]>;
+
+  let resumenRaw: FilaResumenClima[];
+  try {
+    resumenRaw = await queryResumen(COLS_RESUMEN);
+  } catch (err) {
+    if (!/horas_sol_duracion/i.test(String(err))) throw err;
+    resumenRaw = await queryResumen(COLS_RESUMEN_SIN_DURACION);
+  }
+
+  const [lecturasRaw, ultimaLluviaRaw] = await Promise.all([
     rangoIncluyeHoy
       ? supabaseQuery('clima_lecturas',
           'select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_diaria_mm,lluvia_diaria_actualizada_en,radiacion_wm2,uv_index&order=timestamp.desc&limit=600',
@@ -2355,16 +2367,10 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
     humedad_avg: number | null; viento_avg: number | null;
     lluvia_mm: number | null; lluvia_sin_dato: boolean;
     radiacion_avg: number | null; radiacion_max: number | null;
+    energia_kwh_m2: number | null;
+    tiempo_sol_horas: number | null;
+    cobertura_parcial: boolean;
   }
-
-  const serie: DiaClima[] = resumen.map((r) => ({
-    fecha: r.fecha,
-    temp_avg: r.temp_c_avg, temp_max: r.temp_c_max, temp_min: r.temp_c_min,
-    humedad_avg: r.humedad_pct_avg, viento_avg: r.viento_kmh_avg,
-    lluvia_mm: lluviaConfiable(r),
-    lluvia_sin_dato: lluviaConfiable(r) === null,
-    radiacion_avg: r.radiacion_wm2_avg, radiacion_max: r.radiacion_wm2_max,
-  }));
 
   const nums = (arr: Array<number | null | undefined>) =>
     arr.filter((v): v is number => typeof v === 'number');
@@ -2373,16 +2379,41 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   const min = (arr: number[]) => (arr.length ? arr.reduce((a, b) => (a < b ? a : b)) : null);
   const r1 = (v: number) => Math.round(v * 10) / 10;
 
+  const energiaDeAvg = (wm2: number | null): number | null =>
+    wm2 == null ? null : r1((wm2 * 24) / 1000);
+  const tiempoSolDeLecturas = (rows: Array<Record<string, unknown>>): number | null => {
+    const vals = rows.map((r) => r.radiacion_wm2 as number | null).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    const n = vals.filter((v) => v >= 120).length;
+    return r1((n * 5) / 60);
+  };
+
+  const serie: DiaClima[] = resumen.map((r) => ({
+    fecha: r.fecha,
+    temp_avg: r.temp_c_avg, temp_max: r.temp_c_max, temp_min: r.temp_c_min,
+    humedad_avg: r.humedad_pct_avg, viento_avg: r.viento_kmh_avg,
+    lluvia_mm: lluviaConfiable(r),
+    lluvia_sin_dato: lluviaConfiable(r) === null,
+    radiacion_avg: r.radiacion_wm2_avg, radiacion_max: r.radiacion_wm2_max,
+    energia_kwh_m2: energiaDeAvg(r.radiacion_wm2_avg),
+    tiempo_sol_horas: r.horas_sol_duracion != null ? r1(Number(r.horas_sol_duracion)) : null,
+    cobertura_parcial: r.lluvia_confianza === 'cobertura_parcial',
+  }));
+
   const hoyYaEnResumen = serie.some((d) => d.fecha === hoy);
   const lecturasHoy = lecturas.filter((r) => String(r.timestamp).slice(0, 10) === hoy);
   if (rangoIncluyeHoy && !hoyYaEnResumen && lecturasHoy.length > 0) {
     const col = (f: string) => nums(lecturasHoy.map((r) => r[f] as number | null));
+    const radiacionAvgHoy = avg(col('radiacion_wm2'));
     serie.push({
       fecha: hoy,
       temp_avg: avg(col('temp_c')), temp_max: max(col('temp_c')), temp_min: min(col('temp_c')),
       humedad_avg: avg(col('humedad_pct')), viento_avg: avg(col('viento_kmh')),
       lluvia_mm: lluviaDeHoy(lecturas, hoy), lluvia_sin_dato: false,
-      radiacion_avg: avg(col('radiacion_wm2')), radiacion_max: max(col('radiacion_wm2')),
+      radiacion_avg: radiacionAvgHoy, radiacion_max: max(col('radiacion_wm2')),
+      energia_kwh_m2: energiaDeAvg(radiacionAvgHoy),
+      tiempo_sol_horas: tiempoSolDeLecturas(lecturasHoy),
+      cobertura_parcial: false,
     });
   }
 
@@ -2447,6 +2478,16 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
       promedio: avg(nums(serie.map((d) => d.radiacion_avg))),
       maxima: max(nums(serie.map((d) => d.radiacion_max))),
     },
+    energia_solar: {
+      kwh_m2_dia: avg(nums(serie.map((d) => d.energia_kwh_m2))),
+      nota: 'ENERGIA = (radiacion promedio × 24) / 1000 kWh/m2/dia. NO son horas de reloj con sol. Un dia soleado en Aguadas suele dar ~3 kWh/m2 con picos de 1000-1200 W/m2.',
+    },
+    tiempo_sol: {
+      horas_dia: avg(nums(serie.map((d) => d.tiempo_sol_horas))),
+      umbral_wm2: 120,
+      nota: 'Horas con radiacion >= 120 W/m2 (umbral WMO). Es lo que el campo percibe como sol.',
+    },
+    dias_cobertura_parcial: serie.filter((d) => d.cobertura_parcial).length,
     uv: { maximo: max(nums(resumen.map((r) => r.uv_index_max))) },
   };
 
@@ -2476,6 +2517,9 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
         lluvia_mm: ll.length ? r1(ll.reduce((s, v) => s + v, 0)) : null,
         lluvia_dias_sin_dato: dias.filter((d) => d.lluvia_sin_dato).length,
         radiacion_avg: avg(nums(dias.map((d) => d.radiacion_avg))),
+        energia_kwh_m2: avg(nums(dias.map((d) => d.energia_kwh_m2))),
+        tiempo_sol_horas: avg(nums(dias.map((d) => d.tiempo_sol_horas))),
+        dias_cobertura_parcial: dias.filter((d) => d.cobertura_parcial).length,
       };
     });
   } else {
@@ -2486,6 +2530,8 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
       humedad_avg: d.humedad_avg, viento_avg: d.viento_avg,
       lluvia_mm: d.lluvia_mm, lluvia_sin_dato: d.lluvia_sin_dato || undefined,
       radiacion_avg: d.radiacion_avg, radiacion_max: d.radiacion_max,
+      energia_kwh_m2: d.energia_kwh_m2, tiempo_sol_horas: d.tiempo_sol_horas,
+      cobertura_parcial: d.cobertura_parcial || undefined,
     }));
   }
 
@@ -2540,15 +2586,21 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
       return JSON.stringify({ periodo: base.periodo, condiciones_actuales, resumen: resumen_periodo.viento });
     }
     if (m.includes('radi') || m.includes('solar')) {
-      const avgWm2 = resumen_periodo.radiacion.promedio;
       return JSON.stringify({
         periodo: base.periodo,
         condiciones_actuales,
-        resumen: resumen_periodo.radiacion,
-        contexto_solar: {
-          horas_sol_dia: avgWm2 !== null ? r1((avgWm2 * 24) / 1000) : null,
-          nota: 'Optimo Hass: 5.0-7.0 h/dia. Usa get_radiation_context para analisis detallado.',
-        },
+        radiacion_wm2: resumen_periodo.radiacion,
+        energia_solar: resumen_periodo.energia_solar,
+        tiempo_sol: resumen_periodo.tiempo_sol,
+        dias_cobertura_parcial: resumen_periodo.dias_cobertura_parcial,
+        nota: 'La ENERGIA solar (kWh/m2/dia) es la serie que antes se llamaba "horas-sol". NO son horas de reloj. El TIEMPO DE SOL (h) son las horas con radiacion >= 120 W/m2. Un dia con ~3 kWh/m2 puede tener 10+ h de sol visible. Dias cobertura_parcial son cota inferior. Usa get_radiation_context para el analisis agronomico Hass.',
+        detalle: detalle.map((d) => ({
+          fecha: d.fecha ?? d.mes,
+          energia_kwh_m2: d.energia_kwh_m2,
+          tiempo_sol_horas: d.tiempo_sol_horas,
+          radiacion_avg: d.radiacion_avg,
+          cobertura_parcial: d.cobertura_parcial ?? d.dias_cobertura_parcial,
+        })),
       });
     }
     if (m.includes('uv')) {
@@ -2563,6 +2615,32 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
 // ============================================================================
 // RADIATION CONTEXT (sun-hours agronomic analysis)
 // ============================================================================
+
+type FilaRadiacionEsco = {
+  radiacion_wm2_avg: number | null;
+  horas_sol_duracion?: number | null;
+  lluvia_confianza?: string | null;
+};
+
+function mapFilasRadiacion(raw: unknown): FilaRadiacionEsco[] {
+  return ((raw || []) as Array<Record<string, unknown>>).map((r) => ({
+    radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null,
+    horas_sol_duracion: r.horas_sol_duracion != null ? Number(r.horas_sol_duracion) : null,
+    lluvia_confianza: (r.lluvia_confianza as string | null) ?? null,
+  }));
+}
+
+async function queryFilasRadiacion(fechaGte: string, fechaOp: 'lte' | 'lt', fechaTo: string): Promise<FilaRadiacionEsco[]> {
+  const filter = `fecha=gte.${e(fechaGte)}&fecha=${fechaOp}.${e(fechaTo)}&order=fecha.asc`;
+  try {
+    return mapFilasRadiacion(await supabaseQuery('clima_resumen_diario',
+      `select=radiacion_wm2_avg,horas_sol_duracion,lluvia_confianza&${filter}`));
+  } catch (err) {
+    if (!/horas_sol_duracion/i.test(String(err))) throw err;
+    return mapFilasRadiacion(await supabaseQuery('clima_resumen_diario',
+      `select=radiacion_wm2_avg,lluvia_confianza&${filter}`));
+  }
+}
 
 async function execRadiationContext(args: Record<string, unknown>): Promise<string> {
   const period = (args.period as string) || '7d';
@@ -2583,20 +2661,15 @@ async function execRadiationContext(args: Record<string, unknown>): Promise<stri
     currentDays = 90;
     periodLabel = 'Últimos 90 días';
   } else {
-    // YTD
     const jan1 = `${now.getFullYear()}-01-01`;
     const prevJan1 = `${now.getFullYear() - 1}-01-01`;
     const todayStr = now.toISOString().slice(0, 10);
     const prevSameDay = `${now.getFullYear() - 1}-${todayStr.slice(5)}`;
 
-    const currentRes = await supabaseQuery('clima_resumen_diario',
-      `select=radiacion_wm2_avg&fecha=gte.${e(jan1)}&fecha=lte.${e(todayStr)}&order=fecha.asc`);
-    const priorRes = await supabaseQuery('clima_resumen_diario',
-      `select=radiacion_wm2_avg&fecha=gte.${e(prevJan1)}&fecha=lte.${e(prevSameDay)}&order=fecha.asc`);
-
-    const currentRows = ((currentRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
-    const priorRows = ((priorRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
-
+    const [currentRows, priorRows] = await Promise.all([
+      queryFilasRadiacion(jan1, 'lte', todayStr),
+      queryFilasRadiacion(prevJan1, 'lte', prevSameDay),
+    ]);
     return JSON.stringify(buildRadiationContext(currentRows, priorRows, 'Año a la fecha'));
   }
 
@@ -2606,13 +2679,10 @@ async function execRadiationContext(args: Record<string, unknown>): Promise<stri
   const cutoffStr = cutoff.toISOString().slice(0, 10);
   const priorStr = priorCutoff.toISOString().slice(0, 10);
 
-  const currentRes = await supabaseQuery('clima_resumen_diario',
-    `select=radiacion_wm2_avg&fecha=gte.${e(cutoffStr)}&fecha=lte.${e(todayStr)}&order=fecha.asc`);
-  const priorRes = await supabaseQuery('clima_resumen_diario',
-    `select=radiacion_wm2_avg&fecha=gte.${e(priorStr)}&fecha=lt.${e(cutoffStr)}&order=fecha.asc`);
-
-  const currentRows = ((currentRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
-  const priorRows = ((priorRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
+  const [currentRows, priorRows] = await Promise.all([
+    queryFilasRadiacion(cutoffStr, 'lte', todayStr),
+    queryFilasRadiacion(priorStr, 'lt', cutoffStr),
+  ]);
 
   return JSON.stringify(buildRadiationContext(currentRows, priorRows, periodLabel));
 }
@@ -3647,7 +3717,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Conductividad Eléctrica (get_conductivity_data): CE del suelo por lote, promedios, pH, umbrales semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m) y tendencia mensual por lote. Para explicar la evolución de la CE en el tiempo, cruza la tendencia mensual con las fertilizaciones del mismo rango (get_application_summary type=Fertilizacion): tras una fertilización la CE suele subir y luego bajar con el riego/lavado
 - Reportes semanales (get_weekly_reports): archivo de reportes semanales generados (semana, año, periodo, PDF). Para el resumen en vivo de la semana usa get_weekly_overview
 - Colmenas y Apiarios: estado de salud (fuertes/débiles/muertas/con reina), configuración de apiarios
-- Clima: temperatura, humedad, precipitacion, viento (velocidad/rafaga/direccion), radiacion solar, indice UV — datos de estacion Weather Underground sincronizados cada 5 minutos
+- Clima: los 6 indicadores del histórico — temperatura, humedad, precipitacion, energia solar diaria (kWh/m2 = (radiacion_avg × 24)/1000; NO son horas de reloj con sol), tiempo de sol (horas con radiacion ≥ 120 W/m2, umbral WMO), viento — mas indice UV. Datos de estacion Ecowitt sincronizados cada 5 minutos. Un dia soleado en Aguadas suele dar ~3 kWh/m2 con picos 1000–1200 W/m2: eso no significa que la estacion este rota. Dias cobertura_parcial son cota inferior, no un dia completo. Para el analisis agronomico de energia+tiempo de sol usa get_radiation_context.
 
 RUTEO DE HERRAMIENTAS PARA COSTOS:
 - "Cuanto costo la aplicacion X por lote/por arbol?" → get_application_cost_by_lote (insumos + mano de obra desglosados por lote)

@@ -54,7 +54,7 @@ function DeltaBadge({ delta }: { delta: number | null }) {
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${color}`}>
       <Icon className="w-3 h-3" />
-      {isPositive ? '+' : ''}{delta}h
+          {isPositive ? '+' : ''}{delta} kWh/m²
     </span>
   );
 }
@@ -74,8 +74,11 @@ function PeriodRow({ label, ctx }: { label: string; ctx: RadiationPeriodContext 
         {ctx.current.avgSunHours !== null ? (
           <>
             <span className="text-sm font-semibold text-gray-900">
-              {ctx.current.avgSunHours} h/día
+              {ctx.current.avgEnergiaKwhM2} kWh/m²/día
             </span>
+            {ctx.current.avgTiempoSolHoras != null && (
+              <span className="text-xs text-gray-500">{ctx.current.avgTiempoSolHoras} h sol</span>
+            )}
             {ctx.current.status && (
               <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${ctx.current.status.bgColor} ${ctx.current.status.textColor}`}>
                 {ctx.current.status.label}
@@ -111,7 +114,7 @@ export function ContextoSolar({ resumenesDiarios, loading }: ContextoSolarProps)
       <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-3">
         <Sun className="w-4 h-4 text-amber-500 shrink-0" />
         <h3 className="text-sm font-semibold text-gray-900">Contexto Solar</h3>
-        <span className="text-xs text-gray-400">(horas-sol equivalentes/día)</span>
+        <span className="text-xs text-gray-400">(energía kWh/m²/día — no son horas de reloj)</span>
       </div>
 
       {loading ? (
@@ -126,7 +129,10 @@ export function ContextoSolar({ resumenesDiarios, loading }: ContextoSolarProps)
             <PeriodRow key={label} label={label} ctx={ctx} />
           ))}
           <p className="text-xs text-gray-400 mt-2">
-            Rango óptimo Hass: 5.0 – 7.0 h/día. Delta vs. período anterior equivalente.
+            Rango óptimo Hass: 5.0 – 7.0 kWh/m²/día. Delta vs. período anterior equivalente.
+            {periodContexts.some(p => (p.ctx.current.daysCoberturaParcial ?? 0) > 0) && (
+              <span className="block mt-1 text-amber-700">Hay días con cobertura parcial: no los leas como un día completo.</span>
+            )}
           </p>
         </div>
       )}

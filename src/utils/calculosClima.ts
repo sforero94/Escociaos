@@ -1,6 +1,19 @@
 import type { LecturaClima, ResumenClima, ResumenDiario, LecturaClimaAgregada, DatoAnualOverlay, SerieAnual } from '@/types/clima';
 import { fechaAISODate } from '@/utils/fechas';
 import { formatNumber } from '@/utils/format';
+import { calcularTiempoSolHoras, wm2ToEnergiaDiaria } from '@/utils/calculosRadiacion';
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+function energiaDiariaDeAvg(wm2: number | null): number | null {
+  return wm2 == null ? null : round1(wm2ToEnergiaDiaria(wm2));
+}
+
+function energiaHorariaDeAvg(wm2: number | null): number | null {
+  return wm2 == null ? null : round1(wm2 / 1000);
+}
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -458,6 +471,7 @@ function buildResumenFromDaily(rows: ResumenDiario[]): ResumenClima {
   const viento = rows.map(r => r.viento_kmh_avg).filter((v): v is number => v !== null);
   const rafaga = rows.map(r => r.rafaga_kmh_max).filter((v): v is number => v !== null);
   const radiacion = rows.map(r => r.radiacion_wm2_avg).filter((v): v is number => v !== null);
+  const duraciones = rows.map(r => r.horas_sol_duracion).filter((v): v is number => v !== null);
   const lluvia = rows.map(lluviaConfiableDeResumen).filter((v): v is number => v !== null);
 
   return {
@@ -469,6 +483,8 @@ function buildResumenFromDaily(rows: ResumenDiario[]): ResumenClima {
     viento_promedio_kmh: viento.length > 0 ? round2(avg(viento)) : null,
     rafaga_max_kmh: rafaga.length > 0 ? round2(safeMax(rafaga)) : null,
     radiacion_promedio_wm2: radiacion.length > 0 ? round2(avg(radiacion)) : null,
+    tiempo_sol_promedio_h: duraciones.length > 0 ? round1(avg(duraciones)) : null,
+    dias_cobertura_parcial: rows.filter(r => r.lluvia_confianza === 'cobertura_parcial').length,
   };
 }
 
@@ -562,6 +578,7 @@ export function calcularResumen24h(rows: LecturaClima[]): ResumenClima {
     viento_promedio_kmh: viento.length > 0 ? round2(avg(viento)) : null,
     rafaga_max_kmh: rafaga.length > 0 ? round2(safeMax(rafaga)) : null,
     radiacion_promedio_wm2: radiacion.length > 0 ? round2(avg(radiacion)) : null,
+    tiempo_sol_promedio_h: calcularTiempoSolHoras(filtered),
   };
 }
 
@@ -583,6 +600,9 @@ export function resumenDiarioToAgregada(rows: ResumenDiario[], desde: string, ha
       lluvia_diaria_mm: lluviaConfiableDeResumen(r),
       lluvia_confianza: r.lluvia_confianza,
       radiacion_wm2_promedio: r.radiacion_wm2_avg,
+      energia_kwh_m2: energiaDiariaDeAvg(r.radiacion_wm2_avg),
+      tiempo_sol_horas: r.horas_sol_duracion ?? null,
+      cobertura_parcial: r.lluvia_confianza === 'cobertura_parcial',
     }))
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
@@ -610,6 +630,8 @@ export function resumenDiarioToMensual(rows: ResumenDiario[], desde: string, has
     const rafaga = dias.map(d => d.rafaga_kmh_max).filter((v): v is number => v !== null);
     const lluvia = dias.map(lluviaConfiableDeResumen).filter((v): v is number => v !== null);
     const radiacion = dias.map(d => d.radiacion_wm2_avg).filter((v): v is number => v !== null);
+    const duraciones = dias.map(d => d.horas_sol_duracion).filter((v): v is number => v !== null);
+    const nParcial = dias.filter(d => d.lluvia_confianza === 'cobertura_parcial').length;
 
     result.push({
       fecha,
@@ -621,6 +643,9 @@ export function resumenDiarioToMensual(rows: ResumenDiario[], desde: string, has
       rafaga_kmh_max: rafaga.length > 0 ? round2(safeMax(rafaga)) : null,
       lluvia_diaria_mm: lluvia.length > 0 ? round2(lluvia.reduce((s, v) => s + v, 0)) : null,
       radiacion_wm2_promedio: radiacion.length > 0 ? round2(avg(radiacion)) : null,
+      energia_kwh_m2: radiacion.length > 0 ? energiaDiariaDeAvg(avg(radiacion)) : null,
+      tiempo_sol_horas: duraciones.length > 0 ? round1(avg(duraciones)) : null,
+      cobertura_parcial: nParcial > 0,
     });
   }
 
@@ -674,6 +699,8 @@ export function lecturas24hToHorario(rows: LecturaClima[]): LecturaClimaAgregada
       rafaga_kmh_max: rafaga.length > 0 ? round2(safeMax(rafaga)) : null,
       lluvia_diaria_mm: lluviaConfiableDelBucket(lecturas, fecha.slice(0, 10)),
       radiacion_wm2_promedio: radiacion.length > 0 ? round2(avg(radiacion)) : null,
+      energia_kwh_m2: radiacion.length > 0 ? energiaHorariaDeAvg(avg(radiacion)) : null,
+      tiempo_sol_horas: calcularTiempoSolHoras(lecturas),
     });
   }
 
@@ -700,7 +727,14 @@ export function resumenDiarioToAnual(rows: ResumenDiario[], desde: string, hasta
   }
 
   const añosSet = new Set<number>();
-  const aggregated = new Map<string, { temp: number | null; lluvia: number | null; humedad: number | null; viento: number | null }>();
+  const aggregated = new Map<string, {
+    temp: number | null;
+    lluvia: number | null;
+    humedad: number | null;
+    viento: number | null;
+    energia: number | null;
+    tiempoSol: number | null;
+  }>();
 
   for (const [yearMonth, dias] of monthBuckets) {
     const [yearStr, monthStr] = yearMonth.split('-');
@@ -713,12 +747,16 @@ export function resumenDiarioToAnual(rows: ResumenDiario[], desde: string, hasta
     const humedad = dias.map(d => d.humedad_pct_avg).filter((v): v is number => v !== null);
     const viento = dias.map(d => d.viento_kmh_avg).filter((v): v is number => v !== null);
     const lluvia = dias.map(lluviaConfiableDeResumen).filter((v): v is number => v !== null);
+    const radiacion = dias.map(d => d.radiacion_wm2_avg).filter((v): v is number => v !== null);
+    const duraciones = dias.map(d => d.horas_sol_duracion).filter((v): v is number => v !== null);
 
     aggregated.set(key, {
       temp: temps.length > 0 ? round2(avg(temps)) : null,
       lluvia: lluvia.length > 0 ? round2(lluvia.reduce((s, v) => s + v, 0)) : null,
       humedad: humedad.length > 0 ? round2(avg(humedad)) : null,
       viento: viento.length > 0 ? round2(avg(viento)) : null,
+      energia: radiacion.length > 0 ? energiaDiariaDeAvg(avg(radiacion)) : null,
+      tiempoSol: duraciones.length > 0 ? round1(avg(duraciones)) : null,
     });
   }
 
@@ -733,6 +771,8 @@ export function resumenDiarioToAnual(rows: ResumenDiario[], desde: string, hasta
       row[`lluvia_${year}`] = agg?.lluvia ?? null;
       row[`humedad_${year}`] = agg?.humedad ?? null;
       row[`viento_${year}`] = agg?.viento ?? null;
+      row[`energia_${year}`] = agg?.energia ?? null;
+      row[`tiempo_sol_${year}`] = agg?.tiempoSol ?? null;
     }
     datos.push(row);
   }

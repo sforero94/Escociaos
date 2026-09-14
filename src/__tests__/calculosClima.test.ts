@@ -297,6 +297,20 @@ describe('resumenDiarioToAgregada', () => {
     const result = resumenDiarioToAgregada(rows, '2026-07-01', '2026-07-31');
     expect(result[0].lluvia_diaria_mm).toBe(15.75);
   });
+
+  it('maps daily solar energy, sunshine duration and cobertura_parcial', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-09-01', radiacion_wm2_avg: 125, horas_sol_duracion: 12, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-09-02', radiacion_wm2_avg: 125, horas_sol_duracion: 10, lluvia_confianza: 'cobertura_parcial' }),
+    ];
+    const result = resumenDiarioToAgregada(rows, '2026-09-01', '2026-09-02');
+    expect(result[0].energia_kwh_m2).toBe(3);
+    expect(result[0].tiempo_sol_horas).toBe(12);
+    expect(result[0].cobertura_parcial).toBe(false);
+    expect(result[1].energia_kwh_m2).toBe(3);
+    expect(result[1].tiempo_sol_horas).toBe(10);
+    expect(result[1].cobertura_parcial).toBe(true);
+  });
 });
 
 describe('lecturas24hToHorario', () => {

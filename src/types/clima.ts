@@ -60,6 +60,10 @@ export interface ResumenDiario {
   radiacion_wm2_max: number | null;
   uv_index_max: number | null;
   lecturas_count: number;
+  /** Hours with radiation ≥ 120 W/m² (WMO-style). NULL = sin dato (no
+   *  radiation samples), never a fabricated 0. Populated from 5-min lecturas
+   *  by migration 151's rollup; absent on rows written before that. */
+  horas_sol_duracion?: number | null;
 }
 
 export interface ResumenClima {
@@ -71,6 +75,9 @@ export interface ResumenClima {
   viento_promedio_kmh: number | null;
   rafaga_max_kmh: number | null;
   radiacion_promedio_wm2: number | null;
+  /** Average sunshine duration (h) over days that have horas_sol_duracion. */
+  tiempo_sol_promedio_h?: number | null;
+  dias_cobertura_parcial?: number;
 }
 
 export interface PeriodoResumen {
@@ -92,6 +99,11 @@ export interface LecturaClimaAgregada {
   // (resumenDiarioToAgregada); ausente en agregaciones horarias/mensuales.
   lluvia_confianza?: LluviaConfianza | null;
   radiacion_wm2_promedio: number | null;
+  /** Daily (or hourly) solar energy kWh/m². Same series as (avg W/m² × hours) / 1000. */
+  energia_kwh_m2?: number | null;
+  /** Sunshine duration (h) with radiation ≥ 120 W/m². */
+  tiempo_sol_horas?: number | null;
+  cobertura_parcial?: boolean;
 }
 
 export interface DatoAnualOverlay {

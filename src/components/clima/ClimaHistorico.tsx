@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ClimaSubNav } from './ClimaSubNav';
 import { GraficoTemperatura } from './components/GraficoTemperatura';
 import { GraficoPrecipitacion } from './components/GraficoPrecipitacion';
-import { GraficoHumedadRadiacion } from './components/GraficoHumedadRadiacion';
+import { GraficoHumedad } from './components/GraficoHumedad';
+import { GraficoEnergiaSolar } from './components/GraficoEnergiaSolar';
+import { GraficoTiempoSol } from './components/GraficoTiempoSol';
 import { GraficoViento } from './components/GraficoViento';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
@@ -70,7 +72,9 @@ export function ClimaHistorico() {
       'Humedad Promedio (%)',
       'Viento Promedio (km/h)',
       'Viento Máx (km/h)',
-      'Radiación (W/m²)',
+      'Energía solar (kWh/m²)',
+      'Tiempo de sol (h)',
+      'Cobertura parcial',
     ];
 
     const rows = serieHistorica.map((row) => [
@@ -82,7 +86,9 @@ export function ClimaHistorico() {
       row.humedad_pct_promedio ?? '',
       row.viento_kmh_promedio ?? '',
       row.rafaga_kmh_max ?? '',
-      row.radiacion_wm2_promedio ?? '',
+      row.energia_kwh_m2 ?? '',
+      row.tiempo_sol_horas ?? '',
+      row.cobertura_parcial ? 'sí' : '',
     ]);
 
     const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
@@ -200,10 +206,12 @@ export function ClimaHistorico() {
           Sin datos para el rango seleccionado
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <GraficoTemperatura data={serieHistorica} dataAnual={serieAnual} />
+          <GraficoHumedad data={serieHistorica} dataAnual={serieAnual} />
           <GraficoPrecipitacion data={serieHistorica} dataAnual={serieAnual} />
-          <GraficoHumedadRadiacion data={serieHistorica} dataAnual={serieAnual} />
+          <GraficoEnergiaSolar data={serieHistorica} dataAnual={serieAnual} />
+          <GraficoTiempoSol data={serieHistorica} dataAnual={serieAnual} />
           <GraficoViento data={serieHistorica} dataAnual={serieAnual} />
         </div>
       )}

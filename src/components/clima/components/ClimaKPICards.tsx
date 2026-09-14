@@ -7,7 +7,7 @@ import {
   etiquetaEdadLectura,
   minutosDesdeLectura,
 } from '@/utils/calculosClima';
-import { estimateSunHoursToday, getRadiationStatus } from '@/utils/calculosRadiacion';
+import { estimateEnergiaYTiempoSolHoy, getRadiationStatus } from '@/utils/calculosRadiacion';
 import { WindDirectionArrow } from './WindDirectionArrow';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -23,10 +23,10 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
   const todaySunEstimate = useMemo(() => {
     const todayStr = new Date().toDateString();
     const todayReadings = todasLecturas.filter(r => new Date(r.timestamp).toDateString() === todayStr);
-    return estimateSunHoursToday(todayReadings);
+    return estimateEnergiaYTiempoSolHoy(todayReadings);
   }, [todasLecturas]);
 
-  const sunStatus = todaySunEstimate ? getRadiationStatus(todaySunEstimate.sunHoursSoFar) : null;
+  const sunStatus = todaySunEstimate ? getRadiationStatus(todaySunEstimate.energiaKwhM2) : null;
 
   // Misma reja de frescura que la tarjeta del Tablero: `lecturaActual` es un
   // `max by timestamp` sin noción de edad, así que sin esto la última lectura
@@ -193,8 +193,11 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
               <span className="text-sm text-gray-500">W/m²</span>
             </div>
             {todaySunEstimate && (
-              <p className="text-xs text-gray-500 mt-1">
-                Hoy: ~{todaySunEstimate.sunHoursSoFar} horas-sol
+              <p className="text-xs text-gray-500 mt-1" title="Energía = (promedio W/m² × horas transcurridas) / 1000. Tiempo de sol = horas con radiación ≥ 120 W/m².">
+                Hoy: ~{todaySunEstimate.energiaKwhM2} kWh/m²
+                {todaySunEstimate.tiempoSolHoras != null && (
+                  <> · {todaySunEstimate.tiempoSolHoras} h de sol</>
+                )}
               </p>
             )}
           </>
