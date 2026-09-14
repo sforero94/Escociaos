@@ -28,10 +28,16 @@ interface DiaPronostico {
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
-function sunHoursUltimos7Dias(resumenesDiarios: { fecha: string; radiacion_wm2_avg: number | null }[]): number | null {
+function solarUltimos7Dias(resumenesDiarios: {
+  fecha: string;
+  radiacion_wm2_avg: number | null;
+  horas_sol_duracion?: number | null;
+  lluvia_confianza?: string | null;
+}[]): { energiaKwhM2: number | null; tiempoSolHoras: number | null } {
   const cutoffStr = fechaAISODate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
   const rows = resumenesDiarios.filter((r) => r.fecha >= cutoffStr);
-  return aggregateRadiation(rows).avgSunHours;
+  const agg = aggregateRadiation(rows);
+  return { energiaKwhM2: agg.avgEnergiaKwhM2, tiempoSolHoras: agg.avgTiempoSolHoras };
 }
 
 function nombreDia(fechaISO: string): string {
@@ -54,7 +60,7 @@ export function ClimaCard() {
   const { lecturaActual, resumenPeriodos, resumenesDiarios, rawLecturas, loading, estacionConfigurada } = useClimaData();
   const [pronostico, setPronostico] = useState<DiaPronostico[] | null>(null);
 
-  const sunHoursSemana = useMemo(() => sunHoursUltimos7Dias(resumenesDiarios), [resumenesDiarios]);
+  const solarSemana = useMemo(() => solarUltimos7Dias(resumenesDiarios), [resumenesDiarios]);
 
   // Franja de lluvia de los últimos 10 días (§4 Bloque 2.1 del plan del
   // tablero). `construirFranjaLluvia` ya pasa por `lluviaConfiableDeResumen`
@@ -143,7 +149,7 @@ export function ClimaCard() {
           </div>
         </div>
 
-        {resumenSemana && <ResumenSemana resumen={resumenSemana} sunHoursSemana={sunHoursSemana} />}
+        {resumenSemana && <ResumenSemana resumen={resumenSemana} solarSemana={solarSemana} />}
 
         <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
         <RachaSinLluvia racha={rachaSinLluvia} umbralMm={UMBRAL_LLUVIA_MATERIAL_MM} />
@@ -211,7 +217,7 @@ export function ClimaCard() {
         )}
       </div>
 
-      {resumenSemana && <ResumenSemana resumen={resumenSemana} sunHoursSemana={sunHoursSemana} />}
+      {resumenSemana && <ResumenSemana resumen={resumenSemana} solarSemana={solarSemana} />}
 
       <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
       <RachaSinLluvia racha={rachaSinLluvia} umbralMm={UMBRAL_LLUVIA_MATERIAL_MM} />
@@ -229,10 +235,10 @@ function formatMm(mm: number): string {
 // vez de dejar la tarjeta hueca.
 function ResumenSemana({
   resumen,
-  sunHoursSemana,
+  solarSemana,
 }: {
   resumen: ResumenClima;
-  sunHoursSemana: number | null;
+  solarSemana: { energiaKwhM2: number | null; tiempoSolHoras: number | null };
 }) {
   return (
     <div className="pt-3 border-t border-gray-100 flex items-center gap-4 flex-wrap text-xs text-brand-brown/70">
@@ -255,9 +261,14 @@ function ResumenSemana({
           <Wind className="w-3.5 h-3.5" /> ráfaga máx. {Math.round(resumen.rafaga_max_kmh)} km/h
         </span>
       )}
-      {sunHoursSemana !== null && (
+      {solarSemana.energiaKwhM2 !== null && (
         <span className="flex items-center gap-1">
-          <Sun className="w-3.5 h-3.5 text-amber-500" /> {sunHoursSemana.toFixed(1)} h-sol/día
+          <Sun className="w-3.5 h-3.5 text-amber-500" /> {solarSemana.energiaKwhM2.toFixed(1)} kWh/m²/día
+        </span>
+      )}
+      {solarSemana.tiempoSolHoras !== null && (
+        <span className="flex items-center gap-1">
+          <Sun className="w-3.5 h-3.5 text-orange-500" /> {solarSemana.tiempoSolHoras.toFixed(1)} h sol
         </span>
       )}
     </div>

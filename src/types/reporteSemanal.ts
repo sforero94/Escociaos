@@ -48,6 +48,13 @@ export interface DiaClima {
   radiacionMaxWm2: number;
   tempMax: number | null;
   tempMin: number | null;
+  humedadPct?: number | null;
+  vientoKmh?: number | null;
+  /** Daily solar energy kWh/m² = (avg W/m² × 24) / 1000. Same series as the old "horas-sol". */
+  energiaKwhM2?: number | null;
+  /** Sunshine duration (h) with radiation ≥ 120 W/m². */
+  tiempoSolHoras?: number | null;
+  coberturaParcial?: boolean;
 }
 
 export interface ClimaPromedioHistorico {
@@ -55,17 +62,25 @@ export interface ClimaPromedioHistorico {
   lluviaPromSemanal: number | null;
   humedadPromedio: number | null;
   radiacionPromedio: number | null;
+  vientoPromedio?: number | null;
+  energiaKwhM2?: number | null;
+  tiempoSolHoras?: number | null;
   semanasAnalizadas: number;
 }
 
 export interface RadiacionSolarContexto {
+  /** Daily solar energy kWh/m². Same number historically labelled horasSolDia. */
+  energiaKwhM2: number | null;
+  /** @deprecated alias of energiaKwhM2 — keep so older report HTML builders still compile */
   horasSolDia: number | null;
+  tiempoSolHoras: number | null;
   status: string | null;           // 'critico_bajo' | 'bajo' | 'optimo' | 'alto' | 'excesivo'
   statusLabel: string | null;      // e.g. 'Óptimo'
-  deltaVs4Semanas: number | null;  // change vs prior 4 weeks avg
+  deltaVs4Semanas: number | null;  // change vs prior 4 weeks avg (energy)
   diasEnOptimo: number;
   diasBajoOptimo: number;
   diasSobreOptimo: number;
+  diasCoberturaParcial: number;
 }
 
 export interface DatosClimaSemanal {
@@ -77,6 +92,8 @@ export interface DatosClimaSemanal {
   // de arriba los excluye y el reporte lo advierte.
   diasSinDatoLluvia?: number;
   humedadPromedio: number | null;
+  vientoPromedio?: number | null;
+  rafagaMax?: number | null;
   radiacionPromedio: number | null;
   radiacionMax: number | null;
   radiacionSolar?: RadiacionSolarContexto;

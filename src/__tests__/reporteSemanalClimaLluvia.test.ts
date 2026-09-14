@@ -109,3 +109,26 @@ describe('construirDatosClimaSemanal — promedio histórico de 4 semanas', () =
     expect(clima.historico!.lluviaPromSemanal).toBeNull();
   });
 });
+
+describe('construirDatosClimaSemanal — energía solar vs tiempo de sol', () => {
+  it('expone los seis indicadores: energía, duración y cobertura_parcial', () => {
+    const semana = [
+      dia({ fecha: '2026-09-08', radiacion_wm2_avg: 125, horas_sol_duracion: 12, lluvia_confianza: 'ok', viento_kmh_avg: 8 }),
+      dia({ fecha: '2026-09-09', radiacion_wm2_avg: 125, horas_sol_duracion: 10, lluvia_confianza: 'cobertura_parcial', viento_kmh_avg: 6 }),
+    ];
+    const clima = construirDatosClimaSemanal(semana, [])!;
+    expect(clima.tempPromedio).toBe(18);
+    expect(clima.humedadPromedio).toBe(76);
+    expect(clima.lluviaTotal).toBe(0);
+    expect(clima.vientoPromedio).toBe(7);
+    expect(clima.radiacionSolar!.energiaKwhM2).toBe(3);
+    expect(clima.radiacionSolar!.horasSolDia).toBe(3);
+    expect(clima.radiacionSolar!.tiempoSolHoras).toBe(11);
+    expect(clima.radiacionSolar!.diasCoberturaParcial).toBe(1);
+    expect(clima.diario[0].energiaKwhM2).toBe(3);
+    expect(clima.diario[0].tiempoSolHoras).toBe(12);
+    expect(clima.diario[0].coberturaParcial).toBe(false);
+    expect(clima.diario[1].tiempoSolHoras).toBe(10);
+    expect(clima.diario[1].coberturaParcial).toBe(true);
+  });
+});

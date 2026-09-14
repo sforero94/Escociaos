@@ -551,13 +551,17 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n${mon.avisoFechaDesactualizada}`
     const c = datos.clima;
     partes.push(`## RESUMEN DEL CLIMA — SEMANA ACTUAL
 - Temperatura: min ${c.tempMin ?? '—'}°C, max ${c.tempMax ?? '—'}°C, promedio ${c.tempPromedio ?? '—'}°C
-- Lluvia total: ${c.lluviaTotal ?? '—'} mm${c.diasSinDatoLluvia ? ` (${c.diasSinDatoLluvia} dia(s) sin dato confiable de lluvia, EXCLUIDOS del total — el pluviometro no reinicio su contador. No afirmes que no llovio esos dias ni sumes ese faltante.)` : ''}
 - Humedad promedio: ${c.humedadPromedio ?? '—'}%
-- Radiacion solar: promedio ${c.radiacionPromedio ?? '—'} W/m2, max ${c.radiacionMax ?? '—'} W/m2
+- Lluvia total: ${c.lluviaTotal ?? '—'} mm${c.diasSinDatoLluvia ? ` (${c.diasSinDatoLluvia} dia(s) sin dato confiable de lluvia, EXCLUIDOS del total — el pluviometro no reinicio su contador. No afirmes que no llovio esos dias ni sumes ese faltante.)` : ''}
+- Viento: promedio ${c.vientoPromedio ?? '—'} km/h, rafaga max ${c.rafagaMax ?? '—'} km/h
+- Energia solar del dia: ${c.radiacionSolar?.energiaKwhM2 ?? '—'} kWh/m2/dia (misma serie que antes se llamaba "horas-sol"; NO son horas de reloj con sol)
+- Tiempo de sol: ${c.radiacionSolar?.tiempoSolHoras ?? '—'} h/dia (horas con radiacion >= 120 W/m2, umbral WMO)
+- Radiacion: promedio ${c.radiacionPromedio ?? '—'} W/m2, max ${c.radiacionMax ?? '—'} W/m2
+${c.radiacionSolar?.diasCoberturaParcial ? `- ADVERTENCIA: ${c.radiacionSolar.diasCoberturaParcial} dia(s) con cobertura_parcial — energia y tiempo de sol de esos dias son cota inferior, no un dia completo.` : ''}
 
-### Lluvia y radiacion diaria`);
+### Clima diario (los 6 indicadores)`);
     for (const d of (c.diario || [])) {
-      partes.push(`  - ${d.fecha}: lluvia ${d.lluviaMm != null ? `${d.lluviaMm}mm` : 'sin dato'}, rad max ${d.radiacionMaxWm2} W/m2, temp ${d.tempMin ?? '—'}–${d.tempMax ?? '—'}°C`);
+      partes.push(`  - ${d.fecha}: temp ${d.tempMin ?? '—'}–${d.tempMax ?? '—'}°C, humedad ${d.humedadPct ?? '—'}%, lluvia ${d.lluviaMm != null ? `${d.lluviaMm}mm` : 'sin dato'}, energia ${d.energiaKwhM2 ?? '—'} kWh/m2, tiempo sol ${d.tiempoSolHoras ?? '—'} h, viento ${d.vientoKmh ?? '—'} km/h${d.coberturaParcial ? ' [cobertura parcial]' : ''}`);
     }
 
     // Historical comparison data
@@ -567,24 +571,30 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n${mon.avisoFechaDesactualizada}`
 - Temperatura promedio: ${h.tempPromedio ?? '—'}°C
 - Lluvia promedio semanal: ${h.lluviaPromSemanal ?? '—'} mm
 - Humedad promedio: ${h.humedadPromedio ?? '—'}%
+- Viento promedio: ${h.vientoPromedio ?? '—'} km/h
+- Energia solar: ${h.energiaKwhM2 ?? '—'} kWh/m2/dia
+- Tiempo de sol: ${h.tiempoSolHoras ?? '—'} h/dia
 - Radiacion promedio: ${h.radiacionPromedio ?? '—'} W/m2
 
 ### COMPARATIVO (semana actual vs historico)
 - Lluvia: ${c.lluviaTotal ?? 0}mm esta semana vs ${h.lluviaPromSemanal ?? 0}mm promedio semanal (${h.lluviaPromSemanal && c.lluviaTotal ? (((c.lluviaTotal - h.lluviaPromSemanal) / h.lluviaPromSemanal) * 100).toFixed(0) : '—'}% de diferencia)
 - Temperatura: ${c.tempPromedio ?? '—'}°C vs ${h.tempPromedio ?? '—'}°C historico
 - Humedad: ${c.humedadPromedio ?? '—'}% vs ${h.humedadPromedio ?? '—'}% historico
+- Energia solar: ${c.radiacionSolar?.energiaKwhM2 ?? '—'} vs ${h.energiaKwhM2 ?? '—'} kWh/m2/dia
+- Tiempo de sol: ${c.radiacionSolar?.tiempoSolHoras ?? '—'} vs ${h.tiempoSolHoras ?? '—'} h/dia
 - Radiacion: ${c.radiacionPromedio ?? '—'} vs ${h.radiacionPromedio ?? '—'} W/m2 historico`);
     }
 
     // Sun-hours agronomic context
     const rs = c.radiacionSolar;
-    if (rs && rs.horasSolDia !== null) {
-      partes.push(`\n### CONTEXTO SOLAR AGRONOMICO
-- Horas-sol equivalentes/dia: ${rs.horasSolDia} (status: ${rs.statusLabel ?? '—'})
-- Delta vs promedio 4 semanas: ${rs.deltaVs4Semanas !== null ? (rs.deltaVs4Semanas > 0 ? '+' : '') + rs.deltaVs4Semanas + ' h' : '—'}
-- Dias en rango optimo (5-7h): ${rs.diasEnOptimo} de ${rs.diasEnOptimo + rs.diasBajoOptimo + rs.diasSobreOptimo}
+    if (rs && rs.energiaKwhM2 !== null && rs.energiaKwhM2 !== undefined) {
+      partes.push(`\n### CONTEXTO SOLAR (ENERGIA vs TIEMPO DE SOL)
+- Energia solar: ${rs.energiaKwhM2} kWh/m2/dia (status Hass: ${rs.statusLabel ?? '—'}). Esta cifra ES la serie historica que antes se rotulaba "horas-sol equivalentes". Un dia soleado en Aguadas suele dar ~3 kWh/m2 con picos de 1000-1200 W/m2: eso NO significa que la estacion este rota.
+- Tiempo de sol: ${rs.tiempoSolHoras ?? '—'} h/dia (horas con radiacion >= 120 W/m2). Es lo que el campo percibe como "mucho sol".
+- Delta energia vs promedio 4 semanas: ${rs.deltaVs4Semanas !== null ? (rs.deltaVs4Semanas > 0 ? '+' : '') + rs.deltaVs4Semanas + ' kWh/m2' : '—'}
+- Dias en rango optimo de ENERGIA (5-7 kWh/m2): ${rs.diasEnOptimo} de ${rs.diasEnOptimo + rs.diasBajoOptimo + rs.diasSobreOptimo}
 - Dias bajo optimo: ${rs.diasBajoOptimo}, dias sobre optimo: ${rs.diasSobreOptimo}
-NOTA: El rango optimo de horas-sol para Hass a 2200m es 5.0-7.0 h/dia. Valores <3.5 afectan floracion/cuaje. Valores >8.5 implican riesgo de quemado.`);
+${rs.diasCoberturaParcial ? `- ${rs.diasCoberturaParcial} dia(s) con cobertura parcial: no los leas como cobertura completa.\n` : ''}NOTA: El rango optimo de ENERGIA para Hass a 2200m es 5.0-7.0 kWh/m2/dia (mismos umbrales numericos de antes, reetiquetados). Valores <3.5 afectan floracion/cuaje. Valores >8.5 implican riesgo de quemado. NUNCA llames "horas de reloj con sol" a la energia.`);
     }
   }
 
@@ -1725,18 +1735,22 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
   if (!c) return '';
 
   const rs = c.radiacionSolar;
-  const sunHoursLabel = rs?.horasSolDia !== null && rs?.horasSolDia !== undefined
-    ? `${rs.horasSolDia}`
+  const energiaLabel = rs?.energiaKwhM2 !== null && rs?.energiaKwhM2 !== undefined
+    ? `${rs.energiaKwhM2}`
+    : (rs?.horasSolDia !== null && rs?.horasSolDia !== undefined ? `${rs.horasSolDia}` : '—');
+  const tiempoSolLabel = rs?.tiempoSolHoras !== null && rs?.tiempoSolHoras !== undefined
+    ? `${rs.tiempoSolHoras}`
     : '—';
   const sunStatusLabel = rs?.statusLabel ?? '';
+  const notaParcial = rs?.diasCoberturaParcial ? ` · ${rs.diasCoberturaParcial}d parcial` : '';
 
   const kpis = [
-    kpiCard(`${fmtN(c.tempMin, 1)}°`, 'Temp Mín', '°C', '#4D240F'),
-    kpiCard(`${fmtN(c.tempMax, 1)}°`, 'Temp Máx', '°C', '#dc2626'),
-    kpiCard(`${fmtN(c.tempPromedio, 1)}°`, 'Temp Prom', '°C', '#73991C'),
-    kpiCard(`${fmtN(c.lluviaTotal, 1)}`, 'Lluvia', c.diasSinDatoLluvia ? `mm · ${c.diasSinDatoLluvia}d sin dato` : 'mm total', '#4D240F'),
+    kpiCard(`${fmtN(c.tempPromedio, 1)}°`, 'Temperatura', `${fmtN(c.tempMin, 1)}–${fmtN(c.tempMax, 1)} °C`, '#73991C'),
     kpiCard(`${fmtN(c.humedadPromedio, 0)}%`, 'Humedad', 'promedio', '#6b7280'),
-    kpiCard(`${sunHoursLabel}`, 'Horas-Sol', `h/día${sunStatusLabel ? ' · ' + sunStatusLabel : ''}`, '#b45309'),
+    kpiCard(`${fmtN(c.lluviaTotal, 1)}`, 'Precipitación', c.diasSinDatoLluvia ? `mm · ${c.diasSinDatoLluvia}d sin dato` : 'mm total', '#4D240F'),
+    kpiCard(`${energiaLabel}`, 'Energía solar', `kWh/m²/día${sunStatusLabel ? ' · ' + sunStatusLabel : ''}`, '#b45309'),
+    kpiCard(`${tiempoSolLabel}`, 'Tiempo de sol', `h ≥120 W/m²${notaParcial}`, '#ea580c'),
+    kpiCard(`${fmtN(c.vientoPromedio, 1)}`, 'Viento', c.rafagaMax != null ? `km/h · ráfaga ${fmtN(c.rafagaMax, 0)}` : 'km/h promedio', '#0f766e'),
   ].join('');
 
   // SVG combo chart: rainfall bars + radiation line
@@ -1784,8 +1798,9 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
     const xLabels = diario.map((d: any, i: number) => {
       const x = padL + i * gap + gap / 2;
       const dt = new Date(d.fecha + 'T12:00:00');
-      const label = dayNames[dt.getDay()] + ' ' + dt.getDate();
-      return `<text x="${x}" y="${padT + plotH + 18}" text-anchor="middle" font-size="10" fill="#6b7280">${label}</text>`;
+      const mark = d.coberturaParcial ? '*' : '';
+      const label = dayNames[dt.getDay()] + ' ' + dt.getDate() + mark;
+      return `<text x="${x}" y="${padT + plotH + 18}" text-anchor="middle" font-size="10" fill="${d.coberturaParcial ? '#b45309' : '#6b7280'}">${label}</text>`;
     }).join('');
 
     // Y labels left (rainfall)
@@ -1803,9 +1818,15 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
       <text x="${padL + 116}" y="${chartH + 14}" font-size="10" fill="#6b7280">Radiación máx (W/m²)</text>`;
 
     const diasSinDato = diario.filter((d: any) => d.lluviaMm == null).length;
-    const notaSinDato = diasSinDato > 0
-      ? `<div style="font-size:10px;color:#b45309;text-align:center;margin-top:2px;">${diasSinDato} día(s) sin dato confiable de lluvia (el pluviómetro no reinició su contador) — excluidos del total.</div>`
-      : '';
+    const diasParcial = diario.filter((d: any) => d.coberturaParcial).length;
+    const notaSinDato = [
+      diasSinDato > 0
+        ? `${diasSinDato} día(s) sin dato confiable de lluvia (el pluviómetro no reinició su contador) — excluidos del total.`
+        : '',
+      diasParcial > 0
+        ? `${diasParcial} día(s) con cobertura parcial (*): energía y tiempo de sol de esos días son cota inferior, no un día completo.`
+        : '',
+    ].filter(Boolean).map((t) => `<div style="font-size:10px;color:#b45309;text-align:center;margin-top:2px;">${t}</div>`).join('');
 
     chartHTML = `<div style="margin-top:12px;">
       <svg width="${chartW}" height="${chartH + 24}" viewBox="0 0 ${chartW} ${chartH + 24}" style="display:block;margin:0 auto;">

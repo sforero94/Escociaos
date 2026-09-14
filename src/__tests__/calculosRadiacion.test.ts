@@ -1,27 +1,102 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   wm2ToSunHours,
+  wm2ToEnergiaDiaria,
   getRadiationStatus,
   aggregateRadiation,
   buildRadiationPeriodContext,
   estimateSunHoursToday,
+  calcularTiempoSolHoras,
+  estimateEnergiaYTiempoSolHoy,
+  UMBRAL_TIEMPO_SOL_WM2,
+  INTERVALO_LECTURA_MINUTOS,
 } from '@/utils/calculosRadiacion';
 
-describe('wm2ToSunHours', () => {
-  it('converts 250 W/m² avg to 6.0 sun-hours/day', () => {
-    expect(wm2ToSunHours(250)).toBe(6.0);
+describe('wm2ToSunHours / wm2ToEnergiaDiaria', () => {
+  it('are the same number (energy kWh/m², historically called sun-hours)', () => {
+    expect(wm2ToEnergiaDiaria(250)).toBe(wm2ToSunHours(250));
+    expect(wm2ToEnergiaDiaria(250)).toBe(6.0);
   });
 
   it('converts 0 to 0', () => {
     expect(wm2ToSunHours(0)).toBe(0);
   });
 
-  it('converts 1000 W/m² to 24 sun-hours (theoretical max)', () => {
+  it('converts 1000 W/m² to 24 kWh/m² (theoretical max)', () => {
     expect(wm2ToSunHours(1000)).toBe(24);
   });
 
   it('converts 145.83 W/m² to ~3.5', () => {
     expect(wm2ToSunHours(145.83)).toBeCloseTo(3.5, 1);
+  });
+
+  it('a typical sunny day avg ~125 W/m² is ~3 kWh/m², not 3 clock hours', () => {
+    expect(wm2ToEnergiaDiaria(125)).toBe(3);
+  });
+});
+
+describe('calcularTiempoSolHoras', () => {
+  it('returns null when there is no radiation reading (sin dato, never 0)', () => {
+    expect(calcularTiempoSolHoras([])).toBeNull();
+    expect(calcularTiempoSolHoras([{ radiacion_wm2: null }])).toBeNull();
+  });
+
+  it('returns 0 when every reading is below the WMO threshold', () => {
+    expect(calcularTiempoSolHoras([
+      { radiacion_wm2: 0 },
+      { radiacion_wm2: 50 },
+      { radiacion_wm2: UMBRAL_TIEMPO_SOL_WM2 - 1 },
+    ])).toBe(0);
+  });
+
+  it('counts 5-min samples ≥ 120 W/m² as sunshine duration', () => {
+    // 12 samples above threshold × 5 min = 1.0 h
+    const readings = Array.from({ length: 12 }, () => ({ radiacion_wm2: 200 }));
+    expect(calcularTiempoSolHoras(readings)).toBe(1);
+    expect(INTERVALO_LECTURA_MINUTOS).toBe(5);
+  });
+
+  it('a day with ~3 kWh/m² energy can still have ~12 h of sunshine', () => {
+    // 12 h night at 0 + 12 h day at 250 W/m², 5-min cadence → 288 samples
+    const noche = Array.from({ length: 144 }, () => ({ radiacion_wm2: 0 }));
+    const dia = Array.from({ length: 144 }, () => ({ radiacion_wm2: 250 }));
+    const readings = [...noche, ...dia];
+    const avgWm2 = readings.reduce((s, r) => s + r.radiacion_wm2, 0) / readings.length;
+    expect(avgWm2).toBe(125);
+    expect(wm2ToEnergiaDiaria(avgWm2)).toBe(3);
+    expect(calcularTiempoSolHoras(readings)).toBe(12);
+  });
+});
+
+describe('migración 151 keeps the same WMO threshold and 5-min cadence', () => {
+  it('SQL rollup uses 120 W/m² and 5/60 hours', () => {
+    const sql = readFileSync(
+      resolve(__dirname, '../sql/migrations/151_clima_horas_sol_duracion.sql'),
+      'utf8',
+    );
+    expect(UMBRAL_TIEMPO_SOL_WM2).toBe(120);
+    expect(INTERVALO_LECTURA_MINUTOS).toBe(5);
+    expect(sql).toMatch(/v_umbral_sol_wm2 CONSTANT numeric\s+:=\s*120/);
+    expect(sql).toMatch(/v_intervalo_min\s+CONSTANT numeric\s+:=\s*5/);
+    expect(sql).toMatch(/radiacion_wm2 >= 120/);
+    expect(sql).toMatch(/\* 5\.0 \/ 60\.0/);
+    expect(sql).toContain('horas_sol_duracion');
+    // Must not invoke the rollup for history: that DELETE wipes live lecturas.
+    expect(sql).not.toMatch(/PERFORM\s+fn_clima_rollup_diario/i);
+    expect(sql).not.toMatch(/SELECT\s+.*fn_clima_rollup_diario\s*\(/i);
+  });
+
+  it('weekly report names energy and sunshine duration, not clock-hour "Horas-Sol"', () => {
+    const src = readFileSync(
+      resolve(__dirname, '../supabase/functions/server/generar-reporte-semanal.tsx'),
+      'utf8',
+    );
+    expect(src).toContain("'Energía solar'");
+    expect(src).toContain("'Tiempo de sol'");
+    expect(src).toContain("'Humedad'");
+    expect(src).not.toContain("'Horas-Sol'");
   });
 });
 
@@ -64,6 +139,7 @@ describe('aggregateRadiation', () => {
   it('returns null avgSunHours for empty rows', () => {
     const result = aggregateRadiation([]);
     expect(result.avgSunHours).toBeNull();
+    expect(result.avgEnergiaKwhM2).toBeNull();
     expect(result.daysTotal).toBe(0);
   });
 
@@ -88,6 +164,7 @@ describe('aggregateRadiation', () => {
     const result = aggregateRadiation(rows);
     // avg = (6.0 + 2.4 + 4.8 + 8.4 + 5.52) / 5 = 27.12 / 5 = 5.424 → 5.4
     expect(result.avgSunHours).toBe(5.4);
+    expect(result.avgEnergiaKwhM2).toBe(5.4);
     expect(result.daysTotal).toBe(5);
     expect(result.daysInOptimal).toBe(2);
     expect(result.daysBelowOptimal).toBe(2);
@@ -103,6 +180,17 @@ describe('aggregateRadiation', () => {
     const result = aggregateRadiation(rows);
     expect(result.avgSunHours).toBe(6.0);
     expect(result.daysTotal).toBe(2);
+  });
+
+  it('averages sunshine duration when present and counts cobertura_parcial', () => {
+    const rows = [
+      { fecha: '2026-09-01', radiacion_wm2_avg: 125, horas_sol_duracion: 12, lluvia_confianza: 'ok' },
+      { fecha: '2026-09-02', radiacion_wm2_avg: 125, horas_sol_duracion: 10, lluvia_confianza: 'cobertura_parcial' },
+    ];
+    const result = aggregateRadiation(rows);
+    expect(result.avgEnergiaKwhM2).toBe(3);
+    expect(result.avgTiempoSolHoras).toBe(11);
+    expect(result.daysCoberturaParcial).toBe(1);
   });
 });
 
@@ -132,8 +220,8 @@ describe('buildRadiationPeriodContext', () => {
   });
 });
 
-describe('estimateSunHoursToday', () => {
-  it('estimates sun-hours based on avg readings and hours elapsed', () => {
+describe('estimateSunHoursToday / estimateEnergiaYTiempoSolHoy', () => {
+  it('estimates energy based on avg readings and hours elapsed', () => {
     const readings = [
       { timestamp: '2026-05-19T06:00:00', radiacion_wm2: 100 },
       { timestamp: '2026-05-19T09:00:00', radiacion_wm2: 400 },
@@ -144,6 +232,11 @@ describe('estimateSunHoursToday', () => {
     expect(result).not.toBeNull();
     expect(result!.sunHoursSoFar).toBe(5.1);
     expect(result!.avgWm2).toBeCloseTo(366.7, 0);
+
+    const ambos = estimateEnergiaYTiempoSolHoy(readings, 14);
+    expect(ambos!.energiaKwhM2).toBe(5.1);
+    // 3 samples × 5 min; two ≥ 120 (400, 600); 100 < 120 → 2 × 5/60 = 0.2 h
+    expect(ambos!.tiempoSolHoras).toBe(0.2);
   });
 
   it('returns null for no valid readings', () => {
