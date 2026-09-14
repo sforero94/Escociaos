@@ -176,3 +176,53 @@ prompt del agente en cada corrida.
 - **Al medir adopcion de la ronda, cruzar `telegram_alertas_suscripciones` contra `telegram_usuarios.telegram_id IS NOT NULL`.** Un suscriptor sin vincular cuenta como destinatario en la configuracion y como cero en la entrega, y `rondas_avisos` marca el aviso como enviado igual.
 - **UPDATE #67**: Uriel Parada nunca se vinculo; su codigo expiro el 2026-09-04 17:33. **UPDATE #73**: el recordatorio salio el 09-01 y la clave quedo consumida; 6 dias despues no hay ronda de septiembre.
 - **`informes-visita`: 52 objetos de Storage contra 25 filas.** Los ~27 huerfanos son el save fallido del 09-03 que la 136 no limpio. **No contarlo como adopcion.**
+
+## Corrida 2026-09-14-lunes
+
+### Lo que despegó
+- **Primer chequeo capturado EN VIVO de la historia** (2026-09-08; los otros 33 comparten
+  `created_at` del backfill de julio). **A partir de ahora `hato_chequeos` SÍ es señal de
+  captura viva — pero medir siempre la COBERTURA, no solo si existe la fila.**
+- **`hato_tratamientos` se estrenó**: 0 → 30 filas en cuatro días tras la migración 140.
+  **Dejar de clasificarlas como tablas nunca lanzadas.** 24 de 30 sin paso de seguimiento,
+  con tasa idéntica en los dos canales (14/18 telegram, 10/12 web) — **eso descarta defecto
+  de una superficie: el campo es opcional y se está declinando.**
+- **El motor de alertas del hato cerró su primer lazo completo**: el tick del 09-07 generó
+  36 `rechequeo_due` y **35 de 36 fueron accionadas en una semana** (19 confirmada,
+  17 descartada), contra una tasa histórica de 1 de 64. **Corrige la lectura del 08-10 y
+  08-31** de que el problema era el despacho: era el umbral acumulándose.
+  **OJO: el motor lleva caído desde el 09-12 — filado P1 esta corrida.**
+- **5 de 10 cuentas escribieron, récord de la serie** (4 el 08-31, 3 el 09-07). Fernando
+  pasa de consumidor a capturador por primera vez.
+
+### Pulso 2026-09-08 → 09-14 (prev / prom 4 sem)
+telegram_mensajes 125 (115 / 30,3) · registros_trabajo 73 (83 / 66,3) · fin_gastos 55
+(2 / 3,5) · hato_eventos 18 (0 / 2,8) · acciones_recomendadas 13 (18 / 25,8) · chat_messages
+7 (0 / 19,5) · hato_correcciones 5 · movimientos_diarios 3 (12 / 8,0) · hato_chequeos 1
+(**primero en vivo**) · monitoreos 0 · hato_pesajes_leche 0 · movimientos_inventario 0 ·
+rondas_inventario 0 · informes_visita 0 · aplicaciones 0 · fin_ingresos 0.
+**Quién escribe (7d)**: David García 78 · Consuelito 55 · Martha Vega 17 · Santiago 3 ·
+Fernando Jimenez 3.
+
+### Cadencia que NO es abandono — no filar
+`monitoreos` 0 por 2ª semana (R30 cerró el 08-28, las rondas abren cada ~33-35 días).
+`fin_gastos` 55 tras dos semanas de 1-2: la captura es **por lotes**, no un repunte.
+
+### Navegación
+- **`rondas_avisos` solo ha emitido DOS claves en toda su vida**: `mes_omitido:<AAAA-MM>` y
+  `reporte_cierre:<ronda_id>`. **`ronda_recordatorio` NUNCA ha dejado fila**, pese a existir
+  en el catálogo con 2 suscriptores. **Corrige la nota del 09-03** que decía que el
+  recordatorio salió el 09-01 — no hay fila que lo respalde.
+- **El `mes_omitido` se emite aunque haya una ronda abierta sin cerrar**: la de agosto abrió
+  el 08-28 23:14Z, el aviso salió el 08-29 12:00Z y la ronda cerró 46 min después. **Antes
+  de leer un `mes_omitido` como «nadie hizo la ronda», cotejar contra `abierta_en`.**
+- `list_edge_functions.updated_at` viene en **milisegundos epoch**.
+
+### Líneas base para el próximo lunes
+`hato` completitud: activas 65 · sin raza 62 · sin fecha_nacimiento 20 · fichas completas 1
+— **CONGELADA 21 días**, es el #56, no refilar. `hato_alertas` por estado: 80 descartada /
+23 confirmada / 13 enviada / 1 respondida / 1 escalada / 1 expirada. Chequeos: 34, cobertura
+histórica 39-56, **09-08 = 19**. Pesajes: 601, última fecha 2026-08-26. Tratamientos: 30 /
+6 pasos. Storage: chequeos-fotos 6 (era 0) · hato-pesajes-fotos 9 · informes-visita 52 ·
+reportes-semanales 53. Ronda de inventario: **1 en toda su historia**, 0 en septiembre.
+`telegram_usuarios`: 5, y **Uriel Parada sigue SIN vincular**.

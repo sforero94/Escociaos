@@ -386,3 +386,49 @@ original — la entrada existe y miente — y por eso es mas dificil de detectar
 - **#77 NO se cerro con el PR #197**: `arbolEdgeFunctionParidad.test.ts` cubre solo los dos arboles de
   siempre; el tercero (`supabase/functions/informes-visita-proponer/`) sigue sin guarda.
 - **#78 y #66 siguen abiertos**: ningun PR de la ventana toco `.github/`.
+
+## Corrida 2026-09-14-lunes
+
+### Estado de despliegue
+HEAD `2eb472e` · frontend Vercel **AL DÍA, verificado POR CONTENIDO** (cadenas de
+`35223e3` y de `6dada44` —el último commit de la ventana— presentes en los chunks, con
+controles positivos) · edge `make-server-1ccce916` **v253, 2026-09-14T02:13:55Z**, hash
+`a38bd3329c1b3f4bf7011804abc16f104836dda9d5db145c4d39f722633c73b4` — **guardado como nuevo
+punto de comparación** · `informes-visita-proponer` v3 · migraciones **142-149 aplicadas
+MENOS la 147**, la única fusionada-sin-aplicar.
+
+### EL HALLAZGO DE LA CORRIDA, Y SU FORMA VALE MÁS QUE EL DEFECTO
+**Una tabla de bitácora con un HUECO DE TRES DÍAS mientras `cron.job_run_details` dice
+`succeeded` los tres.** Cadena completa de por qué nadie lo vio: (1) `pg_cron` solo encola;
+(2) `net._http_response` da `status_code IS NULL` + `Timeout of 5000 ms` — **pg_net se rinde
+a los 5 s y nunca llega a ver el 500**, así que la nota vieja «timeout NO significa que
+fallara» es cierta pero acá **ESCONDE un fallo real**; (3) la única prueba es la tabla de
+dominio. **Secuencia barata, en este orden: tabla de efectos → `cron.job_run_details` →
+`net._http_response` → `query_logs` sobre `source='function_logs'`.**
+
+### Una tabla de bitácora que se escribe AL FINAL no sirve para diagnosticar
+`hato_alertas_tick_runs` (migración 116) existe para contestar «por qué el motor no generó
+nada», y **no puede contestar «por qué el motor murió»** porque su fila se inserta cuando el
+tick termina (`hato-alertas-tick.ts:704`, última sentencia). La **146** hace lo contrario y
+esa es la lección transferible: **la fila `pendiente` va ANTES de la parte que puede fallar.**
+
+### Cierres y no-cierres
+- **#77 CERRABLE** (Arreglado) por el merge del PR #243: es una **guarda de repositorio**,
+  así que el merge SÍ es el despliegue. Dejó residuo desbloqueado → hallazgo nuevo.
+- **#91 y #95 NO cierran con sus PRs**: los dos shippearon la PREVENCIÓN y sus propios
+  mensajes de commit dicen que el dato histórico queda aparte. **Leer el cuerpo del commit
+  antes de cerrar contra un PR que «arregla» un hallazgo de datos.**
+- **#87 y #56** no cambiaron: el PR #242 mejora el diálogo (prevención), los 13 registros y
+  las razas NULL siguen igual.
+
+### Navegación
+- **La sonda de ruta anónima probó la RETIRADA de un bloqueo, no solo una presencia**: el
+  test de paridad de #77 dejó escrito «la ruta responde 404 en el bundle publicado,
+  verificado 2026-09-13»; hoy responde **401**. **Un comentario de código que documenta un
+  bloqueo de despliegue caduca con el siguiente despliegue — buscarlos después de cada deploy.**
+- `hato_alertas_tick_runs` usa **`ejecutado_at`**, no `creado_en`.
+
+### Cadencia
+60 commits / 26 aterrizajes / 18 PRs en 2,3 días, **58 de 60 en una sola tarde**. Quinta
+ventana seguida con un sesgo identificable distinto; **sigue sin ser interpretable fuera de
+la medición mensual.**

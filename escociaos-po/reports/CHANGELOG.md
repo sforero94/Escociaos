@@ -23,6 +23,74 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-09-14 — corrida lunes
+
+18 PRs merged (#229–#246) and migrations 142, 146, 148 and 149 applied in the 2,3 days
+since the Friday drain. The edge function was redeployed on 2026-09-14 at 02:13 UTC — the
+first deploy in this window — and the frontend is at `main`. One migration (147) is merged
+and still waiting.
+
+### Hato Lechero
+- Every photo-capture attempt (pesaje and chequeo) now leaves a record of how it ended.
+  Nine uploads since 2026-08-11 had produced no rows and no explanation; "the OCR failed",
+  "nobody approved it" and "the server broke" used to look identical from outside.
+  (migration 146, ledger `20260913221334`, PR #236)
+- An alert that has been superseded is now retired instead of sitting in the queue, and the
+  coverage report says which of the two reasons kept an animal out of a rule. (PR #234)
+- The ambiguous-date dialog marks the most likely reading instead of offering two equal
+  options. (PR #242)
+- Alert defaults are on the record: Fernando receives only `secado_due` and
+  `tratamiento_paso`; the three management alerts stay web-only until Gerencia turns them
+  on. The screen used to show a matrix the engine did not honour. (migration 142, ledger
+  `20260912195023`)
+- The alert history and "who receives what" tabs use the shared table component. (PR #230)
+
+### Labores
+- A person can no longer be registered with more than one full jornal on the same day,
+  however the day is split across lotes and tareas. Both the browser and the database block
+  it. The historical cases are left as they are — correcting them is a separate, case-by-case
+  decision. (migration 149, ledger `20260913224221`, PR #246)
+- `valor_jornal_empleado` now stores the rate of one jornal, not the raw monthly salary.
+  2.619 of 2.694 historical rows were repaired, derived from each row's own
+  `costo_jornal / fraccion_jornal` — never from today's salary, which has already changed.
+  (migration 148, ledger `20260913223447`, PRs #229, #244)
+
+### Finanzas
+- Saving a gasto dated more than a day in the future now asks for confirmation. It never
+  blocks — a scheduled payment is legitimate — but a typo no longer makes the record vanish
+  from the historial for five days. (PR #239)
+
+### Ganado
+- Editing a cattle transaction re-derives its `gan_movimientos` instead of leaving the old
+  ones behind. (PR #237)
+
+### Clima
+- The daily backfill deletes at source before reinserting, so a re-run cannot leave two
+  readings for the same instant. (PR #245)
+
+### Aguacate · Informes de visita
+- The third, separately-deployed copy of the anti-invention rules is now guarded by a parity
+  test. It had none. (PR #243)
+
+### Interno
+- Deploy-drift detection got a second signal: it compares the published bundle's own content
+  hash against the previous run, covers both edge functions in a matrix, and notifies by
+  Telegram when it fails. Clock-only checking had reported green over two real regressions.
+  (PR #232)
+- The migration ledger in the root `CLAUDE.md` was corrected for 120, 123, 131, 132, 133,
+  137, 139, 141 and 142 — several said "written, not applied" while live. (PR #231)
+- This changelog now exists at `escociaos-po/reports/CHANGELOG.md`, bootstrapped from the
+  run reports. (PR #233)
+
+### Requiere despliegue manual
+- Nothing. `make-server-1ccce916` is at v253 (2026-09-14T02:13:55Z), later than every commit
+  in the window; `informes-visita-proponer` is at v3 and unchanged.
+
+### Pendiente de aplicar
+- **Migration 147** (`fn_ronda_resolver_con_captura_cantidad_confirmada`) is merged with no
+  ledger row. Its edge half shipped with v253, so Telegram already asks David for the
+  physical count and the live RPC still discards it.
+
 ## 2026-09-11 — corrida viernes (drenaje)
 
 8 PRs merged, migrations 143 and 145 applied, edge function deployed and verified by

@@ -432,3 +432,38 @@ Las 23 tablas sin PK estan TODAS en `respaldos`, 0 en `public` — estado final 
 (accept permanente), 3 `authenticated_security_definer`, 1 `auth_leaked_password_protection`.
 **El chequeo de respaldos de `thinksid/escocia-backups` sigue FUERA DEL ALCANCE de repos de la sesion.
 No es fallo de allowlist y no se vuelve a filar.**
+
+## Corrida 2026-09-14-lunes
+
+- **Línea de salud**: Vercel PROMOTED en `2eb472e` = HEAD (build 27,8 s) · edge
+  `make-server-1ccce916` **v253 (2026-09-14T02:13:55Z), VERIFICADA POR CONTENIDO: 78/78
+  ficheros byte-idénticos al árbol de HEAD, 0 diffs** · `informes-visita-proponer` v3 —
+  **la deriva de 7 días del 09-10 quedó CERRADA, no re-filar** · 6 pg_cron, 0 fallos
+  aparentes en 7 días · DB 122 MB.
+- **`[clima-sync] Supabase insert failed (504)` escaló 30×**: 3/24 h el 09-10 → **143 de 288
+  corridas en 24 h (49,7%)** hoy. Quiebre el **2026-09-08**. `lecturas_count` diario:
+  288 hasta el 09-06 → 221 · 225 · 284 · 240 · 149 · 150. **La base NO es la causa y ya está
+  descartado**: 1688 kB, 176 filas, 0 muertas, 16/60 conexiones, `postgres_logs` limpio.
+- **`Warp server error: Thread killed by timeout manager` ya NO es ruido inocuo.** El 09-07
+  se midió 296/24 h con 0 errores de clima y se declaró ruido; hoy son 165 **con 143 fallos
+  reales**. **No usarla sola, pero tampoco descartarla sin cruzarla contra los no-200.**
+- **EL VOLCADO DEL BUNDLE ANIDA BAJO `make-server-1ccce916/`.** Los `files[].name` salen como
+  `make-server-1ccce916/chat.tsx`. Un `comm` contra el árbol del repo sin quitar el prefijo
+  devuelve **78 «solo en bundle» y 82 «solo en repo»**, o sea una falsa deriva total.
+- **Para saber si la edge function está desplegada NO hace falta `get_edge_function`
+  (~1 MB).** `list_edge_functions` da `version` y `updated_at` en **epoch MILISEGUNDOS**;
+  compararlo contra `git log -1 --format=%aI -- supabase/functions/make-server-1ccce916` es
+  el criterio del propio `scripts/check-deploy-drift.mjs`. Barato y concluyente.
+- **`scripts/deploy-drift-state/<slug>.json` es la línea base de hash y se lee gratis del
+  repo.** Comparar contra `list_edge_functions.ezbr_sha256`: si difieren, hubo despliegue
+  nuevo (bundle fresco, **no** republicación).
+- **El despliegue ya NO sale de un worktree local de Mac**: el `entrypoint_path` de la v253
+  apunta a `/home/runner/work/...`, o sea GitHub Actions. **La nota del 2026-08-24 sobre
+  «un despliegue puede no corresponder a ningún commit de main» ya no describe el mecanismo.**
+  Ojo: `.github/workflows/deteccion-deriva-despliegue.yml` **DETECTA, no despliega** — no
+  volver a buscar un workflow de despliegue, no lo hay.
+- **Un despliegue al día NO implica que la migración compañera haya corrido.** La 147 lo
+  probó al revés de lo habitual: mitad de edge desplegada, migración sin aplicar.
+- **Consulta de aplicación más lenta: ninguna.** El top por media son las consultas del
+  propio barrido contra `cron.job_run_details` (~19 MB) — **descontarla del top** como ya se
+  descuenta `pg_net`.

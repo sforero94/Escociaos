@@ -1513,3 +1513,51 @@ hallazgo es contra la operación, porque ahí no hay un test que se ponga rojo s
 **Corolario sobre dónde vive una regla de la operación**: los runbooks llevan la receta (comandos,
 limpieza), la constitución lleva la regla en el punto donde se ejecuta (§3 despacho, §4 Phase 5). Una
 regla que sólo vive en `memory/` se degrada; una que sólo vive en un runbook no la ve quien despacha.
+
+## Corrida 2026-09-14-lunes
+
+- Modo: **full write · Notion OPERATIVO · preflight 5/5 sin un solo prompt de permiso.**
+  12 hallazgos filados (el cap exacto), 4 P1 todos verificados adversarialmente, 1 cerrado (#77).
+  Backlog al arrancar: **solo 5 abiertos** — el viernes drenó fuerte.
+
+### LA SEÑAL VERDE MINTIÓ TRES VECES EL MISMO DÍA, Y ESA ES LA LECCIÓN DE LA CORRIDA
+Los cuatro P1 comparten forma: **el mecanismo de vigilancia reportaba éxito mientras el
+hecho fallaba.** (a) `pg_cron` dice `succeeded` porque solo encola — tick de alertas del
+hato en 500 tres días seguidos. (b) `pg_net` devuelve `status_code IS NULL` +
+`Timeout of 5000 ms reached` y **nunca llega a ver el 500**. (c) El reintento de clima
+lleva 17 corridas `succeeded` sobre un día que sigue sin fila. **La única prueba válida en
+los tres casos fue la TABLA DE DOMINIO.** Orden barato y canónico:
+tabla de efectos → `cron.job_run_details` → `net._http_response` → `query_logs`
+(`source='function_logs'`, la única que da el código HTTP).
+
+### HIPÓTESIS CRUZADA SIN PROBAR — mirarla ANTES de tratarlos como tres defectos
+Clima (143 PostgREST 504 en 24 h), tick del hato (500 tras una serie de duración que subió
+a 31.054 ms) y tick de la ronda (3 `Gateway Timeout` el 09-13) son **todos de forma
+tiempo-de-espera contra la misma instancia**, y la base está ociosa (122 MB, 16/60
+conexiones, `postgres_logs` limpio). Probablemente **un problema de plataforma, no tres de
+módulo.** El verificador lo conectó; nadie lo probó todavía.
+
+### EL AISLAMIENTO POR WORKTREE FUNCIONÓ POR SEGUNDA VEZ — ya no es experimento
+`npm ci` una vez + un `git worktree` por agente + `node_modules` enlazado + prohibición
+explícita de `cd` fuera y de `checkout`/`switch`/`reset --hard`. Los 6 corrieron en
+paralelo sin pisarse, bug-triage corrió la suite entera, y el árbol compartido quedó limpio.
+**El `140` duplicado que tenía `main` en rojo desde el 09-09 está arreglado (renombrado a
+`144_`): 183 ficheros / 3.917 tests, todo verde.** Hallazgo #92 cerrado por los hechos.
+
+### TRAMPAS DE TOOLS DE ESTA CORRIDA
+- **`Modulo` en Notion es un multi-select con lista cerrada**: `Hato Lechero`, `Inventario`,
+  `Monitoreo`, `Clima`, `Aguacate`, `Ganado`, `Finanzas`, `Labores`, `Aplicaciones`,
+  `Reportes`, **`Auth & RLS`** (no `Auth`), `Infra`, `Cross-cutting`. Un valor fuera de la
+  lista **aborta el `create-pages` entero**, no solo esa página.
+- **`Detectado` NO se consulta como `"Detectado"` en SQL**: la columna es
+  `date:Detectado:start`. `Severidad` son `P0 — Critico` / `P1 — Alto` / `P2 — Medio` /
+  `P3 — Bajo` (con raya larga y **`Critico` sin tilde**).
+- El `id` legible de una ficha es `userDefined:ID`, no `id`.
+
+### UN VERIFICADOR QUE CONFIRMA PUEDE IGUAL CAMBIAR EL HALLAZGO — y esta vez cambió los cuatro
+Ninguno de los 4 P1 llegó a Notion como lo filó su autor. Dos patas se refutaron (el «no le
+abre pantalla» del ascenso de rol; las cargas de `hato-liquidaciones-fotos`, que no pueden
+producir fila porque **no existe ninguna tabla de liquidaciones**), dos cifras se
+corrigieron (143 y no 142; denominador ~39 y no 35 ni 65 — **dos agentes distintos dieron
+dos números distintos y los dos estaban mal**) y dos hallazgos se agravaron. **Verificar no
+es votar sí o no: es reescribir la afirmación.**

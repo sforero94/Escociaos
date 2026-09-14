@@ -509,3 +509,66 @@ Unir siempre por `animal_id`.** Duplicados entre activas: ninguna.
   convencion admite las dos formas.**
 - **`animales_sin_raza` = 176 de 179** segun el resumen del tick, mientras el hallazgo #56 habla de 35
   vacas. **O el contador mide otra cosa o el numero crecio mucho — verificar antes de tocar #56.**
+
+## Corrida 2026-09-14-lunes
+
+### TÉCNICA NUEVA Y ES LA QUE PRODUJO UN P1: emparejar `storage.objects` contra la tabla de dominio por proximidad temporal
+El pipeline de foto del hato escribe la fila de dominio **~30-60 s** después del objeto en
+Storage (control positivo: 2 objetos el 2026-09-08 22:21:51/22:24:32 → 19
+`hato_chequeo_vacas` a las 22:25:00). **Una carga sin fila dentro de esa ventana es un
+intento perdido.** Más barata y más concluyente que leer logs, y **funciona
+retroactivamente sobre meses**, que es lo que los logs de 24 h no permiten.
+**PERO — y el verificador lo refutó a medias:** `/hato/chequeo/foto` es una ruta de
+**preview** por contrato, y la escritura solo ocurre al pulsar Aprobar
+(`/hato/chequeo/commit`). Así que «foto sin filas» es **también** la firma de un humano que
+subió y se fue. **La técnica detecta el síntoma; no distingue la causa.** No escribir
+«el sistema descarta» sin una fila de `hato_capturas_foto` que lo diga.
+
+### DENOMINADORES: dos agentes dieron dos números y los dos estaban mal
+El roster de un chequeo real **no es solo vacas**: el 2026-07-09 fue `vaca=36 + novilla=3
+= 39`. Activos: `vaca=35, novilla=24, ternera=6` (65 en total). El chequeo del 09-08 tiene
+19. **La comparación correcta es 19 contra ~39**, no contra 35 ni contra 65.
+Los chequeos son **BIMENSUALES** (09-08, 07-09, 04-29, 02-25…), así que una ronda perdida
+cuesta dos meses. El **pesaje sí es SEMANAL en miércoles** (`hato_config.dia_pesaje_semanal
+= {"iso":3}`, y las 12 últimas fechas son miércoles a 7 días) — **la afirmación de que la
+planilla es mensual es falsa y ya se refutó.**
+
+### `pg_stat_user_tables.n_tup_del` detecta un borrado fuera de banda en una tabla append-only
+Así se vio que `rondas_avisos` tiene `n_tup_ins=4, n_tup_del=2, n_live_tup=2` sin un solo
+`.delete()` en todo el repo. **Correrlo cada corrida sobre las tablas que el diseño declara
+append-only** (`rondas_avisos`, `hato_eventos`, `hato_pajillas_uso`,
+`globalgap_correcciones`, `hato_correcciones`). Cuesta una consulta. **Prueba que hubo
+borrados, NO cuáles** — por eso ese hallazgo va con Confianza Media.
+
+### Estados verificados — no re-auditar
+- **Migraciones 148 y 149 CONVERGIDAS.** 148: de 2.694 `registros_trabajo` con
+  `empleado_id`, **0** con `valor_jornal_empleado` NULL y **0** que no reconstruyan
+  `costo_jornal/fraccion_jornal` con tolerancia 1. 149: la guarda vive en el cuerpo de
+  `auto_create_registro_trabajo_from_movimiento`, pero **0 escrituras desde el 09-13**, así
+  que sigue sin ejercitarse.
+- **`exceso_jornal` subió de 42 a 49.** Los 7 nuevos son todos de `fecha_trabajo=2026-09-10`,
+  creados el 09-12 16:46-16:50, lote 1. Piedra Paula, **$447.013**. Filado aparte de #95 a
+  propósito: es el único subconjunto resoluble de memoria.
+- **`hato_capturas_foto` en 0 filas es CORRECTO, no un defecto de la 146**: no ha habido
+  ninguna carga a ningún bucket desde que se aplicó (09-13). **No filarlo como «la 146 no
+  funcionó».**
+- Integridad referencial: **0 huérfanos en 15 relaciones**, 0 chapetas duplicadas,
+  0 pesajes duplicados, **0 tratamientos duplicados (bajó de 2/28)**, 0 stock negativo.
+- Inventario libro-vs-stock: **1 sola divergencia** (TecniFeed Boro −18,69), idéntica al
+  09-07. Sin regresiones.
+- Clima estructuralmente sano: 0 duplicados, distribución 90 días `ok:79 /
+  cobertura_parcial:7 / reconstruido:2 / **contador_congelado:0**` — la 122 se sostiene.
+
+### Navegación
+`hato_capturas_foto` usa **`creado_en`**, no `created_at`. `registros_trabajo` **no tiene
+`created_by`** (es `registrado_por`). `v_hato_pajillas_stock` **no tiene
+`cantidad_disponible`**. `hato_alertas_tick_runs` usa **`ejecutado_at`**.
+`telegram_alertas_suscripciones` usa **`alerta_clave` texto**, no FK.
+
+### Vigilancia
+- **RETIRAR** la vigilancia de los 65 días sin chequeo: el del 09-08 la cerró. **Sustituirla
+  por la COBERTURA**: si el próximo chequeo tampoco completa el roster, es patrón.
+- **NUEVO**: `monitoreos` congelado en 4.244 filas / última fecha 2026-08-28. Ámbar a los
+  22 días, rojo a los 28. Dentro del intervalo histórico — **no filar todavía**.
+- **NUEVO**: `movimientos_inventario` congelado desde 2026-09-05. Umbral útil ~20 días.
+- **FECHA DURA 2026-09-18**: vence la ventana de recuperación del día de clima 2026-08-28.

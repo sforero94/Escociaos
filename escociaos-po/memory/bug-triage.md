@@ -563,3 +563,34 @@ argumentable.
 #89, y **`secado_due` (`hatoAlertas.ts:184`) tiene la MISMA forma** («se debe secar hoy (fecha
 programada: X)») y sigue sin arreglar, a proposito, por falta de evidencia propia. **Al tocar cualquier
 mensaje de este motor, preguntar primero si el texto afirma algo que el selector no garantiza.**
+
+## Corrida 2026-09-14-lunes
+
+- **LÍNEA BASE VERDE OTRA VEZ.** `main@2eb472e`: `npx vitest run` → **183 ficheros /
+  3.917 tests, TODO VERDE** en 22,7 s. Lint 0 errores / 898 warnings. `tsc --noEmit` limpio.
+  El rojo de `hatoSchemaContract.test.ts` por el prefijo `140` duplicado quedó cerrado con
+  el renombre a `144_respaldo_pl_chequeo_vacas.sql` — **la suite volvió a ser señal.**
+- **La guarda de la 149 está viva y su mensaje SÍ llega al usuario, pero por UN solo
+  camino**, y los otros dos `catch` que el `CLAUDE.md` raíz le atribuye **no son suyos**:
+  `DailyMovementForm.tsx:766-775` → `throw` → `:797` `setError(err.message)` es el camino
+  real (INSERT en `movimientos_diarios_trabajadores`, que sí tiene el trigger).
+  `RegistrarTrabajoDialog.tsx:329` es **inalcanzable por esta vía** — ese formulario escribe
+  directo en `registros_trabajo`, tabla sin el trigger; ahí bloquea el guard de JS
+  `calcularExcesoJornalPorPersona`. `Labores.tsx:305` pertenece al trigger de
+  `trigger_tarea_status_labor.sql:47` y **coincide en la frase por casualidad** — nunca
+  estuvo muerto. **No re-verificar.**
+- **Las tres tablas hijas de `movimientos_diarios` llevan `ON DELETE CASCADE`**
+  (`confdeltype='c'`), así que el `delete` compensatorio de `DailyMovementForm.tsx:770`
+  limpia de verdad. El `RAISE` del trigger revierte su propio `DELETE` dentro de la misma
+  sentencia. Sin fuga.
+- **`[clima-reintento-sin-dato]` NO puede recuperar un día en el que el sync vivo capturó
+  MÁS de lo que devuelve la History API** — registra «se deja intacta (reagregar habría
+  bajado la cobertura)». Verificado con 08-27, 09-08 y 09-09. **Es correcto, no un fallo del
+  cron**: esos días son irrecuperables por esa vía y no hay que filarlos como reintento roto.
+- **Regla: al ver `cobertura_parcial`, contar los 504 ANTES de culpar al sensor** — y ahora
+  también revisar si el reintento pudo correr.
+- **El bucket de fotos de pesaje se llama `hato-pesajes-fotos`, no `pesajes-fotos`** —
+  el nombre equivocado devuelve 0 filas y parece «nadie subió nada».
+- `BUG_REPORT.md` **sin cambios** desde el 09-07 (no reverificado esta corrida, así
+  etiquetado). Sigue abierto el 3b (inventario consumido valorado en $0), que es
+  `clase: decision`.

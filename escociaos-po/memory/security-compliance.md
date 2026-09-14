@@ -306,3 +306,44 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
 - **El patron 073/081/101 se sigue aplicando solo (3a corrida)**: las 3 tablas de la 134 nacieron cerradas. **Falso positivo a evitar**: `pest_seasonal_profile`, `pest_umbral_economico` y `tareas_lotes` SI tienen GRANT de DML para `anon`, pero son de las migraciones 047/048, anteriores a la 081. **Comprobar la migracion de origen antes de llamar «regresion» a un grant de `anon`.**
 - **`informes-visita-proponer` (v2, `verify_jwt=false`) SI se gatea sola** (Bearer + Administrador/Gerencia). **No es un ESCO-1 repetido, no re-investigar.**
 - **`npm audit --omit=dev`: 9 (2 criticas, 5 altas, 2 moderadas).** La nueva es `fflate`, transitiva, entra por el `.docx` de informes de visita; peor caso una pestana colgada. **Filtrada como ruido; no re-reportar sin cambio de uso.**
+
+## Corrida 2026-09-14-lunes
+
+- **EL PADRÓN CAMBIÓ EN LA DIRECCIÓN CONTRARIA A LA ESPERADA: ya NO existe ninguna cuenta
+  Verificador.** `uriel@escocia.com` es hoy **Administrador**. Padrón: 6 Gerencia +
+  4 Administrador = 10 activas, 0 inactivas (era 6+3+1 el 09-07). **Filado P1, verificado
+  CONFIRMADO.** Regla de método: **contar el padrón POR ROL cada corrida y compararlo
+  contra el de la anterior, no solo contra cero** — un rol puede DESAPARECER por promoción,
+  y eso reabre por arriba lo que la 133 cerró por abajo.
+- **`auth.users.raw_user_meta_data` conserva el rol de aprovisionamiento.** Para
+  `uriel@escocia.com` dice `Verificador` y su `updated_at` es idéntico al `created_at`, o
+  sea que nunca se tocó. **Es la forma de probar desde la BASE que un rol cambió**, sin
+  depender de la memoria de la operación. Las dos fuentes pueden contradecirse y hoy lo hacen.
+- **Las 4 políticas de `fin_transacciones_ganado` (`_select/_insert/_update/_delete_admin`)
+  leen `usuarios.rol` DIRECTO**, no `get_user_role()`, así que **la 137 NO las acota por
+  `activo`**. Excepción real al «la 137 cerró la clase de cuenta desactivada».
+- **`empleados` es la asimetría que prueba que el rol importa**: `Verificador read active
+  empleados` está acotada a `estado='Activo'`; `Administrador read access on empleados` no
+  tiene acotación. Solo **9 de 21** empleados están Activo, así que el ascenso expone 12
+  filas más con cédula y salario.
+- **Un rol de app NO es capacidad de UI, y acá van en direcciones opuestas.** Un
+  Administrador con `modulos_acceso='{}'` igual ve **Tablero General y Configuración**
+  (`Layout.tsx:281-282` solo llama a `puedeAccederModulo` cuando la entrada tiene clave de
+  módulo), y el fail-open de `rol === ''` en `AuthContext.tsx:146-182` **persiste si el
+  fetch FALLA**, no solo durante los 2 s documentados.
+- **La clase de escritura always-true sigue en CERO (2ª corrida seguida).** El barrido sin
+  filtro de rol da 69 filas y **todas son SELECT** salvo `reportes_semanales ALL TO
+  service_role`, que siempre se descuenta. **No re-filar INSERT/UPDATE/DELETE.**
+- **`reportes-semanales` ya NO es la brecha gemela completa**: su UPDATE e INSERT quedaron
+  acotados por rol el 09-07. **Solo queda su SELECT**, misma forma que
+  `Informes visita: leer`. **Los dos son ahora la misma clase latente — revisarlos juntos**,
+  y **desde el panel de Storage**, porque `ALTER POLICY` sobre `storage.objects` exige ser
+  dueño (lección de la 109).
+- **Los dos árboles de edge function están SINCRONIZADOS.** `diff -rq` marca 23 ficheros
+  distintos, pero el diff real de cada uno es **una sola línea**: el comentario
+  `// ARCHIVO: <ruta>` de la cabecera. **No leer `diff -rq` como desincronización sin mirar
+  el cuerpo del diff.**
+- Barrido de secretos limpio. `npm audit --omit=dev`: 9 (2 críticas, 5 altas), **conjunto
+  idéntico al del 09-07** — ruido, no re-reportar sin cambio de uso.
+- Advisors security: 4 categorías, **ninguna nueva**. `rls_enabled_no_policy` subió a 29 por
+  crecimiento de `respaldos`.
