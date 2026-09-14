@@ -76,6 +76,9 @@ export const TEXTO_ENERGIA_SOLAR =
 export const TEXTO_TIEMPO_SOL =
   `Tiempo de sol: horas con radiación ≥ ${UMBRAL_TIEMPO_SOL_WM2} W/m² (umbral WMO). Es lo que el campo percibe como “sol”. Un día con ~3 kWh/m² puede tener 10+ h de sol visible.`;
 
+export const TEXTO_TIEMPO_SOL_24H =
+  `Suma las horas con radiación ≥ ${UMBRAL_TIEMPO_SOL_WM2} W/m² desde el amanecer. El último punto es el total del día hasta ahora. La ventana es de amanecer a atardecer (o la hora más cercana con lecturas).`;
+
 export const TEXTO_COBERTURA_PARCIAL =
   'Día con cobertura parcial: la estación no capturó el día completo. Energía y tiempo de sol de ese día son una cota inferior, no un día entero.';
 
