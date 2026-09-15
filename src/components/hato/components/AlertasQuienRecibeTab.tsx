@@ -3,7 +3,8 @@
 // (issue #217). Filas = tipos del catálogo, columnas = usuarios Telegram,
 // casilla = recibe sí/no. Escalamiento no vive en esta superficie.
 // Un usuario `campo` no puede recibir tipos de gerencia — el checkbox se
-// apaga y el guardrail del tick vuelve a filtrar.
+// apaga y el guardrail del tick vuelve a filtrar. Issue #251: gerencia no
+// puede encender Recibe/Escalamiento en secado_due / tratamiento_paso.
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
   agruparAlertasPorModulo,
   alternarRecibe,
   construirEstadoDesdeSuscripciones,
+  motivoBloqueoAlertaTelegram,
   puedeRecibirAlertaTelegram,
   type SuscripcionEstado,
 } from '@/utils/telegramAlertas';
@@ -113,6 +115,7 @@ export function AlertasQuienRecibeTab({
         <p className="text-sm text-gray-600 max-w-2xl">
           Una fila por tipo de alerta, una columna por usuario. La casilla es Recibe.
           Fernando (campo) solo puede recibir Secado y Paso de tratamiento.
+          Gerencia no puede encender Recibe ni Escalamiento en esos tipos: los gestiona en esta pantalla.
         </p>
         <Button size="sm" disabled={guardando} onClick={() => void handleGuardar()}>
           {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
@@ -149,6 +152,7 @@ export function AlertasQuienRecibeTab({
                   {usuarios.map((usuario) => {
                     const actual = estados[usuario.id]?.[alerta.clave] ?? { recibe: false, escalamiento: false };
                     const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, alerta.clave);
+                    const motivo = motivoBloqueoAlertaTelegram(usuario.rol_bot, alerta.clave);
                     return (
                       <TableCell key={usuario.id} className="text-center">
                         <div className="flex justify-center">
@@ -156,7 +160,12 @@ export function AlertasQuienRecibeTab({
                             checked={permitido && actual.recibe}
                             disabled={!permitido || guardando}
                             onCheckedChange={() => handleToggle(usuario, alerta.clave)}
-                            aria-label={`${alerta.nombre} para ${usuario.nombre_display}`}
+                            aria-label={
+                              motivo
+                                ? `${alerta.nombre} para ${usuario.nombre_display}: ${motivo}`
+                                : `${alerta.nombre} para ${usuario.nombre_display}`
+                            }
+                            title={motivo ?? undefined}
                           />
                         </div>
                       </TableCell>

@@ -20,6 +20,8 @@ import {
   suscripcionDefaultGerencia,
   estadoInicialSuscripciones,
   puedeRecibirAlertaTelegram,
+  aplicarGuardrailSuscripcion,
+  motivoBloqueoAlertaTelegram,
   type AlertaCatalogoRow,
   type AlertaSuscripcionRow,
   type SuscripcionEstado,
@@ -307,5 +309,41 @@ describe('defaults de suscripción (issue #217)', () => {
 
   it('reexporta el guardrail para que TelegramConfig y el gestor usen la misma función', () => {
     expect(puedeRecibirAlertaTelegram('campo', 'hato.servicio_sin_confirmacion')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.secado_due')).toBe(false);
+  });
+
+  it('aplicarGuardrailSuscripcion apaga recibe y escalamiento de gerencia en claves de campo', () => {
+    const fila = {
+      telegram_usuario_id: 'santi',
+      alerta_clave: 'hato.secado_due',
+      recibe: true,
+      escalamiento: true,
+    };
+    expect(aplicarGuardrailSuscripcion('gerencia', fila)).toEqual({
+      telegram_usuario_id: 'santi',
+      alerta_clave: 'hato.secado_due',
+      recibe: false,
+      escalamiento: false,
+    });
+    expect(aplicarGuardrailSuscripcion('campo', fila)).toEqual(fila);
+  });
+
+  it('aplicarGuardrailSuscripcion apaga tipos de gerencia para campo y los deja para gerencia', () => {
+    const fila = {
+      telegram_usuario_id: 'fer',
+      alerta_clave: 'hato.parto_proximo',
+      recibe: true,
+      escalamiento: true,
+    };
+    expect(aplicarGuardrailSuscripcion('campo', fila)).toMatchObject({ recibe: false, escalamiento: false });
+    expect(aplicarGuardrailSuscripcion('gerencia', fila)).toEqual(fila);
+  });
+
+  it('motivoBloqueoAlertaTelegram explica en español por qué la casilla está bloqueada', () => {
+    expect(motivoBloqueoAlertaTelegram('campo', 'hato.secado_due')).toBeNull();
+    expect(motivoBloqueoAlertaTelegram('gerencia', 'hato.servicio_sin_confirmacion')).toBeNull();
+    expect(motivoBloqueoAlertaTelegram('gerencia', 'hato.secado_due')).toMatch(/Fernando/);
+    expect(motivoBloqueoAlertaTelegram('gerencia', 'hato.tratamiento_paso')).toMatch(/Telegram/);
+    expect(motivoBloqueoAlertaTelegram('campo', 'hato.parto_proximo')).toMatch(/Campo no recibe/);
   });
 });

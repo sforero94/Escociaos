@@ -1285,13 +1285,22 @@ describe('guardrail Telegram campo (issue #217)', () => {
     expect(puedeRecibirAlertaTelegram('campo', 'hato.tratamiento_paso')).toBe(true);
   });
 
-  it('gerencia sí puede recibir cualquier tipo de hato (las suscripciones deciden)', () => {
-    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.servicio_sin_confirmacion')).toBe(true);
-    expect(puedeRecibirAlertaTelegram('admin', 'hato.rechequeo_due')).toBe(true);
+  it('gerencia no puede recibir secado ni tratamiento en Telegram (issue #251)', () => {
+    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.secado_due')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.tratamiento_paso')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('admin', 'hato.secado_due')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('monitor', 'hato.tratamiento_paso')).toBe(false);
   });
 
-  it('el guardrail es solo del hato: una clave de otro módulo no se bloquea a campo', () => {
+  it('gerencia sí puede recibir los tipos de gerencia (las suscripciones deciden)', () => {
+    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.servicio_sin_confirmacion')).toBe(true);
+    expect(puedeRecibirAlertaTelegram('admin', 'hato.rechequeo_due')).toBe(true);
+    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.parto_proximo')).toBe(true);
+  });
+
+  it('el guardrail es solo del hato: una clave de otro módulo no se bloquea', () => {
     expect(puedeRecibirAlertaTelegram('campo', 'aguacate.plaga')).toBe(true);
+    expect(puedeRecibirAlertaTelegram('gerencia', 'inventario.ronda_recordatorio')).toBe(true);
   });
 
   it('destinatariosTelegramPermitidos saca a campo de un tipo de gerencia y deja a gerencia', () => {
@@ -1300,11 +1309,18 @@ describe('guardrail Telegram campo (issue #217)', () => {
       ['santi', 'gerencia'],
     ]);
     expect(destinatariosTelegramPermitidos('servicio_sin_confirmacion', ['fer', 'santi'], roles)).toEqual(['santi']);
-    expect(destinatariosTelegramPermitidos('secado_due', ['fer', 'santi'], roles)).toEqual(['fer', 'santi']);
+    expect(destinatariosTelegramPermitidos('secado_due', ['fer', 'santi'], roles)).toEqual(['fer']);
+    expect(destinatariosTelegramPermitidos('tratamiento_paso', ['fer', 'santi'], roles)).toEqual(['fer']);
   });
 
-  it('un telegram_id sin rol en el mapa no se filtra (fail-open, no es campo)', () => {
+  it('un telegram_id sin rol en el mapa no se filtra en tipos de gerencia (fail-open)', () => {
     expect(destinatariosTelegramPermitidos('parto_proximo', ['desconocido'], new Map())).toEqual(['desconocido']);
+  });
+
+  it('un telegram_id sin rol en el mapa se descarta en tipos de campo (fail-closed, issue #251)', () => {
+    const roles = new Map([['fer', 'campo']]);
+    expect(destinatariosTelegramPermitidos('secado_due', ['fer', 'santi'], roles)).toEqual(['fer']);
+    expect(destinatariosTelegramPermitidos('tratamiento_paso', ['desconocido'], new Map())).toEqual([]);
   });
 });
 

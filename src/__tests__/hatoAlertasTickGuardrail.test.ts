@@ -65,3 +65,45 @@ describe('bot: respuesta de alerta usa los helpers del motor (issue #217)', () =
     expect(a).toBe(b);
   });
 });
+
+const UI_QUIEN_RECIBE = [
+  'src/components/hato/components/AlertasQuienRecibeTab.tsx',
+  'src/components/configuracion/TelegramConfig.tsx',
+];
+
+describe('UI: gerencia no enciende secado/tratamiento en Telegram (issue #251)', () => {
+  it('Quién recibe y TelegramConfig bloquean la casilla con el mismo guardrail', () => {
+    for (const rel of UI_QUIEN_RECIBE) {
+      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
+      expect(fuente, rel).toContain('puedeRecibirAlertaTelegram');
+      expect(fuente, rel).toContain('motivoBloqueoAlertaTelegram');
+      expect(fuente, rel).toMatch(/disabled=\{!permitido/);
+    }
+  });
+
+  it('los dos caminos de guardado pasan por aplicarGuardrailSuscripcion', () => {
+    const routing = readFileSync(
+      resolve(__dirname, '../..', 'src/components/hato/hooks/useAlertasRouting.ts'),
+      'utf8',
+    );
+    const config = readFileSync(
+      resolve(__dirname, '../..', 'src/components/configuracion/TelegramConfig.tsx'),
+      'utf8',
+    );
+    expect(routing).toContain('aplicarGuardrailSuscripcion');
+    expect(config).toContain('aplicarGuardrailSuscripcion');
+  });
+
+  it('la migración 152 deja las claves de campo solo en Fernando y no se reescribe a mano', () => {
+    const sql = readFileSync(
+      resolve(__dirname, '../..', 'src/sql/migrations/152_telegram_campo_solo_fernando_secado_tratamiento.sql'),
+      'utf8',
+    );
+    expect(sql).toContain('backup_152_telegram_alertas_suscripciones_campo');
+    expect(sql).toContain('hato.secado_due');
+    expect(sql).toContain('hato.tratamiento_paso');
+    expect(sql).toContain("%fernando%");
+    expect(sql).toMatch(/rol_bot = 'campo'/);
+    expect(sql).toMatch(/escalamiento = false/);
+  });
+});
