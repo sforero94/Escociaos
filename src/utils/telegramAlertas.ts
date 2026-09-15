@@ -8,7 +8,9 @@
 
 import {
   CLAVES_ALERTA_TELEGRAM_CAMPO,
+  esTipoAlertaTelegramCampo,
   puedeRecibirAlertaTelegram,
+  tipoDesdeClaveCatalogo,
 } from '@/utils/hatoAlertas';
 
 // ---------------------------------------------------------------------------
@@ -178,6 +180,30 @@ export function formatearResumenAlertas(resumen: ResumenSuscripciones): string {
 // ---------------------------------------------------------------------------
 
 export { CLAVES_ALERTA_TELEGRAM_CAMPO, puedeRecibirAlertaTelegram };
+
+/** Force-off recibe/escalamiento when the guardrail forbids the pair.
+ * Both save paths (TelegramConfig + Quién recibe) must go through this so a
+ * stale checkbox cannot persist a gerencia subscription on a campo key. */
+export function aplicarGuardrailSuscripcion<
+  T extends { alerta_clave: string; recibe: boolean; escalamiento: boolean },
+>(rolBot: string, fila: T): T {
+  const permitido = puedeRecibirAlertaTelegram(rolBot, fila.alerta_clave);
+  return {
+    ...fila,
+    recibe: permitido && fila.recibe,
+    escalamiento: permitido && fila.escalamiento,
+  };
+}
+
+/** Spanish reason the Quién recibe / TelegramConfig checkbox is locked.
+ * Null when the pair is allowed. */
+export function motivoBloqueoAlertaTelegram(rolBot: string, claveAlerta: string): string | null {
+  if (puedeRecibirAlertaTelegram(rolBot, claveAlerta)) return null;
+  if (esTipoAlertaTelegramCampo(tipoDesdeClaveCatalogo(claveAlerta))) {
+    return 'Gerencia no recibe Secado ni Paso de tratamiento en Telegram. Esos avisos van a Fernando (campo).';
+  }
+  return 'Campo no recibe este tipo en Telegram.';
+}
 
 /** Default checkboxes for a `rol_bot='campo'` user. Escalamiento is always
  * off: campo answers in the corral, it does not escalate to itself. */

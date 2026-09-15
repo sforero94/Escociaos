@@ -33,6 +33,8 @@ import {
   contarSuscripcionesUsuario,
   formatearResumenAlertas,
   estadoInicialSuscripciones,
+  aplicarGuardrailSuscripcion,
+  motivoBloqueoAlertaTelegram,
   puedeRecibirAlertaTelegram,
   type AlertaCatalogoRow,
   type AlertaSuscripcionRow,
@@ -300,17 +302,12 @@ export function TelegramConfig() {
       // `updated_by` (migración 096) no tiene trigger que lo llene -- a
       // diferencia del patrón `created_by` de 040/050/063/074, acá se
       // espera que quien escribe lo declare.
-      // Issue #217: a campo user cannot persist gerencia hato types, even
-      // if a stale checkbox is still on.
-      const filasConAutor = filas.map((f) => {
-        const permitido = puedeRecibirAlertaTelegram(rolBot, f.alerta_clave);
-        return {
-          ...f,
-          recibe: permitido && f.recibe,
-          escalamiento: permitido && f.escalamiento,
-          updated_by: profile?.id ?? null,
-        };
-      });
+      // Issues #217/#251: campo cannot persist gerencia hato types, and
+      // gerencia cannot persist campo types, even if a stale checkbox is on.
+      const filasConAutor = filas.map((f) => ({
+        ...aplicarGuardrailSuscripcion(rolBot, f),
+        updated_by: profile?.id ?? null,
+      }));
       const supabase = getSupabase() as any;
       const { error } = await supabase
         .from('telegram_alertas_suscripciones')
@@ -706,6 +703,7 @@ export function TelegramConfig() {
                 <Label>Alertas</Label>
                 <p className="text-xs text-brand-brown/60 mt-1">
                   Campo (Fernando) solo recibe Secado y Paso de tratamiento en Telegram.
+                  Gerencia no puede encender Recibe ni Escalamiento en esos tipos.
                   El resto se configura en{' '}
                   <Link to="/hato-lechero/alertas?tab=configuracion" className="text-primary underline">
                     Hato → Alertas → Configuración
@@ -731,6 +729,7 @@ export function TelegramConfig() {
                           {grupo.alertas.map((alerta) => {
                             const estado = alertasEstado[alerta.clave] ?? { recibe: false, escalamiento: false };
                             const permitido = puedeRecibirAlertaTelegram(rolBot, alerta.clave);
+                            const motivo = motivoBloqueoAlertaTelegram(rolBot, alerta.clave);
                             return (
                               <div key={alerta.clave} className="flex items-start justify-between gap-3 p-2.5">
                                 <div className="min-w-0">
@@ -738,9 +737,9 @@ export function TelegramConfig() {
                                   {alerta.descripcion && (
                                     <p className="text-xs text-brand-brown/60 mt-0.5">{alerta.descripcion}</p>
                                   )}
-                                  {!permitido && (
+                                  {motivo && (
                                     <p className="text-xs text-amber-700 mt-0.5">
-                                      Campo no recibe este tipo en Telegram.
+                                      {motivo}
                                     </p>
                                   )}
                                 </div>

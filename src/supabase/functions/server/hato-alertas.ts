@@ -1285,10 +1285,13 @@ export function construirMensajeCierreAlertaBroadcast(
 // (issue #217, gestor de alertas web)
 //
 // Routing is data-driven (`telegram_alertas_suscripciones`). This block is
-// the SAFETY NET so a bad checkbox cannot re-flood Fernando (rol_bot='campo')
-// with gerencia types (`servicio_sin_confirmacion`, `rechequeo_due`,
-// `parto_proximo`). Campo may receive only secado + tratamiento on Telegram.
-// Gerencia Telegram users can receive any type they subscribe to.
+// the SAFETY NET so a bad checkbox cannot re-flood:
+// - Fernando (rol_bot='campo') with gerencia types (`servicio_sin_confirmacion`,
+//   `rechequeo_due`, `parto_proximo`);
+// - Martha/Santiago (gerencia) with campo types (`secado_due`,
+//   `tratamiento_paso`) — issue #251. Campo Telegram is Fernando-only at the
+//   data layer (migrations 142/152); the tick still filters by rol_bot so a
+//   gerencia checkbox cannot flood again.
 //
 // The web manager answers with the SAME domain effects as the Telegram
 // callback `hato_alerta:{id}:{si|no|otro}` -- one function decides, two I/O
@@ -1343,28 +1346,33 @@ export function moduloDesdeClaveCatalogo(clave: string): string {
 
 /**
  * Can this Telegram user receive this catalog key on Telegram?
- * - Non-campo roles: yes (subscriptions decide).
- * - Campo + a non-hato key: yes (this guardrail is hato-only).
- * - Campo + hato gerencia type: no, even if the checkbox is on.
+ * - Non-hato keys: yes (this guardrail is hato-only; inventory stays open).
+ * - Hato campo types (`secado_due`, `tratamiento_paso`): only `rol_bot='campo'`.
+ *   Unknown / gerencia / admin fail closed — a missing role must not re-flood
+ *   Martha/Santiago (issue #251). Fernando is `campo`, so he still passes.
+ * - Hato gerencia types: everyone except `campo` (issue #217).
  */
 export function puedeRecibirAlertaTelegram(rolBot: string, claveAlerta: string): boolean {
-  if (rolBot !== 'campo') return true;
   if (moduloDesdeClaveCatalogo(claveAlerta) !== 'hato') return true;
-  return esTipoAlertaTelegramCampo(tipoDesdeClaveCatalogo(claveAlerta));
+  const tipo = tipoDesdeClaveCatalogo(claveAlerta);
+  if (esTipoAlertaTelegramCampo(tipo)) return rolBot === 'campo';
+  return rolBot !== 'campo';
 }
 
 /**
  * Filters the broadcast recipient list AFTER subscriptions are resolved.
- * `rolPorTelegramId` missing an id is treated as non-campo (fail open for
- * gerencia accounts whose rol_bot was not joined) -- the flood we block is
- * specifically `rol_bot='campo'`.
+ * Campo types keep only `rol_bot='campo'` (missing role → drop, fail closed).
+ * Gerencia types drop `campo` and keep everyone else, including an id whose
+ * role was not joined (fail open for gerencia accounts).
  */
 export function destinatariosTelegramPermitidos(
   tipo: TipoAlertaHato,
   telegramIds: readonly string[],
   rolPorTelegramId: ReadonlyMap<string, string>,
 ): string[] {
-  if (esTipoAlertaTelegramCampo(tipo)) return [...telegramIds];
+  if (esTipoAlertaTelegramCampo(tipo)) {
+    return telegramIds.filter((id) => rolPorTelegramId.get(id) === 'campo');
+  }
   return telegramIds.filter((id) => rolPorTelegramId.get(id) !== 'campo');
 }
 
