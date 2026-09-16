@@ -2,6 +2,7 @@ import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { parseOpenWeatherForecast } from './external-tools.ts';
 import { debeReagregarDia } from './clima-reagregacion.ts';
+import { conReintento, esStatusReintentable } from './reintento.ts';
 
 // ============================================================================
 // Ecowitt Cloud API Types
@@ -290,17 +291,25 @@ export async function handleClimaSync(c: Context): Promise<Response> {
     // 2. Parse observation
     const reading = parseEcowittObservation(ecowitt.data, ecowitt.time, creds.mac);
 
-    // 3. Insert via PostgREST with deduplication
-    const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_lecturas`, {
-      method: 'POST',
-      headers: {
-        apikey: sb.serviceKey,
-        Authorization: `Bearer ${sb.serviceKey}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal,resolution=ignore-duplicates',
-      },
-      body: JSON.stringify(reading),
-    });
+    // 3. Insert via PostgREST with deduplication.
+    // ESCO-97: the edge-runtime → PostgREST lane drops ~37% of these
+    // writes as HTTP 504. Without a retry that reading is gone. UNIQUE
+    // (station_id, timestamp) + ignore-duplicates makes a retry of a
+    // 504-that-actually-wrote safe — we never invent rainfall. Only this
+    // 5-min insert is retried; Ecowitt and backfill stay one-shot.
+    const insertRes = await conReintento(
+      () => fetch(`${sb.supabaseUrl}/rest/v1/clima_lecturas`, {
+        method: 'POST',
+        headers: {
+          apikey: sb.serviceKey,
+          Authorization: `Bearer ${sb.serviceKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal,resolution=ignore-duplicates',
+        },
+        body: JSON.stringify(reading),
+      }),
+      { esValorReintentable: (res) => esStatusReintentable(res.status) },
+    );
 
     if (!insertRes.ok) {
       const errorText = await insertRes.text();

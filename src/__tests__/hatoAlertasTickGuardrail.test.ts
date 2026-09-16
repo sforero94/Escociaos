@@ -45,6 +45,34 @@ describe('tick: guardrail Telegram campo (issue #217)', () => {
   });
 });
 
+describe('tick: ESCO-106 (JWT manual + retries + tick_runs en error)', () => {
+  it('ambas copias tienen la segunda puerta JWT+Gerencia (patrón acciones/ronda)', () => {
+    for (const rel of COPIAS) {
+      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
+      expect(fuente, rel).toContain('async function verificarAuth');
+      expect(fuente, rel).toContain("new Set(['Gerencia'])");
+      expect(fuente, rel).toContain('supabase.auth.getUser(token)');
+      expect(fuente, rel).toContain('El disparo manual está restringido a Gerencia.');
+      // El secreto solo ya no es la única puerta: sin JWT el 401 nombra las dos.
+      expect(fuente, rel).toContain('no hay JWT de Gerencia');
+      expect(fuente, rel).not.toContain('function verificarSecretoTick');
+    }
+  });
+
+  it('ambas copias reintentan lecturas abortantes y persisten estado=error al abortar', () => {
+    for (const rel of COPIAS) {
+      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
+      expect(fuente, rel).toContain('consultarConReintento');
+      expect(fuente, rel).toContain('esErrorPostgrestReintentable');
+      expect(fuente, rel).toContain('const INTENTOS_TICK = 3');
+      expect(fuente, rel).toContain('async function abortarTick');
+      expect(fuente, rel).toMatch(/estado:\s*'error'/);
+      expect(fuente, rel).toContain("from('hato_config')");
+      expect(fuente, rel).toContain("from('v_hato_estado_actual')");
+    }
+  });
+});
+
 const COPIAS_BOT = [
   'src/supabase/functions/server/telegram/bot.ts',
   'supabase/functions/make-server-1ccce916/telegram/bot.ts',
