@@ -109,9 +109,9 @@ describe('evaluarDerivaPorHash', () => {
 });
 
 describe('rutaEstadoDriftPorHash', () => {
-  it('produce una ruta distinta por funcion, para no mezclar el estado de las dos edge functions', () => {
+  it('produce una ruta distinta por funcion, para no mezclar estados', () => {
     expect(rutaEstadoDriftPorHash('make-server-1ccce916')).not.toBe(
-      rutaEstadoDriftPorHash('informes-visita-proponer'),
+      rutaEstadoDriftPorHash('otra-funcion'),
     );
   });
 });

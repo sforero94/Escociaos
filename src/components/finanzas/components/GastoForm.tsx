@@ -37,7 +37,13 @@ import type {
   MedioPago
 } from '../../../types/finanzas';
 import { toast } from 'sonner';
-import { obtenerFechaHoy, esFechaFuturaSospechosa } from '@/utils/fechas';
+import {
+  obtenerFechaHoy,
+  esFechaFuturaSospechosa,
+  mensajeConfirmacionFechaFutura,
+  ETIQUETA_CONFIRMAR_FECHA_FUTURA,
+  ETIQUETA_CORREGIR_FECHA_FUTURA,
+} from '@/utils/fechas';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface GastoFormProps {
@@ -524,9 +530,9 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
       open={mostrarConfirmacionFechaFutura}
       onOpenChange={setMostrarConfirmacionFechaFutura}
       title="¿Fecha en el futuro?"
-      description={`Estás guardando este gasto con fecha ${formData.fecha}, que todavía no llega. Si es un error de tecleo, corrígela antes de continuar; si es a propósito, confirma para guardarla igual.`}
-      confirmLabel="Guardar de todas formas"
-      cancelLabel="Corregir fecha"
+      description={mensajeConfirmacionFechaFutura('gasto', [formData.fecha])}
+      confirmLabel={ETIQUETA_CONFIRMAR_FECHA_FUTURA}
+      cancelLabel={ETIQUETA_CORREGIR_FECHA_FUTURA}
       onConfirm={() => {
         setMostrarConfirmacionFechaFutura(false);
         guardarGasto();

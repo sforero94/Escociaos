@@ -49,7 +49,7 @@ export type ResultadoFecha =
    * pidió `requiereAnio` y el texto era DD/MM sin año — así el flujo puede
    * decir "falta el año" en vez de "formato inválido". */
   | { tipo: "invalido"; motivo?: "sin_anio" }
-  /** Una sola lectura posible: se usa sin preguntar. */
+  /** Una sola lectura posible (día > 12, p.ej. 14/12/26): se usa sin preguntar. */
   | { tipo: "unico"; fecha: LecturaFecha }
   /** Dos lecturas posibles. `probable` es la más cercana a hoy y va primero
    * en el teclado; `alterna` es la otra. El flujo DEBE preguntar. */

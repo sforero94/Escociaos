@@ -11,11 +11,11 @@
 #     publicar el mismo bundle viejo mueve `updated_at`/`version` igual, y esa
 #     era la mitad ciega del chequeo original (v223 el 2026-08-28, v236 el
 #     2026-08-30, las dos veces "verde" por reloj sobre una regresion real);
-# (2) corre en MATRIZ sobre las DOS edge functions del proyecto -- antes solo
-#     miraba `make-server-1ccce916` y `informes-visita-proponer` podia quedar
-#     desincronizada 7 dias sin que nada lo dijera; y (3) si el job falla,
-#     avisa por Telegram -- antes solo quedaba en rojo en la pestana Actions y
-#     mandaba correo a una cuenta que nadie lee, así que un fallo real (el que
+# (2) el slug standalone `informes-visita-proponer` se retiro (ESCO-105); el
+#     cliente llama al gemelo dentro de `make-server-1ccce916`. La matriz
+#     cubre esa unica funcion desplegada; y (3) si el job falla, avisa por
+#     Telegram -- antes solo quedaba en rojo en la pestana Actions y mandaba
+#     correo a una cuenta que nadie lee, así que un fallo real (el que
 #     detecto esta misma tanda) paso varios dias sin que nadie se enterara.
 name: Deteccion de deriva de despliegue
 
@@ -38,8 +38,6 @@ jobs:
         include:
           - slug: make-server-1ccce916
             path: supabase/functions/make-server-1ccce916
-          - slug: informes-visita-proponer
-            path: supabase/functions/informes-visita-proponer
     steps:
       - name: Checkout
         uses: actions/checkout@v4

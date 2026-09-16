@@ -7,7 +7,14 @@ import { IngresosBatchRow } from './IngresosBatchRow';
 import { CompradorDialog } from './CompradorDialog';
 import type { BatchRowDataIngreso } from '@/types/finanzas';
 import type { IngresosCatalogs } from '../hooks/useIngresosCatalogs';
-import { obtenerFechaHoy } from '@/utils/fechas';
+import {
+  obtenerFechaHoy,
+  esFechaFuturaSospechosa,
+  mensajeConfirmacionFechaFutura,
+  ETIQUETA_CONFIRMAR_FECHA_FUTURA,
+  ETIQUETA_CORREGIR_FECHA_FUTURA,
+} from '@/utils/fechas';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const DRAFT_KEY = 'ingresos_batch_draft';
 
@@ -68,6 +75,8 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
   const [saving, setSaving] = useState(false);
   const [draftBanner, setDraftBanner] = useState<number | null>(null);
   const [showCompradorDialog, setShowCompradorDialog] = useState(false);
+  const [mostrarConfirmacionFechaFutura, setMostrarConfirmacionFechaFutura] = useState(false);
+  const [fechasFuturasPendientes, setFechasFuturasPendientes] = useState<string[]>([]);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Restore draft on mount
@@ -183,12 +192,7 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
     return valid;
   };
 
-  const handleSave = async () => {
-    if (!validate()) {
-      toast.error('Corrige los campos marcados en rojo antes de guardar');
-      return;
-    }
-
+  const persistirIngresos = async () => {
     try {
       setSaving(true);
       const supabase = getSupabase();
@@ -252,9 +256,26 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
     }
   };
 
+  const handleSave = async () => {
+    if (!validate()) {
+      toast.error('Corrige los campos marcados en rojo antes de guardar');
+      return;
+    }
+
+    const futuras = rows.filter((r) => esFechaFuturaSospechosa(r.fecha)).map((r) => r.fecha);
+    if (futuras.length > 0) {
+      setFechasFuturasPendientes(futuras);
+      setMostrarConfirmacionFechaFutura(true);
+      return;
+    }
+
+    await persistirIngresos();
+  };
+
   const filledCount = rows.filter((r) => r.nombre && r.valor).length;
 
   return (
+    <>
     <div className="space-y-4">
       {/* Draft restoration banner */}
       {draftBanner !== null && (
@@ -338,5 +359,20 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
         onError={(message) => toast.error(message)}
       />
     </div>
+
+    {/* ESCO-91: fecha más de un día en el futuro -- casi siempre un error de tecleo */}
+    <ConfirmDialog
+      open={mostrarConfirmacionFechaFutura}
+      onOpenChange={setMostrarConfirmacionFechaFutura}
+      title="¿Fecha en el futuro?"
+      description={mensajeConfirmacionFechaFutura('ingreso', fechasFuturasPendientes)}
+      confirmLabel={ETIQUETA_CONFIRMAR_FECHA_FUTURA}
+      cancelLabel={ETIQUETA_CORREGIR_FECHA_FUTURA}
+      onConfirm={() => {
+        setMostrarConfirmacionFechaFutura(false);
+        persistirIngresos();
+      }}
+    />
+    </>
   );
 }

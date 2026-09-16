@@ -35,7 +35,14 @@ import type {
   MedioPago
 } from '../../../types/finanzas';
 import { toast } from 'sonner';
-import { obtenerFechaHoy } from '@/utils/fechas';
+import {
+  obtenerFechaHoy,
+  esFechaFuturaSospechosa,
+  mensajeConfirmacionFechaFutura,
+  ETIQUETA_CONFIRMAR_FECHA_FUTURA,
+  ETIQUETA_CORREGIR_FECHA_FUTURA,
+} from '@/utils/fechas';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface IngresoFormProps {
   open: boolean;
@@ -240,6 +247,46 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     }
   };
 
+  const [mostrarConfirmacionFechaFutura, setMostrarConfirmacionFechaFutura] = useState(false);
+
+  const guardarIngreso = async () => {
+    try {
+      setSaving(true);
+
+      const ingresoData = {
+        ...formData,
+        valor: Number(formData.valor),
+        comprador_id: formData.comprador_id || null,
+        observaciones: formData.observaciones || null,
+        url_factura: formData.url_factura || null,
+        cantidad: mostrarCantidad && formData.cantidad ? Number(formData.cantidad) : null,
+        precio_unitario: mostrarCantidad && precioComputado ? precioComputado : null,
+      };
+
+      if (ingreso?.id) {
+        const { error } = await getSupabase()
+          .from('fin_ingresos')
+          .update(ingresoData)
+          .eq('id', ingreso.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await getSupabase()
+          .from('fin_ingresos')
+          .insert([ingresoData]);
+
+        if (error) throw error;
+      }
+
+      clearFormData();
+      onSuccess();
+    } catch (error: any) {
+      toast.error('Error al guardar ingreso: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -258,43 +305,15 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
       return;
     }
 
-    try {
-      setSaving(true);
-
-      const ingresoData = {
-        ...formData,
-        valor: Number(formData.valor),
-        comprador_id: formData.comprador_id || null,
-        observaciones: formData.observaciones || null,
-        url_factura: formData.url_factura || null,
-        cantidad: mostrarCantidad && formData.cantidad ? Number(formData.cantidad) : null,
-        precio_unitario: mostrarCantidad && precioComputado ? precioComputado : null,
-      };
-
-      if (ingreso?.id) {
-        // Update
-        const { error } = await getSupabase()
-          .from('fin_ingresos')
-          .update(ingresoData)
-          .eq('id', ingreso.id);
-
-        if (error) throw error;
-      } else {
-        // Create
-        const { error } = await getSupabase()
-          .from('fin_ingresos')
-          .insert([ingresoData]);
-
-        if (error) throw error;
-      }
-
-      clearFormData();
-      onSuccess();
-    } catch (error: any) {
-      toast.error('Error al guardar ingreso: ' + error.message);
-    } finally {
-      setSaving(false);
+    // ESCO-91: same soft confirm as GastoForm. A future date saves cleanly
+    // and then vanishes from the historial (`fecha <= hoy`) until that day
+    // arrives. Confirm, never block.
+    if (esFechaFuturaSospechosa(formData.fecha)) {
+      setMostrarConfirmacionFechaFutura(true);
+      return;
     }
+
+    await guardarIngreso();
   };
 
   const isEditing = !!ingreso?.id;
@@ -610,6 +629,20 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         </DialogContent>
       </Dialog>
     )}
+
+    {/* ESCO-91: fecha más de un día en el futuro -- casi siempre un error de tecleo */}
+    <ConfirmDialog
+      open={mostrarConfirmacionFechaFutura}
+      onOpenChange={setMostrarConfirmacionFechaFutura}
+      title="¿Fecha en el futuro?"
+      description={mensajeConfirmacionFechaFutura('ingreso', [formData.fecha])}
+      confirmLabel={ETIQUETA_CONFIRMAR_FECHA_FUTURA}
+      cancelLabel={ETIQUETA_CORREGIR_FECHA_FUTURA}
+      onConfirm={() => {
+        setMostrarConfirmacionFechaFutura(false);
+        guardarIngreso();
+      }}
+    />
     </>
   );
 }

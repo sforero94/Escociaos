@@ -7,7 +7,14 @@ import { GastosBatchRow } from './GastosBatchRow';
 import { ProveedorDialog } from '@/components/shared/ProveedorDialog';
 import type { BatchRowData } from '@/types/finanzas';
 import type { GastosCatalogs } from '../hooks/useGastosCatalogs';
-import { obtenerFechaHoy } from '@/utils/fechas';
+import {
+  obtenerFechaHoy,
+  esFechaFuturaSospechosa,
+  mensajeConfirmacionFechaFutura,
+  ETIQUETA_CONFIRMAR_FECHA_FUTURA,
+  ETIQUETA_CORREGIR_FECHA_FUTURA,
+} from '@/utils/fechas';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const DRAFT_KEY = 'gastos_batch_draft';
 
@@ -63,6 +70,8 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   const [saving, setSaving] = useState(false);
   const [draftBanner, setDraftBanner] = useState<number | null>(null);
   const [showProveedorDialog, setShowProveedorDialog] = useState(false);
+  const [mostrarConfirmacionFechaFutura, setMostrarConfirmacionFechaFutura] = useState(false);
+  const [fechasFuturasPendientes, setFechasFuturasPendientes] = useState<string[]>([]);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Restore draft on mount
@@ -182,17 +191,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
     return valid;
   };
 
-  const handleSave = async () => {
-    const touchedRows = rows.filter(isRowTouched);
-    if (touchedRows.length === 0) {
-      toast.error('No hay gastos para guardar');
-      return;
-    }
-    if (!validate()) {
-      toast.error('Corrige los campos marcados en rojo antes de guardar');
-      return;
-    }
-
+  const persistirGastos = async () => {
     try {
       setSaving(true);
       const supabase = getSupabase();
@@ -245,9 +244,31 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
     }
   };
 
+  const handleSave = async () => {
+    const touchedRows = rows.filter(isRowTouched);
+    if (touchedRows.length === 0) {
+      toast.error('No hay gastos para guardar');
+      return;
+    }
+    if (!validate()) {
+      toast.error('Corrige los campos marcados en rojo antes de guardar');
+      return;
+    }
+
+    const futuras = touchedRows.filter((r) => esFechaFuturaSospechosa(r.fecha)).map((r) => r.fecha);
+    if (futuras.length > 0) {
+      setFechasFuturasPendientes(futuras);
+      setMostrarConfirmacionFechaFutura(true);
+      return;
+    }
+
+    await persistirGastos();
+  };
+
   const filledCount = rows.filter((r) => r.nombre && r.valor).length;
 
   return (
+    <>
     <div className="space-y-4">
       {/* Draft restoration banner */}
       {draftBanner !== null && (
@@ -331,5 +352,20 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         onError={(message) => toast.error(message)}
       />
     </div>
+
+    {/* ESCO-91: fecha más de un día en el futuro -- casi siempre un error de tecleo */}
+    <ConfirmDialog
+      open={mostrarConfirmacionFechaFutura}
+      onOpenChange={setMostrarConfirmacionFechaFutura}
+      title="¿Fecha en el futuro?"
+      description={mensajeConfirmacionFechaFutura('gasto', fechasFuturasPendientes)}
+      confirmLabel={ETIQUETA_CONFIRMAR_FECHA_FUTURA}
+      cancelLabel={ETIQUETA_CORREGIR_FECHA_FUTURA}
+      onConfirm={() => {
+        setMostrarConfirmacionFechaFutura(false);
+        persistirGastos();
+      }}
+    />
+    </>
   );
 }

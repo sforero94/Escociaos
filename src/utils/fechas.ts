@@ -141,10 +141,35 @@ export function diferenciaEnDias(fecha1: Date | string, fecha2: Date | string): 
  * (hallazgo ESCO-91: cuatro gastos capturados el 08-09 con fecha 13-09,
  * invisibles en el historial y en el tablero durante cinco días). Un día de
  * margen evita falsos positivos por desfase de huso horario al guardar.
+ *
+ * Soft confirm, never a hard block: the caller must ask and still allow save.
  */
 export function esFechaFuturaSospechosa(fecha: string, hoy: string = obtenerFechaHoy()): boolean {
   if (!esFechaValida(fecha) || fecha <= hoy) return false;
   return diferenciaEnDias(fecha, hoy) > 1;
+}
+
+export const ETIQUETA_CONFIRMAR_FECHA_FUTURA = 'Guardar de todas formas';
+export const ETIQUETA_CORREGIR_FECHA_FUTURA = 'Corregir fecha';
+
+/**
+ * Copy for the ESCO-91 confirmation. `fechasIso` are the dates that already
+ * failed `esFechaFuturaSospechosa` — the helper does not re-filter them.
+ */
+export function mensajeConfirmacionFechaFutura(
+  tipo: 'gasto' | 'ingreso',
+  fechasIso: string[],
+): string {
+  const listado = [...new Set(fechasIso.map((f) => formatearFecha(f)))].join(', ');
+  const varios = fechasIso.length > 1;
+  const sujeto = varios
+    ? (tipo === 'gasto' ? 'estos gastos' : 'estos ingresos')
+    : (tipo === 'gasto' ? 'este gasto' : 'este ingreso');
+  const etiquetaFecha = varios ? 'fechas' : 'fecha';
+  const llega = varios ? 'llegan' : 'llega';
+  const corregir = varios ? 'corrígelas' : 'corrígela';
+  const guardar = varios ? 'guardarlas' : 'guardarla';
+  return `Estás guardando ${sujeto} con ${etiquetaFecha} ${listado}, que todavía no ${llega}. Si es un error de tecleo, ${corregir} antes de continuar; si es a propósito, confirma para ${guardar} igual.`;
 }
 
 /**
