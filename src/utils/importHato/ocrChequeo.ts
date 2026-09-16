@@ -322,9 +322,24 @@ export function construirRosterPlanilla(animales: readonly AnimalRosterPlanilla[
 export type MotivoNoLeida =
   | 'numero_ilegible'
   | 'numero_fuera_del_roster'
+  /** NUEVO (plan de novedades §4.3) -- promovible, resolución DISTINTA de
+   * las otras dos: resolverla tiene un efecto secundario irreversible sobre
+   * `hato_animales.estado` (reactivar o no un animal), así que no puede
+   * compartir motivo con `numero_fuera_del_roster` sin obligar a la UI a
+   * ramificar sobre un sub-estado no declarado. `validarAnclaFila` (frozen)
+   * NUNCA emite este motivo -- lo decide `clasificarPromocion`, DESPUÉS de
+   * un rechazo, refinando `numero_fuera_del_roster` cuando la chapeta leída
+   * la lleva un animal inactivo del hato. */
+  | 'numero_animal_inactivo'
   | 'chapeta_ambigua_en_roster'
   | 'nombre_no_corresponde'
   | 'lectura_repetida_divergente';
+
+/** Por qué una fila que SÍ era promovible por su motivo terminó sin
+ * promoverse (plan §4.4): "el motivo no es de los tres promovibles", "no
+ * trae nombre escrito" o "no trae ningún dato escrito". Nunca se infiere
+ * ni se oculta -- viaja junto al `motivo` original en `FilaOcrNoLeida`. */
+export type MotivoNoPromovible = 'motivo_terminal' | 'sin_nombre_escrito' | 'sin_datos';
 
 export interface FilaOcrNoLeida {
   pagina: number;
@@ -332,6 +347,9 @@ export interface FilaOcrNoLeida {
   numeroImpreso: string;
   nombreImpreso: string;
   motivo: MotivoNoLeida;
+  /** Por qué esta fila, siendo rechazada, tampoco pasó a la ventana de
+   * revisión como fila promovida (plan §4.4). */
+  motivoNoPromovible: MotivoNoPromovible;
   detalle: string;
   /** Lo que el modelo alcanzó a leer en esa fila. Se devuelve ÍNTEGRO aunque
    * la fila no entre al pipeline: nada se descarta en silencio en este
@@ -450,6 +468,189 @@ export function validarAnclaFila(fila: FilaOcr, roster: RosterPlanilla): Resulta
 }
 
 // ---------------------------------------------------------------------------
+// 4.5. Promoción de filas manuscritas (hoja de holgura, plan de novedades §4)
+// ---------------------------------------------------------------------------
+//
+// `validarAnclaFila` queda INTACTO, arriba, byte por byte -- este bloque
+// decide DESPUÉS de un rechazo, nunca dentro del cotejo del ancla. Un bug
+// acá puede como mucho decorar mal un rechazo; jamás puede convertir un
+// rechazo en una aceptación (esa es la propiedad de seguridad, ver el plan).
+
+/** Un animal que NO está en el roster IMPRESO (vacas activas con chapeta y
+ * nombre) pero que lleva el número que el modelo leyó en una fila rechazada:
+ * una novilla/ternera activa, un toro, o cualquier animal inactivo
+ * (descartada/vendida/muerta/...). SUGERENCIA para que un humano decida,
+ * jamás una asignación automática. */
+export interface AnimalFueraDelRoster {
+  id: string;
+  numero: number;
+  nombre: string | null;
+  estado: string;
+}
+
+export interface FilaOcrPromovida {
+  /** Join key contra `FilaChequeoNormalizada.fila`, igual que
+   * `filasConfirmadas`. */
+  filaExcel: number;
+  pagina: number;
+  orden: number;
+  /** Verbatim. NUNCA se escribe en la columna `#`. */
+  numeroImpreso: string;
+  /** Verbatim. Se escribe en `Nombre` como ETIQUETA, nunca como llave. */
+  nombreImpreso: string;
+  motivo: 'numero_ilegible' | 'numero_fuera_del_roster' | 'numero_animal_inactivo';
+  detalle: string;
+  celdas: Record<ColumnaOcr, CeldaOcr>;
+  celdasNoConfiables: ColumnaOcr[];
+  /** Solo `numero_animal_inactivo`. 1..N. Nunca se aplica solo. */
+  candidatosInactivos: AnimalFueraDelRoster[];
+  /** Solo `numero_fuera_del_roster` cuando el número resuelve a un animal
+   * ACTIVO fuera del roster impreso (una novilla). Sugerencia. */
+  sugerenciaActiva: AnimalFueraDelRoster | null;
+}
+
+/** Prefijo ESTABLE del issue de procedencia de una fila promovida. Se busca
+ * por texto en la UI y en cualquier consulta futura sobre
+ * `normalizacion_issues`. No se cambia sin migrar los datos ya escritos --
+ * mismo criterio que `PREFIJO_ISSUE_CORRECCION_MANUAL`
+ * (`hatoCorreccionChequeo.ts`). */
+export const PREFIJO_ISSUE_FILA_PROMOVIDA = 'FILA ESCRITA A MANO';
+
+/** Motivos que `validarAnclaFila` puede emitir y que SÍ admiten promoción,
+ * bajo el resto del predicado del §4.4. Los otros tres (`chapeta_ambigua_en_roster`,
+ * `nombre_no_corresponde`, `lectura_repetida_divergente`) son la firma exacta
+ * del row drift o de una contradicción entre fotos -- TERMINALES para
+ * siempre, sin excepción. El test que fija este conjunto exhaustivamente
+ * vive en `importHatoOcrChequeo.test.ts`. */
+const MOTIVOS_PROMOVIBLES: ReadonlySet<MotivoNoLeida> = new Set<MotivoNoLeida>([
+  'numero_ilegible',
+  'numero_fuera_del_roster',
+  'numero_animal_inactivo',
+]);
+
+/** `true` cuando NINGUNA de las 11 celdas de dato trae texto -- condición
+ * (3) del predicado de promoción (§4.4) y, antes que eso, la defensa
+ * server-side contra las filas en blanco de la hoja de holgura que el
+ * prompt ya pide no devolver (belt-and-braces: un prompt solo no basta). */
+export function esFilaOcrEnBlanco(fila: FilaOcr): boolean {
+  return COLUMNAS_OCR.every((c) => fila.celdas[c].texto.trim() === '');
+}
+
+/** Indexa por chapeta cada animal que NO está en el roster impreso (§5.1):
+ * novillas/terneras/toros activos y cualquier animal inactivo. Devuelve una
+ * LISTA por número porque la unicidad de chapeta (migración 066) solo vale
+ * entre animales `activa` -- dos animales inactivos pueden compartir el
+ * mismo número reciclado. Nunca indexa un número que YA tiene ancla válida
+ * en el roster impreso: ese número ya se resuelve en `validarAnclaFila` y no
+ * necesita sugerencia. */
+export function construirIndiceFueraDelRoster(
+  animales: readonly AnimalFueraDelRoster[],
+  roster: RosterPlanilla,
+): Map<number, AnimalFueraDelRoster[]> {
+  const indice = new Map<number, AnimalFueraDelRoster[]>();
+  for (const animal of animales) {
+    if (roster.porNumero.has(animal.numero)) continue;
+    const lista = indice.get(animal.numero);
+    if (lista) lista.push(animal);
+    else indice.set(animal.numero, [animal]);
+  }
+  return indice;
+}
+
+export type ResultadoClasificacionPromocion =
+  | {
+      promovible: true;
+      motivo: 'numero_ilegible' | 'numero_fuera_del_roster' | 'numero_animal_inactivo';
+      detalle: string;
+      candidatosInactivos: AnimalFueraDelRoster[];
+      sugerenciaActiva: AnimalFueraDelRoster | null;
+    }
+  | { promovible: false; motivoNoPromovible: MotivoNoPromovible };
+
+function detalleParaPromocion(
+  motivo: 'numero_ilegible' | 'numero_fuera_del_roster' | 'numero_animal_inactivo',
+  fila: FilaOcr,
+  detalleRechazo: string,
+  candidatosInactivos: AnimalFueraDelRoster[],
+  sugerenciaActiva: AnimalFueraDelRoster | null,
+): string {
+  if (motivo === 'numero_animal_inactivo') {
+    const lista = candidatosInactivos
+      .map((a) => `#${a.numero} ${a.nombre ?? '(sin nombre)'} (${a.estado})`)
+      .join(', ');
+    const plural = candidatosInactivos.length > 1 ? 'más de un animal inactivo' : 'un animal inactivo';
+    return (
+      `la chapeta escrita a mano '${fila.numeroImpreso.trim()}' no está entre las vacas activas impresas -- ` +
+      `la lleva ${plural} del hato (${lista}); fila promovida a revisión para que un humano decida si volvió al ` +
+      `hato o si el número se leyó/anotó mal`
+    );
+  }
+  if (motivo === 'numero_fuera_del_roster' && sugerenciaActiva) {
+    return (
+      `${detalleRechazo} -- coincide con la novilla/ternera activa #${sugerenciaActiva.numero} ` +
+      `${sugerenciaActiva.nombre ?? '(sin nombre)'}, sugerida pero NO asignada; fila escrita a mano, promovida a revisión`
+    );
+  }
+  return `${detalleRechazo} -- fila escrita a mano (trae nombre y al menos un dato), promovida a revisión`;
+}
+
+/**
+ * Decide si una fila RECHAZADA por `validarAnclaFila` entra a la ventana de
+ * revisión como fila promovida (plan §4.4). Se llama SIEMPRE después de un
+ * rechazo, nunca en su lugar: `rechazo` es el resultado `{motivo, detalle}`
+ * de un `ResultadoAncla` con `ok: false`.
+ *
+ * El predicado, en orden -- las tres condiciones tienen que sostenerse TODAS:
+ *   1. el motivo es uno de los tres promovibles (con el refinamiento
+ *      `numero_fuera_del_roster` -> `numero_animal_inactivo` decidido acá,
+ *      NUNCA dentro de `validarAnclaFila`);
+ *   2. se escribió un nombre (`normalizarNombreParaCotejo` no da vacío);
+ *   3. al menos una de las 11 celdas de dato trae texto.
+ */
+export function clasificarPromocion(
+  rechazo: { motivo: MotivoNoLeida; detalle: string },
+  fila: FilaOcr,
+  indiceFueraDelRoster: ReadonlyMap<number, AnimalFueraDelRoster[]>,
+): ResultadoClasificacionPromocion {
+  if (!MOTIVOS_PROMOVIBLES.has(rechazo.motivo)) {
+    return { promovible: false, motivoNoPromovible: 'motivo_terminal' };
+  }
+
+  // Refinamiento (§4.2/§4.6): decide el motivo ANTES de mirar nombre/datos,
+  // porque es un hecho sobre la chapeta, no sobre la promovibilidad de la
+  // fila. `numero_ilegible` no tiene chapeta legible con la que buscar.
+  let motivo = rechazo.motivo as 'numero_ilegible' | 'numero_fuera_del_roster' | 'numero_animal_inactivo';
+  let candidatosInactivos: AnimalFueraDelRoster[] = [];
+  let sugerenciaActiva: AnimalFueraDelRoster | null = null;
+
+  if (motivo !== 'numero_ilegible') {
+    const numeroTexto = fila.numeroImpreso.trim();
+    const numero = /^\d{1,4}$/.test(numeroTexto) ? parseInt(numeroTexto, 10) : null;
+    if (numero !== null) {
+      const candidatos = indiceFueraDelRoster.get(numero) ?? [];
+      candidatosInactivos = candidatos.filter((a) => a.estado !== 'activa');
+      sugerenciaActiva = candidatos.find((a) => a.estado === 'activa') ?? null;
+      if (candidatosInactivos.length > 0) motivo = 'numero_animal_inactivo';
+    }
+  }
+
+  if (normalizarNombreParaCotejo(fila.nombreImpreso) === '') {
+    return { promovible: false, motivoNoPromovible: 'sin_nombre_escrito' };
+  }
+  if (esFilaOcrEnBlanco(fila)) {
+    return { promovible: false, motivoNoPromovible: 'sin_datos' };
+  }
+
+  return {
+    promovible: true,
+    motivo,
+    detalle: detalleParaPromocion(motivo, fila, rechazo.detalle, candidatosInactivos, sugerenciaActiva),
+    candidatosInactivos,
+    sugerenciaActiva,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 5. De la lectura OCR a la matriz cruda (el reemplazo de `grilla.ts`)
 // ---------------------------------------------------------------------------
 
@@ -491,14 +692,28 @@ export interface OpcionesHojaOcr {
   /** Título de la fila 0. Vacío por defecto: la fecha del chequeo NO se
    * inventa desde la foto (ver `sugerirFechaChequeo` y `aplicarFechaChequeo`). */
   titulo?: string;
+  /** Animales fuera del roster impreso, indexados por chapeta
+   * (`construirIndiceFueraDelRoster`) -- lo que hace posible refinar
+   * `numero_fuera_del_roster` a `numero_animal_inactivo` (plan de novedades
+   * §4.2/§4.6/§5.1). Ausente o vacío -> comportamiento IDÉNTICO, byte por
+   * byte, al de antes de esta opción: sin índice no hay refinamiento ni
+   * sugerencia, pero la promoción por nombre+datos igual puede darse. */
+  indiceFueraDelRoster?: ReadonlyMap<number, AnimalFueraDelRoster[]>;
 }
 
 export interface ResultadoOcrChequeo {
   /** La matriz cruda, lista para `normalizarHojas` -- exactamente la misma
-   * forma que produce el lector de `.xlsx`. */
+   * forma que produce el lector de `.xlsx`. Las filas promovidas van
+   * DESPUÉS de las confirmadas, en ese orden. */
   hoja: HojaCruda;
   filasConfirmadas: LecturaFilaConfirmada[];
   filasNoLeidas: FilaOcrNoLeida[];
+  /** Filas rechazadas por `validarAnclaFila` pero promovidas a la ventana de
+   * revisión (plan de novedades §4/§5): sin ancla contra el roster impreso,
+   * pero con nombre y al menos un dato escritos a mano. `numero = null`
+   * hasta que un humano le asigne una caravana -- nunca llegan solas a la
+   * base (`construirDiffChequeo` las clasifica `no_reconocido`). */
+  filasPromovidas: FilaOcrPromovida[];
   /** Vacas del roster que no aparecieron en ninguna foto. Es el detector de
    * "faltó una página" o "la foto salió cortada": no depende de que un código
    * de página salga legible, sino de la ausencia del dato mismo. */
@@ -535,6 +750,9 @@ export function procesarLecturaOcr(
   roster: RosterPlanilla,
   opciones: OpcionesHojaOcr,
 ): ResultadoOcrChequeo {
+  const indiceFueraDelRoster: ReadonlyMap<number, AnimalFueraDelRoster[]> =
+    opciones.indiceFueraDelRoster ?? new Map();
+
   const filasConfirmadas: LecturaFilaConfirmada[] = [];
   const filasNoLeidas: FilaOcrNoLeida[] = [];
   const advertencias: string[] = [];
@@ -544,6 +762,27 @@ export function procesarLecturaOcr(
   // en dos fotos.
   const yaConfirmada = new Map<number, { indice: number; firma: string; fila: FilaOcr }>();
   const rechazadasPorDuplicado = new Set<number>();
+
+  // Filas RECHAZADAS pero PROMOVIDAS (§4.4/§4.5): no tienen chapeta de
+  // roster con la que indexar, así que la clave de dedupe entre fotos es la
+  // misma que usa `ChequeoDiffReview` para reconciliar correcciones humanas
+  // -- nombre normalizado + número impreso, tal cual.
+  interface CandidataPromovida {
+    pagina: number;
+    orden: number;
+    numeroImpreso: string;
+    nombreImpreso: string;
+    motivo: 'numero_ilegible' | 'numero_fuera_del_roster' | 'numero_animal_inactivo';
+    detalle: string;
+    celdas: Record<ColumnaOcr, CeldaOcr>;
+    celdasNoConfiables: ColumnaOcr[];
+    candidatosInactivos: AnimalFueraDelRoster[];
+    sugerenciaActiva: AnimalFueraDelRoster | null;
+    firma: string;
+  }
+  const candidatasPromovidas: CandidataPromovida[] = [];
+  const yaPromovida = new Map<string, number>(); // firma de identidad -> índice en candidatasPromovidas
+  const rechazadasPromovidasPorDuplicado = new Set<string>();
 
   const paginasOrdenadas = [...paginas].sort((a, b) => a.pagina - b.pagina);
 
@@ -557,14 +796,63 @@ export function procesarLecturaOcr(
     for (const fila of [...pagina.filas].sort((a, b) => a.orden - b.orden)) {
       const ancla = validarAnclaFila(fila, roster);
       if (!ancla.ok) {
-        filasNoLeidas.push({
+        const clasificacion = clasificarPromocion(ancla, fila, indiceFueraDelRoster);
+        if (!clasificacion.promovible) {
+          filasNoLeidas.push({
+            pagina: fila.pagina,
+            orden: fila.orden,
+            numeroImpreso: fila.numeroImpreso,
+            nombreImpreso: fila.nombreImpreso,
+            motivo: ancla.motivo,
+            motivoNoPromovible: clasificacion.motivoNoPromovible,
+            detalle: ancla.detalle,
+            celdas: fila.celdas,
+          });
+          continue;
+        }
+
+        // Dedupe entre fotos (§4.5): misma regla que las confirmadas
+        // (idéntica -> se conserva una; divergente -> ninguna), pero sin
+        // chapeta como llave -- la fila no tiene ancla en el roster.
+        const identidad = `${normalizarNombreParaCotejo(fila.nombreImpreso)}|${fila.numeroImpreso.trim()}`;
+        const firma = firmaLectura(fila);
+        const indicePrevia = yaPromovida.get(identidad);
+        if (indicePrevia !== undefined) {
+          const previa = candidatasPromovidas[indicePrevia];
+          if (previa.firma === firma) {
+            advertencias.push(
+              `la fila escrita a mano '#${fila.numeroImpreso}' / '${fila.nombreImpreso}' aparece en dos fotos con la MISMA lectura -- se conservó una sola`,
+            );
+            continue;
+          }
+          rechazadasPromovidasPorDuplicado.add(identidad);
+          filasNoLeidas.push({
+            pagina: fila.pagina,
+            orden: fila.orden,
+            numeroImpreso: fila.numeroImpreso,
+            nombreImpreso: fila.nombreImpreso,
+            motivo: 'lectura_repetida_divergente',
+            motivoNoPromovible: 'motivo_terminal',
+            detalle: `la fila escrita a mano '#${fila.numeroImpreso}' / '${fila.nombreImpreso}' se leyó en dos fotos con datos distintos -- no se adjudica sola, revisar cuál foto corresponde a este chequeo`,
+            celdas: fila.celdas,
+          });
+          continue;
+        }
+
+        const celdasNoConfiablesPromovida = COLUMNAS_OCR.filter((c) => fila.celdas[c].confianza !== 'alta');
+        yaPromovida.set(identidad, candidatasPromovidas.length);
+        candidatasPromovidas.push({
           pagina: fila.pagina,
           orden: fila.orden,
           numeroImpreso: fila.numeroImpreso,
           nombreImpreso: fila.nombreImpreso,
-          motivo: ancla.motivo,
-          detalle: ancla.detalle,
+          motivo: clasificacion.motivo,
+          detalle: clasificacion.detalle,
           celdas: fila.celdas,
+          celdasNoConfiables: celdasNoConfiablesPromovida,
+          candidatosInactivos: clasificacion.candidatosInactivos,
+          sugerenciaActiva: clasificacion.sugerenciaActiva,
+          firma,
         });
         continue;
       }
@@ -590,6 +878,7 @@ export function procesarLecturaOcr(
           numeroImpreso: fila.numeroImpreso,
           nombreImpreso: fila.nombreImpreso,
           motivo: 'lectura_repetida_divergente',
+          motivoNoPromovible: 'motivo_terminal',
           detalle: `la vaca #${numero} (${ancla.entrada.nombre}) se leyó en dos fotos con datos distintos -- no se adjudica sola, revisar cuál foto corresponde a este chequeo`,
           celdas: fila.celdas,
         });
@@ -642,6 +931,7 @@ export function procesarLecturaOcr(
       numeroImpreso: primera.numeroImpreso,
       nombreImpreso: primera.nombreImpreso,
       motivo: 'lectura_repetida_divergente',
+      motivoNoPromovible: 'motivo_terminal',
       detalle: `primera lectura de la vaca #${numero} (${primera.nombre}); otra foto la reporta distinta, así que ninguna se procesa`,
       celdas: primera.celdas,
     });
@@ -652,6 +942,44 @@ export function procesarLecturaOcr(
   confirmadasFinales.forEach((fila, i) => {
     fila.filaExcel = i + FILA_ENCABEZADO_HOJA_OCR + 2;
   });
+
+  // Análogo, para las candidatas promovidas (§4.5): la PRIMERA lectura que
+  // discrepó también se descarta -- ninguna de las dos es "la buena" por
+  // haber llegado antes.
+  for (const identidad of rechazadasPromovidasPorDuplicado) {
+    const indice = yaPromovida.get(identidad);
+    if (indice === undefined) continue;
+    const primera = candidatasPromovidas[indice];
+    filasNoLeidas.push({
+      pagina: primera.pagina,
+      orden: primera.orden,
+      numeroImpreso: primera.numeroImpreso,
+      nombreImpreso: primera.nombreImpreso,
+      motivo: 'lectura_repetida_divergente',
+      motivoNoPromovible: 'motivo_terminal',
+      detalle: `primera lectura escrita a mano de '#${primera.numeroImpreso}' / '${primera.nombreImpreso}'; otra foto la reporta distinta, así que ninguna se procesa`,
+      celdas: primera.celdas,
+    });
+  }
+  const promovidasFinales = candidatasPromovidas.filter((c) => !rechazadasPromovidasPorDuplicado.has(
+    `${normalizarNombreParaCotejo(c.nombreImpreso)}|${c.numeroImpreso.trim()}`,
+  ));
+  // `filaExcel` se renumera sobre confirmadas Y promovidas JUNTAS -- las
+  // promovidas van DESPUÉS en la matriz, así que su numeración continúa
+  // exactamente donde terminan las confirmadas.
+  const filasPromovidas: FilaOcrPromovida[] = promovidasFinales.map((c, i) => ({
+    filaExcel: confirmadasFinales.length + i + FILA_ENCABEZADO_HOJA_OCR + 2,
+    pagina: c.pagina,
+    orden: c.orden,
+    numeroImpreso: c.numeroImpreso,
+    nombreImpreso: c.nombreImpreso,
+    motivo: c.motivo,
+    detalle: c.detalle,
+    celdas: c.celdas,
+    celdasNoConfiables: c.celdasNoConfiables,
+    candidatosInactivos: c.candidatosInactivos,
+    sugerenciaActiva: c.sugerenciaActiva,
+  }));
 
   const leidas = new Set(confirmadasFinales.map((f) => f.numero));
   const vacasSinLeer: VacaSinLeer[] = [
@@ -683,12 +1011,22 @@ export function procesarLecturaOcr(
       fila.nombre,
       ...COLUMNAS_OCR.map((c) => textoParaPipeline(fila.celdas[c])),
     ]),
+    // Filas promovidas, DESPUÉS de las confirmadas (plan §4.4/§5.1): '#'
+    // VACÍO -- la identidad nunca se adivina -- y 'Nombre' = lo impreso, como
+    // ETIQUETA y jamás como llave. Sin `numero`, `construirDiffChequeo` las
+    // clasifica `no_reconocido`: no llegan solas a la base.
+    ...promovidasFinales.map((c) => [
+      '',
+      c.nombreImpreso,
+      ...COLUMNAS_OCR.map((col) => textoParaPipeline(c.celdas[col])),
+    ]),
   ];
 
   return {
     hoja: { archivo: opciones.archivo, hoja: opciones.hoja, filas },
     filasConfirmadas: confirmadasFinales,
     filasNoLeidas,
+    filasPromovidas,
     vacasSinLeer,
     titulosLeidos,
     advertencias,
@@ -871,7 +1209,7 @@ export function construirPromptOcr(vocabulario: VocabularioOcr): string {
     'La foto es una planilla impresa de chequeo reproductivo, con una fila por vaca y estas columnas, en este orden de izquierda a derecha:',
     ENCABEZADOS_HOJA_OCR.map((h, i) => `${i + 1}. ${h}`).join('\n'),
     '',
-    "Las columnas '#' y 'Nombre' vienen IMPRESAS (letra de imprenta). Algunas otras celdas también vienen impresas en gris (el sistema las pre-llenó) y otras están escritas a mano por la encargada del hato. Transcribe ambas por igual: el valor que está en la celda al momento de la foto.",
+    "Las columnas '#' y 'Nombre' vienen IMPRESAS (letra de imprenta) en las hojas del roster; en la ÚLTIMA hoja -- la hoja de holgura, para animales que no están en la lista -- esas dos columnas pueden venir escritas a mano en vez de impresas. Algunas otras celdas también vienen impresas en gris (el sistema las pre-llenó) y otras están escritas a mano por la encargada del hato. Transcribe ambas por igual: el valor que está en la celda al momento de la foto.",
     '',
     'REGLAS DURAS:',
     "1. Devuelve UNA entrada por cada fila de vaca visible, de arriba hacia abajo, sin saltarte ninguna y sin inventar filas que no estén.",
@@ -879,6 +1217,7 @@ export function construirPromptOcr(vocabulario: VocabularioOcr): string {
     "3. NO interpretes, NO corrijas y NO completes: si la celda dice 'A 206', devuelve exactamente 'A 206'. Si dice algo que parece un código inválido, devuélvelo igual tal cual lo ves.",
     "4. Confianza obligatoria por celda: 'alta' solo si estás seguro de cada carácter; 'baja' si dudas; 'ilegible' si no se lee. En 'baja' e 'ilegible' deja el texto vacío o lo poco que veas, pero NUNCA adivines un valor plausible. Una celda mal adivinada es peor que una celda vacía.",
     "5. Una celda genuinamente en blanco es texto vacío con confianza 'alta'. Eso significa 'no hay nada escrito', y es un dato válido.",
+    "6. No devuelvas filas completamente en blanco (sin número, sin nombre y sin ninguna celda escrita).",
     '',
     'VOCABULARIO ESPERADO (úsalo para leer mejor la letra, NO para reemplazar lo que ves):',
     `- Fechas: formato día/mes/año, por ejemplo 5/11/2026. Transcríbelas tal cual estén escritas.`,

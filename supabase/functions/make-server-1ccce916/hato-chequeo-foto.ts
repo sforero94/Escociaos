@@ -40,13 +40,16 @@ import type {
 } from './importHato/diffChequeo.ts';
 import type { FilaChequeoNormalizada } from './importHato/tipos.ts';
 import {
+  PREFIJO_ISSUE_FILA_PROMOVIDA,
   aplicarFechaChequeo,
+  construirIndiceFueraDelRoster,
   construirPromptOcr,
   construirRosterPlanilla,
   esquemaJsonOcr,
   parsearRespuestaModeloOcr,
   procesarLecturaOcr,
   sugerirFechaChequeo,
+  type AnimalFueraDelRoster,
   type AnimalRosterPlanilla,
   type LecturaOcrPagina,
 } from './importHato/ocrChequeo.ts';
@@ -451,19 +454,34 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
   // (endpoint gemelo) -- las tres copias deben coincidir.
   const hoy = generadoEn.slice(0, 10);
   const filasRoster = (rosterRes.data ?? []) as unknown as HatoEstadoActualRow[];
-  const animalesRoster: AnimalRosterPlanilla[] = filasRoster
-    .filter((fila) => {
-      const etapaEfectiva = resolverEtapaEfectiva(fila, umbralesCategoria, hoy);
-      const derivado = derivarEstadoReproductivo({ ...fila, etapa: etapaEfectiva.etapa }, config, hoy);
-      const categoria = categorizarAnimal(fila, etapaEfectiva.etapa, derivado.estado);
-      return categoria === 'hato_ordeno' || categoria === 'horro';
-    })
-    .map((fila) => ({
-      id: fila.animal_id,
-      numero: fila.numero,
-      nombre: fila.nombre,
-    }));
+  // Una sola pasada por `categorizarAnimal` alimenta DOS listas (plan de
+  // novedades §5.2): el roster impreso (hato_ordeno/horro, como siempre) Y
+  // los animales que ese mismo criterio RECHAZA -- novillas/terneras/toros
+  // activos y cualquier animal inactivo -- que son justo el universo del que
+  // sale `indiceFueraDelRoster` para la promoción de filas manuscritas
+  // (§4.2/§4.6). No hace falta una segunda consulta: `v_hato_estado_actual`
+  // ya trae el hato completo, inactivos incluidos.
+  const animalesRoster: AnimalRosterPlanilla[] = [];
+  const animalesFueraDelRoster: AnimalFueraDelRoster[] = [];
+  for (const fila of filasRoster) {
+    const etapaEfectiva = resolverEtapaEfectiva(fila, umbralesCategoria, hoy);
+    const derivado = derivarEstadoReproductivo({ ...fila, etapa: etapaEfectiva.etapa }, config, hoy);
+    const categoria = categorizarAnimal(fila, etapaEfectiva.etapa, derivado.estado);
+    if (categoria === 'hato_ordeno' || categoria === 'horro') {
+      animalesRoster.push({ id: fila.animal_id, numero: fila.numero, nombre: fila.nombre });
+    } else if (fila.numero !== null) {
+      // Sin chapeta no hay número contra el que indexar -- no puede ser
+      // sugerencia de nada.
+      animalesFueraDelRoster.push({
+        id: fila.animal_id,
+        numero: fila.numero,
+        nombre: fila.nombre,
+        estado: fila.estado,
+      });
+    }
+  }
   const roster = construirRosterPlanilla(animalesRoster);
+  const indiceFueraDelRoster = construirIndiceFueraDelRoster(animalesFueraDelRoster, roster);
 
   if (roster.entradas.length === 0) {
     return await fallar(
@@ -505,10 +523,30 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
     hoja: HOJA_LOGICA,
     // Título vacío a propósito: la fecha del chequeo NO se deriva de la foto.
     titulo: '',
+    indiceFueraDelRoster,
   });
 
   // --- 6. Normalize: el MISMO motor que la ruta .xlsx ----------------------
   const salida = normalizarHojas([ocr.hoja], generadoEn, config);
+
+  // --- 6.b Procedencia de las filas PROMOVIDAS (plan de novedades §5.2) ----
+  // El único punto donde se toca `normalizarHojas.chequeos`: se agrega un
+  // issue por fila promovida, unido por `filaExcel` -> `FilaChequeoNormalizada.fila`
+  // (misma clave que usa `filasConfirmadas`). Es el MISMO canal que
+  // `CORRECCIÓN MANUAL` (`hatoCorreccionChequeo.ts`) -- `normalizacion_issues`,
+  // sin cambio de esquema -- así que la procedencia llega a la ventana de
+  // revisión y sobrevive al commit.
+  if (ocr.filasPromovidas.length > 0) {
+    const promovidasPorFilaExcel = new Map(ocr.filasPromovidas.map((p) => [p.filaExcel, p]));
+    for (const fila of salida.chequeos) {
+      const promovida = promovidasPorFilaExcel.get(fila.fila);
+      if (!promovida) continue;
+      fila.issues.push({
+        crudo: `#${promovida.numeroImpreso} / ${promovida.nombreImpreso}`,
+        motivo: `${PREFIJO_ISSUE_FILA_PROMOVIDA} [${promovida.motivo}]: '#${promovida.numeroImpreso}' / '${promovida.nombreImpreso}' no está en el roster impreso -- ${promovida.detalle}`,
+      });
+    }
+  }
 
   // La fecha del chequeo solo se fija si un HUMANO la mandó (campo `fecha` de
   // la Fase 3a). Si no, queda `null`: la foto no trae título de hoja confiable
@@ -595,15 +633,18 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
 
   const celdasNoConfiables = ocr.filasConfirmadas.reduce((n, f) => n + f.celdasNoConfiables.length, 0);
 
-  // Filas que el OCR ancló contra el roster. Se guarda con la captura
-  // todavía `pendiente`: es el número que separa "el OCR no leyó nada" de
-  // "leyó y nadie aprobó", las dos causas que hoy se ven iguales. Un 0 acá
-  // es un cero MEDIDO, no un hueco.
+  // Filas que el OCR ancló contra el roster MÁS las que promovió (plan de
+  // novedades §5.2): una hoja de holgura toda escrita a mano no puede leerse
+  // como "el OCR no leyó nada" -- exactamente la ambigüedad que la migración
+  // 146 existe para eliminar. Se guarda con la captura todavía `pendiente`:
+  // es el número que separa "el OCR no leyó nada" de "leyó y nadie aprobó",
+  // las dos causas que hoy se ven iguales. Un 0 acá es un cero MEDIDO, no un
+  // hueco.
   await cerrarCapturaFoto({
     supabase,
     capturaId,
     desenlace: 'pendiente',
-    celdasLeidasOcr: ocr.filasConfirmadas.length,
+    celdasLeidasOcr: ocr.filasConfirmadas.length + ocr.filasPromovidas.length,
   });
 
   // --- 8. Respuesta: misma forma que el preview + confianza ----------------
@@ -644,6 +685,10 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
       paginasNoLeidas: erroresLectura,
       filasConfirmadas: ocr.filasConfirmadas,
       filasNoLeidas: ocr.filasNoLeidas,
+      // Filas sin ancla en el roster impreso pero escritas a mano con nombre
+      // y datos (plan de novedades §4/§5): entran editables a la ventana de
+      // revisión, no a `filasNoLeidas`.
+      filasPromovidas: ocr.filasPromovidas,
       vacasSinLeer: ocr.vacasSinLeer,
       advertencias: ocr.advertencias,
       resumen: {
@@ -651,6 +696,7 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
         fotosRecibidas: fotos.length,
         fotosLeidas: lecturas.length,
         filasConfirmadas: ocr.filasConfirmadas.length,
+        filasPromovidas: ocr.filasPromovidas.length,
         filasNoLeidas: ocr.filasNoLeidas.length,
         vacasSinLeer: ocr.vacasSinLeer.length,
         celdasNoConfiables,
