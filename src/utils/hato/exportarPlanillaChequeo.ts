@@ -91,6 +91,23 @@ export const ENCABEZADOS_PLANILLA_CHEQUEO = [
  * consumidor no hardcodeen el número mágico en más de un sitio. */
 export const FILA_ENCABEZADO_PLANILLA = 1;
 
+/** Filas en blanco de la hoja/sección de holgura del chequeo -- decisión del
+ * dueño 2026-09-15 (`docs/hato/plan_chequeo_novedades_implementacion.md`
+ * §0.1 y §7): el planilla imprime SIEMPRE estas 10 filas para cualquier
+ * animal que el veterinario encuentre y no esté en el roster (novilla,
+ * compra reciente, chapeta recién cambiada) -- nunca condicionado a "si
+ * hace falta".
+ *
+ * Vive ACÁ, y no en `exportarPlanillaChequeoPDF.ts`, aunque el plan la lista
+ * como constante de ese archivo: los dos artefactos (`.xlsx` y `.pdf`)
+ * necesitan el MISMO número para no describir una cantidad distinta de
+ * filas libres, y este archivo ya es la fuente de verdad del template
+ * (`ENCABEZADOS_PLANILLA_CHEQUEO`/`FilaPlanillaChequeo`) del que el PDF
+ * IMPORTA -- nunca al revés (ver el encabezado de ese archivo). Ponerla en
+ * el PDF y hacer que este archivo la importara de vuelta crearía un ciclo
+ * de imports entre los dos. El PDF la re-exporta desde acá. */
+export const FILAS_LIBRES_PLANILLA_CHEQUEO = 10;
+
 /** Una fila de la planilla, ya lista para volcarse a celdas -- agnóstica de
  * qué hook/vista la produjo (no depende de `useHatoAnimales`/
  * `useHatoChequeoDetalle`: esos viven en `components/hato/`, una capa por
@@ -151,12 +168,29 @@ function filaAOA(fila: FilaPlanillaChequeo): CeldaAOA[] {
 }
 
 /**
- * Arma la matriz completa (título + encabezado + filas de datos) que
- * consume `XLSX.utils.aoa_to_sheet`. Una sola tabla continua -- el
- * encabezado aparece EXACTAMENTE una vez (fila `FILA_ENCABEZADO_PLANILLA`).
+ * `FILAS_LIBRES_PLANILLA_CHEQUEO` filas totalmente en blanco (las 13
+ * columnas en `null`), para las últimas filas de la tabla continua del
+ * `.xlsx` -- la "hoja de holgura" del `.pdf` no tiene contraparte de página
+ * acá (el `.xlsx` no pagina), así que es simplemente MÁS filas de la MISMA
+ * tabla. `esFilaVacia` (`importHato/grilla.ts`) las descarta como
+ * `fantasma` al volver a subir mientras nadie las llene -- son celda vacía,
+ * nunca `0` ni un valor inventado, mismo contrato del resto del módulo.
+ */
+function filasLibresAOA(): CeldaAOA[][] {
+  const columnas = ENCABEZADOS_PLANILLA_CHEQUEO.length;
+  return Array.from({ length: FILAS_LIBRES_PLANILLA_CHEQUEO }, () => new Array<CeldaAOA>(columnas).fill(null));
+}
+
+/**
+ * Arma la matriz completa (título + encabezado + filas de datos + filas
+ * libres) que consume `XLSX.utils.aoa_to_sheet`. Una sola tabla continua --
+ * el encabezado aparece EXACTAMENTE una vez (fila `FILA_ENCABEZADO_PLANILLA`),
+ * nunca repetido para las filas libres: ese requisito es del PDF (decisión
+ * 2, hojas físicas separadas), no de este archivo (ver el encabezado del
+ * archivo, "nunca repetir el header, rompe la extracción del parser").
  */
 export function construirAOAPlanillaChequeo(tituloHoja: string, filas: FilaPlanillaChequeo[]): CeldaAOA[][] {
-  return [[tituloHoja], [...ENCABEZADOS_PLANILLA_CHEQUEO], ...filas.map(filaAOA)];
+  return [[tituloHoja], [...ENCABEZADOS_PLANILLA_CHEQUEO], ...filas.map(filaAOA), ...filasLibresAOA()];
 }
 
 const MESES_TITULO = [

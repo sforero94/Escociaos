@@ -270,6 +270,18 @@ describe('paridad de comportamiento calculosHato ⇄ calculos-hato', () => {
       { chequeoFecha: FECHA_REF, sx: frontend.parseSX('Mv'), fechasServicio: [] },
       { chequeoFecha: FECHA_REF, sx: frontend.parseSX('gem+'), fechasServicio: [] },
       { chequeoFecha: FECHA_REF, sx: frontend.parseSX(''), fechasServicio: [] },
+      // #259: la supresión contra `fechasServicioConocidas` deja un issue
+      // cuando la fecha también viene de un evento manual (Telegram/ficha)
+      // -- caso real MONZA/AMAPOLA, inseminadas el mismo día de la visita.
+      {
+        chequeoFecha: '2026-09-08',
+        sx: frontend.parseSX('vacia'),
+        fechasServicio: ['2026-09-08'],
+        fechasServicioConocidas: ['2026-09-08'],
+        fechasServicioRegistradasAMano: ['2026-09-08'],
+        toroNombre: 'Jericó',
+        tipoServicio: 'inseminacion',
+      },
     ];
     for (const caso of casos) {
       expect(

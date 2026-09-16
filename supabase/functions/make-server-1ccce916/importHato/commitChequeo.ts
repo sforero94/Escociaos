@@ -319,6 +319,37 @@ export interface EventoManualHistorico {
 }
 
 /**
+ * Reduce los eventos manuales de `servicio` (`chequeo_vaca_id IS NULL`) al
+ * conjunto de fechas YA REGISTRADAS A MANO de cada animal, hasta la fecha
+ * del chequeo que se está aprobando -- INCLUSIVE (#259: el día de la visita
+ * SÍ es "lo ya conocido", mismo criterio corregido de
+ * `fusionarEventosManualesEnDedupe`; solo lo ESTRICTAMENTE posterior queda
+ * fuera).
+ *
+ * Es un subconjunto de lo que esa misma función ya fusiona en
+ * `fechasServicioPorAnimal`: existe SOLO para que `derivarEventosDeChequeo`
+ * pueda decirle a `descomponerSX` cuáles de las fechas ya conocidas vinieron
+ * de un evento manual -- así la supresión deja un `ParseIssue` de revisión
+ * cuando corresponde (caso real MONZA/AMAPOLA) y sigue silenciosa cuando la
+ * fecha ya conocida viene de un chequeo anterior (caso CAMILA #154). Ver
+ * `calculosHato.ts::InputDescomposicionSX.fechasServicioRegistradasAMano`.
+ * NO cambia qué fecha se deduplica -- solo decora la supresión.
+ */
+export function seleccionarFechasServicioRegistradasAManoPorAnimal(
+  eventosManuales: EventoManualHistorico[],
+  chequeoNuevoFecha: string,
+): Map<string, Set<string>> {
+  const resultado = new Map<string, Set<string>>();
+  for (const evento of eventosManuales) {
+    if (evento.tipo !== 'servicio') continue;
+    if (evento.fecha > chequeoNuevoFecha) continue; // ver #259 -- estrictamente posterior queda fuera
+    if (!resultado.has(evento.animalId)) resultado.set(evento.animalId, new Set());
+    resultado.get(evento.animalId)!.add(evento.fecha);
+  }
+  return resultado;
+}
+
+/**
  * **N10 — el nodo que impide que el chequeo duplique lo que ya se registró a
  * mano.** Fusiona los eventos manuales en los dos mapas de deduplicación que
  * consume `derivarEventosDeChequeo`.
@@ -355,10 +386,24 @@ export function fusionarEventosManualesEnDedupe(
   const crias = new Map<string, string | null>(ultimaCriaAnteriorPorAnimal);
 
   for (const evento of eventosManuales) {
-    // Solo lo ESTRICTAMENTE anterior al chequeo que se aprueba -- mismo
-    // criterio que los dos selectores de arriba. Un evento manual del mismo
-    // día o posterior no es "lo ya conocido", es otro hecho.
-    if (evento.fecha >= chequeoNuevoFecha) continue;
+    // El día de la visita SÍ es "lo ya conocido" (#259, corregido
+    // 2026-09-15). Este comentario decía antes "un evento manual del mismo
+    // día o posterior no es 'lo ya conocido', es otro hecho" -- ESE
+    // razonamiento era el bug: el día del chequeo es exactamente el día en
+    // que el corral captura por Telegram/ficha ANTES de que la planilla se
+    // fotografíe y se comitee, a veces días o semanas después (caso real
+    // MONZA/AMAPOLA, inseminadas por Telegram el 2026-09-08, el mismo día
+    // de la visita -- el commit, corrido una semana más tarde, derivó un
+    // SEGUNDO evento `servicio` para cada una porque `2026-09-08 >=
+    // 2026-09-08` se saltaba la fusión). Solo lo ESTRICTAMENTE POSTERIOR
+    // queda fuera de la ventana: para `servicio` es inerte (la planilla
+    // nunca trae una fecha de servicio futura respecto a su propia visita,
+    // así que un evento posterior nunca puede coincidir con
+    // `fechasServicio`); para `parto`, `agruparPartosPorProximidad` ya se
+    // niega a tratar dos lecturas a <= `DIAS_MINIMOS_ENTRE_PARTOS` días
+    // como nacimientos distintos, así que ensanchar la ventana un día no
+    // puede perder un parto real.
+    if (evento.fecha > chequeoNuevoFecha) continue;
 
     if (evento.tipo === 'servicio') {
       if (!servicios.has(evento.animalId)) servicios.set(evento.animalId, new Set());
@@ -429,11 +474,24 @@ export function fusionarEventosManualesEnDedupe(
  * este mapa representa las fechas de chequeos ESTRICTAMENTE ANTERIORES al
  * que se está aprobando -- no hace falta acumular nada dentro de esta
  * función misma.
+ *
+ * `fechasServicioRegistradasAManoPorAnimal` (#259, default vacío --
+ * compatible con llamadas existentes): subconjunto de
+ * `fechasServicioConocidasPorAnimal` -- las fechas de ESE conjunto que
+ * vinieron de un evento manual (Telegram/ficha) y no de un chequeo anterior,
+ * provisto por el handler con `seleccionarFechasServicioRegistradasAManoPorAnimal`
+ * a partir del MISMO `eventosManuales` que ya lee para
+ * `fusionarEventosManualesEnDedupe` -- ninguna consulta adicional. Se
+ * reenvía a `descomponerSX` como `fechasServicioRegistradasAMano` para que
+ * decida si una supresión deja un `ParseIssue` de revisión (caso real
+ * MONZA/AMAPOLA) o sigue silenciosa (caso CAMILA #154). NO cambia qué se
+ * deduplica.
  */
 export function derivarEventosDeChequeo(
   aprobadas: FilaChequeoAprobada[],
   ultimaCriaAnteriorPorAnimal: Map<string, string | null> = new Map(),
   fechasServicioConocidasPorAnimal: Map<string, Set<string>> = new Map(),
+  fechasServicioRegistradasAManoPorAnimal: Map<string, Set<string>> = new Map(),
 ): ResultadoDerivacionEventos {
   const eventos: EventoConIndice[] = [];
   const issues: ParseIssue[] = [];
@@ -446,6 +504,7 @@ export function derivarEventosDeChequeo(
       sx: fila.sx,
       fechasServicio: fila.fechasServicio,
       fechasServicioConocidas: Array.from(fechasServicioConocidasPorAnimal.get(animalId) ?? []),
+      fechasServicioRegistradasAMano: Array.from(fechasServicioRegistradasAManoPorAnimal.get(animalId) ?? []),
       toroNombre: fila.toroNombre ?? undefined,
       tipoServicio: fila.tipoServicio ?? undefined,
       ultimaCria: parseUltimaCria(fila.raw.ultimaCria).fecha,

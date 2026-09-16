@@ -1049,6 +1049,86 @@ describe('descomponerSX', () => {
       ]);
     });
   });
+
+  // ==========================================================================
+  // #259 -- una supresión contra `fechasServicioConocidas` que además vino
+  // de un evento MANUAL (Telegram/ficha) deja un issue de revisión; una
+  // supresión contra un chequeo anterior (CAMILA #154) sigue silenciosa.
+  // ==========================================================================
+  describe('fechasServicioRegistradasAMano -- issue de revisión cuando la supresión es contra un evento manual (#259)', () => {
+    it('omitir fechasServicioRegistradasAMano (como en todos los fixtures existentes) preserva el comportamiento previo sin cambios -- ningún issue nuevo', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2022-10-20',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2022-08-26'],
+        fechasServicioConocidas: ['2022-08-26'],
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues).toEqual([]);
+    });
+
+    it('la fecha suprimida viene de un evento MANUAL -- deja un issue nombrando la fecha, el toro y el tipo de servicio de la planilla (caso real MAGNIFICA #103)', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2026-09-08',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2026-09-08'],
+        fechasServicioConocidas: ['2026-09-08'],
+        fechasServicioRegistradasAMano: ['2026-09-08'],
+        tipoServicio: 'inseminacion',
+        toroNombre: 'Jericó',
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues).toEqual([
+        expect.objectContaining({
+          crudo: '2026-09-08',
+          motivo: expect.stringContaining('2026-09-08'),
+        }),
+      ]);
+      expect(r.issues[0].motivo).toContain('Jericó');
+      expect(r.issues[0].motivo).toContain('inseminacion');
+    });
+
+    it('la fecha suprimida viene de un chequeo ANTERIOR, no de un evento manual -- NO deja issue (caso CAMILA #154, sigue silencioso)', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2022-10-20',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2022-08-26'],
+        fechasServicioConocidas: ['2022-08-26'],
+        fechasServicioRegistradasAMano: [], // la fecha conocida NO es de un evento manual
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues).toEqual([]);
+    });
+
+    it('una fecha en fechasServicioRegistradasAMano que NO está en fechasServicioConocidas no dispara nada -- solo decora una supresión que ya iba a ocurrir', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2026-09-08',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2026-09-08'],
+        fechasServicioConocidas: [], // esta fecha NO se suprime
+        fechasServicioRegistradasAMano: ['2026-09-08'],
+        tipoServicio: 'inseminacion',
+        toroNombre: 'Jericó',
+      });
+      expect(r.eventos).toEqual([expect.objectContaining({ tipo: 'servicio', fecha: '2026-09-08' })]);
+      expect(r.issues).toEqual([]);
+    });
+
+    it('sin toroNombre/tipoServicio (sin dato en la planilla) el issue lo dice explícitamente, nunca inventa un valor', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2026-09-08',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2026-09-08'],
+        fechasServicioConocidas: ['2026-09-08'],
+        fechasServicioRegistradasAMano: ['2026-09-08'],
+      });
+      expect(r.issues[0].motivo).toContain('sin dato');
+    });
+  });
 });
 
 // ==============================================================================
