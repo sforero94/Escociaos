@@ -33,10 +33,11 @@
 // móvil, donde el plan sólo espera la SUBIDA, no la corrección.
 
 import { useState } from 'react';
-import { AlertTriangle, Info, PencilLine, RotateCcw, UserPlus, Loader2 } from 'lucide-react';
+import { AlertTriangle, Info, PencilLine, RotateCcw, UserPlus, Loader2, PenLine, Check } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Button } from '@/components/ui/button';
 import { EstadoChip } from './EstadoChip';
-import { chipClasificacionDiff, chipNumeroProvisional } from '@/utils/hatoUi';
+import { chipClasificacionDiff, chipNumeroProvisional, chipFilaEscritaAMano } from '@/utils/hatoUi';
 import {
   CAMPOS_CORRECCION_CHEQUEO,
   CAMPOS_NO_CORREGIBLES,
@@ -47,10 +48,22 @@ import {
   type CorreccionesFilaTexto,
   type MetaCampoCorreccion,
 } from '@/utils/hatoCorreccionChequeo';
-import type { PreviewChequeoRespuesta } from '../hooks/useSubirChequeoExcel';
+import { PREFIJO_ISSUE_FILA_PROMOVIDA } from '@/utils/importHato/ocrChequeo';
+import type { PreviewChequeoRespuesta, ReporteOcrChequeo } from '../hooks/useSubirChequeoExcel';
 import type { RevisionChequeo } from '../hooks/useRevisionChequeo';
 import type { FilaDiffChequeo, ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
+
+/** Una fila promovida de la respuesta OCR (`ocr.filasPromovidas[number]`) --
+ * response-only, nunca releída de la base (plan de novedades §6.5). */
+export type FilaPromovidaOcr = ReporteOcrChequeo['filasPromovidas'][number];
+
+/** El `id` de un input de corrección, único por fila+campo -- lo que le
+ * permite al botón "Corregir la caravana" (Path B, §4.6) enfocar el campo
+ * `numero` de la fila correcta sin acoplarse a un ref por fila. */
+export function idCeldaCorreccion(fila: number, campo: CampoCorreccionChequeo): string {
+  return `chequeo-celda-${campo}-${fila}`;
+}
 
 // Render de `numero` unificado con el resto del módulo (F/U4,
 // docs/hato/sesiones-b5-d7-e3.md): null -> "Sin caravana" (nunca "Sin
@@ -128,10 +141,15 @@ function CeldaCorregible({
   const valor = tecleado ?? valorParaEdicion(fila, meta.campo);
   const clase = claseCelda(corregido, mensajeError !== undefined);
   const titulo = mensajeError ?? meta.ayuda;
+  // Id estable, único por fila+campo -- es lo que le permite al botón
+  // "Corregir la caravana" (Path B, §4.6) enfocar este campo sin un ref por
+  // fila (`idCeldaCorreccion`, arriba).
+  const id = idCeldaCorreccion(numeroFila, meta.campo);
 
   if (meta.tipo === 'seleccion') {
     return (
       <select
+        id={id}
         className={clase}
         value={valor}
         title={titulo}
@@ -150,6 +168,7 @@ function CeldaCorregible({
 
   return (
     <input
+      id={id}
       // `type="date"` para fechas (ISO nativo, sin ambigüedad d/m/a) y texto
       // para todo lo demás -- incluidos los numéricos, que se interpretan con
       // `parseValorNumerico`, el mismo parser del archivo, en vez de dejar que
@@ -174,9 +193,13 @@ interface FilaProps {
   camposCorregidos: CampoCorreccionChequeo[];
   erroresPorCampo: Map<CampoCorreccionChequeo, string>;
   editable: boolean;
+  /** La fila promovida (`ocr.filasPromovidas`) que corresponde a este `fila`,
+   * si la hay -- join por `filaExcel`, response-only (§6.5). */
+  filaPromovida: FilaPromovidaOcr | undefined;
   onCorregir: (fila: number, campo: CampoCorreccionChequeo, texto: string) => void;
   onDeshacer: (fila: number) => void;
   onCrearFicha: (diff: FilaDiffChequeo) => void;
+  onReactivarAnimal: (filaPromovida: FilaPromovidaOcr) => void;
 }
 
 function FilaDiffEditable({
@@ -186,13 +209,23 @@ function FilaDiffEditable({
   camposCorregidos,
   erroresPorCampo,
   editable,
+  filaPromovida,
   onCorregir,
   onDeshacer,
   onCrearFicha,
+  onReactivarAnimal,
 }: FilaProps) {
   const corregidos = new Set(camposCorregidos);
   const issuesCorreccion = fila.issues.filter((i) => i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL));
-  const issuesParseo = fila.issues.filter((i) => !i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL));
+  const issuesParseo = fila.issues.filter(
+    (i) => !i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL) && !i.motivo.startsWith(PREFIJO_ISSUE_FILA_PROMOVIDA),
+  );
+  // Procedencia PERMANENTE de la fila (plan de novedades §4.4/§6.5): se
+  // detecta por el prefijo del issue, nunca por la clasificación -- una fila
+  // escrita a mano sigue siéndolo aunque ya se le haya asignado caravana.
+  const filaEscritaAMano = fila.issues.some((i) => i.motivo.startsWith(PREFIJO_ISSUE_FILA_PROMOVIDA));
+  const requiereIdentidad = diff.clasificacion === 'no_reconocido' && filaEscritaAMano;
+
   const hayDetalle =
     diff.motivoNoReconocido !== null ||
     diff.diferencias.length > 0 ||
@@ -201,6 +234,12 @@ function FilaDiffEditable({
     diff.clasificacion === 'nuevo' ||
     diff.conflictoEstadoRegistrado !== null;
 
+  const enfocarCaravana = () => {
+    const el = document.getElementById(idCeldaCorreccion(diff.fila, 'numero'));
+    el?.focus();
+    if (el instanceof HTMLInputElement) el.select();
+  };
+
   return (
     <>
       <tr className="border-t border-gray-100 bg-white">
@@ -208,6 +247,7 @@ function FilaDiffEditable({
           <div className="flex flex-wrap items-center gap-1">
             <EstadoChip chip={chipClasificacionDiff(diff.clasificacion)} />
             {diff.numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
+            {filaEscritaAMano && <EstadoChip chip={chipFilaEscritaAMano()} />}
           </div>
           <p className="text-xs text-gray-400">fila {diff.fila}</p>
         </td>
@@ -266,6 +306,80 @@ function FilaDiffEditable({
                     </>
                   )}
                 </p>
+              )}
+
+              {/* Fila escrita a mano todavía sin identidad (plan de novedades
+                  §4.4/§6.5): un aviso corto SIEMPRE que no exista un panel
+                  más específico abajo -- `numero_ilegible` no trae
+                  candidatos con los que armar ninguno, y `numero_fuera_del_roster`
+                  sin `sugerenciaActiva` tampoco, así que el hint genérico es
+                  lo único que hay para decir. Cuando SÍ hay panel
+                  (`numero_animal_inactivo`, o `numero_fuera_del_roster` CON
+                  sugerencia), ese panel ya cubre "hace falta identidad" con
+                  más contexto -- repetir el hint sería ruido. */}
+              {requiereIdentidad &&
+                (!filaPromovida ||
+                  filaPromovida.motivo === 'numero_ilegible' ||
+                  (filaPromovida.motivo === 'numero_fuera_del_roster' && !filaPromovida.sugerenciaActiva)) && (
+                  <p className="text-xs text-amber-700">
+                    <PenLine className="w-4 h-4 inline-flex flex-shrink-0" /> Escribe la caravana para identificarla.
+                  </p>
+                )}
+
+              {requiereIdentidad && filaPromovida?.motivo === 'numero_animal_inactivo' && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 space-y-2">
+                  <p className="text-xs text-amber-800">
+                    <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> La fila escrita a mano dice{' '}
+                    <strong>
+                      #{filaPromovida.numeroImpreso} {filaPromovida.nombreImpreso}
+                    </strong>
+                    . Esa caravana la lleva {filaPromovida.candidatosInactivos.length > 1 ? 'más de un animal' : 'un animal'}{' '}
+                    que el sistema tiene como inactivo. Nadie puede aprobar esta fila hasta que decidas qué pasó.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!editable}
+                      onClick={() => onReactivarAnimal(filaPromovida)}
+                      className="border-amber-400 text-amber-800 hover:bg-amber-100"
+                    >
+                      El animal sigue en el hato (reactivar)
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!editable}
+                      onClick={enfocarCaravana}
+                    >
+                      Me equivoqué de número
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {requiereIdentidad && filaPromovida?.motivo === 'numero_fuera_del_roster' && filaPromovida.sugerenciaActiva && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  <Info className="w-4 h-4 flex-shrink-0" />
+                  <p>
+                    Coincide con la novilla/ternera activa{' '}
+                    <strong>
+                      #{filaPromovida.sugerenciaActiva.numero} {filaPromovida.sugerenciaActiva.nombre ?? '(sin nombre)'}
+                    </strong>
+                    . Sugerencia, no asignación.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!editable}
+                    onClick={() => onCorregir(diff.fila, 'numero', String(filaPromovida.sugerenciaActiva!.numero))}
+                    className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    Usar esta caravana
+                  </button>
+                </div>
               )}
 
               {diff.clasificacion === 'nuevo' && (
@@ -329,6 +443,7 @@ export function ChequeoDiffReview({
   editable,
   motivoSoloLectura,
   onCrearFicha,
+  onReactivarAnimal,
 }: {
   resultado: PreviewChequeoRespuesta;
   revision: RevisionChequeo;
@@ -337,6 +452,11 @@ export function ChequeoDiffReview({
   editable: boolean;
   motivoSoloLectura?: string | null;
   onCrearFicha: (diff: FilaDiffChequeo) => void;
+  /** Path A del motivo `numero_animal_inactivo` (§4.6) -- abre
+   * `ReactivarAnimalDialog`. Va como HERMANO del diálogo de subida (mismo
+   * motivo que `onCrearFicha`), así que este componente solo avisa; el
+   * caller decide dónde vive el diálogo. */
+  onReactivarAnimal: (filaPromovida: FilaPromovidaOcr) => void;
 }) {
   const [filtro, setFiltro] = useState<FiltroFilas>('todas');
   const {
@@ -361,6 +481,10 @@ export function ChequeoDiffReview({
     if (!erroresPorFila.has(error.fila)) erroresPorFila.set(error.fila, new Map());
     erroresPorFila.get(error.fila)!.set(error.campo, error.mensaje);
   }
+
+  // Join por `filaExcel` == `FilaDiffChequeo.fila` (§6.5): response-only,
+  // nunca se releen de la base.
+  const filasPromovidasPorFila = new Map((resultado.ocr?.filasPromovidas ?? []).map((p) => [p.filaExcel, p]));
 
   const requiereAtencion = (f: FilaDiffChequeo) =>
     !esClasificacionAprobable(f.clasificacion) ||
@@ -585,9 +709,11 @@ export function ChequeoDiffReview({
                     camposCorregidos={camposCorregidosPorFila[filaDiff.fila] ?? []}
                     erroresPorCampo={erroresPorFila.get(filaDiff.fila) ?? new Map()}
                     editable={editable}
+                    filaPromovida={filasPromovidasPorFila.get(filaDiff.fila)}
                     onCorregir={corregirCampo}
                     onDeshacer={deshacerFila}
                     onCrearFicha={onCrearFicha}
+                    onReactivarAnimal={onReactivarAnimal}
                   />
                 );
               })}

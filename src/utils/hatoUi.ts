@@ -164,6 +164,19 @@ export function chipNumeroProvisional(): ChipEstilo {
   };
 }
 
+/** Chip para una fila del chequeo que llegó PROMOVIDA desde la hoja de
+ * holgura -- escrita a mano, sin ancla en el roster impreso (plan de
+ * novedades §4.4/§6.5). Se detecta por el prefijo `PREFIJO_ISSUE_FILA_PROMOVIDA`
+ * en `fila.issues`, nunca por la clasificación: la procedencia es un hecho
+ * permanente de la fila, sobreviva o no a la resolución de su identidad. */
+export function chipFilaEscritaAMano(): ChipEstilo {
+  return {
+    label: 'Escrita a mano',
+    className: AMBAR,
+    title: 'Fila de la hoja de holgura: sin ancla impresa, la escribió una persona en el papel',
+  };
+}
+
 /** Chip para la clasificación de una fila del diff de chequeo (B0/V10). */
 export function chipClasificacionDiff(clasificacion: ClasificacionFilaDiff): ChipEstilo {
   switch (clasificacion) {

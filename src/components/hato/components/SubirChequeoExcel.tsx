@@ -55,7 +55,7 @@
 //      el motivo dicho en pantalla -- nunca un botón que falla con 403.
 
 import { useEffect, useState } from 'react';
-import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera } from 'lucide-react';
+import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera, PenLine } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,10 +63,24 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubirChequeoExcel } from '../hooks/useSubirChequeoExcel';
 import { useRevisionChequeo } from '../hooks/useRevisionChequeo';
-import { ChequeoDiffReview } from './ChequeoDiffReview';
+import { ChequeoDiffReview, type FilaPromovidaOcr } from './ChequeoDiffReview';
 import { CrearAnimalDialog } from './CrearAnimalDialog';
 import { CapturaArchivo } from './CapturaArchivo';
+import { ReactivarAnimalDialog } from './ReactivarAnimalDialog';
 import type { FilaDiffChequeo } from '@/utils/importHato/diffChequeo';
+
+/** Traducción en español de `motivoNoPromovible` (plan de novedades §4.4) --
+ * separa "no se entendió" de "no se puede hacer nada al respecto": las tres
+ * son razones DISTINTAS y cada una pide una acción distinta de Martha. */
+const TEXTO_MOTIVO_NO_PROMOVIBLE: Record<string, string> = {
+  motivo_terminal: 'el motivo de rechazo no admite corrección aquí (chapeta ambigua, nombre no corresponde, o dos fotos en desacuerdo sobre la misma vaca)',
+  sin_nombre_escrito: 'no se escribió ningún nombre junto al número -- sin las dos anclas no hay cómo identificar la fila',
+  sin_datos: 'no trae ningún dato escrito además del número',
+};
+
+function textoMotivoNoPromovible(motivo: string): string {
+  return TEXTO_MOTIVO_NO_PROMOVIBLE[motivo] ?? motivo;
+}
 
 /** Tope de fotos por chequeo -- el MISMO que valida el servidor
  * (`hato-chequeo-foto.ts`). Duplicarlo aquí es a propósito: así el usuario se
@@ -112,6 +126,11 @@ export function SubirChequeoExcel({
   const [dragActive, setDragActive] = useState(false);
   const [veterinario, setVeterinario] = useState('');
   const [filaParaFicha, setFilaParaFicha] = useState<FilaDiffChequeo | null>(null);
+  // Path A del motivo `numero_animal_inactivo` (plan de novedades §4.6):
+  // MISMO patrón que `filaParaFicha` -- el diálogo vive como HERMANO del de
+  // subida, no anidado dentro de `ChequeoDiffReview`, para que Radix apile
+  // los dos modales sin que cerrar el de arriba cierre el de abajo.
+  const [filaParaReactivar, setFilaParaReactivar] = useState<FilaPromovidaOcr | null>(null);
   // Fase 3b -- ruta por FOTO. `foto` es el modo por defecto: es el camino que
   // el flujo nuevo quiere (Martha fotografía la planilla que llenó a mano) y
   // el `.xlsx` queda como respaldo, no al revés. `null` = todavía no eligió
@@ -127,6 +146,7 @@ export function SubirChequeoExcel({
       setAvisoFotos(null);
       setVeterinario('');
       setFilaParaFicha(null);
+      setFilaParaReactivar(null);
       setModo('foto');
       limpiar();
       onCompletado?.();
@@ -251,6 +271,12 @@ export function SubirChequeoExcel({
                   acceptArchivo=".xlsx,.xls"
                   label="Cargar chequeo"
                   labelOpcionArchivo="Subir archivo .xlsx"
+                  // #253 (plan de novedades §6.1/§8.2): sin esto, "Subir
+                  // archivo" solo deja elegir un archivo -- la hoja de
+                  // holgura (página 3) tiene que poder viajar en el MISMO
+                  // envío que las páginas 1-2, o se pierde igual aunque la
+                  // promoción de filas manuscritas ya esté lista.
+                  multipleArchivo
                 />
                 {modo === 'foto' && fotos.length > 0 && (
                   <span className="text-xs text-gray-500">
@@ -337,6 +363,9 @@ export function SubirChequeoExcel({
                 <p className="font-medium text-gray-900">
                   Lectura de {resultado.ocr.resumen.fotosLeidas} de {resultado.ocr.resumen.fotosRecibidas} foto(s):{' '}
                   {resultado.ocr.resumen.filasConfirmadas} de {resultado.ocr.resumen.vacasEnRoster} vacas reconocidas
+                  {resultado.ocr.resumen.filasPromovidas > 0 && (
+                    <> · {resultado.ocr.resumen.filasPromovidas} fila(s) escrita(s) a mano</>
+                  )}
                 </p>
 
                 {resultado.ocr.resumen.celdasNoConfiables > 0 && (
@@ -358,6 +387,22 @@ export function SubirChequeoExcel({
                   </div>
                 )}
 
+                {/* Filas de la hoja de holgura, escritas a mano (plan de
+                    novedades §4/§6.1): ya son editables en la tabla de abajo
+                    -- este bloque solo explica que hace falta una caravana
+                    antes de poder aprobarlas. */}
+                {resultado.ocr.resumen.filasPromovidas > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-amber-700 flex items-center gap-1">
+                      <PenLine className="w-3.5 h-3.5" /> Filas escritas a mano ({resultado.ocr.resumen.filasPromovidas})
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      Son editables en la tabla de abajo (marcadas «Escrita a mano»): cada una necesita una caravana
+                      antes de poder aprobarse.
+                    </p>
+                  </div>
+                )}
+
                 {resultado.ocr.filasNoLeidas.length > 0 && (
                   <div className="mt-2">
                     <p className="text-xs font-medium text-red-700">
@@ -367,7 +412,8 @@ export function SubirChequeoExcel({
                     <ul className="text-xs text-gray-600 space-y-1 mt-1">
                       {resultado.ocr.filasNoLeidas.map((f, i) => (
                         <li key={i}>
-                          Página {f.pagina}: leyó &quot;{f.nombreImpreso ?? '—'}&quot; / #{f.numeroImpreso ?? '—'} ({f.motivo})
+                          Página {f.pagina}: leyó &quot;{f.nombreImpreso ?? '—'}&quot; / #{f.numeroImpreso ?? '—'} ({f.motivo}) —{' '}
+                          {textoMotivoNoPromovible(f.motivoNoPromovible)}
                         </li>
                       ))}
                     </ul>
@@ -462,6 +508,7 @@ export function SubirChequeoExcel({
                 editable={editable && !comprometiendo}
                 motivoSoloLectura={motivoSoloLectura}
                 onCrearFicha={setFilaParaFicha}
+                onReactivarAnimal={setFilaParaReactivar}
               />
             )}
           </DialogBody>
@@ -528,6 +575,31 @@ export function SubirChequeoExcel({
         }}
         onCreado={() => {
           setFilaParaFicha(null);
+          revision.recargarEstado();
+        }}
+      />
+
+      {/* Path A del motivo `numero_animal_inactivo` (plan de novedades
+          §4.6/§6.4): la fila escrita a mano trae la caravana de un animal
+          descartado/vendido/muerto y una persona confirma que sigue en el
+          hato. Mismo motivo de HERMANO que `CrearAnimalDialog`: Radix apila
+          los dos modales sin que cerrar el de arriba cierre el de abajo. */}
+      <ReactivarAnimalDialog
+        open={filaParaReactivar !== null}
+        onOpenChange={(abierto) => { if (!abierto) setFilaParaReactivar(null); }}
+        numeroImpreso={filaParaReactivar?.numeroImpreso ?? ''}
+        nombreImpreso={filaParaReactivar?.nombreImpreso ?? ''}
+        candidatos={filaParaReactivar?.candidatosInactivos ?? []}
+        fechaChequeo={revision.fechaChequeoValida}
+        onReactivado={(animal) => {
+          if (filaParaReactivar) {
+            // El animal reactivado ya lleva su propia caravana real -- se
+            // escribe en la fila como cualquier otra corrección manual, con
+            // el mismo issue `CORRECCIÓN MANUAL [numero]` que deja el resto
+            // del módulo, y la fila se re-clasifica en vivo.
+            revision.corregirCampo(filaParaReactivar.filaExcel, 'numero', String(animal.numero));
+          }
+          setFilaParaReactivar(null);
           revision.recargarEstado();
         }}
       />
