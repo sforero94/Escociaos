@@ -1102,6 +1102,33 @@ export interface InputDescomposicionSX {
    * un evento propio) y sigue sin tocarse, sea cual sea `fechasServicioConocidas`.
    */
   fechasServicioConocidas?: readonly string[];
+  /**
+   * Fechas de servicio del animal ya registradas A MANO (Telegram, ficha)
+   * antes o el mismo día de este chequeo. Subconjunto de
+   * `fechasServicioConocidas`: NO cambia qué se deduplica -- solo decide si
+   * la supresión deja un `ParseIssue` para revisión humana.
+   *
+   * Root del bug que corrige (#259, verificado en producción): MONZA y
+   * AMAPOLA fueron inseminadas por Telegram el mismo día de la visita del
+   * veterinario, y el commit del chequeo derivó un SEGUNDO evento `servicio`
+   * para cada una porque la ventana de deduplicación excluía el día de la
+   * visita (ver `fusionarEventosManualesEnDedupe` en
+   * `importHato/commitChequeo.ts`). Ensanchar esa ventana basta para no
+   * duplicar el evento, pero la supresión de una fecha manual puede tapar
+   * una discrepancia real entre lo que dice la planilla y lo que ya se
+   * registró -- caso real MAGNIFICA #103, 2026-09-03: la planilla dice
+   * Jericó/inseminación, Telegram dice Jersey/monta. Sin este conjunto la
+   * versión de la planilla se descarta en silencio; con él, la supresión de
+   * una fecha que también aparece aquí deja un issue nombrando la fecha y lo
+   * que la planilla trajo (toro + tipo de servicio), para que un humano
+   * decida cuál es correcto. La supresión contra una fecha conocida de un
+   * chequeo ANTERIOR (caso CAMILA #154, `fechasServicioConocidas`) sigue
+   * silenciosa a propósito -- eso es ruido esperado, no una discrepancia.
+   *
+   * `undefined`/vacío (default) preserva el comportamiento anterior sin
+   * cambios -- compatibilidad hacia atrás con todos los fixtures existentes.
+   */
+  fechasServicioRegistradasAMano?: readonly string[];
   /** Fecha de parto real, si la planilla la trae explícita (columna `F
    * parto`/`SEC REAL` de Gen 1 -- Gen 2/3 no siempre la tienen, ver doc S2 §2). */
   fechaPartoReal?: string;
@@ -1365,8 +1392,26 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
   // propios), por eso el índice `i` de `procedencia` sigue anclado a la
   // posición original en el arreglo, no a la posición tras filtrar.
   const fechasServicioConocidas = new Set(input.fechasServicioConocidas ?? []);
+  // #259: subconjunto de `fechasServicioConocidas` que vino de un evento
+  // MANUAL (Telegram/ficha), no de un chequeo anterior -- ver el
+  // `fechasServicioRegistradasAMano` de `InputDescomposicionSX`. Suprimir
+  // esa fecha en silencio tapa una posible discrepancia planilla/Telegram
+  // (toro, tipo de servicio); suprimir una fecha de un chequeo anterior
+  // (CAMILA #154) sigue sin dejar issue, es ruido esperado.
+  const fechasServicioRegistradasAMano = new Set(input.fechasServicioRegistradasAMano ?? []);
   input.fechasServicio.forEach((fecha, i) => {
-    if (fechasServicioConocidas.has(fecha)) return; // ya registrado en un chequeo anterior -- no es un servicio nuevo
+    if (fechasServicioConocidas.has(fecha)) {
+      if (fechasServicioRegistradasAMano.has(fecha)) {
+        issues.push({
+          crudo: fecha,
+          motivo:
+            `La fecha de servicio '${fecha}' ya está registrada a mano (Telegram/ficha) para este animal -- ` +
+            `la planilla trae Toro '${input.toroNombre ?? 'sin dato'}' / tipo de servicio '${input.tipoServicio ?? 'sin dato'}' ` +
+            `para esa misma fecha, que puede no coincidir con lo ya registrado; no se creó un segundo evento, revisar cuál es correcto.`,
+        });
+      }
+      return; // ya registrado (chequeo anterior o evento manual) -- no es un servicio nuevo
+    }
     eventos.push({
       tipo: 'servicio',
       fecha,
