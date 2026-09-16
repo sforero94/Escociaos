@@ -183,7 +183,8 @@ app.post("/make-server-1ccce916/hato/pesaje/commit", async (c) => {
 
 // Hato Lechero: motor de alertas (S6, plan §7.3) -- tick diario disparado
 // por pg_cron (migración 060). Auth por secreto compartido
-// (x-hato-tick-secret), no JWT de usuario -- ver hato-alertas-tick.ts.
+// (x-hato-tick-secret), más disparo manual con JWT+Gerencia -- ver
+// hato-alertas-tick.ts.
 app.post("/make-server-1ccce916/hato/alertas/tick", async (c) => {
   return await handleHatoAlertasTick(c);
 });

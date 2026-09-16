@@ -6,16 +6,18 @@
 // idempotente (`regla_clave UNIQUE` + `ON CONFLICT DO NOTHING`, plan §7.3
 // "anti-spam... tick seguro de correr dos veces").
 //
-// Auth: header compartido `x-hato-tick-secret`, NO un JWT de usuario -- el
-// llamador es un cron de Postgres, no una sesión humana (mismo patrón que
-// 030/036 para clima, pero clima no envía nada saliente así que no necesita
-// secreto; este endpoint sí dispara mensajes de Telegram, de ahí el secreto
-// compartido, ver migración 060). El secreto vive en Supabase Vault y se
-// inyecta como header en tiempo de disparo -- este handler solo lo compara
-// contra `Deno.env.get('HATO_ALERTAS_TICK_SECRET')` (secreto de edge
-// function, configurado por fuera de este código). Si esa variable de
-// entorno está vacía o ausente, el endpoint responde 503 y NO HACE NADA --
-// nunca corre "abierto" ni cae a ningún valor por defecto.
+// Auth -- DOBLE PUERTA, calcada de `acciones-tick.ts` / `ronda-inventario-tick.ts`:
+//   (a) secreto compartido `x-hato-tick-secret` -- el llamador normal es el
+//       pg_cron de la migración 060 (05:45 Bogotá), no una sesión humana.
+//       El secreto vive en Supabase Vault y se inyecta como header en
+//       tiempo de disparo; este handler lo compara contra
+//       `Deno.env.get('HATO_ALERTAS_TICK_SECRET')`.
+//   (b) JWT + rol Gerencia -- disparo manual para pruebas (ESCO-106). Sin
+//       esta puerta un humano no podía verificar el tick: el secreto no
+//       viaja en el navegador y el cron reporta `succeeded` aunque el
+//       POST haya devuelto 500 (`pg_net` solo registra que encoló).
+// Si el secreto NO está configurado y tampoco llega un JWT, el endpoint
+// responde 503 y NO HACE NADA -- nunca corre "abierto".
 //
 // Tres fases (plan §7.3), en este orden estricto -- cada una alimenta el
 // estado que la siguiente necesita:
@@ -130,34 +132,122 @@ import {
 } from './hato-alertas.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
 import { enviarMensajeTelegram } from './telegram/enviar.ts';
+import { conReintento, esErrorPostgrestReintentable } from './reintento.ts';
 
 /** Módulo de este handler dentro de `alertas_catalogo` -- única fuente de
  * la constante `'hato'` en todo el archivo (migración 096, `clave = modulo.tipo`). */
 const MODULO_ALERTAS = 'hato';
 
-function respuestaError(c: Context, status: 400 | 500 | 503, error: string) {
+function respuestaError(c: Context, status: 400 | 401 | 403 | 500 | 503, error: string) {
   return c.json({ success: false, error }, status);
 }
 
 // ---------------------------------------------------------------------------
-// Auth: secreto compartido, no JWT de usuario -- ver cabecera del archivo.
+// Auth -- DOBLE PUERTA: secreto del cron, o JWT + Gerencia para un disparo
+// manual. Ver cabecera del archivo. 401/403 de auth NO escriben una fila
+// en `hato_alertas_tick_runs` -- no hubo tick. Un 500 posterior sí.
 // ---------------------------------------------------------------------------
-function verificarSecretoTick(c: Context): Response | null {
+
+const ROLES_DISPARO_MANUAL = new Set(['Gerencia']);
+
+type ClienteSupabase = ReturnType<typeof createClient>;
+
+async function verificarAuth(
+  c: Context,
+  supabase: ClienteSupabase,
+): Promise<{ disparo: 'cron' | 'manual' } | Response> {
   const secretoConfigurado = Deno.env.get('HATO_ALERTAS_TICK_SECRET');
+  const secretoRecibido = c.req.header('x-hato-tick-secret');
+  if (secretoConfigurado && secretoRecibido && secretoRecibido === secretoConfigurado) {
+    return { disparo: 'cron' };
+  }
+
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user) {
+      return respuestaError(c, 401, 'Token inválido o expirado.');
+    }
+    const { data: usuario, error: usuarioError } = await consultarConReintento(() =>
+      supabase.from('usuarios').select('rol').eq('id', userData.user.id).maybeSingle(),
+    );
+    if (usuarioError) {
+      return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
+    }
+    if (!usuario || !ROLES_DISPARO_MANUAL.has(usuario.rol as string)) {
+      return respuestaError(c, 403, 'El disparo manual está restringido a Gerencia.');
+    }
+    return { disparo: 'manual' };
+  }
+
   if (!secretoConfigurado) {
-    // Nunca correr "abierto": si el secreto no está configurado en este
-    // entorno, el endpoint no hace nada, ni siquiera leer la BD.
     return respuestaError(
       c,
       503,
-      'HATO_ALERTAS_TICK_SECRET no está configurado en este entorno -- el tick de alertas está deshabilitado hasta que se configure el secreto (ver migración 060).',
+      'HATO_ALERTAS_TICK_SECRET no está configurado en este entorno -- el tick de alertas está deshabilitado hasta que se configure el secreto (ver migración 060), y no llegó ningún JWT de Gerencia como alternativa.',
     );
   }
-  const recibido = c.req.header('x-hato-tick-secret');
-  if (!recibido || recibido !== secretoConfigurado) {
-    return respuestaError(c, 401, 'Secreto de tick inválido o ausente.');
-  }
-  return null;
+  return respuestaError(c, 401, 'Secreto de tick inválido/ausente y no hay JWT de Gerencia -- ninguna de las dos puertas de auth se cumplió.');
+}
+
+// ---------------------------------------------------------------------------
+// PostgREST retries (ESCO-106).
+//
+// Nine sequential reads run before the tick can write `hato_alertas_tick_runs`.
+// At a ~37% 504 rate, 2 attempts still leave ~27% of ticks dead with no row
+// (`0.37^2 ≈ 0.14` per call; `1 - 0.86^9 ≈ 0.74` of ticks still abort).
+// 3 attempts bring that under 4%. Clima stays at the helper default of 2
+// (one insert, not a chain). Never retries 4xx — those are real.
+// ---------------------------------------------------------------------------
+
+const INTENTOS_TICK = 3;
+
+type ErrorConsulta = { message: string; code?: string; status?: number } | null;
+
+async function consultarConReintento<T>(
+  accion: () => PromiseLike<{ data: T | null; error: ErrorConsulta }>,
+): Promise<{ data: T | null; error: ErrorConsulta }> {
+  let intento = 0;
+  return conReintento(
+    async () => {
+      intento += 1;
+      const r = await accion();
+      if (esErrorPostgrestReintentable(r.error) && intento < INTENTOS_TICK) {
+        console.warn(
+          `[hato-alertas-tick] PostgREST reintentable (intento ${intento}/${INTENTOS_TICK}): ${r.error?.message}`,
+        );
+      }
+      return r;
+    },
+    {
+      intentos: INTENTOS_TICK,
+      esValorReintentable: (r) => esErrorPostgrestReintentable(r.error),
+    },
+  );
+}
+
+/** Abort after auth succeeded: persist estado='error' so the gap is visible
+ * (migración 116 CHECK allows only 'ok'|'error'). Never throws. */
+async function abortarTick(
+  c: Context,
+  supabase: ClienteSupabase,
+  args: {
+    fechaReferencia: string;
+    inicioMs: number;
+    error: string;
+    cobertura?: ResumenCoberturaAlertas | null;
+  },
+): Promise<Response> {
+  await registrarCorridaTick(supabase, {
+    fechaReferencia: args.fechaReferencia,
+    duracionMs: Date.now() - args.inicioMs,
+    estado: 'error',
+    error: args.error,
+    cobertura: args.cobertura ?? null,
+    resultado: {},
+  });
+  return respuestaError(c, 500, args.error);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,40 +325,69 @@ interface FilaAlertaTerminal {
 // Handler principal
 // ---------------------------------------------------------------------------
 export async function handleHatoAlertasTick(c: Context): Promise<Response> {
-  const authError = verificarSecretoTick(c);
-  if (authError) return authError;
-
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  const auth = await verificarAuth(c, supabase);
+  if (auth instanceof Response) return auth;
+
   const ahora = new Date();
   const fechaHoraReferencia = ahora.toISOString();
   const fechaReferencia = fechaHoraReferencia.slice(0, 10);
+  const inicioMs = ahora.getTime();
+
+  try {
+    return await correrTick(c, supabase, {
+      fechaHoraReferencia,
+      fechaReferencia,
+      inicioMs,
+    });
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : String(err);
+    console.error(`[hato-alertas-tick] error no controlado: ${mensaje}`);
+    return abortarTick(c, supabase, {
+      fechaReferencia,
+      inicioMs,
+      error: `Error no controlado: ${mensaje}`,
+    });
+  }
+}
+
+async function correrTick(
+  c: Context,
+  supabase: ClienteSupabase,
+  args: { fechaHoraReferencia: string; fechaReferencia: string; inicioMs: number },
+): Promise<Response> {
+  const { fechaHoraReferencia, fechaReferencia, inicioMs } = args;
+  const abortar = (error: string, cobertura?: ResumenCoberturaAlertas) =>
+    abortarTick(c, supabase, { fechaReferencia, inicioMs, error, cobertura });
 
   // --- hato_config -- explota si falta una clave (058/062), nunca un
   //     default inventado en este handler. -----------------------------
-  const { data: filasConfig, error: errorConfig } = await supabase.from('hato_config').select('clave, valor');
+  const { data: filasConfig, error: errorConfig } = await consultarConReintento(() =>
+    supabase.from('hato_config').select('clave, valor'),
+  );
   if (errorConfig) {
-    return respuestaError(c, 500, `No se pudo leer hato_config: ${errorConfig.message}`);
+    return abortar(`No se pudo leer hato_config: ${errorConfig.message}`);
   }
   let hatoConfig;
   try {
     hatoConfig = construirHatoConfigDesdeFilas((filasConfig ?? []) as FilaHatoConfig[]);
   } catch (err) {
-    return respuestaError(c, 500, err instanceof Error ? err.message : String(err));
+    return abortar(err instanceof Error ? err.message : String(err));
   }
 
   // --- hato_alertas_config -- activo/horas por tipo. Ya NO se lee
   //     `destinatario_telegram_id` de aquí (096) -- los destinatarios salen
   //     de `telegram_alertas_suscripciones`, abajo. La columna sigue en la
   //     tabla (vestigial, ver cabecera del archivo). --------------------
-  const { data: filasAlertasConfig, error: errorAlertasConfig } = await supabase
-    .from('hato_alertas_config')
-    .select('tipo, horas_escalamiento, activo');
+  const { data: filasAlertasConfig, error: errorAlertasConfig } = await consultarConReintento(() =>
+    supabase.from('hato_alertas_config').select('tipo, horas_escalamiento, activo'),
+  );
   if (errorAlertasConfig) {
-    return respuestaError(c, 500, `No se pudo leer hato_alertas_config: ${errorAlertasConfig.message}`);
+    return abortar(`No se pudo leer hato_alertas_config: ${errorAlertasConfig.message}`);
   }
   const configPorTipo = new Map<TipoAlertaHato, FilaAlertaConfig>(
     ((filasAlertasConfig ?? []) as FilaAlertaConfig[]).map((f) => [f.tipo, f]),
@@ -278,12 +397,14 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   //     clave (`modulo.tipo`, migración 096). Solo suscritos ACTIVOS en
   //     telegram_usuarios -- uno desactivado no debe recibir ni escalar
   //     aunque su fila de suscripción siga con recibe/escalamiento=true. ---
-  const { data: filasSuscripcionesCrudas, error: errorSuscripciones } = await supabase
-    .from('telegram_alertas_suscripciones')
-    .select('alerta_clave, recibe, escalamiento, telegram_usuarios!inner(telegram_id, activo, rol_bot)')
-    .eq('telegram_usuarios.activo', true);
+  const { data: filasSuscripcionesCrudas, error: errorSuscripciones } = await consultarConReintento(() =>
+    supabase
+      .from('telegram_alertas_suscripciones')
+      .select('alerta_clave, recibe, escalamiento, telegram_usuarios!inner(telegram_id, activo, rol_bot)')
+      .eq('telegram_usuarios.activo', true),
+  );
   if (errorSuscripciones) {
-    return respuestaError(c, 500, `No se pudieron leer las suscripciones de alertas: ${errorSuscripciones.message}`);
+    return abortar(`No se pudieron leer las suscripciones de alertas: ${errorSuscripciones.message}`);
   }
   const suscripcionesResueltas = resolverFilasSuscripcion(
     (filasSuscripcionesCrudas ?? []) as FilaSuscripcionCruda[],
@@ -305,12 +426,14 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
 
   let retiradasReglaSuperada = 0;
 
-  const { data: filasAbiertas, error: errorAbiertas } = await supabase
-    .from('hato_alertas')
-    .select('id, tipo, estado, regla_clave, datos')
-    // Una sola definición de "abierta" en todo el módulo -- la misma que usa
-    // `puedeResponderAlerta` dentro del motor puro.
-    .in('estado', [...ESTADOS_ALERTA_RESPONSIBLES]);
+  const { data: filasAbiertas, error: errorAbiertas } = await consultarConReintento(() =>
+    supabase
+      .from('hato_alertas')
+      .select('id, tipo, estado, regla_clave, datos')
+      // Una sola definición de "abierta" en todo el módulo -- la misma que usa
+      // `puedeResponderAlerta` dentro del motor puro.
+      .in('estado', [...ESTADOS_ALERTA_RESPONSIBLES]),
+  );
   if (errorAbiertas) {
     console.error(
       `[hato-alertas-tick] no se pudieron leer las alertas abiertas para el retiro por regla superada (fase 0, ESCO-93): ${errorAbiertas.message}`,
@@ -343,22 +466,24 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   // (a) GENERAR
   // =========================================================================
 
-  const { data: filasEstado, error: errorEstado } = await supabase
-    .from('v_hato_estado_actual')
-    .select(
+  const { data: filasEstado, error: errorEstado } = await consultarConReintento(() =>
+    supabase.from('v_hato_estado_actual').select(
       'animal_id, numero, nombre, etapa, raza, estado, num_partos, ultimo_chequeo_fecha, ultimo_servicio_fecha, ultimo_parto_fecha, ultimo_secado_real_fecha, ultima_confirmacion_prenez_fecha, ultimo_evento_fecha, ultimo_estado_chequeo, ultima_confirmacion_prenez_metodo, ultimo_aborto_fecha',
-    );
+    ),
+  );
   if (errorEstado) {
-    return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${errorEstado.message}`);
+    return abortar(`No se pudo leer v_hato_estado_actual: ${errorEstado.message}`);
   }
   const animales = (filasEstado ?? []) as AnimalHatoParaAlertas[];
 
-  const { data: filasPasos, error: errorPasos } = await supabase
-    .from('hato_tratamiento_pasos')
-    .select('id, fecha_programada, descripcion, hato_tratamientos(animal_id, hato_animales(numero, nombre))')
-    .is('fecha_ejecutada', null);
+  const { data: filasPasos, error: errorPasos } = await consultarConReintento(() =>
+    supabase
+      .from('hato_tratamiento_pasos')
+      .select('id, fecha_programada, descripcion, hato_tratamientos(animal_id, hato_animales(numero, nombre))')
+      .is('fecha_ejecutada', null),
+  );
   if (errorPasos) {
-    return respuestaError(c, 500, `No se pudo leer hato_tratamiento_pasos: ${errorPasos.message}`);
+    return abortar(`No se pudo leer hato_tratamiento_pasos: ${errorPasos.message}`);
   }
   const pasosPendientes: PasoTratamientoPendienteInput[] = ((filasPasos ?? []) as Array<Record<string, unknown>>)
     .map((fila) => {
@@ -388,11 +513,11 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   // expresar. `generarAlertasPendientes` sigue recibiendo el `Set` de
   // siempre (derivado de las claves del mismo `Map`, nunca de una segunda
   // consulta) -- su firma y su comportamiento no cambian una coma.
-  const { data: filasReglas, error: errorReglas } = await supabase
-    .from('hato_alertas')
-    .select('regla_clave, estado');
+  const { data: filasReglas, error: errorReglas } = await consultarConReintento(() =>
+    supabase.from('hato_alertas').select('regla_clave, estado'),
+  );
   if (errorReglas) {
-    return respuestaError(c, 500, `No se pudo leer hato_alertas: ${errorReglas.message}`);
+    return abortar(`No se pudo leer hato_alertas: ${errorReglas.message}`);
   }
   const reglasExistentesConEstado = new Map<string, EstadoAlertaHato>(
     (filasReglas ?? []).map((f: { regla_clave: string; estado: EstadoAlertaHato }) => [f.regla_clave, f.estado]),
@@ -434,11 +559,11 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
       // datos, igual que enviada_en (ver cabecera del archivo).
       datos: { ...a.datos, mensaje: a.mensaje },
     }));
-    const { error: errorInsert } = await supabase
-      .from('hato_alertas')
-      .upsert(filasInsertar, { onConflict: 'regla_clave', ignoreDuplicates: true });
+    const { error: errorInsert } = await consultarConReintento(() =>
+      supabase.from('hato_alertas').upsert(filasInsertar, { onConflict: 'regla_clave', ignoreDuplicates: true }),
+    );
     if (errorInsert) {
-      return respuestaError(c, 500, `No se pudieron insertar las alertas generadas: ${errorInsert.message}`);
+      return abortar(`No se pudieron insertar las alertas generadas: ${errorInsert.message}`, cobertura);
     }
   }
 
@@ -446,12 +571,14 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   // (b) DESPACHAR
   // =========================================================================
 
-  const { data: filasActivas, error: errorActivas } = await supabase
-    .from('hato_alertas')
-    .select('id, tipo, animal_id, regla_clave, fecha_programada, estado, intentos, destinatario_telegram_id, datos, updated_at')
-    .in('estado', ['pendiente', 'enviada']);
+  const { data: filasActivas, error: errorActivas } = await consultarConReintento(() =>
+    supabase
+      .from('hato_alertas')
+      .select('id, tipo, animal_id, regla_clave, fecha_programada, estado, intentos, destinatario_telegram_id, datos, updated_at')
+      .in('estado', ['pendiente', 'enviada']),
+  );
   if (errorActivas) {
-    return respuestaError(c, 500, `No se pudieron leer las alertas activas: ${errorActivas.message}`);
+    return abortar(`No se pudieron leer las alertas activas: ${errorActivas.message}`, cobertura);
   }
   const activas = (filasActivas ?? []) as FilaAlertaActiva[];
 
@@ -663,10 +790,12 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   // hay solapamiento posible entre las dos.
   // =========================================================================
 
-  const { data: filasTerminales, error: errorTerminales } = await supabase
-    .from('hato_alertas')
-    .select('id, estado, escalada_at, updated_at')
-    .in('estado', ['escalada', 'respondida']);
+  const { data: filasTerminales, error: errorTerminales } = await consultarConReintento(() =>
+    supabase
+      .from('hato_alertas')
+      .select('id, estado, escalada_at, updated_at')
+      .in('estado', ['escalada', 'respondida']),
+  );
 
   let expiradasAtascadas = 0;
 
@@ -703,7 +832,8 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
 
   await registrarCorridaTick(supabase, {
     fechaReferencia,
-    duracionMs: Date.now() - ahora.getTime(),
+    duracionMs: Date.now() - inicioMs,
+    estado: 'ok',
     cobertura,
     resultado,
   });
@@ -731,48 +861,56 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
 // el resto de este archivo para `hato_alertas_envios` (fase b, arriba).
 // ---------------------------------------------------------------------------
 async function registrarCorridaTick(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ClienteSupabase,
   args: {
     fechaReferencia: string;
     duracionMs: number;
-    cobertura: ResumenCoberturaAlertas;
+    estado?: 'ok' | 'error';
+    error?: string;
+    cobertura: ResumenCoberturaAlertas | null;
     resultado: Record<string, unknown>;
   },
 ): Promise<void> {
+  const estado = args.estado ?? 'ok';
   const resumenLog = {
     tick: 'hato-alertas',
     fecha_referencia: args.fechaReferencia,
+    estado,
     duracion_ms: args.duracionMs,
-    animales_evaluados: args.cobertura.animales_evaluados,
-    animales_sin_raza: args.cobertura.animales_sin_raza,
-    cobertura: args.cobertura.por_tipo,
+    animales_evaluados: args.cobertura?.animales_evaluados ?? null,
+    animales_sin_raza: args.cobertura?.animales_sin_raza ?? null,
+    cobertura: args.cobertura?.por_tipo ?? null,
     retiradas_regla_superada: args.resultado.retiradas_regla_superada,
     generadas: args.resultado.generadas,
     enviadas: args.resultado.enviadas,
     escaladas: args.resultado.escaladas,
     expiradas: args.resultado.expiradas,
+    error: args.error ?? null,
   };
   // Línea única, estructurada -- pensada para leerse con `JSON.parse` desde
   // `query_logs`, no para leerse a simple vista.
   console.log(`[hato-alertas-tick] resumen: ${JSON.stringify(resumenLog)}`);
 
-  const { error } = await supabase.from('hato_alertas_tick_runs').insert({
-    fecha_referencia: args.fechaReferencia,
-    estado: 'ok',
-    duracion_ms: args.duracionMs,
-    animales_evaluados: args.cobertura.animales_evaluados,
-    animales_sin_raza: args.cobertura.animales_sin_raza,
-    pasos_tratamiento_evaluados: args.cobertura.pasos_tratamiento_evaluados,
-    cobertura: args.cobertura.por_tipo,
-    generadas: args.resultado.generadas,
-    enviadas: args.resultado.enviadas,
-    mensajes_enviados: args.resultado.mensajes_enviados,
-    saltadas_sin_destinatario: args.resultado.saltadas_sin_destinatario,
-    escaladas: args.resultado.escaladas,
-    mensajes_escalamiento: args.resultado.mensajes_escalamiento,
-    expiradas: args.resultado.expiradas,
-    expiradas_atascadas: args.resultado.expiradas_atascadas,
-  });
+  const { error } = await consultarConReintento(() =>
+    supabase.from('hato_alertas_tick_runs').insert({
+      fecha_referencia: args.fechaReferencia,
+      estado,
+      error: args.error ?? null,
+      duracion_ms: args.duracionMs,
+      animales_evaluados: args.cobertura?.animales_evaluados ?? null,
+      animales_sin_raza: args.cobertura?.animales_sin_raza ?? null,
+      pasos_tratamiento_evaluados: args.cobertura?.pasos_tratamiento_evaluados ?? null,
+      cobertura: args.cobertura?.por_tipo ?? null,
+      generadas: args.resultado.generadas ?? null,
+      enviadas: args.resultado.enviadas ?? null,
+      mensajes_enviados: args.resultado.mensajes_enviados ?? null,
+      saltadas_sin_destinatario: args.resultado.saltadas_sin_destinatario ?? null,
+      escaladas: args.resultado.escaladas ?? null,
+      mensajes_escalamiento: args.resultado.mensajes_escalamiento ?? null,
+      expiradas: args.resultado.expiradas ?? null,
+      expiradas_atascadas: args.resultado.expiradas_atascadas ?? null,
+    }),
+  );
   if (error) {
     // No aborta ni cambia la respuesta del tick -- ver el contrato en la
     // cabecera de esta función. Motivo esperable hasta que la migración 116
