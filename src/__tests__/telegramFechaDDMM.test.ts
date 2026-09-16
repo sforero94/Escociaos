@@ -65,6 +65,15 @@ describe('leerFecha — lo que sí es inequívoco se resuelve sin preguntar', ()
     expect(r).toEqual({ tipo: 'unico', fecha: { iso: '2025-12-28', etiqueta: '28 de diciembre 2025' } });
   });
 
+  // ESCO-87 (dueño, 2026-09-16): if the date is not ambiguous, no extra
+  // check. 14 and 27 cannot be a month, so there is only one reading.
+  it.each([
+    ['14/12/26', '2026-12-14', '14 de diciembre 2026'],
+    ['27/11/26', '2026-11-27', '27 de noviembre 2026'],
+  ])('%s es único — no se pregunta', (texto, iso, etiqueta) => {
+    expect(leerFecha(texto, HOY)).toEqual({ tipo: 'unico', fecha: { iso, etiqueta } });
+  });
+
   it('día igual a mes no es ambiguo: las dos lecturas coinciden', () => {
     const r = leerFecha('7/7', HOY);
     expect(r.tipo).toBe('unico');
