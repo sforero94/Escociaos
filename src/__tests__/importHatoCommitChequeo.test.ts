@@ -14,9 +14,11 @@ import {
   construirPayloadCommit,
   seleccionarUltimaCriaAnteriorPorAnimal,
   seleccionarFechasServicioConocidasPorAnimal,
+  seleccionarFechasServicioRegistradasAManoPorAnimal,
   fusionarEventosManualesEnDedupe,
   type FilaChequeoAprobada,
   type FilaUltimaCriaHistorico,
+  type EventoManualHistorico,
 } from '@/utils/importHato/commitChequeo';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
 import type { AnimalHatoActual, FilaChequeoVacaHistorico, FilaDiffChequeo, ResultadoDiffChequeo, UltimoChequeoVacaActual } from '@/utils/importHato/diffChequeo';
@@ -639,19 +641,62 @@ describe('fusionarEventosManualesEnDedupe', () => {
     expect(fechasServicioPorAnimal.get('a1')).toEqual(new Set(['2026-05-02', '2026-08-10']));
   });
 
-  it('ignora lo registrado el mismo día del chequeo o después', () => {
-    // No es "lo ya conocido", es otro hecho -- mismo criterio estricto que
-    // los dos selectores que se alimentan de hato_chequeo_vacas.
+  // #259, corregido 2026-09-15 -- caso real MONZA/AMAPOLA: inseminadas por
+  // Telegram el MISMO día de la visita del veterinario (2026-09-08). Antes
+  // de este fix, `evento.fecha >= chequeoNuevoFecha` descartaba ese evento
+  // manual de la fusión y el commit del chequeo derivaba un SEGUNDO evento
+  // `servicio` para la misma monta -- este test fijaba, en rojo, ese
+  // comportamiento incorrecto ("ignora lo registrado el mismo día del
+  // chequeo o después"). El día de la visita SÍ es "lo ya conocido"; solo lo
+  // ESTRICTAMENTE posterior queda fuera.
+  it('incluye lo registrado el MISMO día del chequeo -- el día de la visita SÍ es "lo ya conocido" (caso real MONZA/AMAPOLA, #259)', () => {
     const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(
       new Map(),
       new Map(),
-      [
-        { animalId: 'a1', tipo: 'servicio', fecha: '2026-08-20' },
-        { animalId: 'a1', tipo: 'servicio', fecha: '2026-08-25' },
-      ],
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-09-08' }],
+      '2026-09-08',
+    );
+    expect(fechasServicioPorAnimal.get('a1')).toEqual(new Set(['2026-09-08']));
+  });
+
+  it('sigue ignorando lo registrado ESTRICTAMENTE DESPUÉS del chequeo -- inerte para servicio, la planilla nunca trae una fecha futura', () => {
+    const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-25' }],
       '2026-08-20',
     );
     expect(fechasServicioPorAnimal.has('a1')).toBe(false);
+  });
+
+  it('sigue incluyendo lo registrado ESTRICTAMENTE ANTES del chequeo (comportamiento previo, sin cambios)', () => {
+    const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-10' }],
+      '2026-08-20',
+    );
+    expect(fechasServicioPorAnimal.get('a1')).toEqual(new Set(['2026-08-10']));
+  });
+
+  it('un parto manual el MISMO día del chequeo SÍ reemplaza la última cría conocida (#259, mismo criterio ensanchado para parto)', () => {
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-09-08' }],
+      '2026-09-08',
+    );
+    expect(ultimaCriaAnteriorPorAnimal.get('a1')).toBe('2026-09-08');
+  });
+
+  it('un parto manual ESTRICTAMENTE DESPUÉS del chequeo sigue sin afectar la última cría conocida', () => {
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-08-25' }],
+      '2026-08-20',
+    );
+    expect(ultimaCriaAnteriorPorAnimal.has('a1')).toBe(false);
   });
 
   it('un parto manual reemplaza la última cría cuando es más reciente', () => {
@@ -700,5 +745,167 @@ describe('fusionarEventosManualesEnDedupe', () => {
     );
     expect(servicios.get('a1')).toEqual(new Set(['2026-05-02']));
     expect(crias.get('a1')).toBe('2026-01-15');
+  });
+});
+
+// ============================================================================
+// seleccionarFechasServicioRegistradasAManoPorAnimal (#259) -- subconjunto
+// de lo que fusionarEventosManualesEnDedupe ya fusiona, solo para que
+// descomponerSX sepa si una supresión vino de un evento manual.
+// ============================================================================
+
+describe('seleccionarFechasServicioRegistradasAManoPorAnimal', () => {
+  it('incluye un servicio manual del MISMO día del chequeo (#259)', () => {
+    const eventos: EventoManualHistorico[] = [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-09-08' }];
+    const mapa = seleccionarFechasServicioRegistradasAManoPorAnimal(eventos, '2026-09-08');
+    expect(mapa.get('a1')).toEqual(new Set(['2026-09-08']));
+  });
+
+  it('incluye un servicio manual de un día ANTERIOR al chequeo', () => {
+    const eventos: EventoManualHistorico[] = [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-10' }];
+    const mapa = seleccionarFechasServicioRegistradasAManoPorAnimal(eventos, '2026-08-20');
+    expect(mapa.get('a1')).toEqual(new Set(['2026-08-10']));
+  });
+
+  it('excluye un servicio manual ESTRICTAMENTE POSTERIOR al chequeo', () => {
+    const eventos: EventoManualHistorico[] = [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-25' }];
+    const mapa = seleccionarFechasServicioRegistradasAManoPorAnimal(eventos, '2026-08-20');
+    expect(mapa.has('a1')).toBe(false);
+  });
+
+  it('ignora eventos de tipo parto -- solo servicio alimenta este mapa', () => {
+    const eventos: EventoManualHistorico[] = [{ animalId: 'a1', tipo: 'parto', fecha: '2026-08-10' }];
+    const mapa = seleccionarFechasServicioRegistradasAManoPorAnimal(eventos, '2026-08-20');
+    expect(mapa.size).toBe(0);
+  });
+
+  it('sin eventos manuales, mapa vacío (nunca se inventa una fecha)', () => {
+    const mapa = seleccionarFechasServicioRegistradasAManoPorAnimal([], '2026-08-20');
+    expect(mapa.size).toBe(0);
+  });
+});
+
+// ============================================================================
+// Pipeline completo de #259: fusionarEventosManualesEnDedupe +
+// derivarEventosDeChequeo(..., fechasServicioRegistradasAManoPorAnimal) --
+// prueba el WIRING real que usa `hato-chequeo-commit.ts`, no solo cada pieza
+// aislada. Caso real: MONZA/AMAPOLA, inseminadas por Telegram el mismo día
+// de la visita del veterinario (2026-09-08); el chequeo, comiteado una
+// semana después, trae esa misma F Servicio en la planilla.
+// ============================================================================
+
+describe('pipeline #259 -- un servicio manual suprime el derivado y deja un issue solo cuando corresponde', () => {
+  /** Fusiona `eventosManuales` (mismo query que hace el handler, ver
+   * `hato-chequeo-commit.ts`) y devuelve los tres mapas que
+   * `derivarEventosDeChequeo` necesita -- exactamente el wiring real. */
+  function mapasParaChequeo(eventosManuales: EventoManualHistorico[], chequeoFecha: string) {
+    const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(new Map(), new Map(), eventosManuales, chequeoFecha);
+    const fechasServicioRegistradasAManoPorAnimal = seleccionarFechasServicioRegistradasAManoPorAnimal(eventosManuales, chequeoFecha);
+    return { fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal };
+  }
+
+  it('servicio manual el MISMO día del chequeo suprime el derivado y deja un issue (caso real MONZA/AMAPOLA)', () => {
+    const fila = filaBase({
+      sx: parseSX('vacia'),
+      fechasServicio: ['2026-09-08'],
+      chequeoFecha: '2026-09-08',
+      toroNombre: 'Hypnotic',
+      tipoServicio: 'inseminacion',
+    });
+    const { fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal } = mapasParaChequeo(
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-09-08' }],
+      '2026-09-08',
+    );
+    const { eventos, issues } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], new Map(), fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal);
+
+    expect(eventos).toEqual([]); // nunca un segundo evento `servicio`
+    expect(issues).toEqual([expect.objectContaining({ crudo: '2026-09-08' })]);
+    expect(issues[0].motivo).toContain('Hypnotic');
+  });
+
+  it('servicio manual el día ANTERIOR al chequeo también suprime el derivado y deja un issue', () => {
+    const fila = filaBase({
+      sx: parseSX('vacia'),
+      fechasServicio: ['2026-08-10'],
+      chequeoFecha: '2026-08-20',
+      toroNombre: 'Hypnotic',
+      tipoServicio: 'inseminacion',
+    });
+    const { fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal } = mapasParaChequeo(
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-10' }],
+      '2026-08-20',
+    );
+    const { eventos, issues } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], new Map(), fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal);
+
+    expect(eventos).toEqual([]);
+    expect(issues).toEqual([expect.objectContaining({ crudo: '2026-08-10' })]);
+  });
+
+  it('servicio manual ESTRICTAMENTE POSTERIOR al chequeo es inerte -- el derivado SÍ se emite, sin issue', () => {
+    const fila = filaBase({
+      sx: parseSX('vacia'),
+      fechasServicio: ['2026-08-20'],
+      chequeoFecha: '2026-08-20',
+      toroNombre: 'Hypnotic',
+      tipoServicio: 'inseminacion',
+    });
+    const { fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal } = mapasParaChequeo(
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-25' }], // posterior al chequeo, no puede coincidir con esta fecha
+      '2026-08-20',
+    );
+    const { eventos, issues } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], new Map(), fechasServicioPorAnimal, fechasServicioRegistradasAManoPorAnimal);
+
+    expect(eventos).toEqual([expect.objectContaining({ tipo: 'servicio', fecha: '2026-08-20' })]);
+    expect(issues).toEqual([]);
+  });
+
+  it('la supresión contra un chequeo ANTERIOR (no un evento manual) sigue silenciosa -- caso CAMILA #154', () => {
+    const fila = filaBase({
+      sx: parseSX('vacia'),
+      fechasServicio: ['2022-08-26'],
+      chequeoFecha: '2022-10-20',
+      toroNombre: 'Toro X',
+      tipoServicio: 'monta',
+    });
+    const fechasServicioConocidasPorAnimal = new Map([['a1', new Set(['2022-08-26'])]]);
+    // Sin eventos manuales -- la fecha conocida viene de un chequeo anterior.
+    const { eventos, issues } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], new Map(), fechasServicioConocidasPorAnimal, new Map());
+
+    expect(eventos).toEqual([]);
+    expect(issues).toEqual([]); // sin issue -- ruido esperado, no una discrepancia
+  });
+
+  it('un parto manual el MISMO día del chequeo suprime el derivado (mismo criterio ensanchado para parto, #259)', () => {
+    const fila = filaBase({
+      sx: parseSX('OV'),
+      fechasServicio: [],
+      chequeoFecha: '2026-09-08',
+      raw: { ...filaBase().raw, ultimaCria: '8/9/2026' },
+    });
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-09-08' }],
+      '2026-09-08',
+    );
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], ultimaCriaAnteriorPorAnimal);
+    expect(eventos).toEqual([]);
+  });
+
+  it('un parto manual ESTRICTAMENTE POSTERIOR al chequeo no afecta el derivado (inerte, #259)', () => {
+    const fila = filaBase({
+      sx: parseSX('OV'),
+      fechasServicio: [],
+      chequeoFecha: '2026-08-20',
+      raw: { ...filaBase().raw, ultimaCria: '20/8/2026' },
+    });
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-08-25' }],
+      '2026-08-20',
+    );
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], ultimaCriaAnteriorPorAnimal);
+    expect(eventos).toEqual([expect.objectContaining({ tipo: 'parto' })]);
   });
 });

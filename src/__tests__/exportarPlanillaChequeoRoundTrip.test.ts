@@ -40,10 +40,14 @@ import {
   type UltimoChequeoVacaActual,
 } from '@/utils/importHato/diffChequeo';
 import {
+  ENCABEZADOS_PLANILLA_CHEQUEO,
+  FILA_ENCABEZADO_PLANILLA,
   construirLibroPlanillaChequeo,
+  construirAOAPlanillaChequeo,
   construirTituloHojaChequeo,
   construirNombreHojaChequeo,
   isoATextoDDMMYYYY,
+  FILAS_LIBRES_PLANILLA_CHEQUEO,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
 
@@ -316,5 +320,103 @@ describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo s
       [{ animalId: 'animal-vaca', estado: 'Servida' }],
     );
     expect(diffSinConflicto.filas[0].conflictoEstadoRegistrado).toBeNull();
+  });
+});
+
+describe('Fase 3 (docs/hato/plan_chequeo_novedades_implementacion.md §7.2) -- round-trip de las 10 filas libres', () => {
+  it('las 10 filas libres exportadas vuelven como descartesPorMotivo.fantasma; el conteo de chequeos reales no cambia', () => {
+    const lucero = construirFixture({
+      id: 'animal-lucero',
+      numero: 101,
+      nombre: 'LUCERO',
+      plRaw: 18.5,
+      numPartosRaw: 3,
+      fechaServicioRaw: '10/5/2026',
+      toroRaw: 'Toro Nitro',
+      estadoRaw: 'ok',
+      ultimaCriaRaw: '1/2/2025',
+      sxRaw: 'ov',
+      tttoRaw: null,
+    });
+
+    const libro = construirLibroPlanillaChequeo(XLSX, {
+      tituloHoja: construirTituloHojaChequeo(FECHA_CHEQUEO_ACTUAL),
+      nombreHoja: construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL),
+      filas: [lucero.fila],
+    });
+    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
+    const nombreHojaLeida = libroLeido.SheetNames[0];
+    const hojaCruda: HojaCruda = {
+      archivo: ARCHIVO,
+      hoja: nombreHojaLeida,
+      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
+    };
+
+    const salida = normalizarHojas([hojaCruda], '2026-07-24T00:00:00.000Z', CONFIG);
+
+    // El único chequeo real sigue siendo LUCERO -- las 10 filas libres
+    // nunca entran a `chequeos` (mismo "conteo de filas parseadas" de
+    // siempre, la exportación no las agrega como animales).
+    expect(salida.chequeos).toHaveLength(1);
+    expect(salida.chequeos[0].numero).toBe(101);
+
+    // Y las 10 vuelven identificadas por la MISMA vía que ya descartaba
+    // filas vacías -- no una categoría nueva, no un issue, no una fila
+    // fantasma silenciosa sin explicación.
+    expect(salida.hojas).toHaveLength(1);
+    expect(salida.hojas[0].descartesPorMotivo.fantasma).toBe(FILAS_LIBRES_PLANILLA_CHEQUEO);
+  });
+
+  it('diligenciar una fila libre (escribir número + nombre a mano) la hace parsear como una fila de animal normal', () => {
+    // Se arma el AOA con la función pura real (nunca a mano): así, si el
+    // orden de columnas o la posición de las filas libres cambia algún día,
+    // este test las sigue encontrando en el lugar correcto.
+    const aoa = construirAOAPlanillaChequeo(construirTituloHojaChequeo(FECHA_CHEQUEO_ACTUAL), []);
+    // Sin filas de datos previas en este fixture, fila 0 = título, fila 1 =
+    // encabezado, así que la PRIMERA fila libre es el índice 2 -- se
+    // simula que alguien la diligenció a mano en el papel/`.xlsx`.
+    const PRIMERA_FILA_LIBRE = FILA_ENCABEZADO_PLANILLA + 1;
+    const columnas = ENCABEZADOS_PLANILLA_CHEQUEO.length;
+    expect(aoa[PRIMERA_FILA_LIBRE]).toHaveLength(columnas);
+    expect(aoa[PRIMERA_FILA_LIBRE].every((c) => c === null)).toBe(true);
+    aoa[PRIMERA_FILA_LIBRE] = [
+      950,
+      'RECIEN LLEGADA',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      'ok',
+      null,
+      null,
+      null,
+    ];
+
+    const hoja = XLSX.utils.aoa_to_sheet(aoa);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL));
+
+    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
+    const nombreHojaLeida = libroLeido.SheetNames[0];
+    const hojaCruda: HojaCruda = {
+      archivo: ARCHIVO,
+      hoja: nombreHojaLeida,
+      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
+    };
+
+    const salida = normalizarHojas([hojaCruda], '2026-07-24T00:00:00.000Z', CONFIG);
+
+    // Las 9 filas libres restantes siguen fantasma; la diligenciada ya no
+    // se descarta -- parsea como una fila de animal más.
+    expect(salida.hojas[0].descartesPorMotivo.fantasma).toBe(FILAS_LIBRES_PLANILLA_CHEQUEO - 1);
+    expect(salida.chequeos).toHaveLength(1);
+    expect(salida.chequeos[0].numero).toBe(950);
+    expect(salida.chequeos[0].nombre).toBe('RECIEN LLEGADA');
+    expect(salida.chequeos[0].estado).toBe('vacia_apta'); // 'ok' -> vacia_apta, igual que textoCeldaEstado/parseEstado
   });
 });

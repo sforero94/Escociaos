@@ -51,6 +51,7 @@ import {
   construirPayloadCommit,
   seleccionarUltimaCriaAnteriorPorAnimal,
   seleccionarFechasServicioConocidasPorAnimal,
+  seleccionarFechasServicioRegistradasAManoPorAnimal,
   fusionarEventosManualesEnDedupe,
   type EventoManualHistorico,
   type FilaUltimaCriaHistorico,
@@ -330,6 +331,12 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   // los dos mapas de deduplicación de arriba no los ven y el chequeo emite un
   // SEGUNDO evento para el mismo hecho -- la forma exacta del bug que costó
   // tres rondas de limpieza en julio de 2026.
+  //
+  // `.lte` (no `.lt`) -- #259, corregido 2026-09-15: el día de la visita SÍ
+  // es "lo ya conocido" (ver `fusionarEventosManualesEnDedupe`). Con `.lt`
+  // un evento manual del MISMO día del chequeo nunca se traía, y el commit
+  // derivaba un segundo evento para el mismo hecho (caso real MONZA/AMAPOLA,
+  // inseminadas por Telegram el mismo día de la visita).
   let eventosManuales: EventoManualHistorico[] = [];
   if (animalIds.length > 0) {
     const { data, error } = await supabase
@@ -338,7 +345,7 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
       .in('animal_id', animalIds)
       .in('tipo', ['servicio', 'parto'])
       .is('chequeo_vaca_id', null)
-      .lt('fecha', chequeo.fecha);
+      .lte('fecha', chequeo.fecha);
     if (error) {
       const mensaje = `No se pudo leer hato_eventos: ${error.message}`;
       await cerrarCapturaConFallo(mensaje, 0);
@@ -359,6 +366,17 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   );
   const fechasServicioConocidasPorAnimal = fusionado.fechasServicioPorAnimal;
   const ultimaCriaAnteriorFusionada = fusionado.ultimaCriaAnteriorPorAnimal;
+  // #259, segunda mitad: de las fechas que `fechasServicioConocidasPorAnimal`
+  // ya fusionó, cuáles vinieron de un evento MANUAL (no de un chequeo
+  // anterior) -- mismo `eventosManuales` que arriba, ninguna consulta
+  // adicional. `descomponerSX` la usa para decidir si una supresión deja un
+  // `ParseIssue` de revisión (planilla y Telegram pueden discrepar de toro/
+  // tipo de servicio, caso real MAGNIFICA #103) o sigue silenciosa (caso
+  // CAMILA #154, fecha conocida de un chequeo anterior).
+  const fechasServicioRegistradasAManoPorAnimal = seleccionarFechasServicioRegistradasAManoPorAnimal(
+    eventosManuales,
+    chequeo.fecha,
+  );
 
   // --- 4. Revalidar el ALCANCE contra el diff fresco --------------------
   const { aceptadas, rechazadas } = validarFilasCommit(filas, diffFresco);
@@ -370,7 +388,12 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
 
   // --- 5. Derivar eventos + resolver toro_id (I/O: SELECT-o-INSERT) ----
   const vacas = construirFilasVacas(aceptadas);
-  const { eventos } = derivarEventosDeChequeo(aceptadas, ultimaCriaAnteriorFusionada, fechasServicioConocidasPorAnimal);
+  const { eventos } = derivarEventosDeChequeo(
+    aceptadas,
+    ultimaCriaAnteriorFusionada,
+    fechasServicioConocidasPorAnimal,
+    fechasServicioRegistradasAManoPorAnimal,
+  );
 
   const nombresToro = [...new Set(eventos.map((e) => e.toro_nombre).filter((n): n is string => !!n && n.trim() !== ''))];
   const toroCache = new Map<string, string>();

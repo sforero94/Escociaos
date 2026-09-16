@@ -13,6 +13,7 @@ import { parseEstado } from '@/utils/calculosHato';
 import {
   ENCABEZADOS_PLANILLA_CHEQUEO,
   FILA_ENCABEZADO_PLANILLA,
+  FILAS_LIBRES_PLANILLA_CHEQUEO,
   construirAOAPlanillaChequeo,
   construirTituloHojaChequeo,
   construirNombreHojaChequeo,
@@ -126,14 +127,17 @@ describe('textoCeldaEstadoRegistrado (D-E, B5.4 -- N21/N22 del plan de agosto 20
 });
 
 describe('construirAOAPlanillaChequeo', () => {
-  it('arma título (fila 0) + encabezado (fila 1, UNA sola vez) + filas de datos, una tabla continua', () => {
+  it('arma título (fila 0) + encabezado (fila 1, UNA sola vez) + filas de datos + filas libres, una tabla continua', () => {
     const filas = [
       filaVacia({ numero: 101, nombre: 'LUCERO' }),
       filaVacia({ numero: 205, nombre: 'ESTRELLA' }),
     ];
     const aoa = construirAOAPlanillaChequeo('CHEQUEO 22 JULIO 2026', filas);
 
-    expect(aoa).toHaveLength(4); // título + encabezado + 2 filas
+    // título + encabezado + 2 filas de datos + FILAS_LIBRES_PLANILLA_CHEQUEO
+    // (Fase 3, decisión del dueño 2026-09-15: SIEMPRE se agregan, nunca
+    // condicionadas a "si hace falta").
+    expect(aoa).toHaveLength(4 + FILAS_LIBRES_PLANILLA_CHEQUEO);
     expect(aoa[0]).toEqual(['CHEQUEO 22 JULIO 2026']);
     expect(aoa[FILA_ENCABEZADO_PLANILLA]).toEqual([...ENCABEZADOS_PLANILLA_CHEQUEO]);
     expect(aoa[2][0]).toBe(101);
@@ -142,10 +146,27 @@ describe('construirAOAPlanillaChequeo', () => {
 
     // El encabezado aparece EXACTAMENTE una vez -- requisito duro de B5.1
     // ("nunca repetir la fila de header, rompe la extracción del parser").
+    // Las filas libres NO lo repiten: ese requisito es del PDF (hojas
+    // físicas separadas), no de esta tabla continua.
     const filasQueSonElEncabezado = aoa.filter(
       (fila) => JSON.stringify(fila) === JSON.stringify([...ENCABEZADOS_PLANILLA_CHEQUEO]),
     );
     expect(filasQueSonElEncabezado).toHaveLength(1);
+  });
+
+  it('las filas libres son EXACTAMENTE 10, van al final y son totalmente en blanco (las 13 columnas en null)', () => {
+    const filas = [filaVacia({ numero: 101, nombre: 'LUCERO' })];
+    const aoa = construirAOAPlanillaChequeo('CHEQUEO 22 JULIO 2026', filas);
+
+    // título(1) + encabezado(1) + 1 fila de datos = índice 3 es la primera
+    // fila libre.
+    const filasLibres = aoa.slice(3);
+    expect(filasLibres).toHaveLength(FILAS_LIBRES_PLANILLA_CHEQUEO);
+    expect(FILAS_LIBRES_PLANILLA_CHEQUEO).toBe(10);
+    for (const filaLibre of filasLibres) {
+      expect(filaLibre).toHaveLength(ENCABEZADOS_PLANILLA_CHEQUEO.length);
+      expect(filaLibre.every((celda) => celda === null)).toBe(true);
+    }
   });
 
   it('el template tiene 13 columnas -- las 13 históricas menos TP, más "Estado registrado" (D-E, B5.4)', () => {
@@ -191,7 +212,8 @@ describe('construirLibroPlanillaChequeo -- ensamblado real con xlsx', () => {
 
     expect(aoaLeido[0][0]).toBe('CHEQUEO 22 JULIO 2026');
     expect(aoaLeido[1].slice(0, 2)).toEqual(['#', 'Nombre']);
-    expect(aoaLeido).toHaveLength(4);
+    // título + encabezado + 2 filas de datos + las filas libres de la Fase 3.
+    expect(aoaLeido).toHaveLength(4 + FILAS_LIBRES_PLANILLA_CHEQUEO);
   });
 });
 

@@ -29,6 +29,7 @@ import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 import type { ResultadoDiffChequeo } from '@/utils/importHato/diffChequeo';
 import type { FilaChequeoNormalizada, ManifiestoHoja, FilaTerneraNormalizada, FilaSubtablaNormalizada } from '@/utils/importHato/tipos';
 import type { FilaRechazadaCommit } from '@/utils/importHato/commitChequeo';
+import type { AnimalFueraDelRoster } from '@/utils/importHato/ocrChequeo';
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
@@ -70,8 +71,39 @@ export interface ReporteOcrChequeo {
   /** Páginas cuya lectura falló entera (timeout, rechazo del proveedor…). */
   paginasNoLeidas: string[];
   /** Filas que el modelo leyó pero NO se pudieron anclar a una vaca del
-   * roster: nunca se desplazan, se reportan. */
-  filasNoLeidas: { pagina: number; numeroImpreso: string | null; nombreImpreso: string | null; motivo: string }[];
+   * roster Y que tampoco calificaron para promoción (plan de novedades §4.4):
+   * nunca se desplazan, se reportan. `motivoNoPromovible` explica -- SIEMPRE,
+   * nunca opcional -- por qué, siendo rechazada, tampoco entró a la ventana
+   * de revisión como fila editable. */
+  filasNoLeidas: {
+    pagina: number;
+    numeroImpreso: string | null;
+    nombreImpreso: string | null;
+    motivo: string;
+    motivoNoPromovible: string;
+  }[];
+  /** Filas RECHAZADAS por el ancla pero PROMOVIDAS a la ventana de revisión
+   * (plan de novedades §4/§5): sin `numero` (identidad) hasta que una
+   * persona la asigna corrigiendo la caravana de la fila, ya visible en
+   * `ChequeoDiffReview` como `no_reconocido`. `filaExcel` es la llave de
+   * unión contra `FilaDiffChequeo.fila` -- la MISMA que usan las filas
+   * confirmadas. */
+  filasPromovidas: {
+    filaExcel: number;
+    pagina: number;
+    orden: number;
+    numeroImpreso: string;
+    nombreImpreso: string;
+    motivo: 'numero_ilegible' | 'numero_fuera_del_roster' | 'numero_animal_inactivo';
+    detalle: string;
+    /** Solo cuando `motivo === 'numero_animal_inactivo'`. 1..N -- nunca se
+     * adjudica sola si hay más de un candidato. */
+    candidatosInactivos: AnimalFueraDelRoster[];
+    /** Solo cuando `motivo === 'numero_fuera_del_roster'` y el número
+     * resuelve a una novilla/ternera ACTIVA fuera del roster impreso.
+     * Sugerencia para un llenado de un clic -- nunca se aplica sola. */
+    sugerenciaActiva: AnimalFueraDelRoster | null;
+  }[];
   /** Vacas activas que no aparecieron en ninguna foto -- así una página
    * faltante o una foto cortada se detecta sola. */
   vacasSinLeer: { numero: number | null; nombre: string | null; motivo: string }[];
@@ -81,6 +113,10 @@ export interface ReporteOcrChequeo {
     fotosRecibidas: number;
     fotosLeidas: number;
     filasConfirmadas: number;
+    /** Filas escritas a mano promovidas a la ventana de revisión -- se
+     * reporta APARTE de `filasConfirmadas`, nunca sumada en silencio: una
+     * hoja llena de novedades no debe leerse como "poco reconocida". */
+    filasPromovidas: number;
     filasNoLeidas: number;
     vacasSinLeer: number;
     celdasNoConfiables: number;

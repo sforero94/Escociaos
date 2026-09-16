@@ -16,6 +16,7 @@ import {
   chipEstadoTratamiento,
   chipStockPajillas,
   chipVejezPesajes,
+  chipFilaEscritaAMano,
 } from '../utils/hatoUi';
 import type { EstadoReproductivo, TipoEstado } from '../utils/calculosHato';
 import type { ClasificacionFilaDiff } from '../utils/importHato/diffChequeo';
@@ -66,6 +67,15 @@ describe('chipVaciaEsProblema', () => {
 
   it('colorea verde cuando es normal', () => {
     expect(chipVaciaEsProblema(false)?.className).toContain('green');
+  });
+});
+
+describe('chipFilaEscritaAMano', () => {
+  it('rótulo estable, mismo tono ámbar que provisional/cambio', () => {
+    const chip = chipFilaEscritaAMano();
+    expect(chip.label).toBe('Escrita a mano');
+    expect(chip.className).toContain('amber');
+    expect(chip.title).toBeTruthy();
   });
 });
 

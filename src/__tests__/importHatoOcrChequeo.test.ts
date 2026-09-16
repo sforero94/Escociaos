@@ -21,16 +21,21 @@ import {
   COLUMNAS_OCR,
   ENCABEZADOS_HOJA_OCR,
   ENCABEZADO_POR_COLUMNA_OCR,
+  PREFIJO_ISSUE_FILA_PROMOVIDA,
   aplicarFechaChequeo,
+  clasificarPromocion,
+  construirIndiceFueraDelRoster,
   construirPromptOcr,
   construirRosterPlanilla,
   distanciaEdicionAcotada,
+  esFilaOcrEnBlanco,
   esquemaJsonOcr,
   normalizarNombreParaCotejo,
   parsearRespuestaModeloOcr,
   procesarLecturaOcr,
   sugerirFechaChequeo,
   validarAnclaFila,
+  type AnimalFueraDelRoster,
   type AnimalRosterPlanilla,
   type CeldaOcr,
   type ColumnaOcr,
@@ -506,6 +511,338 @@ describe('procesarLecturaOcr', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4.5. Promoción de filas manuscritas (hoja de holgura, plan §4/§5)
+// ---------------------------------------------------------------------------
+//
+// Lo que estos tests protegen, en orden de importancia (docs/hato/plan_chequeo_novedades_implementacion.md §4):
+//   1. `validarAnclaFila` queda INTACTO -- la promoción decide DESPUÉS de un
+//      rechazo, nunca dentro del cotejo del ancla.
+//   2. El conjunto promovible es EXACTO: los tres motivos declarados, nunca
+//      más. Los tres terminales (`chapeta_ambigua_en_roster`,
+//      `nombre_no_corresponde`, `lectura_repetida_divergente`) son
+//      promovible=false SIEMPRE, sin importar qué traiga la fila.
+//   3. El predicado de 3 condiciones (motivo + nombre escrito + algún dato)
+//      falla independientemente en cada condición.
+//   4. Una fila promovida entra a la matriz con '#' vacío y 'Nombre' =
+//      lo impreso, y `filaExcel` se renumera de forma contigua sobre
+//      confirmadas + promovidas juntas.
+//   5. Las promovidas se dedupean entre fotos con la MISMA regla que las
+//      confirmadas (por firma de lectura), pero SIN chapeta como llave.
+
+const FILA_MANUSCRITA_COMPLETA = filaOcr({
+  numeroImpreso: '900',
+  nombreImpreso: 'NOVILLA NUEVA',
+  celdas: celdas({ pl: celda('18') }),
+});
+
+describe('esFilaOcrEnBlanco', () => {
+  it('es verdadero cuando ninguna de las 11 celdas de dato trae texto', () => {
+    expect(esFilaOcrEnBlanco(filaOcr({ numeroImpreso: '', nombreImpreso: '', celdas: celdas() }))).toBe(true);
+  });
+
+  it('es falso apenas UNA celda trae texto, sin importar la confianza declarada', () => {
+    expect(
+      esFilaOcrEnBlanco(
+        filaOcr({ numeroImpreso: '', nombreImpreso: '', celdas: celdas({ pl: celda('3', 'baja') }) }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('construirIndiceFueraDelRoster', () => {
+  const roster = construirRosterPlanilla(ROSTER_BASE);
+
+  it('indexa por número los animales que NO están en el roster impreso, como LISTA (la unicidad de chapeta solo vale entre activas)', () => {
+    const fueraDelRoster: AnimalFueraDelRoster[] = [
+      { id: 'uuid-178-a', numero: 178, nombre: 'COMINA', estado: 'descartada' },
+      { id: 'uuid-178-b', numero: 178, nombre: 'MOTONETA', estado: 'muerta' },
+      { id: 'uuid-900', numero: 900, nombre: 'NOVILLA NUEVA', estado: 'activa' },
+    ];
+    const indice = construirIndiceFueraDelRoster(fueraDelRoster, roster);
+    expect(indice.get(178)).toHaveLength(2);
+    expect(indice.get(900)).toEqual([{ id: 'uuid-900', numero: 900, nombre: 'NOVILLA NUEVA', estado: 'activa' }]);
+  });
+
+  it('nunca indexa un número que ya tiene ancla válida en el roster impreso', () => {
+    const homonimo: AnimalFueraDelRoster[] = [
+      { id: 'uuid-otro-102', numero: 102, nombre: 'HOMONIMA', estado: 'descartada' },
+    ];
+    const indice = construirIndiceFueraDelRoster(homonimo, roster);
+    expect(indice.has(102)).toBe(false);
+  });
+});
+
+describe('clasificarPromocion -- el conjunto promovible es EXACTO (plan §4.3)', () => {
+  const sinCandidatos = new Map<number, AnimalFueraDelRoster[]>();
+
+  it.each([
+    ['numero_ilegible', true],
+    ['numero_fuera_del_roster', true],
+    ['numero_animal_inactivo', true],
+    ['chapeta_ambigua_en_roster', false],
+    ['nombre_no_corresponde', false],
+    ['lectura_repetida_divergente', false],
+  ] as const)('motivo %s -> promovible %s', (motivo, promovibleEsperado) => {
+    const resultado = clasificarPromocion(
+      { motivo, detalle: 'detalle de prueba' },
+      FILA_MANUSCRITA_COMPLETA,
+      sinCandidatos,
+    );
+    expect(resultado.promovible).toBe(promovibleEsperado);
+    if (!resultado.promovible) {
+      expect(resultado.motivoNoPromovible).toBe('motivo_terminal');
+    }
+  });
+
+  it('un motivo terminal es promovible=false SIN IMPORTAR el contenido de la fila (nombre y datos completos)', () => {
+    const resultado = clasificarPromocion(
+      { motivo: 'nombre_no_corresponde', detalle: 'x' },
+      FILA_MANUSCRITA_COMPLETA,
+      sinCandidatos,
+    );
+    expect(resultado).toEqual({ promovible: false, motivoNoPromovible: 'motivo_terminal' });
+  });
+});
+
+describe('clasificarPromocion -- el predicado de 3 condiciones (plan §4.4)', () => {
+  const sinCandidatos = new Map<number, AnimalFueraDelRoster[]>();
+
+  it('condición (2) sola: sin nombre escrito, aunque haya datos, no se promueve', () => {
+    const fila = filaOcr({ numeroImpreso: '900', nombreImpreso: '', celdas: celdas({ pl: celda('18') }) });
+    const resultado = clasificarPromocion({ motivo: 'numero_fuera_del_roster', detalle: 'x' }, fila, sinCandidatos);
+    expect(resultado).toEqual({ promovible: false, motivoNoPromovible: 'sin_nombre_escrito' });
+  });
+
+  it('condición (3) sola: con nombre pero sin ninguna celda de dato, no se promueve', () => {
+    const fila = filaOcr({ numeroImpreso: '900', nombreImpreso: 'NOVILLA NUEVA', celdas: celdas() });
+    const resultado = clasificarPromocion({ motivo: 'numero_fuera_del_roster', detalle: 'x' }, fila, sinCandidatos);
+    expect(resultado).toEqual({ promovible: false, motivoNoPromovible: 'sin_datos' });
+  });
+
+  it('las tres condiciones a la vez SÍ promueven: motivo base + nombre + un dato', () => {
+    const resultado = clasificarPromocion(
+      { motivo: 'numero_ilegible', detalle: 'x' },
+      FILA_MANUSCRITA_COMPLETA,
+      sinCandidatos,
+    );
+    expect(resultado.promovible).toBe(true);
+  });
+});
+
+describe('clasificarPromocion -- refinamiento numero_fuera_del_roster -> numero_animal_inactivo (plan §4.2/§4.6)', () => {
+  it('se refina cuando la chapeta la lleva UN animal inactivo', () => {
+    const indice = construirIndiceFueraDelRoster(
+      [{ id: 'uuid-178', numero: 178, nombre: 'COMINA', estado: 'descartada' }],
+      construirRosterPlanilla(ROSTER_BASE),
+    );
+    const fila = filaOcr({ numeroImpreso: '178', nombreImpreso: 'COMINA', celdas: celdas({ pl: celda('10') }) });
+    const resultado = clasificarPromocion({ motivo: 'numero_fuera_del_roster', detalle: 'x' }, fila, indice);
+    expect(resultado.promovible).toBe(true);
+    if (resultado.promovible) {
+      expect(resultado.motivo).toBe('numero_animal_inactivo');
+      expect(resultado.candidatosInactivos).toEqual([
+        { id: 'uuid-178', numero: 178, nombre: 'COMINA', estado: 'descartada' },
+      ]);
+      expect(resultado.sugerenciaActiva).toBeNull();
+    }
+  });
+
+  it('lista TODOS los candidatos inactivos cuando más de uno comparte la chapeta -- nunca preselecciona', () => {
+    const indice = construirIndiceFueraDelRoster(
+      [
+        { id: 'uuid-178-a', numero: 178, nombre: 'COMINA', estado: 'descartada' },
+        { id: 'uuid-178-b', numero: 178, nombre: 'MOTONETA', estado: 'vendida' },
+      ],
+      construirRosterPlanilla(ROSTER_BASE),
+    );
+    const fila = filaOcr({ numeroImpreso: '178', nombreImpreso: 'COMINA', celdas: celdas({ pl: celda('10') }) });
+    const resultado = clasificarPromocion({ motivo: 'numero_fuera_del_roster', detalle: 'x' }, fila, indice);
+    expect(resultado.promovible).toBe(true);
+    if (resultado.promovible) expect(resultado.candidatosInactivos).toHaveLength(2);
+  });
+
+  it('una novilla ACTIVA fuera del roster impreso es SUGERENCIA, y el motivo NO se refina', () => {
+    const indice = construirIndiceFueraDelRoster(
+      [{ id: 'uuid-900', numero: 900, nombre: 'NOVILLA NUEVA', estado: 'activa' }],
+      construirRosterPlanilla(ROSTER_BASE),
+    );
+    const resultado = clasificarPromocion(
+      { motivo: 'numero_fuera_del_roster', detalle: 'x' },
+      FILA_MANUSCRITA_COMPLETA,
+      indice,
+    );
+    expect(resultado.promovible).toBe(true);
+    if (resultado.promovible) {
+      expect(resultado.motivo).toBe('numero_fuera_del_roster');
+      expect(resultado.sugerenciaActiva).toEqual({
+        id: 'uuid-900',
+        numero: 900,
+        nombre: 'NOVILLA NUEVA',
+        estado: 'activa',
+      });
+      expect(resultado.candidatosInactivos).toEqual([]);
+    }
+  });
+
+  it('numero_ilegible nunca se refina -- no hay chapeta legible con la que buscar en el índice', () => {
+    const indice = construirIndiceFueraDelRoster(
+      [{ id: 'uuid-900', numero: 900, nombre: 'NOVILLA NUEVA', estado: 'descartada' }],
+      construirRosterPlanilla(ROSTER_BASE),
+    );
+    const fila = filaOcr({ numeroImpreso: '9OO', nombreImpreso: 'NOVILLA NUEVA', celdas: celdas({ pl: celda('1') }) });
+    const resultado = clasificarPromocion({ motivo: 'numero_ilegible', detalle: 'x' }, fila, indice);
+    expect(resultado.promovible).toBe(true);
+    if (resultado.promovible) {
+      expect(resultado.motivo).toBe('numero_ilegible');
+      expect(resultado.candidatosInactivos).toEqual([]);
+    }
+  });
+});
+
+describe('PREFIJO_ISSUE_FILA_PROMOVIDA', () => {
+  it('es estable -- no se cambia sin migrar los datos ya escritos (mismo criterio que CORRECCIÓN MANUAL)', () => {
+    expect(PREFIJO_ISSUE_FILA_PROMOVIDA).toBe('FILA ESCRITA A MANO');
+  });
+});
+
+describe('procesarLecturaOcr -- promoción de filas manuscritas de punta a punta', () => {
+  const roster = construirRosterPlanilla(ROSTER_BASE);
+
+  it('una fila fuera del roster con nombre y datos se promueve, y NO aparece en filasNoLeidas', () => {
+    const lectura = parsearRespuestaModeloOcr(
+      respuestaModelo([
+        { numero_impreso: '101', nombre_impreso: 'ALINA', celdas: celdasJson({ pl: { texto: '18', confianza: 'alta' } }) },
+        {
+          numero_impreso: '900',
+          nombre_impreso: 'NOVILLA NUEVA',
+          celdas: celdasJson({ pl: { texto: '5', confianza: 'alta' } }),
+        },
+      ]),
+      1,
+    );
+    const resultado = procesarLecturaOcr([lectura], roster, OPCIONES_HOJA);
+
+    expect(resultado.filasNoLeidas).toHaveLength(0);
+    expect(resultado.filasPromovidas).toHaveLength(1);
+    const promovida = resultado.filasPromovidas[0];
+    expect(promovida.motivo).toBe('numero_fuera_del_roster');
+    expect(promovida.numeroImpreso).toBe('900');
+    expect(promovida.nombreImpreso).toBe('NOVILLA NUEVA');
+
+    // '#' NUNCA se adivina; 'Nombre' viaja como ETIQUETA, no como llave.
+    const filaMatrizPromovida = resultado.hoja.filas[3];
+    expect(filaMatrizPromovida[0]).toBe('');
+    expect(filaMatrizPromovida[1]).toBe('NOVILLA NUEVA');
+
+    // filaExcel contiguo: confirmadas primero, promovidas después.
+    expect(resultado.filasConfirmadas.map((f) => f.filaExcel)).toEqual([3]);
+    expect(promovida.filaExcel).toBe(4);
+  });
+
+  it('renumera filaExcel de forma contigua con confirmadas, rechazadas (terminales) y promovidas mezcladas', () => {
+    const lectura = parsearRespuestaModeloOcr(
+      respuestaModelo([
+        { numero_impreso: '101', nombre_impreso: 'ALINA', celdas: celdasJson({}) },
+        { numero_impreso: '103', nombre_impreso: 'CAMILA', celdas: celdasJson({}) },
+        // Row drift real: chapeta de GALLEGA con nombre de CAMILA -- motivo
+        // TERMINAL, jamás se promueve aunque tenga datos.
+        {
+          numero_impreso: '102',
+          nombre_impreso: 'CAMILA',
+          celdas: celdasJson({ pl: { texto: '9', confianza: 'alta' } }),
+        },
+        {
+          numero_impreso: '900',
+          nombre_impreso: 'NOVILLA UNO',
+          celdas: celdasJson({ pl: { texto: '1', confianza: 'alta' } }),
+        },
+        {
+          numero_impreso: '901',
+          nombre_impreso: 'NOVILLA DOS',
+          celdas: celdasJson({ pl: { texto: '2', confianza: 'alta' } }),
+        },
+      ]),
+      1,
+    );
+    const resultado = procesarLecturaOcr([lectura], roster, OPCIONES_HOJA);
+
+    expect(resultado.filasConfirmadas.map((f) => f.filaExcel)).toEqual([3, 4]);
+    expect(resultado.filasPromovidas.map((f) => f.filaExcel)).toEqual([5, 6]);
+    expect(resultado.filasNoLeidas).toHaveLength(1);
+    expect(resultado.filasNoLeidas[0].motivo).toBe('nombre_no_corresponde');
+    expect(resultado.filasNoLeidas[0].motivoNoPromovible).toBe('motivo_terminal');
+  });
+
+  it('dos fotos con la MISMA lectura de una fila manuscrita dedupan a UNA sola promovida', () => {
+    const filaManuscrita = {
+      numero_impreso: '900',
+      nombre_impreso: 'NOVILLA NUEVA',
+      celdas: celdasJson({ pl: { texto: '5', confianza: 'alta' } }),
+    };
+    const p1 = parsearRespuestaModeloOcr(respuestaModelo([filaManuscrita]), 1);
+    const p2 = parsearRespuestaModeloOcr(respuestaModelo([filaManuscrita]), 2);
+    const resultado = procesarLecturaOcr([p1, p2], roster, OPCIONES_HOJA);
+
+    expect(resultado.filasPromovidas).toHaveLength(1);
+    expect(resultado.filasNoLeidas).toHaveLength(0);
+    expect(resultado.advertencias.join(' ')).toContain('MISMA lectura');
+  });
+
+  it('dos fotos que se contradicen sobre la misma fila manuscrita no promueven NINGUNA', () => {
+    const p1 = parsearRespuestaModeloOcr(
+      respuestaModelo([
+        {
+          numero_impreso: '900',
+          nombre_impreso: 'NOVILLA NUEVA',
+          celdas: celdasJson({ pl: { texto: '5', confianza: 'alta' } }),
+        },
+      ]),
+      1,
+    );
+    const p2 = parsearRespuestaModeloOcr(
+      respuestaModelo([
+        {
+          numero_impreso: '900',
+          nombre_impreso: 'NOVILLA NUEVA',
+          celdas: celdasJson({ pl: { texto: '7', confianza: 'alta' } }),
+        },
+      ]),
+      2,
+    );
+    const resultado = procesarLecturaOcr([p1, p2], roster, OPCIONES_HOJA);
+
+    expect(resultado.filasPromovidas).toHaveLength(0);
+    expect(resultado.filasNoLeidas).toHaveLength(2);
+    expect(resultado.filasNoLeidas.every((f) => f.motivo === 'lectura_repetida_divergente')).toBe(true);
+    expect(resultado.filasNoLeidas.every((f) => f.motivoNoPromovible === 'motivo_terminal')).toBe(true);
+  });
+
+  it('una fila completamente en blanco (la hoja de holgura sin usar) jamás se promueve', () => {
+    const lectura = parsearRespuestaModeloOcr(
+      respuestaModelo([{ numero_impreso: '', nombre_impreso: '', celdas: celdasJson({}) }]),
+      1,
+    );
+    const resultado = procesarLecturaOcr([lectura], roster, OPCIONES_HOJA);
+
+    expect(resultado.filasPromovidas).toHaveLength(0);
+    expect(resultado.filasNoLeidas).toHaveLength(1);
+    expect(resultado.filasNoLeidas[0].motivoNoPromovible).toBe('sin_nombre_escrito');
+  });
+
+  it('sin índice de fuera-del-roster (opción ausente), el comportamiento es EXACTAMENTE el mismo que hoy para filas sin nombre/datos', () => {
+    const lectura = parsearRespuestaModeloOcr(
+      respuestaModelo([{ numero_impreso: '777', nombre_impreso: 'NOVILLA NUEVA', celdas: celdasJson({}) }]),
+      1,
+    );
+    const resultado = procesarLecturaOcr([lectura], roster, OPCIONES_HOJA);
+    expect(resultado.filasPromovidas).toHaveLength(0);
+    expect(resultado.filasNoLeidas).toHaveLength(1);
+    expect(resultado.filasNoLeidas[0].motivo).toBe('numero_fuera_del_roster');
+    expect(resultado.filasNoLeidas[0].motivoNoPromovible).toBe('sin_datos');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. La matriz cruda atraviesa el pipeline EXISTENTE sin un segundo parser
 // ---------------------------------------------------------------------------
 
@@ -659,5 +996,14 @@ describe('prompt y esquema del modelo', () => {
     for (const vaca of ROSTER_BASE) {
       expect(prompt).not.toContain(vaca.nombre!);
     }
+  });
+
+  it('el prompt permite # y Nombre a mano SOLO en la última hoja, y prohíbe devolver filas completamente en blanco', () => {
+    const prompt = construirPromptOcr({ toros: ['NITRO'] });
+    expect(prompt).toMatch(/última hoja/i);
+    expect(prompt).toContain('escritas a mano');
+    expect(prompt).toMatch(/completamente en blanco/i);
+    // Rule 2 (nunca mover un valor a la fila vecina) sigue intacta.
+    expect(prompt).toContain('NUNCA lo pongas en la fila vecina');
   });
 });
