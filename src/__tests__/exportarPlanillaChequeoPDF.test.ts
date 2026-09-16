@@ -12,8 +12,14 @@
 //      columna a `ENCABEZADOS_PLANILLA_CHEQUEO`, estos tests fallan antes de
 //      que salga un PDF con una columna sin clasificar o desbordada.
 //   4. El documento REAL armado con jspdf + jspdf-autotable (inyectadas, mismo
-//      patrón que el test hermano inyecta `xlsx`): 35 filas caben en 2 páginas
-//      a 11pt y el pie dice "Página 1 de 2".
+//      patrón que el test hermano inyecta `xlsx`): el roster de 35 filas
+//      ocupa 2 páginas a 11pt y el pie dice "Página 1 de 3" (Fase 3: SIEMPRE
+//      hay una 3ª página de holgura al final).
+//   5. Fase 3 (`docs/hato/plan_chequeo_novedades_implementacion.md` §7.1) --
+//      la hoja de holgura: SIEMPRE última página, total = roster + 1
+//      (invariante calculada, nunca un literal fuera de un fixture), 10
+//      filas × 13 columnas, encabezado propio, las 13 columnas blancas con
+//      el borde grueso.
 
 import { describe, it, expect } from 'vitest';
 import jsPDF from 'jspdf';
@@ -29,6 +35,8 @@ import {
   textoCeldaNumero,
   hayNumerosProvisionales,
   construirDocumentoPlanillaChequeoPDF,
+  construirFilasHojaLibre,
+  construirEstilosColumnaHojaLibre,
   ANCHOS_COLUMNAS_PDF_MM,
   ANCHO_UTIL_CARTA_HORIZONTAL_MM,
   COLUMNAS_A_DILIGENCIAR,
@@ -38,6 +46,11 @@ import {
   ALTO_MINIMO_FILA_MM,
   NOTA_OPERATIVA_PLANILLA,
   MARGENES_PDF_MM,
+  FILAS_LIBRES_PLANILLA_CHEQUEO,
+  TITULO_HOJA_LIBRE,
+  COLOR_BLANCO,
+  GROSOR_BORDE_ESCRIBIBLE,
+  GROSOR_BORDE_REFERENCIA,
 } from '@/utils/hato/exportarPlanillaChequeoPDF';
 
 function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre: string }): FilaPlanillaChequeo {
@@ -399,23 +412,74 @@ describe('construirDocumentoPlanillaChequeoPDF -- documento real con jspdf + jsp
     expect(Math.round(alto)).toBe(216);
   });
 
-  it('35 filas a 11pt caben en 2 páginas (la referencia del dueño)', () => {
+  // Desde la Fase 3 (plan §7.1, decisión del dueño 2026-09-15) el documento
+  // SIEMPRE lleva una hoja de holgura adicional al final, así que el total
+  // de páginas de estos dos fixtures deja de ser "las páginas del roster" y
+  // pasa a ser "las páginas del roster + 1". Con el roster de 35 filas eso
+  // es 2 + 1 = 3 (el ejemplo textual del plan); con una sola fila es 1 + 1
+  // = 2. Las DOS cifras cambiaron respecto de antes de la Fase 3, y las dos
+  // se verifican para que el invariante "+1" quede probado contra más de un
+  // tamaño de roster, no solo contra el fixture de 35.
+  it('35 filas a 11pt: el roster ocupa 2 páginas (la referencia del dueño) + 1 de holgura = 3 en total', () => {
     const doc = construirDocumentoPlanillaChequeoPDF(
       { jsPDF, autoTable },
       { tituloDocumento: 'CHEQUEO 29 JULIO 2026', subtitulo: '35 vacas', filas: filas35 },
     );
-    expect(doc.getNumberOfPages()).toBe(2);
+    // Literal SOLO en esta aserción de fixture -- exactamente lo que el plan
+    // pide ("con el roster de hoy, 35, total === 3"). El invariante general
+    // vive en el test de abajo, computado contra `paginasRoster`.
+    expect(doc.getNumberOfPages()).toBe(3);
   });
 
-  it('una sola fila cabe en una sola página (no se pagina de más)', () => {
+  it('una sola fila: el roster ocupa 1 página + 1 de holgura = 2 en total (no se pagina de más)', () => {
     const doc = construirDocumentoPlanillaChequeoPDF(
       { jsPDF, autoTable },
       { tituloDocumento: 'CHEQUEO 29 JULIO 2026', filas: [fila({ numero: 101, nombre: 'LUCERO' })] },
     );
-    expect(doc.getNumberOfPages()).toBe(1);
+    expect(doc.getNumberOfPages()).toBe(2);
   });
 
-  it('el título va en CADA página, y cada página lleva su "Página i de N" y la regla operativa', () => {
+  it('el total de páginas es SIEMPRE roster + 1 -- invariante verificada con DOS tamaños de roster distintos, nunca un literal suelto', () => {
+    // `unaFila` produce un roster de 1 página (test de arriba); `filas35`
+    // produce un roster de 2 páginas. El total de cada documento tiene que
+    // ser exactamente esa cifra + 1 -- si algún día la hoja de holgura
+    // dejara de caber en 1 página adicional, la propia función lanza (ver
+    // la guarda al final de `construirDocumentoPlanillaChequeoPDF`), así
+    // que este test también prueba que esa guarda no se dispara para
+    // ninguno de los dos tamaños.
+    const docUnaFila = construirDocumentoPlanillaChequeoPDF(
+      { jsPDF, autoTable },
+      { tituloDocumento: 'CHEQUEO 29 JULIO 2026', filas: [fila({ numero: 101, nombre: 'LUCERO' })] },
+    );
+    const doc35 = construirDocumentoPlanillaChequeoPDF(
+      { jsPDF, autoTable },
+      { tituloDocumento: 'CHEQUEO 29 JULIO 2026', filas: filas35 },
+    );
+    const paginasRosterUnaFila = 1; // ver "no se pagina de más" arriba
+    const paginasRoster35 = 2; // ver "la referencia del dueño" arriba
+    expect(docUnaFila.getNumberOfPages()).toBe(paginasRosterUnaFila + 1);
+    expect(doc35.getNumberOfPages()).toBe(paginasRoster35 + 1);
+  });
+
+  it('la hoja de holgura es SIEMPRE la última página del documento', () => {
+    const doc = construirDocumentoPlanillaChequeoPDF(
+      { jsPDF, autoTable },
+      { tituloDocumento: 'CHEQUEO 29 JULIO 2026', filas: filas35 },
+    );
+    const total = doc.getNumberOfPages();
+    const contenido = doc.output();
+    // El pie "Página N de N" solo puede salir en la página N, que por
+    // construcción es la que se agregó al final (`doc.addPage()` corre
+    // DESPUÉS de dibujar el roster completo y nada se agrega después de la
+    // hoja de holgura) -- si esa página no fuera la de holgura, "Página N
+    // de N" no existiría en el documento.
+    expect(contenido).toContain(`Página ${total} de ${total}`);
+    // Y el título de la hoja de holgura aparece exactamente una vez: es
+    // exclusivo de esa hoja, nunca se dibuja en el roster.
+    expect(contenido.split(TITULO_HOJA_LIBRE).length - 1).toBe(1);
+  });
+
+  it('el título va en CADA página (roster + holgura), y cada página lleva su "Página i de N" y la regla operativa', () => {
     const doc = construirDocumentoPlanillaChequeoPDF(
       { jsPDF, autoTable },
       { tituloDocumento: 'CHEQUEO 29 JULIO 2026', filas: filas35 },
@@ -423,22 +487,52 @@ describe('construirDocumentoPlanillaChequeoPDF -- documento real con jspdf + jsp
     // El texto crudo del PDF generado (jsPDF no comprime por defecto) permite
     // verificar lo IMPRESO, no solo que la función no lanzó.
     const contenido = doc.output();
-    expect(doc.getNumberOfPages()).toBe(2);
-    expect(contenido).toContain('Página 1 de 2');
-    expect(contenido).toContain('Página 2 de 2');
-    // El título aparece dos veces: una por página.
-    expect(contenido.split('CHEQUEO 29 JULIO 2026').length - 1).toBe(2);
+    expect(doc.getNumberOfPages()).toBe(3); // 2 del roster + 1 de holgura
+    expect(contenido).toContain('Página 1 de 3');
+    expect(contenido).toContain('Página 2 de 3');
+    expect(contenido).toContain('Página 3 de 3');
+    // El título aparece TRES veces: una por página, incluida la holgura.
+    expect(contenido.split('CHEQUEO 29 JULIO 2026').length - 1).toBe(3);
     expect(contenido).toContain(NOTA_OPERATIVA_PLANILLA.slice(0, 30));
   });
 
-  it('el encabezado de columnas se repite en la segunda página (showHead: everyPage)', () => {
+  it('el encabezado de columnas se repite en TODAS las páginas, incluida la hoja de holgura (showHead: everyPage)', () => {
     const doc = construirDocumentoPlanillaChequeoPDF(
       { jsPDF, autoTable },
       { tituloDocumento: 'CHEQUEO 29 JULIO 2026', filas: filas35 },
     );
     const contenido = doc.output();
-    // "Parto Probable" solo existe en la fila de encabezado: si aparece dos
-    // veces, el encabezado se dibujó en las dos páginas.
-    expect(contenido.split('Probable').length - 1).toBeGreaterThanOrEqual(2);
+    // "Parto Probable" solo existe en la fila de encabezado: si aparece 3
+    // veces, el encabezado se dibujó en las 3 páginas -- las 2 del roster
+    // (showHead: everyPage) y la de holgura (decisión 2 del dueño: repite
+    // el encabezado en su propia hoja).
+    expect(contenido.split('Probable').length - 1).toBeGreaterThanOrEqual(3);
+  });
+
+  describe('la hoja de holgura en sí (plan §7.1)', () => {
+    it('construirFilasHojaLibre: EXACTAMENTE 10 filas de cuerpo × las 13 columnas del template, todas en blanco', () => {
+      const filasLibres = construirFilasHojaLibre();
+      expect(filasLibres).toHaveLength(FILAS_LIBRES_PLANILLA_CHEQUEO);
+      expect(FILAS_LIBRES_PLANILLA_CHEQUEO).toBe(10);
+      for (const filaLibre of filasLibres) {
+        expect(filaLibre).toHaveLength(ENCABEZADOS_PLANILLA_CHEQUEO.length);
+        expect(filaLibre.every((celda) => celda === '')).toBe(true);
+      }
+    });
+
+    it('construirEstilosColumnaHojaLibre: las 13 columnas son blancas con el borde grueso de una celda diligenciable -- nunca el gris de "referencia"', () => {
+      const estilos = construirEstilosColumnaHojaLibre();
+      expect(Object.keys(estilos)).toHaveLength(ENCABEZADOS_PLANILLA_CHEQUEO.length);
+      ENCABEZADOS_PLANILLA_CHEQUEO.forEach((_, i) => {
+        const estilo = estilos[String(i)];
+        expect(estilo.fillColor).toEqual(COLOR_BLANCO);
+        expect(estilo.lineWidth).toBe(GROSOR_BORDE_ESCRIBIBLE);
+        expect(estilo.cellWidth).toBe(ANCHOS_COLUMNAS_PDF_MM[i]);
+      });
+    });
+
+    it('el borde de la hoja de holgura es más grueso que el de una celda de referencia -- confirma la diferencia visual, no solo el valor absoluto', () => {
+      expect(GROSOR_BORDE_ESCRIBIBLE).toBeGreaterThan(GROSOR_BORDE_REFERENCIA);
+    });
   });
 });

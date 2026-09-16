@@ -40,8 +40,16 @@ import { parseSX, type CriaDestino, type SexoCria } from '@/utils/calculosHato';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import {
   ENCABEZADOS_PLANILLA_CHEQUEO,
+  FILAS_LIBRES_PLANILLA_CHEQUEO,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
+
+// `FILAS_LIBRES_PLANILLA_CHEQUEO` vive en el archivo hermano (fuente de
+// verdad del template) y se re-exporta acá para que quien la busque en el
+// módulo PDF (Fase 3, plan §7.1) la encuentre -- ver la nota junto a su
+// definición sobre por qué no vive en este archivo (evita un ciclo de
+// imports entre los dos).
+export { FILAS_LIBRES_PLANILLA_CHEQUEO };
 
 // ----------------------------------------------------------------------------
 // 1. Etiqueta legible de `Sexo cría` (D-E del plan)
@@ -409,9 +417,39 @@ export const FUENTE_ENCABEZADO_PT = 8;
  * MÁS espacio libre para escribir, no menos. */
 export const ALTO_MINIMO_FILA_MM = 9;
 
+/** Alto de fila de la hoja de holgura (Fase 3, plan §7.1) -- MAYOR que el de
+ * la tabla del roster (`ALTO_MINIMO_FILA_MM = 9`). No es una inconsistencia:
+ * la restricción de 9mm viene de meter 35 filas en 2 páginas, y esta hoja
+ * lleva solo `FILAS_LIBRES_PLANILLA_CHEQUEO` filas en una página entera.
+ * Además acá se escriben LAS TRECE columnas a mano, no seis (`# Partos`,
+ * fechas, etc. también se diligencian a mano cuando la fila es una novedad,
+ * porque no hay identidad previa de la que arrastrarlas). */
+export const ALTO_FILA_HOJA_LIBRE_MM = 12;
+
+export const TITULO_HOJA_LIBRE = 'Animales que no están en la lista';
+export const INSTRUCCION_HOJA_LIBRE =
+  'Escriba aquí cualquier animal que el veterinario revise y que no aparezca en las hojas anteriores. ' +
+  'Anote SIEMPRE la caravana y el nombre: sin las dos no se puede identificar.';
+
+/** Grosor del borde (`lineWidth` de autoTable) de una celda DILIGENCIABLE --
+ * más marcado que el de una celda de referencia, para que el recuadro
+ * invite a escribir dentro y quede bien delimitado para el OCR de la Fase 3.
+ * Reutilizado por la tabla del roster (columnas que Martha diligencia,
+ * `COLUMNAS_A_DILIGENCIAR`) y por la hoja de holgura completa -- ahí las 13
+ * columnas se escriben a mano, así que TODAS llevan este grosor. */
+export const GROSOR_BORDE_ESCRIBIBLE = 0.45;
+/** Grosor del borde de una celda de solo REFERENCIA -- el sistema la
+ * calcula, nadie la escribe a mano. */
+export const GROSOR_BORDE_REFERENCIA = 0.2;
+
 const COLOR_PRIMARIO: [number, number, number] = [115, 153, 28]; // #73991C
 const COLOR_GRIS_PRELLENADO: [number, number, number] = [240, 240, 240];
-const COLOR_BLANCO: [number, number, number] = [255, 255, 255];
+/** Blanco puro -- exportado (y no un `const` privado como el resto de la
+ * paleta) porque la hoja de holgura pinta sus 13 columnas de este color a
+ * propósito (nunca gris de "referencia": ahí no hay ningún valor previo del
+ * que arrastrar nada) y un test necesita comprobarlo contra el valor real,
+ * nunca contra un literal `[255, 255, 255]` desincronizable. */
+export const COLOR_BLANCO: [number, number, number] = [255, 255, 255];
 const COLOR_BORDE: [number, number, number] = [90, 90, 90];
 const COLOR_TEXTO: [number, number, number] = [30, 30, 30];
 const COLOR_TEXTO_TENUE: [number, number, number] = [110, 110, 110];
@@ -494,6 +532,51 @@ function estamparPiesDePagina(doc: DocumentoPDF, conNumerosProvisionales: boolea
   }
 }
 
+/** Estilo de columna que consume `columnStyles` de autoTable -- hoisted a
+ * nivel de módulo (antes vivía como `interface` local dentro de
+ * `construirDocumentoPlanillaChequeoPDF`) para que
+ * `construirEstilosColumnaHojaLibre` (Fase 3) pueda declarar el mismo tipo
+ * sin duplicarlo. */
+export interface EstiloColumnaPlanilla {
+  cellWidth: number;
+  fillColor: [number, number, number];
+  lineWidth: number;
+  valign: 'top' | 'middle';
+}
+
+/**
+ * Matriz de cuerpo de la hoja de holgura (Fase 3, plan §7.1):
+ * `FILAS_LIBRES_PLANILLA_CHEQUEO` filas × las 13 columnas del template, TODAS
+ * en blanco -- a diferencia de una fila del roster (que sale con las
+ * columnas de referencia pre-llenadas), acá no hay identidad previa de la
+ * que arrastrar nada: es una fila para un animal que el sistema no conoce
+ * todavía.
+ */
+export function construirFilasHojaLibre(): string[][] {
+  const columnas = ENCABEZADOS_PLANILLA_CHEQUEO.length;
+  return Array.from({ length: FILAS_LIBRES_PLANILLA_CHEQUEO }, () => new Array<string>(columnas).fill(''));
+}
+
+/**
+ * `columnStyles` de la hoja de holgura: las 13 columnas en blanco y con el
+ * borde marcado de una celda diligenciable (plan §7.1, punto 4) -- en esta
+ * hoja `#` y `Nombre` TAMBIÉN se escriben a mano (no hay roster del que
+ * copiarlos), así que el tratamiento gris de "referencia" de
+ * `COLUMNAS_PRELLENADAS` sería una mentira visual acá.
+ */
+export function construirEstilosColumnaHojaLibre(): Record<string, EstiloColumnaPlanilla> {
+  const estilos: Record<string, EstiloColumnaPlanilla> = {};
+  ENCABEZADOS_PLANILLA_CHEQUEO.forEach((_, i) => {
+    estilos[String(i)] = {
+      cellWidth: ANCHOS_COLUMNAS_PDF_MM[i],
+      fillColor: COLOR_BLANCO,
+      lineWidth: GROSOR_BORDE_ESCRIBIBLE,
+      valign: 'top',
+    };
+  });
+  return estilos;
+}
+
 /**
  * Arma el documento completo y lo devuelve SIN guardarlo (el llamador decide
  * si lo descarga o lo mide). Decisiones de layout, todas requisitos del
@@ -511,6 +594,14 @@ function estamparPiesDePagina(doc: DocumentoPDF, conNumerosProvisionales: boolea
  *   inservible en el corral.
  * - **`rowPageBreak: 'avoid'`**: una fila de vaca nunca se corta entre dos
  *   páginas.
+ *
+ * **Fase 3 (plan §7.1, decisión del dueño 2026-09-15): SIEMPRE agrega una
+ * hoja de holgura al final** -- 10 filas en blanco con la grilla completa de
+ * 13 columnas, para cualquier animal que el veterinario encuentre y no esté
+ * en las hojas anteriores. Nunca condicionada a "si hace falta". El conteo
+ * de páginas del roster (`paginasRoster`) se MIDE contra el documento real
+ * ya dibujado -- nunca una fórmula ni un literal -- y el total se valida
+ * contra la única invariante que el plan pide: `total = paginasRoster + 1`.
  */
 export function construirDocumentoPlanillaChequeoPDF(
   libs: LibreriasPDFPlanilla,
@@ -518,13 +609,7 @@ export function construirDocumentoPlanillaChequeoPDF(
 ): DocumentoPDF {
   const doc = new libs.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
 
-  interface EstiloColumna {
-    cellWidth: number;
-    fillColor: [number, number, number];
-    lineWidth: number;
-    valign: 'top' | 'middle';
-  }
-  const estilosPorColumna: Record<string, EstiloColumna> = {};
+  const estilosPorColumna: Record<string, EstiloColumnaPlanilla> = {};
   ENCABEZADOS_PLANILLA_CHEQUEO.forEach((encabezado, i) => {
     const seDiligencia = COLUMNAS_A_DILIGENCIAR.has(encabezado);
     estilosPorColumna[String(i)] = {
@@ -532,7 +617,7 @@ export function construirDocumentoPlanillaChequeoPDF(
       fillColor: seDiligencia ? COLOR_BLANCO : COLOR_GRIS_PRELLENADO,
       // Borde más marcado en lo que se diligencia: el recuadro invita a
       // escribir dentro y delimita la celda para el OCR.
-      lineWidth: seDiligencia ? 0.45 : 0.2,
+      lineWidth: seDiligencia ? GROSOR_BORDE_ESCRIBIBLE : GROSOR_BORDE_REFERENCIA,
       // Texto arriba en las celdas escribibles -> el espacio libre queda
       // abajo, donde Martha escribe. En las de referencia, centrado.
       valign: seDiligencia ? 'top' : 'middle',
@@ -552,7 +637,7 @@ export function construirDocumentoPlanillaChequeoPDF(
       fontSize: FUENTE_DATOS_PT,
       textColor: COLOR_TEXTO,
       lineColor: COLOR_BORDE,
-      lineWidth: 0.2,
+      lineWidth: GROSOR_BORDE_REFERENCIA,
       cellPadding: { top: 1.2, right: 1.5, bottom: 1.2, left: 1.5 },
       minCellHeight: ALTO_MINIMO_FILA_MM,
       overflow: 'linebreak',
@@ -566,7 +651,7 @@ export function construirDocumentoPlanillaChequeoPDF(
       halign: 'center',
       valign: 'middle',
       minCellHeight: 8,
-      lineWidth: 0.2,
+      lineWidth: GROSOR_BORDE_REFERENCIA,
     },
     columnStyles: estilosPorColumna,
     // El título va en CADA página: una hoja suelta del corral tiene que decir
@@ -574,7 +659,81 @@ export function construirDocumentoPlanillaChequeoPDF(
     didDrawPage: () => dibujarEncabezadoPagina(doc, opciones),
   });
 
+  // El roster ya terminó de dibujarse: este es el número REAL de páginas que
+  // ocupó, medido contra el documento -- nunca una fórmula ni un literal
+  // (misma lección de las migraciones 103/120 sobre no hardcodear un
+  // conteo medido contra el estado de hoy).
+  const paginasRoster = doc.getNumberOfPages();
+
+  // ---- Fase 3: hoja de holgura, SIEMPRE, y SIEMPRE la última página. ----
+  doc.addPage();
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...COLOR_PRIMARIO);
+  doc.text(TITULO_HOJA_LIBRE, MARGENES_PDF_MM.left, 26);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...COLOR_TEXTO_TENUE);
+  const lineasInstruccion: string[] = doc.splitTextToSize(INSTRUCCION_HOJA_LIBRE, ANCHO_TABLA_PDF_MM);
+  doc.text(lineasInstruccion, MARGENES_PDF_MM.left, 31);
+
+  const ALTURA_LINEA_INSTRUCCION_MM = 4;
+  const inicioTablaHojaLibreY = 31 + lineasInstruccion.length * ALTURA_LINEA_INSTRUCCION_MM + 4;
+
+  libs.autoTable(doc, {
+    head: [[...ENCABEZADOS_PLANILLA_CHEQUEO]],
+    body: construirFilasHojaLibre(),
+    theme: 'grid',
+    showHead: 'everyPage',
+    rowPageBreak: 'avoid',
+    startY: inicioTablaHojaLibreY,
+    margin: MARGENES_PDF_MM,
+    tableWidth: ANCHO_TABLA_PDF_MM,
+    styles: {
+      font: 'helvetica',
+      fontSize: FUENTE_DATOS_PT,
+      textColor: COLOR_TEXTO,
+      lineColor: COLOR_BORDE,
+      lineWidth: GROSOR_BORDE_REFERENCIA,
+      cellPadding: { top: 1.2, right: 1.5, bottom: 1.2, left: 1.5 },
+      minCellHeight: ALTO_FILA_HOJA_LIBRE_MM,
+      overflow: 'linebreak',
+      valign: 'top',
+    },
+    headStyles: {
+      fillColor: COLOR_PRIMARIO,
+      textColor: COLOR_BLANCO,
+      fontStyle: 'bold',
+      fontSize: FUENTE_ENCABEZADO_PT,
+      halign: 'center',
+      valign: 'middle',
+      minCellHeight: 8,
+      lineWidth: GROSOR_BORDE_REFERENCIA,
+    },
+    // Las 13 columnas en blanco y con el borde marcado (plan §7.1, punto 4):
+    // acá TODO se escribe a mano, no solo las 6 de siempre.
+    columnStyles: construirEstilosColumnaHojaLibre(),
+    // Mismo callback que el roster: el título del chequeo también va en la
+    // hoja de holgura -- es una hoja suelta más del mismo paquete.
+    didDrawPage: () => dibujarEncabezadoPagina(doc, opciones),
+  });
+
   estamparPiesDePagina(doc, hayNumerosProvisionales(opciones.filas));
+
+  // Invariante de paginación (plan §7.1): la hoja de holgura SIEMPRE existe
+  // y SIEMPRE es la última, así que el total tiene que ser exactamente el
+  // roster + 1. Se mide y se valida en vez de asumirse: 10 filas fijas a
+  // `ALTO_FILA_HOJA_LIBRE_MM` siempre caben en una sola página adicional
+  // dado el presupuesto de esta hoja, pero si algún día dejaran de caber es
+  // mejor un error explícito que una planilla con la hoja de holgura
+  // repartida en dos páginas sin que nadie lo note.
+  const paginasTotal = doc.getNumberOfPages();
+  if (paginasTotal !== paginasRoster + 1) {
+    throw new Error(
+      `La hoja de holgura debía ocupar exactamente 1 página adicional y ocupó ${paginasTotal - paginasRoster}.`,
+    );
+  }
+
   return doc;
 }
 
