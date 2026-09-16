@@ -7,9 +7,13 @@ import type { InformeVisitaCabecera, SnippetPropuesto } from '@/types/informesVi
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
-/** 404 = the standalone propose function is not deployed. */
+/** Twin inside make-server-1ccce916. The standalone slug was retired (ESCO-105). */
+export const RUTA_PROPONER_SNIPPETS =
+  '/make-server-1ccce916/informes-visita/snippets/proponer';
+
+/** 404 = make-server-1ccce916 is not deployed, or the route is missing from the live bundle. */
 export const MENSAJE_ENDPOINT_NO_DESPLEGADO =
-  'El endpoint de propuestas no está desplegado. Hay que desplegar la edge function informes-visita-proponer.';
+  'El endpoint de propuestas no está desplegado. Hay que desplegar la edge function make-server-1ccce916.';
 
 export interface PropuestaSnippetsRespuesta {
   cabecera: InformeVisitaCabecera;
@@ -43,7 +47,7 @@ export async function pedirSnippetsAlModelo(opts: {
   }
 
   const res = await fetch(
-    `${EDGE_FUNCTION_BASE}/informes-visita-proponer`,
+    `${EDGE_FUNCTION_BASE}${RUTA_PROPONER_SNIPPETS}`,
     {
       method: 'POST',
       headers: {

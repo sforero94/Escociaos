@@ -14,7 +14,11 @@ import {
   insumoEstaEnSnippet,
   parsearRespuestaSnippets,
 } from '@/utils/informesVisita/snippets';
-import { MENSAJE_ENDPOINT_NO_DESPLEGADO, propuestaVacia } from '@/utils/informesVisita/clienteProponer';
+import {
+  MENSAJE_ENDPOINT_NO_DESPLEGADO,
+  RUTA_PROPONER_SNIPPETS,
+  propuestaVacia,
+} from '@/utils/informesVisita/clienteProponer';
 import {
   FUENTE_INFORME_VISITA,
   formatearRespuestaEsco,
@@ -22,8 +26,8 @@ import {
 } from '@/utils/informesVisita/esco';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
 import { proponerTemasDeNota, sanitizarTemas, TEMAS_INFORME } from '@/utils/informesVisita/temas';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 const FIXTURE_MODELO = {
   cabecera: {
@@ -147,7 +151,14 @@ describe('cabecera barata', () => {
 
 describe('endpoint de propuestas', () => {
   it('nombra el redespliegue cuando el servidor responde 404', () => {
-    expect(MENSAJE_ENDPOINT_NO_DESPLEGADO).toMatch(/informes-visita-proponer/);
+    expect(MENSAJE_ENDPOINT_NO_DESPLEGADO).toMatch(/make-server-1ccce916/);
+  });
+
+  it('apunta al gemelo de make-server-1ccce916, no al slug standalone (ESCO-105)', () => {
+    expect(RUTA_PROPONER_SNIPPETS).toBe(
+      '/make-server-1ccce916/informes-visita/snippets/proponer',
+    );
+    expect(RUTA_PROPONER_SNIPPETS).not.toMatch(/informes-visita-proponer/);
   });
 });
 
@@ -382,5 +393,39 @@ describe('extraerTextoDeDocumentXml', () => {
     const texto = extraerTextoDeDocumentXml(xml);
     expect(texto).toContain('Proxam');
     expect(texto).toContain('2 cc/L');
+  });
+});
+
+describe('ESCO-105: el slug standalone ya no existe', () => {
+  const RAIZ = resolve(__dirname, '../..');
+
+  function listarTs(dirAbs: string, prefijo = ''): string[] {
+    const salida: string[] = [];
+    for (const entrada of readdirSync(join(dirAbs, prefijo))) {
+      const relativa = prefijo ? `${prefijo}/${entrada}` : entrada;
+      if (statSync(join(dirAbs, relativa)).isDirectory()) {
+        salida.push(...listarTs(dirAbs, relativa));
+      } else if (/\.tsx?$/.test(entrada)) {
+        salida.push(relativa);
+      }
+    }
+    return salida;
+  }
+
+  it('no queda el tercer árbol supabase/functions/informes-visita-proponer/', () => {
+    expect(existsSync(join(RAIZ, 'supabase/functions/informes-visita-proponer'))).toBe(false);
+  });
+
+  it('ningún cliente llama el slug standalone', () => {
+    const llamadores: string[] = [];
+    for (const raiz of ['src/components', 'src/utils'] as const) {
+      for (const relativa of listarTs(join(RAIZ, raiz))) {
+        const fuente = readFileSync(join(RAIZ, raiz, relativa), 'utf-8');
+        if (/\/informes-visita-proponer(?!\.ts)/.test(fuente)) {
+          llamadores.push(`${raiz}/${relativa}`);
+        }
+      }
+    }
+    expect(llamadores).toEqual([]);
   });
 });

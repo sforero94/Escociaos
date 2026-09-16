@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { esFechaFuturaSospechosa } from '@/utils/fechas';
+import { esFechaFuturaSospechosa, mensajeConfirmacionFechaFutura } from '@/utils/fechas';
 
 // Hallazgo ESCO-91: cuatro gastos capturados el 2026-09-08 con fecha
 // 2026-09-13 quedaron invisibles en el historial (filtro `ytd`, tope hoy)
@@ -27,5 +27,13 @@ describe('esFechaFuturaSospechosa', () => {
   it('no marca una fecha inválida o vacía', () => {
     expect(esFechaFuturaSospechosa('', HOY)).toBe(false);
     expect(esFechaFuturaSospechosa('no-es-fecha', HOY)).toBe(false);
+  });
+});
+
+describe('mensajeConfirmacionFechaFutura', () => {
+  it('avisa y deja confirmar: nunca habla de bloquear', () => {
+    const msg = mensajeConfirmacionFechaFutura('gasto', ['2026-09-13']);
+    expect(msg).toMatch(/confirma para guardarla igual/);
+    expect(msg).not.toMatch(/no se puede|bloquea|obligatorio/i);
   });
 });

@@ -34,10 +34,11 @@ La 135 agregó la columna con CHECK sin tildes; la 136 lo corrige.
 
 - Pure: `src/utils/informesVisita/`
 - UI: este directorio (`SnippetDeck`, swipe)
-- Edge: standalone `informes-visita-proponer` (LLM, no escribe DB) plus the
-  same handler inside `make-server-1ccce916`. The browser calls the
-  standalone slug. `verify_jwt = false`; the handler checks JWT +
-  Administrador/Gerencia. Propose does not write DB, so that deploy is
-  safe without the tables. Persist needs 134–136 (applied 2026-09-03).
+- Edge: `POST /make-server-1ccce916/informes-visita/snippets/proponer`
+  (LLM, no escribe DB). The standalone slug `informes-visita-proponer` was
+  retired (ESCO-105); the browser calls the twin inside
+  `make-server-1ccce916`. `verify_jwt = false`; the handler checks JWT +
+  Administrador/Gerencia. Persist needs 134–136 (applied 2026-09-03).
+  Redeploy `make-server-1ccce916` after changing the handler.
 - Tests: `src/__tests__/informesVisitaExtract.test.ts` (fixture sintético; nunca
   el Word real de Salazar)
