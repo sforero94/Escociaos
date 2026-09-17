@@ -1789,3 +1789,49 @@ explicacion completa en su propio texto. Leerlo entero, no solo `version` y `nam
 | 2026-09-10-jueves | 5 |
 | **2026-09-17-jueves** | **5. Racha de ceros: 0** |
 La auto-poda **no aplica**: siete jueves seguidos con hallazgos.
+
+## Cierre en vivo de la corrida 2026-09-17-jueves (turno humano posterior, ~14:00Z)
+
+Santiago dispuso los cuatro puntos del informe en una sola respuesta. Estado final:
+
+| Ficha | Disposicion | Estado |
+|---|---|---|
+| **ESCO-113** (clima, creada en este turno) | Corte de luz en la finca, confirmado por el. Ya lo estaban arreglando | **In progress** |
+| **ESCO-110** (7 jornales con ano 2025) | Ya le pidio a David corregirlos | **In progress** hasta que David confirme |
+| **ESCO-109** (pesaje de leche, 22 dias) | «Pesan este sabado» | **Done · Aceptado (no se arregla)** |
+| **ESCO-111** (escalamiento del hato) | «Eran alertas para descartar» | **Done · Aceptado (no se arregla)** |
+
+### EL CLIMA NO ESTABA FILADO Y EL HUECO FUE MIO
+Santiago pidio «marca in progress» sobre un hallazgo que **no existia como fila**: lo difiri
+por el tope de 5 del jueves y solo lo nombre en el informe. Tuve que crearlo en el momento
+(ESCO-113). **Leccion: un item que va en REQUIERE TU DECISION tiene que tener ficha, aunque
+el tope lo deje fuera del conteo de la corrida.** El tope limita cuantos hallazgos se
+reportan, no cuantos se pueden rastrear. Si necesita decision, necesita fila.
+
+### LA ESTACION VOLVIO — corte total 31,6 h
+Reanudo **2026-09-17 13:25:02Z** (corte 2026-09-16 05:50:02Z -> 17 13:25:02Z). Cadencia de
+5 min normal a los pocos minutos. **La causa era la luz, como dijo el dueno**, y eso
+confirma por tercera vez la regla de la corrida 2026-08-20: **ante un silencio de clima,
+preguntar por la energia en la finca ANTES de escalar a conclusion de hardware.** Escalarlo
+sin ese dato ya se refuto una vez.
+
+### LO QUE SE VA A MATERIALIZAR SOLO, y hay que mirarlo el lunes
+El dia **2026-09-17** se sella esta noche en el rollup de las 05:15Z con ~187 lecturas de
+288 (solo desde las 08:25 Bogota): bajo el umbral de 240, o sea `cobertura_parcial`, y
+`horas_sol_duracion` escribira un numero calculado sobre una manana que nunca se midio.
+**Peor de detectar que el 0,00 del 09-16: una cifra plausible pero baja.** ESCO-108 se
+dispara por segunda vez en tres dias sin que nadie toque nada. Comprobacion del lunes:
+`select fecha, lecturas_count, horas_sol_duracion from clima_resumen_diario where fecha in ('2026-09-16','2026-09-17')`.
+
+### VIGILANCIAS QUE QUEDAN ARMADAS PARA EL LUNES
+- **ESCO-109 esta Done pero condicionado**: si el sabado 2026-09-20 no aparecen filas en
+  `hato_pesajes_leche`, el hueco llega a 25 dias y cuatro miercoles, y deja de ser una pausa.
+- **ESCO-109 NO cierra el fallo del 2026-09-04**: esa subida a `hato-pesajes-fotos` escribio
+  cero filas y sigue siendo un fallo silencioso real de la tuberia, distinto de la captura
+  que no ocurrio. No darlo por cerrado con la ficha.
+- **ESCO-111 acepta el estado, no lo arregla**: el escalamiento del hato sigue apagado por
+  dato en las 5 claves y el motor sigue estampando `escalada_at`. Es estado aceptado, **no
+  se re-investiga**. Se reabre solo si aparece una alerta que SI requiera accion y no llegue.
+- **ESCO-110**: al confirmar David, comprobar
+  `select count(*) from registros_trabajo where fecha_trabajo='2025-09-14'` = 0 y que
+  `min(fecha_trabajo)` suba a 2025-10-16.
