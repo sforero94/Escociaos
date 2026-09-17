@@ -2,6 +2,7 @@ import { Conversation } from "npm:@grammyjs/conversations@2";
 import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
+import { atribucionDesdeFilaTelegram } from "../eventoHatoUndo.ts";
 
 function isGanadoNegocio(nombre: string): boolean {
   const lower = nombre.toLowerCase();
@@ -16,6 +17,23 @@ function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   return createClient(url, serviceKey, { auth: { persistSession: false } });
+}
+
+// F5-bis (issue #266): "hoy" en Bogotá (UTC-5, sin horario de verano),
+// NUNCA en UTC. `new Date().toISOString().split("T")[0]` da el día UTC, y
+// el servidor Deno corre en UTC — de las 19:00 Bogotá en adelante ese
+// texto ya es MAÑANA (misma trampa que el CLAUDE.md raíz documenta para
+// el navegador bajo "Hoy siempre en hora LOCAL, nunca UTC"). Las edge
+// functions quedan fuera de `src/utils/fechas.ts` a propósito — Deno no
+// puede alcanzar ese árbol — así que este archivo resuelve el día de
+// Bogotá con su propio `Intl.DateTimeFormat`, sin importar de otro sitio.
+function hoyBogotaISO(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +288,7 @@ async function ganadoCompraFlow(
   conversation: Conversation<BotContext>, ctx: BotContext,
 ): Promise<boolean> {
   const tipo = "compra";
-  const fecha = new Date().toISOString().split("T")[0];
+  const fecha = hoyBogotaISO(); // F5-bis (issue #266): antes UTC, ver hoyBogotaISO()
   let finca = "";
   let cantidadCabezas = 0;
   let kilosPagados = 0;
@@ -991,10 +1009,31 @@ export async function gastoConversation(
         }
 
         // ── Insert into fin_gastos ───────────────────────────────────
-        const today = new Date().toISOString().split("T")[0];
+        // F5-bis (issue #266): antes UTC, ver hoyBogotaISO().
+        const today = hoyBogotaISO();
 
         const insertResult = await conversation.external(async () => {
           const sb = getSupabaseAdmin();
+
+          // F5 (issue #266): `created_by`, buscado en el instante de
+          // escribir — no al entrar al flujo — para que un replay tardío
+          // del plugin de conversaciones no lo deje en NULL (mismo motivo
+          // documentado en `eventoHato.ts`).
+          const telegramId = ctx.from?.id;
+          let filaTelegram: { usuario_id: string | null; nombre_display: string | null } | null =
+            null;
+          if (telegramId != null) {
+            const { data: tgUser } = await sb
+              .from("telegram_usuarios")
+              .select("usuario_id, nombre_display")
+              .eq("telegram_id", telegramId)
+              .eq("activo", true)
+              .maybeSingle();
+            filaTelegram = (tgUser as { usuario_id: string | null; nombre_display: string | null } | null) ??
+              null;
+          }
+          const { usuarioId } = atribucionDesdeFilaTelegram(filaTelegram);
+
           const { data, error } = await sb
             .from("fin_gastos")
             .insert({
@@ -1008,6 +1047,7 @@ export async function gastoConversation(
               medio_pago_id: medioPagoSel.id,
               estado: "Pendiente",
               observaciones: null,
+              created_by: usuarioId,
             })
             .select("id")
             .single();

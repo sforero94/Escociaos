@@ -1,4 +1,4 @@
-import type { NegocioAccion } from '@/utils/accionesTipos';
+import type { NegocioAccion } from '@/utils/negociosTablero';
 import { PulsoHatoCard } from './PulsoHatoCard';
 import { PulsoAguacateCard } from './PulsoAguacateCard';
 import { PulsoGanadoCard } from './PulsoGanadoCard';

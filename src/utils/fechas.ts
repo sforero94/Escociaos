@@ -92,6 +92,64 @@ export function obtenerFechaHoy(): string {
 }
 
 /**
+ * Día calendario Bogotá (`AAAA-MM-DD`) de un `timestamptz` AJENO al reloj del
+ * navegador -- `capturadoEn` de una novedad, un `created_at` de otra persona.
+ *
+ * No es lo mismo que `obtenerFechaHoy()`, que lee `getFullYear`/`getMonth`/
+ * `getDate` del reloj LOCAL: sirve para "hoy" y sigue siendo la función
+ * correcta para eso. Acá hace falta otra operación -- convertir un instante
+ * en UTC al día calendario de Bogotá, sin importar en qué huso corre el
+ * navegador que lee la pantalla. Con el navegador en Bogotá los dos
+ * coinciden; en cualquier otro huso, no, y el bloque de Novedades
+ * (`docs/plan_novedades_implementacion.md` §4.2) exige el día Bogotá siempre,
+ * nunca el del lector.
+ *
+ * Es el ÚNICO sitio de `src/` autorizado a nombrar `'America/Bogota'` para
+ * este propósito -- guardado por `src/__tests__/hatoFechaLocalGuard.test.ts`.
+ *
+ * @param iso - Timestamp ISO con huso (`timestamptz`), p. ej. `created_at`.
+ * @returns String `AAAA-MM-DD`, el día calendario en Bogotá (UTC-5, sin DST).
+ */
+export function diaBogota(iso: string): string {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(iso));
+
+  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+  return `${parte('year')}-${parte('month')}-${parte('day')}`;
+}
+
+/**
+ * Hora local Bogotá (`HH:MM`, 24h) de un `timestamptz` AJENO -- hermana de
+ * `diaBogota()` para el mismo caso de uso: el "capturadoEn" de una novedad
+ * de otra persona (`src/components/dashboard/NovedadLinea.tsx`, issue #266).
+ * La línea muestra la hora sólo cuando `diaBogota(capturadoEn) === hoy`
+ * (Bogotá); el día de captura ya lo resuelve `diaBogota()`.
+ *
+ * SEGUNDA ocurrencia autorizada de `'America/Bogota'` en este archivo --
+ * `src/__tests__/hatoFechaLocalGuard.test.ts` (`LISTA_BLANCA_BOGOTA`) fija
+ * el conteo de `src/utils/fechas.ts` en 2 por esta función. Actualiza ese
+ * conteo si alguna vez cambia.
+ *
+ * @param iso - Timestamp ISO con huso (`timestamptz`), p. ej. `created_at`.
+ * @returns String `HH:MM` en hora Bogotá.
+ */
+export function horaBogota(iso: string): string {
+  const partes = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Bogota',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso));
+
+  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+  return `${parte('hour')}:${parte('minute')}`;
+}
+
+/**
  * Obtiene la fecha actual formateada en dd/mm/aaaa
  * @returns String en formato dd/mm/aaaa
  */

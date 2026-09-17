@@ -3,6 +3,15 @@
 **Propuesta de producto** · 2026-08-16 · CPO
 Ruta afectada: `/` (`src/components/Dashboard.tsx` + `src/components/dashboard/*`)
 
+> **Superado 2026-09-17 (issue #266).** El **bloque 4** que este documento diseña
+> ("Acciones recomendadas") se retiró de producción y su motor se archivó, sin borrar, en
+> `archive/acciones-recomendadas/`. Lo reemplaza el bloque **"Novedades"**, en la misma
+> ranura vertical (entre Pulso por negocio y Dinero originalmente; movida arriba de Clima
+> el mismo día, por decisión del dueño tras probarlo en vivo) — ver `docs/plan_novedades.md`
+> (CPO) y `docs/plan_novedades_implementacion.md` (CTO). El resto de este documento (bloques
+> 0, 1, 2, 3, 5, 6) sigue vigente sin cambios; sólo §4 y las menciones al bloque 4 abajo
+> describen algo que ya no existe en pantalla.
+
 > **Revisión 2 — 2026-08-16, tras el prototipo maquetado.** El dueño revisó el prototipo y
 > lo aprobó con cuatro cambios, todos incorporados: (1) se **elimina** la "Agenda: qué
 > hablar con cada quien" porque el tablero lo leen todos los usuarios de Gerencia y un

@@ -10,6 +10,7 @@ import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
 import { hoyBogota, leerFecha, restarDias } from "../fechaDDMM.ts";
+import { atribucionDesdeFilaTelegram } from "../eventoHatoUndo.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -150,6 +151,27 @@ export async function jornalConversation(
   let currentTareaNombre = "";
   let currentLoteId = "";
   let currentLoteNombre = "";
+
+  // Atribución (F5, issue #266): el bot escribe con service_role, donde
+  // `auth.uid()` es NULL — ni el trigger de la 074 ni ningún otro se
+  // disparan solos. Se busca una sola vez, vía `conversation.external`
+  // (cuyo resultado el plugin de conversaciones repite igual en un
+  // replay, a diferencia de un flavor propio como `ctx.telegramUser`), y
+  // se comparte entre `insertRegistros` y `replaceRegistros`.
+  const filaTelegramJornal = await conversation.external(async () => {
+    const telegramId = ctx.from?.id;
+    if (telegramId == null) return null;
+    const sb = getSupabase();
+    const { data: tgUser } = await sb
+      .from("telegram_usuarios")
+      .select("usuario_id, nombre_display")
+      .eq("telegram_id", telegramId)
+      .eq("activo", true)
+      .maybeSingle();
+    return (tgUser as { usuario_id: string | null; nombre_display: string | null } | null) ??
+      null;
+  });
+  const { usuarioId: registradoPorId } = atribucionDesdeFilaTelegram(filaTelegramJornal);
 
   // Back signal: returned by ask* functions when the user presses "← Atrás"
   const GO_BACK = Symbol("GO_BACK");
@@ -783,6 +805,7 @@ export async function jornalConversation(
           ? calcValorJornalEmpleado(w.salario ?? 0, w.prestaciones_sociales ?? 0, w.auxilios_no_salariales ?? 0)
           : null,
         costo_jornal: costoJornal,
+        registrado_por: registradoPorId,
       };
     });
 
@@ -856,6 +879,7 @@ export async function jornalConversation(
             ? calcValorJornalEmpleado(w.salario ?? 0, w.prestaciones_sociales ?? 0, w.auxilios_no_salariales ?? 0)
             : null,
           costo_jornal: costoJornal,
+          registrado_por: registradoPorId,
         };
       });
 

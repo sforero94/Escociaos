@@ -47,12 +47,15 @@ const ALLOWLIST_FROM = new Set([
   // Corrido a 138 al añadir la guarda de edición de ESCO-90 (re-derivar
   // gan_movimientos/gan_pesos_historico al editar cantidad_cabezas/peso).
   'src/components/finanzas/components/TransaccionGanadoForm.tsx:138',
-  // Corrido de 275 a 295 al mover `parseDDMM` a `../fechaDDMM.ts` (2026-09-09).
-  'src/supabase/functions/server/telegram/conversations/ingreso.ts:295',
-  'src/supabase/functions/server/telegram/conversations/gasto.ts:290',
+  // Corrido de 295 a 296 (ingreso.ts) y de 290 a 308 (gasto.ts) al agregar
+  // la atribución de Telegram (F5) y el arreglo de fecha UTC (F5-bis) del
+  // issue #266 -- líneas nuevas antes de este selector, la consulta en sí
+  // no cambió.
+  'src/supabase/functions/server/telegram/conversations/ingreso.ts:296',
+  'src/supabase/functions/server/telegram/conversations/gasto.ts:308',
   // Árbol espejo (supabase/functions/make-server-1ccce916) — mismo motivo.
-  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:295',
-  'supabase/functions/make-server-1ccce916/telegram/conversations/gasto.ts:290',
+  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:296',
+  'supabase/functions/make-server-1ccce916/telegram/conversations/gasto.ts:308',
 ]);
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {

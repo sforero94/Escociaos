@@ -1,5 +1,6 @@
 
   import { defineConfig } from 'vite';
+  import { configDefaults } from 'vitest/config';
   import react from '@vitejs/plugin-react-swc';
   import tailwindcss from '@tailwindcss/vite';
   import path from 'path';
@@ -84,5 +85,13 @@
     server: {
       port: 3000,
       open: true,
+    },
+    test: {
+      // `archive/` (issue #266): tests del motor "Acciones recomendadas"
+      // retirado -- sus imports apuntan a rutas que ya no existen bajo
+      // `src/`. Preservados tal cual para restaurar, nunca corridos por la
+      // suite activa. Sin este exclude, `vitest run` (sin `test.include`
+      // propio) los recoge con su glob por defecto y falla al resolver imports.
+      exclude: [...configDefaults.exclude, 'archive/**'],
     },
   });
