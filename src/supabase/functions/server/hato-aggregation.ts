@@ -391,14 +391,15 @@ export function calcularSubetapaTernera(edadMeses: number, umbrales: UmbralesCat
 // ----------------------------------------------------------------------------
 
 /**
- * Exportada para `acciones-paquete.ts` (motor de acciones recomendadas,
- * Fase 2, docs/brief_tecnico_motor_acciones.md §3.3): ese ensamblador
- * necesita construir la MISMA lista de animales por-fila que este archivo
- * usa internamente (`AnimalHatoParaAcciones`, `src/utils/accionesHechos.ts`)
- * para los hechos `hato.vacias_90d`/`hato.secado_vencido`/
- * `hato.proximas_a_secar`/`hato.rechequeo_vencido`/`hato.cobertura_pesaje`/
- * `hato.servicios_90d` -- reutiliza esta función y `categorizarAnimal` en
- * vez de reimplementar la resolución de etapa/categoría una tercera vez.
+ * Exportada originalmente para `acciones-paquete.ts` (motor de "acciones
+ * recomendadas", RETIRADO por el issue #266 -- código preservado, sin
+ * borrar, en `archive/acciones-recomendadas/`): ese ensamblador construía la
+ * MISMA lista de animales por-fila que este archivo usa internamente
+ * (`AnimalHatoParaAcciones`, hoy en
+ * `archive/acciones-recomendadas/frontend/utils/accionesHechos.ts`) para sus
+ * hechos `hato.*`. Sigue exportada porque no tiene otro motivo para dejar de
+ * estarlo -- ningún consumidor activo la usa hoy, pero reutilizarla es más
+ * barato que borrarla si algo la vuelve a necesitar.
  */
 export interface EtapaEfectivaHato {
   etapa: 'ternera' | 'novilla' | 'vaca' | 'toro';
@@ -444,9 +445,8 @@ export function resolverEtapaEfectiva(
 }
 
 /** Exportada por el mismo motivo que `resolverEtapaEfectiva` -- ver su
- * comentario. Usada por `acciones-paquete.ts` para contar "vacas en
- * ordeño" (hechos `hato.cobertura_pesaje`/`hato.servicios_90d`) con la
- * MISMA regla que categoriza la pestaña del hato y el resto de Esco. */
+ * comentario (el motor que la consumía, `acciones-paquete.ts`, está
+ * retirado y archivado, no borrado). */
 export function categorizarAnimal(
   fila: HatoEstadoActualRow,
   etapaEfectiva: EtapaEfectivaHato['etapa'],

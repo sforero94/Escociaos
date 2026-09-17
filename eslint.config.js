@@ -4,7 +4,10 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['node_modules', 'build', 'dist', 'src/supabase', 'supabase'] },
+  // `archive/` (issue #266): código retirado, preservado tal cual para poder
+  // restaurarlo -- nunca se relintea ni se retipa, mismo criterio que
+  // `src/supabase`/`supabase` (árboles que no corren por Vitest/tsc).
+  { ignores: ['node_modules', 'build', 'dist', 'src/supabase', 'supabase', 'archive'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

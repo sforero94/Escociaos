@@ -22,10 +22,9 @@ export { QuickLinksRow } from './QuickLinksRow';
 export { DashboardKPICard } from './DashboardKPICard';
 export { PlagasKPICard } from './PlagasKPICard';
 export type { PlagaKPI } from './PlagasKPICard';
-export { AccionesRecomendadas } from './AccionesRecomendadas';
-export type { AccionesRecomendadasProps } from './AccionesRecomendadas';
-export { AccionCard } from './AccionCard';
-export type { AccionCardProps } from './AccionCard';
+// AccionesRecomendadas/AccionCard -- retiradas (issue #266, reemplazadas por
+// Novedades). Código preservado en archive/acciones-recomendadas/, nunca borrado.
+export { Novedades } from './Novedades';
 export { Dinero } from './Dinero';
 export { SaludDatos } from './SaludDatos';
 export { RequiereDecision } from './RequiereDecision';

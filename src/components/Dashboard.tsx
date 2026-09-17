@@ -5,8 +5,16 @@
  * va de lo que espera una decisión a lo que sólo informa, y por eso el dinero
  * queda de penúltimo y la salud de los datos de último.
  *
- *   barra de estado · requiere tu decisión · hoy en la finca ·
- *   pulso por negocio · acciones recomendadas · dinero · salud de los datos
+ *   barra de estado · requiere tu decisión · novedades · hoy en la finca ·
+ *   pulso por negocio · dinero · salud de los datos
+ *
+ * "Novedades" (issue #266) reemplazó a "Acciones recomendadas", que vivía
+ * entre Pulso y Dinero. Movida arriba de Clima el 2026-09-17 por decisión
+ * de Santiago tras probar el bloque en vivo -- el brief (§3) ya
+ * pre-autorizaba invertir el orden con Pulso si la lectura real mostraba
+ * que Novedades se lee primero; esto va más allá de ese único intercambio,
+ * pero es la misma clase de ajuste post-lanzamiento, no una relectura del
+ * diseño. Ver `docs/plan_novedades.md` / `docs/plan_novedades_implementacion.md`.
  *
  * Este archivo COMPONE y no calcula. Cada bloque trae su propio hook y sus
  * propias consultas; aquí sólo vive lo que dos bloques tienen que compartir,
@@ -23,20 +31,17 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { obtenerFechaHoy } from '@/utils/fechas';
-import type { NegocioAccion } from '@/utils/accionesTipos';
-import type { EntradaSelectores } from '@/utils/accionesHechos';
+import type { NegocioAccion } from '@/utils/negociosTablero';
 import {
   EstadoHeader,
   ClimaCard,
   RequiereDecision,
   useRequiereDecision,
   PulsoNegocio,
-  AccionesRecomendadas,
+  Novedades,
   Dinero,
   SaludDatos,
 } from './dashboard/index';
-import { useGanadoParaAcciones } from './dashboard/hooks/useGanadoParaAcciones';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -70,24 +75,6 @@ export function Dashboard() {
     navegar: navigate,
   });
 
-  const ganadoParaAcciones = useGanadoParaAcciones(hasModulo('ganado'));
-
-  /** Entrada del cotejo al pintar (§6.2 del brief del motor). El pulso de
-   *  hato y aguacate consulta por dentro de sus tarjetas y no expone su
-   *  derivado, así que aquí van `null` — que el cotejo trata como
-   *  indeterminado (la acción se muestra), nunca como "caducada". Es la
-   *  respuesta honesta de "ese negocio no cargó aquí". */
-  const entradaAcciones = useMemo<EntradaSelectores>(
-    () => ({
-      animalesHato: null,
-      priorizacion: null,
-      ganado: ganadoParaAcciones,
-      config: null,
-      hoy: obtenerFechaHoy(),
-    }),
-    [ganadoParaAcciones],
-  );
-
   return (
     <div className="space-y-5">
       <EstadoHeader
@@ -97,16 +84,11 @@ export function Dashboard() {
 
       <RequiereDecision resultado={decision} />
 
+      <Novedades profile={profile} />
+
       <ClimaCard />
 
       <PulsoNegocio negocios={negocios} />
-
-      <AccionesRecomendadas
-        negocios={negocios}
-        entrada={entradaAcciones}
-        esGerencia={esGerencia}
-        userId={profile?.id ?? null}
-      />
 
       <Dinero />
 
