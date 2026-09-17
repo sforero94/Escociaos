@@ -182,14 +182,18 @@ describe('aggregateRadiation', () => {
     expect(result.daysTotal).toBe(2);
   });
 
-  it('averages sunshine duration when present and counts cobertura_parcial', () => {
+  it('skips NULL sunshine duration on cobertura_parcial days (never a fabricated 0)', () => {
+    // ESCO-108: a partial day stores horas_sol_duracion = NULL, not 0 and not
+    // a lower-bound hour count. Energy from radiacion_wm2_avg still lands
+    // (same flaw, out of scope). Averaging 12 with a fabricated 10 was the
+    // old lock-in this test used to assert.
     const rows = [
       { fecha: '2026-09-01', radiacion_wm2_avg: 125, horas_sol_duracion: 12, lluvia_confianza: 'ok' },
-      { fecha: '2026-09-02', radiacion_wm2_avg: 125, horas_sol_duracion: 10, lluvia_confianza: 'cobertura_parcial' },
+      { fecha: '2026-09-02', radiacion_wm2_avg: 125, horas_sol_duracion: null, lluvia_confianza: 'cobertura_parcial' },
     ];
     const result = aggregateRadiation(rows);
     expect(result.avgEnergiaKwhM2).toBe(3);
-    expect(result.avgTiempoSolHoras).toBe(11);
+    expect(result.avgTiempoSolHoras).toBe(12);
     expect(result.daysCoberturaParcial).toBe(1);
   });
 });
