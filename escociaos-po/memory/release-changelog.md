@@ -432,3 +432,51 @@ esa es la lección transferible: **la fila `pendiente` va ANTES de la parte que 
 60 commits / 26 aterrizajes / 18 PRs en 2,3 días, **58 de 60 en una sola tarde**. Quinta
 ventana seguida con un sesgo identificable distinto; **sigue sin ser interpretable fuera de
 la medición mensual.**
+
+## Corrida 2026-09-17-jueves
+
+### SEMANA DE RELEASE LIMPIA — todo lo fusionado esta vivo, probado POR CONTENIDO
+`2eb472e` -> `55ca4af`: 20 commits, 6 PR fusionados (#248,#250,#252,#260,#265,#264),
+6 migraciones aplicadas, 1 despliegue de edge function, 1 PR abierto (#247, sostiene el 150).
+**El hueco de despliegue que este rol existe para cazar NO ocurrio.**
+
+### LA 147 SE APLICO, PERO **NO CON SU FICHERO** — hallazgo nuevo, filado ESCO-112
+El ledger lo confiesa en su propia cabecera: «Full-file 147 aborted on post-check looking for
+'Ajuste' (single quotes) while body has "Ajuste" (double quotes)».
+Comprobado en el fichero: `:160` escribe `"Ajuste"` (dobles), `:261` exige `'%''Ajuste''%'`
+(simples). **La post-condicion no puede casar nunca con el cuerpo que protege: el fichero es
+inejecutable para siempre.** Lo vivo es un `CREATE OR REPLACE` compuesto a mano
+(md5 `611a7d7b6ba8bc5e101e8782c0a40f49`), nunca revisado como fichero.
+**LECCION: leer el ledger ENTERO, no solo `version` y `name`.** La explicacion completa
+estaba en el texto de `statements` y cuatro agentes reportaron «147 aplicada» sin verla.
+Ademas `limpieza_chequeo_prueba_qa_2020_01_15` (`20260916022812`) borro filas de dominio y
+**no dejo fichero** (el directorio salta 154 -> README).
+
+### REFUTACION PROPIA QUE VALE GUARDAR — el «orden invertido» de la 147
+Los timestamps desnudos sugerian que la migracion corrio 36 min ANTES de su despliegue,
+invirtiendo el orden que su cabecera declara obligatorio. **Falso.** La historia en git de
+`scripts/deploy-drift-state/make-server-1ccce916.json` muestra que el lado app salio con
+**v253 el 09-14**, dos dias ANTES. El orden se respeto y nunca se abrio ventana de RAISE.
+**`git log -p --follow` sobre ese fichero es un registro de despliegues gratis: da, por
+fecha, el commit y el `ezbr_sha256` vivos. Mirarlo ANTES de acusar un orden de despliegue.**
+
+### LA RETIRADA DE UNA EDGE FUNCTION SE PRUEBA EN TRES PUNTOS, NO EN UNO
+`list_edge_functions` devuelve una sola funcion **+** `POST /functions/v1/<slug-retirado>`
+da 404 **+** el slug aparece en **0 de 203** chunks del frontend mientras el gemelo si
+aparece. Los tres juntos prueban que cliente y servidor quedaron de acuerdo.
+
+### EL DETECTOR DE DERIVA AVISA A NADIE — diferido por el tope, refilar el lunes
+Corrida #23 (09-15) = `failure`, **verdadero positivo**. Log literal:
+`TELEGRAM_BOT_TOKEN: ` y `TELEGRAM_CHAT_ID: ` vacios, seguido de
+`##[warning] ... no se pudo avisar. Ver hallazgo ESCO-78`. **El paso sale 0, asi que el
+silencio es por construccion.** Ventanas de deriva reales medidas: **42 h** (`e28e362`) y
+**25,5 h** (`25341a3`). Solo Santiago puede poner los secretos.
+
+### BASELINES
+- Frontend Vercel **al dia, verificado por contenido** sobre 203 chunks, con control negativo
+  (`"Horas-sol"` = 0 chunks).
+- Edge `make-server-1ccce916` **v260, 2026-09-16T16:21:08Z**, hash
+  `43608caa571ecac4cf37b54a77a3d2bb7c5b56a7c306f0959d386e58a3cb3c02`, commit `a4f3ce6`.
+- Migraciones hasta 154 aplicadas. 6/6 crons `active`.
+- Cadencia (2,2 dias): 20 commits, 6 PR, 6 migraciones, fix share 5/9 = 55,6%. **Sexta
+  ventana seguida con sesgo distinto: sigue sin ser interpretable fuera de la medicion mensual.**

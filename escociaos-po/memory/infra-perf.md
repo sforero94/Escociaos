@@ -488,3 +488,59 @@ No es fallo de allowlist y no se vuelve a filar.**
   `respuestaError` de `hato-alertas-tick.ts` descarta el mensaje, y `registrarCorridaTick` es
   la ULTIMA sentencia — asi que un fallo temprano no deja ni log ni fila. **Al auditar un
   endpoint, mirar si su camino de error escribe algo ANTES de confiar en el silencio.**
+
+## Corrida 2026-09-17-jueves
+
+### EL CARRIL edge-runtime -> PostgREST ESTA CERRADO — refuta mi propio P1 del lunes
+| Huella | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| `infra/postgrest/carril-edge-runtime-504` | El carril falla ~37% con 504 | 09-16T11:10Z->09-17T11:00Z: **edge-runtime 66 peticiones, 0 de 5xx**; navegador 1.113/0. Confirmado en tabla de dominio: `lecturas_count` 288/283/288 y `hato_alertas_tick_runs` `ok` 15/16/17 | 2026-09-17-jueves |
+| `infra/postgrest/warp-es-senal` | «Warp server error: Thread killed by timeout manager» ya no es ruido | 157 en 24 h con **0** peticiones fallidas. Vuelve a ser ruido. Nunca usarla sola; cruzarla contra los no-200 | 2026-09-17-jueves |
+
+### LA CONSULTA DE ORIGEN, CORREGIDA PARA COMPOSIO
+`SUPABASE_RUN_READ_ONLY_QUERY` **NO ve la tabla `logs`** (`42P01`). Por Composio va
+`SUPABASE_GET_PROJECT_LOGS` y las fuentes son NOMBRES DE TABLA, sin `source=` ni
+`log_attributes`:
+```sql
+select case when h.user_agent like 'Deno/%' then 'edge-runtime'
+            when h.user_agent like 'Mozilla/%' then 'browser' else 'otro' end as origen,
+       resp.status_code as status, count(*) as n
+from edge_logs
+cross join unnest(metadata) as m
+cross join unnest(m.request) as r
+cross join unnest(r.headers) as h
+cross join unnest(m.response) as resp
+where r.url like '%/rest/v1/%' group by 1,2
+```
+**Sin `iso_timestamp_start`/`iso_timestamp_end` la ventana es ~1 HORA, no 24.** Una primera
+consulta dio 24 filas y parecia «casi no hay trafico»; con ventana explicita, 1.179.
+
+### FIRMA DE ESTACION MUERTA (distinta de carril caido) — y su severidad real
+`net._http_response` devuelve **200** sostenido con `{"message":"No data available","synced":0}`
+y el reintento de la 121 devuelve `consultaOk:false / "sin datos de Ecowitt para ese dia"`.
+Cuando la History API tampoco tiene el dia, el dia es **IRRECUPERABLE**; no esperar a que
+venza la ventana de 21 dias. Misma firma que 2026-08-28, el unico dia ausente en 90.
+**PERO NO ES P1**: el Tablero General ya muestra «Sin dato reciente del clima»
+(`Dashboard.tsx:100` -> `ClimaCard.tsx:132`) y ~27 h iguales pasaron el 27-28 de agosto.
+Lo que falta es la alerta PUSH: **cero claves `clima.*` en `alertas_catalogo`** (5 hato,
+3 inventario). Filado P3.
+
+### EL CRON 121 REPARA HACIA ATRAS Y SE PUEDE MEDIR
+Los dos dias que el lunes reporte en 149 y 150 lecturas hoy estan en **240 y 271**. Al
+evaluar una perdida de clima, **volver a consultar `lecturas_count` unos dias despues**
+antes de darla por definitiva.
+
+### LA AUSENCIA DE FILA ES LA SENAL
+Faltan `hato_alertas_tick_runs` de los dias 09-12/13/14 y existen 09-11 y 09-15: son
+exactamente las corridas que abortaban con 500. `registrarCorridaTick` corre ultimo, asi que
+un aborto temprano no deja nada. **Un camino de error que no escribe es invisible.**
+
+### ESTADOS ACEPTADOS
+- Vercel 5/5 READY/PROMOTED, alias en `55ca4af`. Deriva de despliegue 0
+  (`scripts/deploy-drift-state/` fija `a4f3ce6`, el ultimo commit que toca el arbol edge).
+- 6 pg_cron activos. 0 no-200 de edge function en 24 h.
+- **Falsa alarma descartada**: `a4f3ce6` retira `informes-visita-proponer` y manda al
+  navegador al gemelo; parece la mina de la leccion 105 y NO lo es — el gemelo existe en el
+  paquete desplegado desde `0607a09` (09-08).
+- El reintento de la PR #265 esta vivo en los dos arboles (`clima.tsx:300`,
+  `hato-alertas-tick.ts:212`) pero **todavia no lo ejercito un 504 real**: shipped, no probado.

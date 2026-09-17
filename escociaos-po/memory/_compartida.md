@@ -1694,3 +1694,98 @@ round-trips, no lineal.**
 
 **PALANCA DEL LADO DEL CLIENTE**: Dashboard -> Settings -> General -> Restart project (recicla
 PostgREST/Kong). Solo la puede accionar Santiago.
+
+## Corrida 2026-09-17-jueves
+
+- Modo: **full write · preflight 5/5 · CERO prompts de permiso.** 5 hallazgos filados
+  (ESCO-108..112, el tope exacto del jueves), 3 diferidos y nombrados en el informe.
+  **Backlog al arrancar: VACIO por primera vez** — Santiago cerro los 12 del lunes antes
+  del 09-16.
+
+### EL CARRIL edge-runtime -> PostgREST ESTA CERRADO (refuta el P1 del lunes)
+Ventana 09-16T11:10Z -> 09-17T11:00Z: **edge-runtime 66 peticiones, 0 de 5xx**; navegador
+1.113 / 0. El lunes eran 416/153 (36,8%). A p=0,368, cero fallos en 66 tiradas tiene
+probabilidad ~1e-13. Confirmado en la TABLA DE DOMINIO: `lecturas_count` 288/283/288 los
+dias 13/14/15 y `hato_alertas_tick_runs` con fila `ok` los dias 15/16/17.
+**`Warp server error: Thread killed by timeout manager` volvio a ser ruido**: 157 en 24 h
+con 0 peticiones fallidas. Nunca usarla sola; cruzarla siempre contra los no-200.
+
+### LA CONVERGENCIA ENTRE AGENTES NO ES EVIDENCIA — la leccion mas cara de esta corrida
+**Tres agentes independientes filaron el silencio de la estacion de clima como P1 y los tres
+se equivocaron en la MISMA pata**: «nada avisa a un humano». Falso. `ClimaCard` se renderiza
+en el **Tablero General** (`Dashboard.tsx:100`), la pantalla de aterrizaje, y muestra hoy
+«Sin dato reciente del clima». Tres agentes coincidiendo es correlacion de un supuesto
+compartido, no triangulacion. **El verificador lo mato leyendo el codigo del consumidor** —
+`grep -rn clasificarFrescuraLectura src/` da DOS consumidores, no uno.
+Ademas: «solo 8 filas en `clima_lecturas`» NO es sintoma, es la poda de la migracion 036
+haciendo su trabajo. El unico sintoma valido es `max(timestamp)`.
+
+### ERROR PROPIO DEL ORQUESTADOR — mi preflight dio FALSO VERDE
+`ls node_modules 2>/dev/null | head -3 && echo "present"` imprime «present» aunque `ls`
+falle, **porque en una tuberia el codigo de salida es el del ULTIMO comando** (`head`, que
+sale 0 con entrada vacia). `node_modules` no existia y yo declare que si.
+**Regla: `if ! ls X; then` — nunca `cmd | head && echo ok`.**
+Bug Triage lo detecto, se nego a hacer `npm ci` porque su brief lo prohibia, y reporto el
+hueco en vez de violar la regla en silencio. **Ese es el comportamiento correcto de un
+agente y hay que preservarlo.** Lo arregle a mitad de corrida y corri la suite yo.
+
+### ARRANQUE: NUEVA COMPROBACION OBLIGATORIA ANTES DE DESPACHAR
+`test -x node_modules/.bin/vitest` tiene que pasar. Si no, `npm ci` UNA vez en el checkout
+compartido (los worktrees ya enlazan ahi, asi que una instalacion sirve a los cuatro).
+**`npx vitest` NO sirve**: resuelve un vitest remoto contra el `vite.config.ts` local, falla
+con `Cannot find module 'vite'` **y sale con codigo 0**. Invocar `node_modules/.bin/vitest run`.
+
+### LINEA BASE DE LA SUITE — `main` @ `55ca4af`
+**189 ficheros / 4.048 pruebas PASAN** · `tsc --noEmit` limpio · eslint 0 errores / 914
+avisos (linea base preexistente). Sube desde 183/3.917 del 09-14.
+
+### TRAMPAS DE TOOLS DE ESTA CORRIDA
+- **`SUPABASE_RUN_READ_ONLY_QUERY` NO ve la tabla `logs`** (`42P01`). La consulta canonica
+  de origen escrita mas arriba es para el conector viejo. Por Composio se usa
+  **`SUPABASE_GET_PROJECT_LOGS`**, cuyas fuentes son NOMBRES DE TABLA (`edge_logs`,
+  `function_logs`, `postgrest_logs`, `postgres_logs`) con `cross join unnest(metadata)`, sin
+  `source=` ni `log_attributes`.
+- **Sin `iso_timestamp_start`/`iso_timestamp_end` la ventana por defecto es ~1 HORA, no 24.**
+  Una primera consulta devolvio 24 filas y parecia «casi no hay trafico»; con ventana
+  explicita, 1.179. Pasar siempre las dos marcas.
+- **El filtro `Estado does_not_equal Done` sobre un `status` de Notion SI funciona** — la
+  respuesta vacia de esta corrida era real, no un fallo del filtro. Confirmado contra un
+  listado sin filtro: 40 filas, todas `Done`.
+- **`net._http_response` retiene ~6 HORAS.** No sirve para mirar un dia atras.
+- Columnas que costaron round-trips: `hato_alertas_tick_runs.ejecutado_at` (no `ejecutado_en`),
+  `.generadas`/`.enviadas`/`.animales_evaluados`; `clima_resumen_diario.temp_c_min|max|avg`,
+  `.radiacion_wm2_max`, `.uv_index_max`; `empleados.nombre` (no `nombre_completo`);
+  `hato_eventos` sin `registrado_por` (vive en `datos->>`); `movimientos_diarios.fecha_movimiento`
+  (no `fecha`); `produccion.ano` (no `anio`); `cron.job_run_details` sin `jobname`.
+
+### METODO: SEGUIR LA FK ANTES DE FILAR
+Los dos hallazgos de datos se filaron sobre patas circunstanciales **con la prueba decisiva
+a un join de distancia**. El error de ano lo prueba `tareas.created_at` (la tarea se creo el
+2026-09-03, asi que 2025 es fisicamente imposible); el pesaje lo prueba la correlacion de 40
+segundos entre una subida a Storage y `hato_pesajes_leche.created_at` diez dias antes.
+Ninguno de los dos autores siguio la FK. **Antes de filar un hallazgo de datos: preguntar
+que tabla padre haria imposible la lectura inocente.**
+
+### UN INSTRUMENTO NO PUEDE HABLAR DE UN PERIODO ANTERIOR A SU PROPIA EXISTENCIA
+`hato_capturas_foto` se aplico el 2026-09-13. Usarla para afirmar «nadie intento subir» en
+una ventana de 22 dias que empieza el 08-26 es leer evidencia de un periodo que el
+instrumento no cubre. Cubre 1 de los 3 miercoles perdidos, no los tres.
+
+### MIGRACION 147: EL FICHERO NO PUEDE CORRER, NUNCA
+Su post-condicion (linea 261) exige `'Ajuste'` entre comillas SIMPLES y su cuerpo (linea
+160) lo escribe entre DOBLES. Aborta siempre. Lo que corre en produccion es un
+`CREATE OR REPLACE` **compuesto a mano** el 09-16 (md5 `611a7d7b...`), nunca revisado como
+fichero — el propio ledger lo confiesa en su cabecera. **Rompe la garantia de que los bytes
+que corren son los aprobados.** Ademas `limpieza_chequeo_prueba_qa_2020_01_15`
+(ledger `20260916022812`) borro filas de dominio y **no dejo fichero**.
+**El ledger es la fuente, no el fichero ni el CLAUDE.md** — y esta vez el ledger tenia la
+explicacion completa en su propio texto. Leerlo entero, no solo `version` y `name`.
+
+## Racha del jueves (regla de auto-poda) — actualizada 2026-09-17
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-08-27-jueves | 5 |
+| 2026-09-03-jueves | 4 |
+| 2026-09-10-jueves | 5 |
+| **2026-09-17-jueves** | **5. Racha de ceros: 0** |
+La auto-poda **no aplica**: siete jueves seguidos con hallazgos.

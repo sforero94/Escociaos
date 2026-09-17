@@ -572,3 +572,52 @@ borrados, NO cuáles** — por eso ese hallazgo va con Confianza Media.
   22 días, rojo a los 28. Dentro del intervalo histórico — **no filar todavía**.
 - **NUEVO**: `movimientos_inventario` congelado desde 2026-09-05. Umbral útil ~20 días.
 - **FECHA DURA 2026-09-18**: vence la ventana de recuperación del día de clima 2026-08-28.
+
+## Corrida 2026-09-17-jueves
+
+### REFUTADOS / CORREGIDOS ESTA CORRIDA (ledger)
+| Huella | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| `data/clima/estacion-muda-nadie-avisa` | «29 h sin lectura y NADA avisa a un humano» -> P1 | El Tablero General (`Dashboard.tsx:100` -> `ClimaCard.tsx:132`) muestra «Sin dato reciente del clima». Y ~27 h iguales el 27-28 de agosto. **Bajo a P3** | 2026-09-17-jueves |
+| `data/labores/anio-2025-costo-fantasma` | El error de ano «inventa un costo fantasma de 2025» | `calculosCostoKg.ts:46` `ANO_MIN_LOTE=2026` y `:274` cae a nivel finca para todo ano anterior. Las 7 filas se leen en una rama que nunca las usa. El hecho quedo MAS probado; el impacto es 2,1% del lote | 2026-09-17-jueves |
+| `data/hato/pesaje-nadie-intento-22-dias` | «Nadie intento subir» en los 22 dias | `hato_capturas_foto` se aplico el 09-13. Solo cubre 1 de los 3 miercoles | 2026-09-17-jueves |
+
+### METODO QUE ME FALTO Y HAY QUE APLICAR SIEMPRE
+**Seguir la FK antes de filar.** Fila el error de ano con tres patas circunstanciales
+(vecino 37 s despues, lote gemelo, aislamiento temporal) cuando la prueba decisiva estaba a
+un join: `tareas.created_at` = 2026-09-03 para la tarea «Drench Septiembre», lo que hace
+2025 **fisicamente imposible**. Ademas una de mis patas era erronea: la fila de DAVID es de
+OTRA tarea (`416e4773`, «Otras actividades»), no de la misma.
+Regla: **antes de filar un hallazgo de datos, preguntar que tabla padre haria imposible la
+lectura inocente.**
+
+### TECNICA CONFIRMADA — detectar un ano tecleado mal
+Agrupar por `created_at`, buscar un lote que comparta cuadrilla+lote con su vecino pero
+difiera un ano exacto, y comprobar AISLAMIENTO (`select fecha, count(*)` en +-6 semanas).
+Un backfill legitimo trae vecinos; un error de ano no tiene ninguno. **La migracion 149 NO
+lo detecta**: suma por `fecha_trabajo` y la fecha equivocada queda legal (7 filas a 1.0).
+
+### LA GUARDA DE UNA COLUMNA NUEVA NO SE HEREDA DE SU VECINA
+`clima_resumen_diario`: la lluvia esta protegida por `lluvia_confianza`; `horas_sol_duracion`
+(mig 151) **no consulta esa senal en absoluto** — su unico guard es `COUNT(radiacion_wm2)=0`,
+que cuenta lecturas que EXISTEN, no cobertura. Con 11 lecturas nocturnas escribe 0,00.
+Sonda barata al auditar cualquier agregado diario nuevo:
+`select ... where <col_nueva> is not null and lecturas_count < 240`.
+
+### ESTADOS ACEPTADOS
+- La 2a fila de `hato_capturas_foto` (09-16, `ok`, 42 filas) **no es fantasma**: es la prueba
+  QA revertida a `respaldos.backup_qa_test_chequeo*`. Antes de filar «dice ok y no hay
+  filas», mirar `respaldos`.
+- `estado` NULL en `hato_chequeo_vacas` es NORMAL (29/34, 34/39, 36/40 historicamente).
+- El chequeo del 09-08 **ya no esta corto**: Santiago lo recapturo el 09-15, 19 -> 34 filas.
+- La migracion 149 se ejercito por primera vez y **aguanto**: 0 grupos (fecha, persona) > 1.0
+  desde el 09-13. El conteo historico en exceso bajo de 49 a 42.
+
+### BASELINE 2026-09-17 (ventana desde 09-14 11:00Z)
+`hato_eventos` 792 (+7) · `hato_chequeos` 34 (=) · `hato_chequeo_vacas` 1.513 (+34) ·
+`hato_pesajes_leche` 601 (=, ultima fecha 2026-08-26) · `hato_tratamientos` 27 (+1) ·
+`hato_alertas` 123 (+4) · `hato_capturas_foto` 2 (+2) · `movimientos_inventario` 165
+(**congelado desde 09-05**) · `movimientos_diarios` 175 (+2) · `monitoreos` 4.244
+(**congelado, ultima fecha 08-28, 20 dias — umbral rojo 28 = 25-sep**) ·
+`registros_trabajo` 2.920 (+15) · `fin_gastos` 4.534 (=) · `clima_resumen_diario` 1.937.
+Integridad: 0 huerfanos en 11 relaciones, 0 stock negativo, 0 chapetas duplicadas activas.

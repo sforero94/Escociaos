@@ -594,3 +594,54 @@ mensaje de este motor, preguntar primero si el texto afirma algo que el selector
 - `BUG_REPORT.md` **sin cambios** desde el 09-07 (no reverificado esta corrida, así
   etiquetado). Sigue abierto el 3b (inventario consumido valorado en $0), que es
   `clase: decision`.
+
+## Corrida 2026-09-17-jueves
+
+### LA SUITE: linea base nueva, y el modo de falso verde que la escondio
+**`main` @ `55ca4af`: 189 ficheros / 4.048 pruebas PASAN.** `tsc --noEmit` limpio.
+eslint 0 errores / 914 avisos (linea base preexistente). Sube desde 183/3.917 del 09-14.
+
+**No la corri yo: `node_modules` era un enlace COLGADO en los cuatro worktrees.** Me negue a
+hacer `npm ci` porque el brief lo prohibe y reporte el hueco — **eso fue lo correcto y hay
+que repetirlo**. El orquestador lo arreglo a mitad de corrida y corrio la suite.
+**Segundo modo de falso verde de `npx vitest`** (el primero fue `--reporter=basic`): resuelve
+un vitest remoto contra el `vite.config.ts` local, falla con `Cannot find module 'vite'` **y
+sale con codigo 0**. **Regla: `node_modules/.bin/vitest run`, nunca `npx vitest`, y comprobar
+`test -x node_modules/.bin/vitest` antes de creerle a cualquier resultado.**
+
+### EL TICK DE ALERTAS DEL HATO ESTA ARREGLADO — P1 del lunes cerrado por evidencia
+`hato_alertas_tick_runs`: 09-15 `ok` 8.007 ms, 09-16 `ok` 2.025 ms, 09-17 `ok` 2.190 ms.
+El hueco de tres dias sin NINGUNA fila (09-12/13/14) son las corridas que abortaban.
+**No re-auditar.**
+
+### EL PESAJE DE LECHE NO SE ARREGLO — y «cerrado en Notion» no es «arreglado»
+3 miercoles perdidos (09-02, 09-09, 09-16), ultimo dato 2026-08-26, ultima escritura 08-29.
+**Empeoro despues de que el lunes lo filara P1 y se cerrara el 09-16.**
+CORRECCION A MI PROPIA PATA: dije «nadie intento» sobre 22 dias usando `hato_capturas_foto`,
+que **se aplico el 09-13** — solo cubre 1 de los 3 miercoles. Y la foto huerfana del 09-04
+no contradice eso: **precede al instrumento en 9 dias**. Lectura correcta: un fallo silencioso
+el 09-04, y despues ningun intento.
+**El camino de pesaje SI esta instrumentado** (`hato-pesaje-pipeline.ts:320` llama
+`registrarCapturaFoto({tipo:'pesaje'})` ANTES del modelo; `pesajeLeche.ts:389` enruta igual),
+asi que cero filas SI es evidencia — desde el 09-13.
+**Control que probo que la tuberia funcionaba**: la subida del 08-29 19:34:05 esta 40 SEGUNDOS
+antes de `hato_pesajes_leche.created_at` 08-29 19:34:45.
+**La plata de la leche esta intacta**: `hato_produccion_quincenal` y `fin_ingresos` al dia.
+
+### LA 151 REPITIO EL CERO FABRICADO QUE LA 103/115/122 ARREGLARON PARA LA LLUVIA
+Unico guard: `COUNT(radiacion_wm2)=0`, que cuenta lecturas que EXISTEN, no cobertura.
+`v_min_lecturas=240` se calcula en el MISMO CTE y solo alimenta `lluvia_confianza`.
+**Al agregar cualquier agregado diario nuevo a `clima_resumen_diario`, preguntar primero que
+escribe en un dia de cobertura parcial.** Filado ESCO-108.
+
+### NAVEGACION
+- `hato_capturas_foto`: `creado_en, actualizado_en, tipo, origen, desenlace, anio, mes, fecha,
+  storage_*, fotos_recibidas, modelo, celdas_leidas_ocr, celdas_confirmadas, filas_escritas,
+  detalle, created_by`. **No** `iniciado_en`/`estado`/`error_mensaje`.
+- `hato_alertas_tick_runs`: `ejecutado_at`, `estado`, `error`, `generadas`, `enviadas`.
+- `rondas_inventario` no tiene `actualizado_en`.
+- `net._http_response` retiene ~6 HORAS. Para mirar un dia atras, la tabla de dominio.
+- `mcp__Supabase_Escritura__query_logs` fue DENEGADO por el clasificador de auto-mode.
+  **El camino correcto es `SUPABASE_GET_PROJECT_LOGS` via Composio** — no reintentar el otro.
+- **`scripts/deploy-drift-state/<slug>.json` es la forma barata de saber QUE commit esta
+  desplegado**, y tiene historia en git.
