@@ -887,6 +887,7 @@ export async function monitoreoConversation(
               gravedad_numerica: gravedad.numerica,
               observaciones: observaciones,
               monitor: user.nombre_display,
+              user_id: user.usuario_id,
               ronda_id: rondaId,
               floracion_sin_flor: floracionSinFlor,
               floracion_brotes: floracionBrotes,
