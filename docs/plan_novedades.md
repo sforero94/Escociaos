@@ -539,6 +539,14 @@ M-1 muestra que el feed llega seguido al tope de 20 líneas · estado de "visto"
 
 ## 11. Decisiones para Santiago
 
+> **RESUELTAS — Santiago respondió el 2026-09-16, el mismo día del brief.** Escogió la opción
+> recomendada en las cinco: **D-1 (a)** una línea por sesión de captura; **D-2 (a)** 7 días; **D-3 (a)**
+> «Acciones recomendadas» se retira en el mismo release y la generación diaria se detiene, con el
+> historial conservado; **D-4 (a)** sin correcciones en la v1; **D-5 (a)** sin resumen por Telegram
+> hasta la revisión de las 6 semanas. D-1 y D-4 se asumieron por defecto y no fueron objetadas.
+> Además decidió sobre el punto §17.5 del plan técnico: **el arreglo de la fecha UTC de
+> `telegram/conversations/gasto.ts` entra en el mismo release, como ticket aparte.**
+
 Cinco. Todas se responden con una letra.
 
 **D-1 · ¿Qué es una línea del feed?**

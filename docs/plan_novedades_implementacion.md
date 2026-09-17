@@ -9,6 +9,10 @@ este plan, y abre el issue después.
 > Se planifica sobre la opción **recomendada** de cada decisión de §11 del brief: D-1 (a) sesión de
 > captura, D-2 (a) 7 días, D-3 (a) retiro en el mismo release, D-4 (a) sin correcciones, D-5 (a) sin
 > Telegram. Cada sección dice qué cambia si Santiago elige otra letra.
+>
+> **Confirmado el 2026-09-16:** Santiago escogió la recomendada en las cinco. Sobre §17.5 decidió que
+> el arreglo de la fecha UTC de `gasto.ts` **entra en el mismo release, como ticket aparte** (fase
+> F5-bis en §14).
 
 ---
 
@@ -613,6 +617,7 @@ haría que un cambio de atribución tocara la fecha de un gasto.
 | **F3** | Pantalla | `Novedades.tsx`, `NovedadLinea.tsx`, `useNovedades.ts`, instrumentación M-4/M-5, prueba 4. **No se monta** | Los 6 estados se ven en pruebas; `novedades_uso` recibe filas al expandir y al navegar | **M** | F2 |
 | **F4** | Intercambio *(el release)* | Monta Novedades; borra el motor (§11.1); migración 156; despliegue de *edge function*; borrado de secretos; `CLAUDE.md`, `docs/README.md`, archivo de los 3 documentos | El tablero muestra Novedades y **no** Acciones; `cron.job` sin `acciones-recomendadas-tick`; `npm run lint` y `npm test` verdes | **M** | F3 |
 | **F5** | Atribución de Telegram *(paralela)* | Los 4 archivos × 2 árboles; despliegue | Un `/jornal` de prueba deja `registrado_por` poblado | **S/M** | ninguna |
+| **F5-bis** | Fecha UTC de `/gasto` *(paralela; decisión del dueño, §17.5)* | `gasto.ts:273` y `:994` con fecha Bogotá en vez de `toISOString().split("T")[0]`; los dos árboles; despliegue. **Commit separado de F5**: un cambio de atribución no toca la fecha de un gasto | Un `/gasto` de prueba después de las 19:00 Bogotá guarda la fecha de hoy, no la de mañana | **S** | ninguna |
 | **F6** | Pulido y revisión | Fuentes *Should*; fecha de revisión en el calendario; E-1/E-2 congeladas | La revisión de las 6 semanas tiene fecha antes de cerrar F4 | **S** | F4 |
 
 **Hitos.** M1 = fin de F1: la base soporta el feed. M2 = fin de F2: el criterio existe y está probado
@@ -691,6 +696,8 @@ Cinco puntos. No los resuelvo: los marco.
 5. **«Con fecha futura» va a disparar la primera semana por un defecto del servidor, no por un error de
    tecleo** (§4.3). Es correcto que el feed lo muestre; lo que hay que decidir es si el ticket de ese
    defecto entra en el mismo release para que la métrica de la revisión no quede contaminada.
+   **Decidido por el dueño el 2026-09-16: sí, entra en el mismo release, como ticket aparte** — es
+   la fase F5-bis de §14, paralela y en commit separado de la atribución (F5).
 
 **Nada del brief me parece técnicamente infactible.** Las cuatro garantías más duras —frescura menor a
 10 minutos, fuera del camino crítico, degradación por fuente con la fuente nombrada, y el gate de rol
