@@ -87,30 +87,26 @@ const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[
       'UTC; enumerarFechas() itera con cursor. Los tres son ida y vuelta UTC coherente.',
   },
   {
-    archivo: 'src/utils/accionesHechos.ts',
-    ocurrencias: 1,
-    razon:
-      'sumarDias() construye la Date explícitamente vía Date.UTC(y, m-1, d+dias) a ' +
-      'partir de un `AAAA-MM-DD` ya parseado -- nunca del reloj -- y la vuelve a leer con ' +
-      'toISOString().slice(0,10); ida y vuelta UTC coherente, mismo patrón que ' +
-      'fechaCorteTimeline (EventoTimeline.tsx). Módulo puro y espejado a Deno (motor de ' +
-      'acciones recomendadas): no puede importar `fechaAISODate`/`obtenerFechaHoy` de ' +
-      '`@/utils/fechas` (sin copia en el árbol Deno), así que toda su aritmética de fecha ' +
-      'es local a este archivo, igual que el `diasEntre` de `accionesOrden.ts`.',
-  },
-  {
     archivo: 'src/utils/rondaInventario/tick.ts',
     ocurrencias: 1,
     razon:
       'sumarDiasFecha() -- Fase 5 de la ronda de inventario (A-4, posponer el ' +
       'recordatorio) -- construye la Date explícitamente vía Date.UTC(anio, mes-1, dia) ' +
       'a partir de un `AAAA-MM-DD` ya parseado -- nunca del reloj -- y la vuelve a leer ' +
-      'con toISOString().slice(0,10); ida y vuelta UTC coherente, MISMO patrón que ' +
-      'sumarDias() de accionesHechos.ts (arriba). Módulo puro espejado a los dos árboles ' +
-      'de edge function (docs/inventario/regenerar-copias-ronda-inventario.py): no puede ' +
-      'importar `fechaAISODate`/`obtenerFechaHoy` de `@/utils/fechas`.',
+      'con toISOString().slice(0,10); ida y vuelta UTC coherente, mismo patrón que ' +
+      'fechaCorteTimeline (EventoTimeline.tsx, arriba). Módulo puro espejado a los dos ' +
+      'árboles de edge function (docs/inventario/regenerar-copias-ronda-inventario.py): ' +
+      'no puede importar `fechaAISODate`/`obtenerFechaHoy` de `@/utils/fechas`.',
   },
 ];
+
+// `src/utils/accionesHechos.ts` (motor de "acciones recomendadas") tenía una
+// entrada acá con el mismo patrón UTC-coherente (`sumarDias()`). Se quitó
+// cuando el archivo se archivó, sin borrar, en
+// `archive/acciones-recomendadas/frontend/utils/accionesHechos.ts` (issue
+// #266, 2026-09-17) -- ese código ya no vive bajo `src/`, así que esta
+// guarda no tiene nada que verificar ahí. La razón histórica queda en
+// `docs/archive/implementation/motor_acciones_recomendadas_retiro.md`.
 
 /** Quita comentarios antes de buscar el patrón. Varios archivos DOCUMENTAN el
  * antipatrón en prosa ("NUNCA `new Date().toISOString().slice(0, 10)`") y esas
@@ -294,6 +290,115 @@ function contarInfracciones(ruta: string): number {
   const fuente = sinComentarios(readFileSync(ruta, 'utf-8'));
   return fuente.match(new RegExp(PATRON_UTC_HOY.source, 'g'))?.length ?? 0;
 }
+
+// ============================================================================
+// Guard de huso horario nombrado -- `diaBogota()` (issue #266, "Novedades").
+//
+// Convertir un `timestamptz` AJENO (una captura de otra persona) al día
+// calendario de Bogotá exige nombrar el huso explícitamente -- no hay forma
+// de hacerlo con getters LOCALES como el resto de este archivo. Eso abre la
+// puerta a que cualquier módulo nuevo escriba su propia conversión de huso a
+// mano, cada una con su propia oportunidad de estar mal (offset fijo -05:00
+// sin dar cuenta de que Bogotá no tiene horario de verano pero sí lo tienen
+// otros husos con los que alguien podría confundirlo, `Date.UTC` mal
+// restado, etc.). `diaBogota()` (`src/utils/fechas.ts`) es el único sitio
+// declarado para esa conversión desde este release, y este guard lo hace
+// cumplir con el mismo mecanismo de lista blanca CERRADA Y CONTADA de
+// arriba: contra `'America/Bogota'`, el token que delata la conversión de
+// huso, sin importar si viaja envuelto en un `Intl.DateTimeFormat` o en un
+// literal.
+//
+// Los cuatro sitios pre-existentes de la lista no son un error -- son casos
+// legítimos que llevan meses en producción (amanecer/atardecer de la finca,
+// el corte del reporte semanal, la frescura de `clima_lecturas`). No se
+// tocan en este cambio. Lo que este guard impide es que un QUINTO sitio
+// aparezca por su cuenta en vez de llamar a `diaBogota()`.
+// ============================================================================
+
+const PATRON_BOGOTA = /America\/Bogota/g;
+
+/** Lista blanca CERRADA Y CONTADA, mismo mecanismo que `LISTA_BLANCA_UTC`
+ *  arriba. `src/utils/fechas.ts` es la única entrada NUEVA de este release
+ *  -- su ocurrencia es `diaBogota()`. Las otras cuatro son preexistentes y
+ *  se documentan para que el guard las reconozca sin taparlas. */
+const LISTA_BLANCA_BOGOTA: { archivo: string; ocurrencias: number; razon: string }[] = [
+  {
+    archivo: 'src/utils/fechas.ts',
+    ocurrencias: 2,
+    razon:
+      'diaBogota() + horaBogota() -- issue #266, "Novedades" (F3, pantalla). Únicos dos ' +
+      'sitios autorizados a convertir un timestamptz ajeno a hora/día calendario de ' +
+      'Bogotá; todo lo demás debe llamarlos, nunca reimplementar la conversión. ' +
+      'horaBogota() la usa NovedadLinea.tsx para decidir si una línea muestra la hora ' +
+      'de captura ("21:00") o el día -- comparando diaBogota(capturadoEn) contra hoy.',
+  },
+  {
+    archivo: 'src/utils/amanecerAtardecer.ts',
+    ocurrencias: 1,
+    razon:
+      'ZONA_FINCA -- constante documental para las horas de amanecer/atardecer de la ' +
+      'finca (Aguadas, Caldas), preexistente a este release.',
+  },
+  {
+    archivo: 'src/utils/fetchDatosReporteSemanal.ts',
+    ocurrencias: 2,
+    razon:
+      'Corte del reporte semanal contra la frescura de `clima_lecturas` ' +
+      '(`lluvia_diaria_actualizada_en`, migración 068), preexistente a este release.',
+  },
+  {
+    archivo: 'src/utils/calculosClima.ts',
+    ocurrencias: 2,
+    razon: 'Agregaciones de clima en hora Bogotá, preexistente a este release.',
+  },
+  {
+    archivo: 'src/components/reportes/ReporteSemanalWizard.tsx',
+    ocurrencias: 2,
+    razon: 'Fechas por defecto del asistente de reporte semanal, preexistente a este release.',
+  },
+];
+
+describe('guard estático: sólo diaBogota() nombra el huso America/Bogota', () => {
+  it('ningún archivo fuera de la lista blanca nombra America/Bogota', () => {
+    const permitidos = new Map(LISTA_BLANCA_BOGOTA.map((e) => [e.archivo, e.ocurrencias]));
+
+    const infractores = RAICES_CUBIERTAS.flatMap(archivosTs)
+      .map((ruta) => {
+        const rel = ruta.replace(process.cwd() + '/', '');
+        const fuente = sinComentarios(readFileSync(ruta, 'utf-8'));
+        const n = fuente.match(new RegExp(PATRON_BOGOTA.source, 'g'))?.length ?? 0;
+        return { rel, n };
+      })
+      .filter(({ rel, n }) => n > 0 && n !== (permitidos.get(rel) ?? 0))
+      .map(({ rel, n }) => `${rel} (${n} apariciones, permitidas ${permitidos.get(rel) ?? 0})`);
+
+    expect(
+      infractores,
+      'Estos archivos nombran America/Bogota fuera de la lista blanca cerrada. Si de ' +
+        'verdad necesitas el día calendario de Bogotá de un timestamp ajeno, usa ' +
+        'diaBogota() de @/utils/fechas -- ya existe. Si el uso es legítimo por otra razón, ' +
+        'agrégalo a LISTA_BLANCA_BOGOTA con su conteo exacto.',
+    ).toEqual([]);
+  });
+
+  it('la lista blanca de husos está viva: cada entrada tiene EXACTAMENTE las apariciones declaradas', () => {
+    const desfases = LISTA_BLANCA_BOGOTA.filter(({ archivo, ocurrencias }) => {
+      const fuente = sinComentarios(readFileSync(join(process.cwd(), archivo), 'utf-8'));
+      const n = fuente.match(new RegExp(PATRON_BOGOTA.source, 'g'))?.length ?? 0;
+      return n !== ocurrencias;
+    }).map(({ archivo, ocurrencias }) => {
+      const fuente = sinComentarios(readFileSync(join(process.cwd(), archivo), 'utf-8'));
+      const n = fuente.match(new RegExp(PATRON_BOGOTA.source, 'g'))?.length ?? 0;
+      return `${archivo}: declaradas ${ocurrencias}, reales ${n}`;
+    });
+
+    expect(
+      desfases,
+      'LISTA_BLANCA_BOGOTA quedó desactualizada. Si eliminaste un uso legítimo, baja el ' +
+        'conteo o borra la entrada; nunca la subas para silenciar un sitio nuevo.',
+    ).toEqual([]);
+  });
+});
 
 describe('guard estático: el código de navegador nunca toma "hoy" en UTC', () => {
   it('ningún archivo bajo src/components/ ni src/utils/ toma "hoy" del reloj en UTC', () => {
