@@ -49,11 +49,21 @@
 --     `FOR UPDATE` sobre `rondas_excepciones` y sobre `productos`, y la
 --     atribución por `fn_ronda_actor_correo` que puso la 143: todo intacto.
 --
--- ESTADO: ESCRITA Y FUSIONADA, **SIN APLICAR** (2026-09-13). Se aplica
--- DESPUÉS de `npx supabase functions deploy make-server-1ccce916`, y ese
--- despliegue no lo pudo hacer la sesión que escribió esto (sin
--- `SUPABASE_ACCESS_TOKEN`; el conector MCP de escritura aplica migraciones,
--- no despliega funciones).
+-- ESTADO: APLICADA a producción 2026-09-16 (ledger `20260916154436`,
+-- issue #263 / ESCO-98), PERO NO CON ESTE FICHERO ENTERO. El CREATE OR
+-- REPLACE se compuso a mano (md5 de prosrc después
+-- `611a7d7b6ba8bc5e101e8782c0a40f49`). El fichero abortaba siempre en su
+-- propia post-condición: el cuerpo (~línea 160) escribe `"Ajuste"` entre
+-- comillas DOBLES y la guarda (~línea 261) buscaba `'Ajuste'` entre
+-- SIMPLES. Corregido en este mismo archivo (issue #268 / ESCO-112).
+-- Editar una migración ya aplicada es INTENCIONAL: el fichero nunca pudo
+-- correr, y dejarlo así gasta cada agente que intenta re-aplicarlo.
+-- NO re-aplicar el fichero entero a producción -- la pre-guarda de
+-- `cantidad_fisica_confirmada` aborta porque la función ya la exige.
+--
+-- ESTADO ORIGINAL (2026-09-13): escrita y fusionada, se aplicaba DESPUÉS
+-- de `npx supabase functions deploy make-server-1ccce916`. Ese orden se
+-- respetó: el lado app salió en v253 el 2026-09-14, dos días antes.
 --
 -- ORDEN DE APLICACIÓN -- INVERTIDO respecto de la 140, y por un motivo que
 -- conviene no olvidar: **primero `functions deploy`, después la migración.**
@@ -258,7 +268,10 @@ BEGIN
   IF v_def NOT ILIKE '%fn_ronda_validar_actor(v_actor_usuario, v_actor_telegram, ''inventario_explicacion'')%' THEN
     RAISE EXCEPTION '147 ABORTADA (post): la autorización por inventario_explicacion se perdió.';
   END IF;
-  IF v_def NOT ILIKE '%''Ajuste''%' THEN
+  -- Comillas DOBLES, las mismas que el RAISE del cuerpo (~línea 160:
+  -- nunca "Ajuste"). El fichero original buscaba '%''Ajuste''%' (simples)
+  -- y abortaba siempre -- ESCO-112. Esta línea es la corrección.
+  IF v_def NOT ILIKE '%"Ajuste"%' THEN
     RAISE EXCEPTION '147 ABORTADA (post): la guarda CA-8 sobre tipo_movimiento se perdió.';
   END IF;
 
