@@ -544,3 +544,15 @@ un aborto temprano no deja nada. **Un camino de error que no escribe es invisibl
   paquete desplegado desde `0607a09` (09-08).
 - El reintento de la PR #265 esta vivo en los dos arboles (`clima.tsx:300`,
   `hato-alertas-tick.ts:212`) pero **todavia no lo ejercito un 504 real**: shipped, no probado.
+
+## 2026-09-18 — el conector de escritura perdio `apply_migration` (ESCO-114, P1)
+
+Hecho completo, con la refutacion que lo acompana, en `_compartida.md`
+(seccion "Corrida 2026-09-18-viernes"). Resumen de tres lineas para no re-investigarlo:
+
+- `mcp__Supabase_Escritura__apply_migration` **no existe en la sesion**; el `execute_sql` que
+  aparece en su lugar resuelve **`supabase_read_only_user`, `default_transaction_read_only = on`**.
+- **NO es un agujero de seguridad** — esa lectura se filo y **murio en verificacion**. El conector
+  perdio escritura, no gano. Falla del lado seguro.
+- El carril `ddl_aditivo` del viernes queda inerte hasta que Santiago lo restaure en la Routine.
+  **Ningun rodeo por Composio** (`CLAUDE.md` §6/§12 lo prohiben en cualquier fase).

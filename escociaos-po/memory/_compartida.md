@@ -1835,3 +1835,82 @@ dispara por segunda vez en tres dias sin que nadie toque nada. Comprobacion del 
 - **ESCO-110**: al confirmar David, comprobar
   `select count(*) from registros_trabajo where fecha_trabajo='2025-09-14'` = 0 y que
   `min(fecha_trabajo)` suba a 2025-10-16.
+
+## Corrida 2026-09-18-viernes (drenaje del backlog)
+
+**Conjunto elegible VACIO.** Cero filas en `Estado = Not started` en toda la base de
+hallazgos. Cero pendientes de 60+ dias. **El viernes no filo ningun hallazgo de producto
+y no abrio ninguna investigacion** — ningun PR, ninguna migracion, ningun cierre.
+
+### REGRESION DE TOOLING — `apply_migration` desaparecio del conector de escritura (ESCO-114, P1)
+
+**El hecho, medido, no inferido**: `mcp__Supabase_Escritura__apply_migration` **no existe en la
+sesion**. Busqueda por selector directo → "No matching deferred tools found". En su lugar el
+conector expone `execute_sql`, que probado con un SELECT inofensivo entra como
+**`supabase_read_only_user` con `default_transaction_read_only = on`**.
+
+**Existia hace una semana**: `reports/2026-09-11-viernes.md:213` registra
+`Supabase_Escritura | apply_migration | OK`. Es regresion, no confusion de nombres.
+
+**CONSECUENCIA OPERATIVA: el carril `ddl_aditivo` no puede correr hasta que Santiago lo
+restaure en la Routine del viernes.** No lo intentes por Composio — `CLAUDE.md` §6 y §12
+prohiben `SUPABASE_BETA_RUN_SQL_QUERY` y `SUPABASE_APPLY_A_MIGRATION` en cualquier fase.
+Si un viernes futuro saca una migracion elegible y el tool sigue ausente: **filar el estado,
+no buscar un rodeo.**
+
+### LEDGER DE REFUTACIONES — lo que murio en verificacion esta corrida
+
+**`infra-perf/conector-escritura/el-conector-gano-escritura-libre` → REFUTADO 2026-09-18.**
+La primera lectura de ESCO-114 afirmaba que el conector habia ganado una herramienta de
+escritura mas amplia (`execute_sql` = DML/DDL arbitrario) y que por tanto la propiedad de
+seguridad "freehand SQL es mecanicamente imposible" se habia roto **hacia afuera**.
+**Lo mato una medicion directa**: `execute_sql` de ese conector resuelve read-only. El
+conector no se abrio, **se cerro**. La perdida es de **capacidad**, no de **contencion**.
+No re-investigar como agujero de seguridad: **no lo es**.
+
+Matiz que aporto el verificador y conviene guardar: la propiedad documentada
+("permite `apply_migration` y nada mas") describia siempre la **allowlist**, no lo **expuesto**.
+Ya el 2026-09-17 `query_logs` de ese mismo conector fue **denegado por el clasificador**
+(`memory/bug-triage.md:644`) — o sea que el conector ya exponia mas de un tool antes de esto.
+`CLAUDE.md:343` y `:620` estan desactualizados en ese punto.
+
+### VIGILANCIAS DEL LUNES QUE SE PUEDEN CERRAR (verificadas contra produccion hoy)
+
+- **La 158 funciono.** La memoria advertia que el 17-sep sellaria "una cifra plausible pero
+  baja" de `horas_sol_duracion`, mas dificil de ver que el `0,00` del 16-sep. **No paso**:
+  `2026-09-16` (11 lecturas) y `2026-09-17` (189 lecturas) estan **los dos en NULL**, los dos
+  bajo el umbral de 240. El cuerpo vivo de `fn_clima_rollup_diario` lleva la guarda de
+  cobertura. **ESCO-108 esta arreglado Y aplicado**, no solo fusionado.
+- **La estacion de clima volvio sola.** El jueves llevaba 29 h muda. Hoy: ultima lectura
+  `2026-09-18 11:20:02 UTC`, **0,0 h de silencio**, 266 lecturas en 24 h. **No hace falta ir a
+  la finca.** El corte fue fisico y se resolvio sin intervencion.
+- **ESCO-112 esta sustancialmente completo** en `8de246e`: la guarda de la 147 ahora busca
+  `%"Ajuste"%` (comillas dobles, linea 274) y ya no aborta siempre; la migracion huerfana
+  quedo como `157_limpieza_chequeo_prueba_qa.sql` con cabecera `NO APLICAR`; `CLAUDE.md:417`
+  corregido. **Ninguna de las dos fichas se cerro** — las dos llevan `Requiere aprobacion`.
+
+### DERIVA NUEVA, NO ARREGLADA A PROPOSITO
+
+`CLAUDE.md:439` sigue diciendo que la **158** esta "**ESCRITA, SIN APLICAR**". Se aplico el
+2026-09-17 20:45:45 UTC (ledger `20260917204545`), dos minutos despues de fusionarse. **Sexta
+vez que falla el punto 5 de la lista de cierre** — y esta vez dentro del mismo commit que
+arreglaba ESCO-112, cuyo tema es esa misma deriva. **No se toco** porque ESCO-112 lleva
+`Requiere aprobacion`, y esa marca anula la clase por completo.
+
+### ORDEN CORRECTO OBSERVADO, vale la pena registrarlo
+La 158 se fusiono (20:43:49 UTC) **y luego** se aplico (20:45:45 UTC). Cero ventana de
+"produccion corre un esquema que `main` no documenta". No hay nada en APLICADO SIN FUSIONAR.
+
+## Racha del viernes (regla de auto-poda del drenaje) — actualizada 2026-09-18
+
+| Corrida | Conjunto elegible | Racha de vacios |
+|---|---|---|
+| 2026-09-04-viernes | 8 elegibles | 0 |
+| 2026-09-11-viernes | 9 elegibles | 0 |
+| **2026-09-18-viernes** | **VACIO** | **1** |
+
+**La auto-poda NO aplica todavia** (hace falta tres seguidos). **Y hay que leer este vacio con
+cuidado antes de sacar conclusiones**: no es que el viernes se haya quedado sin trabajo
+estructuralmente — es que **Santiago drenó el backlog a mano el miercoles** con `8de246e`. Si el
+lunes vuelve a llenarlo, la racha se corta. **No recomendar mover el viernes a mensual sobre la
+base de un vaciado manual puntual.**
