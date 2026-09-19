@@ -44,10 +44,13 @@ import {
 } from "../../calculos-hato.ts";
 import { construirHatoConfigDesdeFilas } from "../../hato-config-desde-tabla.ts";
 import {
-  atribucionDesdeFilaTelegram,
   construirCallbackDeshacerEvento,
   construirCallbackDeshacerTratamiento,
 } from "../eventoHatoUndo.ts";
+import {
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from "../resolverUsuarioTelegram.ts";
 import {
   avisoFechaLejana,
   fechaLegible,
@@ -847,25 +850,16 @@ export async function eventoHatoConversation(
     const guardado = await conversation.external(async () => {
       const sb = getSupabaseAdmin();
       // `ctx.telegramUser` es flavor propio y no sobrevive el replay del
-      // plugin de conversaciones (hallazgo 2026-08-28 en excepcionDavid).
-      // `ctx.from.id` sí es nativo de grammY. Se reconsulta acá, en el
-      // instante de escribir: si se leyera al entrar al flujo, un replay
-      // tardío dejaría created_by y registrado_por en NULL — que es lo
-      // que quedó en las dos filas de Martha del 2026-09-08.
-      const telegramId = ctx.from?.id;
-      let filaTelegram: { usuario_id: string | null; nombre_display: string | null } | null =
-        null;
-      if (telegramId != null) {
-        const { data: tgUser } = await sb
-          .from("telegram_usuarios")
-          .select("usuario_id, nombre_display")
-          .eq("telegram_id", telegramId)
-          .eq("activo", true)
-          .maybeSingle();
-        filaTelegram = (tgUser as { usuario_id: string | null; nombre_display: string | null } | null) ??
-          null;
+      // plugin de conversaciones (hallazgo 2026-08-28 en excepcionDavid;
+      // issue #273). `ctx.from.id` sí es nativo de grammY. Se reconsulta
+      // acá, en el instante de escribir: si se leyera al entrar al flujo,
+      // un replay tardío dejaría created_by y registrado_por en NULL —
+      // que es lo que quedó en las dos filas de Martha del 2026-09-08.
+      const resuelto = await resolverUsuarioTelegram(sb, ctx.from?.id);
+      if (!resuelto.ok) {
+        throw new Error(mensajeResolverUsuarioTelegram(resuelto.motivo));
       }
-      const { usuarioId, nombreDisplay } = atribucionDesdeFilaTelegram(filaTelegram);
+      const { usuarioId, nombreDisplay } = resuelto;
 
       // Tratamiento: otra tabla y un solo RPC (138). La cabecera y su paso de
       // seguimiento son dos filas en dos tablas y tienen que quedar juntas —
