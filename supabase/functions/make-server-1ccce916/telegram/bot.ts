@@ -27,6 +27,11 @@ import {
 } from "./eventoHatoUndo.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
 import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
+import {
+  exigirUsuarioIdVinculado,
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from "./resolverUsuarioTelegram.ts";
 // `produccionQuincenal` (litros al camión) se retiró del bot -- SOW 3 de
 // docs/plan_hato_produccion_rework.md §2.3: la quincena pasó a ser un
 // registro financiero (`fin_ingreso_id NOT NULL`, migración 070) y el bot
@@ -192,6 +197,11 @@ function getBot(): Bot<BotContext> {
 
   // ==========================================================================
   // AUTH MIDDLEWARE
+  //
+  // `ctx.telegramUser` sirve para "¿estás registrado?" y para los menús de
+  // módulos. NO para atribución de escrituras ni write-gates: grammy
+  // conversations@2 no lleva este flavor al replay (issue #273). Esos
+  // caminos llaman `resolverUsuarioTelegram` por `ctx.from.id`.
   // ==========================================================================
 
   bot.use(async (ctx, next) => {
@@ -1329,10 +1339,14 @@ function getBot(): Bot<BotContext> {
     await ctx.answerCallbackQuery();
     const token = ctx.match?.[1];
     if (!token) return;
-    if (!ctx.telegramUser?.usuario_id) {
-      await ctx.reply("Tu cuenta no está vinculada.");
+    const resueltoMem = exigirUsuarioIdVinculado(
+      await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
+    );
+    if (!resueltoMem.ok) {
+      await ctx.reply(mensajeResolverUsuarioTelegram(resueltoMem.motivo));
       return;
     }
+    const usuarioIdMem = resueltoMem.usuarioId;
     const sb = getSupabaseAdmin();
     // Reach into Esco directly via the in-process executor by calling the
     // edge function endpoint? No — the proposal cache is in-memory inside
@@ -1346,7 +1360,7 @@ function getBot(): Bot<BotContext> {
     // For Phase 3D, we keep it pragmatic: persist directly using the service
     // role. The proposal token expires in 30 min and the service role bypass
     // is acceptable here because the user just tapped ✅ on Telegram.
-    const conversationId = await getOrCreateTelegramConversation(ctx.telegramUser.usuario_id);
+    const conversationId = await getOrCreateTelegramConversation(usuarioIdMem);
     // Rehydrate: find the most recent assistant message whose metadata.tool_interactions
     // contains a propose_memory_save with this token
     const { data: assistantMsgs } = await sb
@@ -1380,7 +1394,7 @@ function getBot(): Bot<BotContext> {
       return;
     }
     const { error } = await sb.from("esco_memorias").insert({
-      user_id: ctx.telegramUser.usuario_id,
+      user_id: usuarioIdMem,
       content: content.slice(0, 1000),
       source_channel: "telegram",
     });
@@ -2433,11 +2447,14 @@ function getBot(): Bot<BotContext> {
     await ctx.replyWithChatAction("typing");
 
     try {
-      const userId = ctx.telegramUser.usuario_id;
-      if (!userId) {
-        await ctx.reply("Tu cuenta no está vinculada a un usuario del sistema.");
+      const resueltoEsco = exigirUsuarioIdVinculado(
+        await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
+      );
+      if (!resueltoEsco.ok) {
+        await ctx.reply(mensajeResolverUsuarioTelegram(resueltoEsco.motivo));
         return;
       }
+      const userId = resueltoEsco.usuarioId;
 
       // Persist conversation
       const conversationId = await getOrCreateTelegramConversation(userId);
