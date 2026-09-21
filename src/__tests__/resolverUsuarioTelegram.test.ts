@@ -123,7 +123,8 @@ describe('mensajeResolverUsuarioTelegram', () => {
 
 describe('resolverUsuarioTelegram', () => {
   it('resuelve a Fernando por telegram_id activo', async () => {
-    const visto = { eqs: [] as Array<[string, string | number | boolean]> };
+    const visto: { tabla?: string; columnas?: string; eqs: Array<[string, string | number | boolean]> } =
+      { eqs: [] };
     const r = await resolverUsuarioTelegram(
       clienteMock({ fila: FERNANDO, visto }),
       4242,
