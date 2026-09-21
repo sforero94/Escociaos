@@ -75,39 +75,66 @@ export function evaluarDeriva({ desplegadoEnMs, commitISO }) {
 }
 
 /**
- * Segunda señal, INDEPENDIENTE DEL RELOJ (hallazgo ESCO-66). El chequeo de
- * arriba compara fechas: si un despliegue exitoso vuelve a publicar el MISMO
- * contenido viejo, `updated_at` y `version` avanzan igual (pasó dos veces en
- * tres días: v223 el 2026-08-28 y v236 el 2026-08-30) y el chequeo de reloj
- * dice "sin deriva" sobre una regresión real.
+ * Segunda señal, independiente del reloj (hallazgo ESCO-66 / issue #271).
  *
- * `ezbr_sha256` es el hash del contenido REALMENTE desplegado (lo confirma
- * `list_edge_functions`/`get_edge_function` de la Management API). Un
- * despliegue que no lo mueve no publicó nada nuevo, sin importar qué diga el
- * reloj: "un despliegue que no mueve el hash no desplegó nada" — regla ya
- * establecida por esta operación. Se compara contra el estado de la corrida
- * ANTERIOR (persistido en el repo), nunca contra el propio commit actual —
- * no hay forma de derivar el hash "correcto" sin re-construir el bundle.
+ * `ezbr_sha256` es el hash que la Management API reporta para el bundle
+ * publicado. Se compara contra el estado de la corrida ANTERIOR (persistido
+ * en el repo), nunca contra el propio commit actual — no hay forma de derivar
+ * el hash "correcto" sin re-construir el bundle, y no se inventa un
+ * sustituto local.
  *
- * @param {{ hashActual: string, commitActual: string, estadoPrevio: { commit: string, hash: string } | null }} entrada
- * @returns {{ hayDerivaPorHash: boolean, motivo: string }}
+ * No tratar commit↑ + hash igual como fallo duro cuando el reloj ya dice
+ * que no hay deriva. `ezbr_sha256` PUEDE no moverse aunque se publique un
+ * bundle nuevo (Management API sticky: 2026-09-18, version 261→263,
+ * `updated_at` avanzó, hash quedó en a9fe8807…, y el bundle nuevo sí estaba
+ * vivo). Fallar ahí es el falso positivo de #271.
+ *
+ * El reloj sigue siendo la guarda que sí falla: si `updated_at` es anterior
+ * al último commit del árbol, hay deriva de despliegue. Un republicado del
+ * bundle viejo con reloj verde queda como aviso, no como exit 1.
+ *
+ * @param {{ hashActual: string, commitActual: string, estadoPrevio: { commit: string, hash: string } | null, hayDerivaReloj?: boolean }} entrada
+ * @returns {{ hayDerivaPorHash: boolean, aviso: boolean, motivo: string }}
  */
-export function evaluarDerivaPorHash({ hashActual, commitActual, estadoPrevio }) {
+export function evaluarDerivaPorHash({
+  hashActual,
+  commitActual,
+  estadoPrevio,
+  hayDerivaReloj = false,
+}) {
   if (!estadoPrevio) {
-    return { hayDerivaPorHash: false, motivo: 'sin estado previo, primera corrida: se siembra la línea base' };
+    return {
+      hayDerivaPorHash: false,
+      aviso: false,
+      motivo: 'sin estado previo, primera corrida: se siembra la línea base',
+    };
   }
   const commitCambio = estadoPrevio.commit !== commitActual;
   const hashIgual = estadoPrevio.hash === hashActual;
   if (commitCambio && hashIgual) {
+    // Hash sticky: la API no movió ezbr_sha256. Solo es deriva de contenido
+    // cuando el reloj TAMBIÉN dice que producción está atrás del árbol.
+    if (!hayDerivaReloj) {
+      return {
+        hayDerivaPorHash: false,
+        aviso: true,
+        motivo:
+          `AVISO: el árbol desplegado tiene un commit nuevo (antes ${estadoPrevio.commit}, ahora ` +
+          `${commitActual}) pero ezbr_sha256 no cambió (${hashActual}). ` +
+          `La Management API puede devolver un hash sticky aunque el bundle sí se haya publicado; ` +
+          `el reloj no marca deriva, así que no se trata como fallo de contenido`,
+      };
+    }
     return {
       hayDerivaPorHash: true,
+      aviso: false,
       motivo:
         `el árbol desplegado tiene un commit nuevo (antes ${estadoPrevio.commit}, ahora ` +
         `${commitActual}) pero el hash del contenido publicado no cambió (${hashActual}) — ` +
         `el despliegue republicó el mismo bundle viejo`,
     };
   }
-  return { hayDerivaPorHash: false, motivo: 'hash coherente con el commit del árbol' };
+  return { hayDerivaPorHash: false, aviso: false, motivo: 'hash coherente con el commit del árbol' };
 }
 
 /**
@@ -231,10 +258,11 @@ async function main() {
 
   const rutaEstado = rutaEstadoDriftPorHash(funcion);
   const estadoPrevio = leerEstadoPrevio(rutaEstado);
-  const { hayDerivaPorHash, motivo } = evaluarDerivaPorHash({
+  const { hayDerivaPorHash, aviso, motivo } = evaluarDerivaPorHash({
     hashActual: hash,
     commitActual: commitSha,
     estadoPrevio,
+    hayDerivaReloj: hayDeriva,
   });
   escribirEstadoActual(rutaEstado, { commit: commitSha, hash });
 
@@ -245,6 +273,9 @@ async function main() {
   console.log(`chequeo hash  : ${motivo}`);
 
   if (!hayDeriva && !hayDerivaPorHash) {
+    if (aviso) {
+      console.warn(`\n${motivo}.`);
+    }
     console.log('\nOK: sin deriva de reloj y sin deriva de contenido.');
     return;
   }
