@@ -23,6 +23,92 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-09-21 — corrida lunes
+
+A clean release week. 15 PRs merged (#248–#274), nine migrations applied (147, 151, 152,
+153, 154, 155, 156, 157, 158) and four edge-function deploys, ending at **v264 on
+2026-09-19 at 15:43 UTC — 66 seconds after the commit that needed it**. The deployed
+bundle hash matches the repo state file, the two edge trees are byte-identical across 74
+files, and nothing is waiting on a manual deploy. This section also covers the 2026-09-17
+Thursday and 2026-09-18 Friday runs, whose sections were never written.
+
+### Tablero General
+- **"Novedades" replaces "Acciones recomendadas".** The daily LLM engine is retired: its
+  cron no longer runs, its `/acciones/tick` route is gone, and its four tables are kept
+  untouched as historical evidence. Its code was archived rather than deleted, in
+  `archive/acciones-recomendadas/`. The new feed is live and in use — 23 interactions by
+  two accounts between 2026-09-17 16:32 UTC and 2026-09-20 05:00 UTC. (issue #266, PR
+  #267, migrations 155 and 156)
+
+### Clima
+- The figure the screen called "horas-sol" was daily energy in kWh/m², not time. Sunshine
+  is now measured as hours with radiation at or above 120 W/m² and shown separately; the
+  energy figure keeps its own, correct label. (PR #250, migration 151)
+- A day with too few readings no longer reports a fabricated `0.00` hours of sun — it
+  reports no data. 2026-09-16 (11 readings) and 2026-09-17 (189) are now blank, while
+  09-18, 09-19 and 09-20 carry 9.42, 8.58 and 9.25 hours on full coverage. (PR #269,
+  migration 158, ledger `20260917204545`)
+
+### Hato Lechero
+- Fernando is the only Telegram recipient of the secado and tratamiento alerts. The tick
+  had been sending them to Gerencia as well, with 48-hour escalation on top. (PR #251,
+  migration 152)
+- Uploading a chequeo no longer creates a second copy of a service already registered by
+  Telegram on the same day. The date boundary excluded exactly the day of the visit.
+  (PR #259)
+- The 2026-09-08 vet check was corrected against the paper planilla: real service dates
+  for seven cows, the right bull for two more, four duplicate treatments removed, one
+  treatment that was never captured added, and **#177 (MOTONETA) and #178 (COMINA)
+  reactivated** — both were written off in the August inventory cleanup but are alive and
+  were served in September. (migrations 153 and 154)
+- A row the planilla could not anchor to a cow is now promoted for review instead of being
+  dropped, and the printed planilla always carries ten spare rows. (PR #260)
+- A QA test chequeo dated 2020-01-15 was removed from production. (migration 157)
+
+### Telegram
+- Every write path — jornal, gasto, ingreso, monitoreo, pesaje, evento, ronda — resolves
+  who is writing from `telegram_usuarios`. `/pesaje` had been treating Fernando as an
+  unlinked user, which is why milk weighing had stalled. (PR #274)
+- A gasto captured by Telegram after 19:00 Bogotá no longer saves with tomorrow's date.
+  (PR #267)
+
+### Finanzas
+- Saving a gasto or ingreso dated more than a day ahead asks for confirmation in the batch
+  grids as well as the dialogs. A date like 14/12/26, which has only one reading, no longer
+  triggers the ambiguity question. (PR #264)
+
+### Inventario
+- Resolving a count difference with a supporting document now asks David for the physical
+  count, separately from the movement quantity. The two are different numbers, and the
+  voice interpreter's figure used to survive all the way into the closing report — that is
+  what made the "three bags of 15-15-15" correction necessary. (migration 147, ledger
+  `20260916154436`)
+
+### Interno
+- `informes-visita-proponer` was retired as a separate edge function; the browser now calls
+  its twin on `make-server-1ccce916`. One function is deployed where there were two.
+  (PR #264)
+- The hato alert tick and the 5-minute clima sync retry PostgREST 504s instead of dying
+  mid-run. (PR #265)
+- The maintenance operation's Supabase reads and Notion access moved to Composio, leaving
+  `Supabase_Escritura` as the sole write exception. (PR #248)
+
+### Requiere despliegue manual
+- Nothing. `make-server-1ccce916` is at v264 and its published hash (`7139fbad…`) matches
+  the last commit that touched the deployed tree.
+
+### Known holes in this record
+- Migrations **155** and **156** are live in production with **no row** in
+  `supabase_migrations.schema_migrations` — applied outside `apply_migration`, the same
+  path as 035–039, 041, 046 and 093. Verified against the live catalog instead:
+  `novedades_uso` and `fn_novedades_autores` exist, and the `acciones-recomendadas-tick`
+  cron is gone.
+- Migration **147** was applied by hand. Its file still cannot run: the post-condition
+  looks for `'Ajuste'` in single quotes while the body writes `"Ajuste"` in double quotes
+  (ESCO-112). Do not re-run the file.
+- `main` shipped **red** on 2026-09-19 (`a5e5987`) and deployed 66 seconds later. Two days
+  of red typecheck and one failing test followed. Fixed in PR #275, opened by this run.
+
 ## 2026-09-14 — corrida lunes
 
 18 PRs merged (#229–#246) and migrations 142, 146, 148 and 149 applied in the 2,3 days

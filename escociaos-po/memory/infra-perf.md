@@ -556,3 +556,30 @@ Hecho completo, con la refutacion que lo acompana, en `_compartida.md`
   perdio escritura, no gano. Falla del lado seguro.
 - El carril `ddl_aditivo` del viernes queda inerte hasta que Santiago lo restaure en la Routine.
   **Ningun rodeo por Composio** (`CLAUDE.md` §6/§12 lo prohiben en cualquier fase).
+
+## Corrida 2026-09-21-lunes
+
+### Estados aceptados (nuevos)
+- **Las migraciones 155 y 156 NO tienen fila en el ledger y SÍ están aplicadas.** `schema_migrations` salta de `20260916154436` (147) a `20260917204545` (158). La prueba está en el catálogo vivo, no en el ledger: `cron.job where jobname like '%acciones%'` = 0, y `novedades_uso` existe con 23 filas. **Sexta confirmación de que el ledger no es autoritativo. No refilar como «migración sin aplicar».**
+- **El doble `ocr_fallo` de pesaje del 2026-09-20 04:59Z es usuario, no defecto.** Subieron la liquidación de El Pomar por la ruta de pesaje; el mensaje de error pregunta literalmente eso y el usuario se corrigió en 34 s (objeto en `hato-liquidaciones-fotos` a las 05:00:34Z). **No volver a leer un `ocr_fallo` como fallo de tubería sin mirar qué bucket recibió objeto en los 60 s siguientes.**
+- **`acciones-recomendadas-tick` confirmado retirado.** `cron.job` tiene **5 jobs, no 6**; 5/5 `active` es el estado sano y la línea base de 6/6 queda superada.
+- **`list_edge_functions` devolviendo UNA sola función es correcto**: `informes-visita-proponer` sigue retirada desde el 2026-09-16.
+- **La 140 SÍ está desplegada** (ya estaba en `_compartida.md:1539`, reconfirmado): 18 filas `hato_tratamientos` con `fuente='telegram'` entre 09-09 y 09-12. El `CLAUDE.md:378` que dice lo contrario es el hallazgo ESCO-118, no una duda técnica.
+
+### Refutación de esta corrida
+- **El hallazgo «monitoreo congelado 26 días» NO se filó, y la razón importa.** Se midió con `max(fecha_inicio)` de `rondas_monitoreo` = 2026-08-26. Pero la ronda R30 **cerró el 2026-09-18** con 44 obs / 12 sublotes, y la cadencia real es de ~33-35 días entre rondas, así que la próxima cae ~09-23/09-30. **`max(fecha_inicio)` no mide abandono; hay que mirar `fecha_fin` y la cadencia.** Usage Analytics lo tenía en su sección «cadencia que NO es abandono». Umbral acordado: **a partir del 2026-10-05 un cero sí es señal.**
+
+### Navegación (nueva)
+- **`net._http_response` NO tiene columna `url`.** Columnas: id, status_code, content_type, headers, content, timed_out, error_msg, created. Para separar endpoints hay que filtrar por `content` (`not like '%Ecowitt%'` aísla lo que no es el sync de 5 min). Ventana viva ~6 h, no 7. **Tres consultas se perdieron esta corrida por asumir `url`.**
+- **`hato_alertas_tick_runs` usa `ejecutado_at`, no `created_at`**, y los contadores son `generadas`/`enviadas`/`escaladas`, sin prefijo.
+- **Verificar el despliegue de edge function cuesta 2 llamadas y es concluyente**: `list_edge_functions` da `ezbr_sha256`, y `scripts/deploy-drift-state/<slug>.json` lo trae del repo. Iguales = cero deriva. No hace falta `get_edge_function` (~1 MB).
+- **La paridad de los dos árboles edge se comprueba con `tail -n +2` + `diff -q` en bucle**: 74 ficheros, 0 diffs reales hoy. **El conteo crudo de `diff -w -q` creció de 16 a 24 ficheros porque los árboles crecieron — el conteo NO es la señal, el diff sin la línea 1 sí.**
+- **Leer `scripts/deploy-drift-state/<fn>.json` POR COMMIT**, no con `git log -p`: este último sólo imprime líneas que cambiaron, así que una corrida donde el hash se mantuvo no muestra línea de hash y la secuencia parece discontinua. La forma por-commit es la que destapó el falso positivo del 09-18 (ESCO-126).
+
+### Baselines 2026-09-21
+DB **124 MB** / 8 GB (18/60 conexiones) — **80 de los 124 son bloat de plataforma**: `net._http_response` 59 MB / 72 filas vivas y `cron.job_run_details` 21 MB / 0 tuplas vivas (crece ~2 MB/semana). Storage **251 MB / 300 objetos** en 8 buckets: reportes-semanales 121 MB/55, **informes-visita 59 MB/201 (el que más rápido crece)**, chequeos-fotos 43 MB/10, hato-liquidaciones 13 MB/13, hato-pesajes 10 MB/13.
+Edge **v264** (2026-09-19T15:43:43Z), `ezbr_sha256` **`7139fbadbb26a16458ef1a04db000560764b586a0d04cbaa75426669ad218b6d`** = commit `a5e5987`, **deriva 0, desplegada 66 s después del commit**. Vercel **5/5 READY**, prod alias = HEAD `1672794`, build 31,7 s.
+**5 pg_cron activos, TODOS verificados a HTTP 200 en `net._http_response`** (no en la señal verde de `cron.job_run_details`, que miente). Clima: última lectura 2026-09-21 11:10:01Z, **288 lecturas/24 h**, `lecturas_count` 09-18/19/20 = 288/287/288.
+**Estación RECUPERADA** tras el corte: silencio actual 0,03 h. **Perdidos permanentemente 2 días**: 09-16 (11 lecturas) y 09-17 (189), ambos sellados `cobertura_parcial`.
+`hato_alertas_tick_runs`: **7 corridas `ok` seguidas** (09-15..09-21), 179 animales, 1.643–2.428 ms. **ESCO-106 y ESCO-97 aguantan.**
+Rendimiento: ninguna consulta de aplicación por encima de ~100 ms de media. La mayor real es `fn_clima_rollup_diario()` a 205,3 ms × 59 llamadas, una vez al día.

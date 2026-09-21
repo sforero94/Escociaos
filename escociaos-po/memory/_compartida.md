@@ -1914,3 +1914,28 @@ cuidado antes de sacar conclusiones**: no es que el viernes se haya quedado sin 
 estructuralmente — es que **Santiago drenó el backlog a mano el miercoles** con `8de246e`. Si el
 lunes vuelve a llenarlo, la racha se corta. **No recomendar mover el viernes a mensual sobre la
 base de un vaciado manual puntual.**
+
+## 2026-09-21-lunes — hechos transversales
+
+### El preflight de Fase 0 volvió a pagar, y esta vez el hallazgo es de la propia operación
+- **`apply_migration` SIGUE ausente del conector `Supabase_Escritura`** — tercera corrida seguida (viernes 09-18, y re-verificado hoy). El manifiesto lista 13 herramientas y ninguna es ésa. **Monday nunca escribe, así que no bloqueó nada hoy.** Se añadió como evidencia a ESCO-114 en vez de filar un duplicado.
+- **El prompt almacenado de la Routine del lunes afirma literalmente «A `Supabase_Escritura` connector is attached and exposes `apply_migration` and nothing else».** Las dos mitades son falsas. La misma afirmación está en `escociaos-po/CLAUDE.md` líneas 343 y 620. **Arreglar el conector no arregla los tres textos.**
+- Todo lo demás del preflight, verde: 4/4 toolkits `active`; `supabase_bitis-coward` devuelve **exactamente 1 proyecto** (`Escocia OS`, `ywhtjwawnkeqlwxbvgup`, ACTIVE_HEALTHY, PG 17.6.1.042); `SELECT current_user` → **`supabase_read_only_user`**. **Cero prompts de permiso en toda la corrida.**
+
+### La plantilla de despacho estaba incompleta — hallazgo contra la operación (ESCO-120)
+`runbooks/run-lunes.md` paso 8 exige DOS conjuntos: el de deduplicación (`Estado != Done`) **y el de no-refilar** (`Resolucion = Aceptado (no se arregla)` o `Refutado`). **`CLAUDE.md` §3 paso 3 sólo menciona el primero.** Despaché 5 de 6 agentes sin el segundo y tuve que mandarlo después por `SendMessage`. Funcionó —Data Integrity confirma explícitamente que honró ESCO-100/101/103/104/107/111— **pero funcionó porque lo noté, no porque la plantilla lo produjera.**
+**Importa más ahora que antes**: el drenaje del viernes dejó el tablero en 1 fila, así que el conjunto de deduplicación está casi vacío mientras el de aceptados es grande (**9 cerrados como «Aceptado (no se arregla)» en 7 días**). **El conjunto de no-refilar es hoy el más cargado de los dos, y es el que la plantilla olvida.**
+
+### La consolidación mató un P2, y el método vale guardarlo
+Infra filó «monitoreo congelado 26 días» midiendo `max(fecha_inicio)` de `rondas_monitoreo` = 2026-08-26. Usage Analytics tenía el dato que lo refuta: **la ronda R30 cerró el 2026-09-18** con 44 obs / 12 sublotes, y la cadencia real entre rondas es de ~33-35 días. **`max(fecha_inicio)` no mide abandono.** No se filó. Umbral acordado y anotado en las dos memorias: **a partir del 2026-10-05 un cero sí es señal.**
+
+### Un P1 verificado por reproducción independiente en vez de por un refutador
+`main` llevaba dos días en rojo y **lo encontraron Bug Triage y Usage Analytics por separado**, cada uno corriendo las tres comprobaciones desde su propio worktree, con resultados idénticos. Para una afirmación que es un código de salida —no una inferencia— **la reproducción mutua es evidencia más fuerte que una pasada de refutación**, y gastar un agente en «¿de verdad falla `npm test`?» habría sido desperdicio. Se filó como P1 diciendo esto explícitamente. **El precedente aplica sólo a afirmaciones mecánicamente comprobables; una inferencia sigue necesitando su refutador.**
+
+### La receta de worktrees se ganó su sitio otra vez
+Un `npm ci` en el checkout principal + 6 `git worktree add` con `node_modules` simbolizado. **Cuatro agentes corrieron lint/typecheck/suite en paralelo sin colisionar, y el rojo de dos días salió en los primeros minutos.** Es exactamente el escenario del hallazgo #92. Coste: ~2 min. Limpieza: `git worktree remove --force <path>` + `git worktree prune`.
+
+### Trampas de herramienta de esta corrida (transversales)
+- **`NOTION_QUERY_DATABASE_WITH_FILTER` sin filtro sobre esta base devuelve ~429k tokens** y va al workbench. **Filtrar siempre** (`{"property":"Estado","status":{"does_not_equal":"Done"}}` da el conjunto abierto en una sola llamada pequeña) o procesar con `COMPOSIO_REMOTE_BASH_TOOL` + `jq` sobre el fichero guardado. La línea que extrae el tablero compacto: `jq -r '.results[0].response.data.results[] | [(.properties.ID.unique_id.prefix + "-" + (.properties.ID.unique_id.number|tostring)), .properties.Severidad.select.name, .properties.Estado.status.name, (.properties.Resolucion.select.name // "-"), (.properties.Hallazgo.title[0].plain_text // "-")] | @tsv'`
+- **`Severidad` usa raya larga**: `P1 — Alto`, `P2 — Medio`, `P3 — Bajo`. `Estado` es `status`, no `select`.
+- **`net._http_response` no tiene columna `url`** y **`cron.job_run_details` no tiene `jobname`**. Las dos costaron round-trips.
