@@ -125,3 +125,48 @@ frente al despliegue**:
    no hay carril de migración que las pueda aplicar; `apply_migration` corre como
    `postgres`, que no es dueño de esa tabla (precedente 109). Van por el panel.
 4. **Identificar las dos fotos** de ESCO-123.
+
+---
+
+## Aplicación a producción — 2026-09-21
+
+Santiago dio el `go` y pidió **un solo `functions deploy` al final**, no varios. Eso
+encaja: las cuatro migraciones van primero de todos modos, y el deploy sólo lo necesitan
+la 160 y la 162.
+
+Orden elegido: **cero filas de dominio primero**, para validar el carril de escritura por
+Composio antes de tocar datos.
+
+| Orden | Mig. | Ledger | Filas de dominio | Verificación independiente |
+|---|---|---|---|---|
+| 1 | **160** | `20260921152648` | 0 | CHECK admite `liquidacion`, `periodo_pesaje` intacto, 10 CHECK, 5 filas, privilegios sin cambio |
+| 2 | **162** | `20260921152928` | 3 | 0 con llave `gastos`, `ingresos` intacto en 2, respaldo de 5 filas con RLS y sin grants |
+| 3 | **159** | `20260921153155` | 11 | respaldo de 11, 09-17 y 08-27 en NULL, **19 días gruesos conservan radiación y lluvia**, wunderground 1.757 intacto |
+| 4 | **161** | `20260921153529` | 0 | reparto de roles **idéntico** a la base previa: 24 / 6 / 15, cero sin helper |
+
+**`get_advisors` sin hallazgos nuevos.** Los 42 `rls_enabled_no_policy` son todos de
+`respaldos.backup_*` —incluidos los dos nuevos—, que es el estado final buscado de la 081.
+Los dos `anon_security_definer` sobre los helpers son el accept permanente de la 082.
+
+### La verificación que más valió
+
+Transferir 50 KB de SQL a mano tiene riesgo de transcripción, y el peligro no es un error
+de sintaxis —eso aborta y revierte— sino un predicado **válido pero distinto**, que
+ampliaría o recortaría accesos en silencio. Por eso, **antes** de aplicar la 161 capturé
+el reparto por roles de las 45 políticas. Después de aplicar, el reparto es exactamente el
+mismo: **24 admin+gerencia · 6 sólo Administrador · 15 sólo Gerencia**, cero sin helper.
+Eso prueba que `fin_proveedores` siguió siendo sólo Administrador y que ninguna política
+de un solo rol se fusionó.
+
+Lo mismo para la 159, donde lo que decide bien o mal son constantes: verifiqué en el
+cuerpo vivo el umbral de hueco **45**, el de sol **120**, las tolerancias **0,5** y
+**10 %**, y las bandas de cadencia **4–7** y **25–35**.
+
+### Lo que sigue sin poder hacerse desde acá
+
+**El backfill de ESCO-121 no lo puedo disparar**: `/clima/backfill` exige el secreto
+compartido `CLIMA_SYNC_SECRET` o un JWT de Gerencia, y no manejo secretos. **Pero una
+parte se drena sola**: el cron `clima-reintento-sin-dato` (migración 121, jobid 8, activo,
+06:00 Bogotá) le vuelve a preguntar a Ecowitt por los días de los últimos 21 que sigan sin
+dato confiable. La cola reciente se recupera sin intervención; los días más viejos, dentro
+de la ventana de 90 días de Ecowitt, necesitan un disparo manual.
