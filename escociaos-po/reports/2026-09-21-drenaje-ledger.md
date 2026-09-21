@@ -77,6 +77,28 @@ El hueco real es otro y no es una línea: falta el enlace entre la carga y la fi
 dominio que escribió. No se filó — la 146 tiene 8 días y hay 5 filas. Condición de
 disparo anotada.
 
+## Veredictos finales de las cuatro migraciones
+
+| Mig. | Ficha | Veredicto | Correcciones | Filas de dominio |
+|---|---|---|---|---|
+| 159 | ESCO-116 + 121 | `SAFE WITH CORRECTIONS` | 3, aplicadas | UPDATE sobre **11** |
+| 160 | ESCO-115 | `SAFE WITH CORRECTIONS` | 3, aplicadas | **cero** |
+| 161 | ESCO-119 | `SAFE` | ninguna | **cero** |
+| 162 | ESCO-117 | `SAFE WITH CORRECTIONS` | 7, aplicadas | UPDATE sobre **3** |
+
+La 162 fue la más cargada, y por una razón que vale guardar: **reintrodujo el literal de
+padrón que 103, 120 y 133 ya habían prohibido** — tres guardas comparando por igualdad
+contra una población que Gerencia escribe desde Configuración → Telegram. La
+pre-condición se negaba a correr si no había exactamente 3 filas con la llave, o sea
+justo cuando hay **más** que limpiar. Es el veredicto de la 120 al pie de la letra, y es
+la cuarta vez que el mismo error entra por la puerta.
+
+Su otra corrección sustantiva **refutó una evidencia del encabezado**: justificaba el
+costo cero por `created_by`, y eso no prueba nada porque el insert borrado sí ponía
+autor. La evidencia que sostiene la conclusión es otra — las **4.534 de 4.534** filas de
+`fin_gastos` están en `Confirmado` y el flujo borrado escribía `Pendiente` fijo.
+Verificado en vivo.
+
 ## Orden de aplicación — NO es uniforme
 
 Las cuatro migraciones son independientes entre sí, pero **dos tienen orden opuesto
@@ -86,8 +108,12 @@ frente al despliegue**:
   `tipo='liquidacion'`. Al revés, el INSERT viola el CHECK, y `registrarCapturaFoto`
   devuelve `null` sin lanzar: la carga perdería en silencio justo la instrumentación
   que la migración agrega.
-- **162 → deploy PRIMERO, migración después.** Al revés queda una ventana con el
-  comando registrado y la llave ya retirada.
+- **162 → también migración PRIMERO.** El borrador recomendaba deploy-primero y la
+  revisión lo dio vuelta; se verificó y es correcto invertirlo. Las dos ventanas son
+  inofensivas —ningún camino escribe—, así que el desempate es otro: la llave **es** la
+  autorización, y desplegar primero la deja **imposible de quitar desde la interfaz y
+  reescribiéndose sola**, porque el formulario se siembra desde la fila, las casillas
+  salen de `TELEGRAM_MODULES` y `handleSubmit` reescribe el arreglo entero.
 
 ## Pendiente de Santiago
 
