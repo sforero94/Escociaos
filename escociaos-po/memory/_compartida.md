@@ -2006,3 +2006,68 @@ cuando `claude/po-rls-161` se empujó. Es el mismo error que ya forzó tres renu
 (ver la entrada de la 144 en CLAUDE.md). **El barrido se corre en el momento de elegir el
 número, y nunca se cita de un encabezado ajeno ni de memoria** — y tiene que incluir las
 ramas de `origin`, que no están ni en el ledger ni en `respaldos`.
+
+---
+
+## Aplicar migraciones por Composio — lo aprendido el 2026-09-21
+
+Primera vez que el carril autónomo escribió a producción por
+`SUPABASE_APPLY_A_MIGRATION` (ESCO-114). Cuatro migraciones aplicadas: 159, 160, 161, 162.
+Lo que hay que saber antes de la próxima:
+
+### 1. `apply_migration` SÍ envuelve en una transacción. Queda probado.
+
+No es una suposición heredada: la 160 arranca con
+`CREATE TEMP TABLE _base_160 ON COMMIT DROP` y su precondición la lee después. Si no
+envolviera, la tabla temporal moriría al terminar el `CREATE` y el `DO` abortaría con
+«relation does not exist» **antes de cualquier DDL**. Corrió limpio. Y la 159 usa
+`set_config(..., is_local => true)` leído en la post-condición, que también exige
+transacción.
+
+**Consecuencia práctica: un fichero NO debe traer `BEGIN;`/`COMMIT;` propios.** El
+`COMMIT;` cerraría la transacción EXTERNA y lo que viniera después correría fuera de ella,
+donde ninguna guarda posterior puede revertirlo. Sólo 4 de 167 ficheros del directorio los
+traen, y ninguna de las últimas aplicadas.
+
+### 2. El «Migration applied successfully» del carril NO es verificación.
+
+Devuelve `{"message": "Migration applied successfully. Response data: []"}` y nada más.
+No dice cuántas filas tocó ni si las guardas pasaron. **Siempre verificar aparte con el
+conector de solo lectura**, y contra el catálogo vivo — no contra el encabezado del
+fichero.
+
+### 3. El riesgo de transferir SQL a mano NO es el error de sintaxis.
+
+Un error de sintaxis aborta y revierte: es el caso benigno. El caso peligroso es un
+predicado **válido pero distinto**, que amplía o recorta accesos en silencio y pasa las
+guardas. Con 45 `ALTER POLICY` casi idénticas eso es una amenaza real.
+
+**La defensa que funcionó: capturar una LÍNEA BASE SEMÁNTICA antes de aplicar.** Para la
+161 conté el reparto por roles de las 45 políticas —24 admin+gerencia, 6 sólo
+Administrador, 15 sólo Gerencia— y después de aplicar volví a contarlo. Idéntico, cero sin
+helper. Eso prueba lo que las guardas del fichero NO prueban: que `fin_proveedores` siguió
+siendo sólo Administrador y que ninguna política de un rol se fusionó.
+
+Para una función, el equivalente es verificar **las constantes vivas** una por una. En la
+159: umbral de hueco 45, sol 120, tolerancias 0,5 y 10 %, bandas 4–7 y 25–35.
+
+### 4. Orden de aplicación: las de CERO filas de dominio primero.
+
+Valida el carril y el tamaño de carga antes de tocar datos. 160 (0) → 162 (3) → 159 (11)
+→ 161 (0 pero 50 KB). Los ficheros no tienen dependencias entre sí, así que el orden es
+libre y conviene usarlo para reducir riesgo.
+
+### 5. Lo que NO se puede hacer desde acá: nada que exija un secreto.
+
+El backfill de clima (`POST /clima/backfill`) exige `CLIMA_SYNC_SECRET` o un JWT de
+Gerencia. **No se manejan secretos**, así que ese paso es de Santiago. Igual para
+`npx supabase functions deploy`. **Antes de prometer un paso, comprobar si necesita
+credencial** — el carril de migraciones no las da.
+
+### 6. Las entradas de CLAUDE.md se escriben EN LA MISMA SESIÓN, por migración.
+
+No al final y no en lote: es el paso que 120, 133, 137 y 141 se saltaron, y por eso
+estuvieron marcadas «SIN APLICAR» durante días estando vivas. Y van contra
+`supabase_migrations.schema_migrations`, nunca contra el encabezado del fichero. **Dos de
+las cuatro (159 y 160) ni siquiera tenían entrada en la lista** — el PR nunca la agregó.
+Revisar que exista, no sólo que diga «aplicada».
