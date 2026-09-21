@@ -149,12 +149,4 @@ export function parsearCallbackDeshacerTratamiento(data: string): { tratamientoI
   return { tratamientoId: m[1].toLowerCase() };
 }
 
-/** Atribución que el bot escribe con service_role (auth.uid() es NULL). */
-export function atribucionDesdeFilaTelegram(
-  fila: { usuario_id: string | null; nombre_display: string | null } | null,
-): { usuarioId: string | null; nombreDisplay: string | null } {
-  return {
-    usuarioId: fila?.usuario_id ?? null,
-    nombreDisplay: fila?.nombre_display ?? null,
-  };
-}
+export { atribucionDesdeFilaTelegram } from "./resolverUsuarioTelegram.ts";

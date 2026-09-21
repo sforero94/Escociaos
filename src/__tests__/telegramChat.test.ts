@@ -65,9 +65,14 @@ describe('Telegram Message History', () => {
 // ============================================================================
 
 describe('Handler de texto libre con persistencia', () => {
-  it('handler debe obtener userId del telegramUser', () => {
-    // The handler should access telegramUser.usuario_id for conversation management
-    expect(botSource).toMatch(/ctx\.telegramUser.*usuario_id|telegramUser.*\.usuario_id/s);
+  it('handler resuelve userId con resolverUsuarioTelegram, no con ctx.telegramUser.usuario_id', () => {
+    const handlerSection = botSource.slice(
+      botSource.indexOf('bot.on("message:text"'),
+      botSource.indexOf('bot.api.setMyCommands') || botSource.length
+    );
+    expect(handlerSection).toContain('resolverUsuarioTelegram');
+    expect(handlerSection).toContain('exigirUsuarioIdVinculado');
+    expect(handlerSection).not.toMatch(/ctx\.telegramUser\?\.usuario_id|ctx\.telegramUser\.usuario_id/);
   });
 
   it('handler debe llamar getOrCreateTelegramConversation', () => {

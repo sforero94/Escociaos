@@ -226,3 +226,35 @@ histórica 39-56, **09-08 = 19**. Pesajes: 601, última fecha 2026-08-26. Tratam
 6 pasos. Storage: chequeos-fotos 6 (era 0) · hato-pesajes-fotos 9 · informes-visita 52 ·
 reportes-semanales 53. Ronda de inventario: **1 en toda su historia**, 0 en septiembre.
 `telegram_usuarios`: 5, y **Uriel Parada sigue SIN vincular**.
+
+## Corrida 2026-09-21-lunes
+
+### Pulso 2026-09-15 → 09-21 (sem / prev / prom4s)
+`registros_trabajo` 49 (73 / 69,8) · **`hato_pesajes_leche` 45 (0 / 13,0)** · `hato_chequeo_vacas` 34 (0 / 0,0, recaptura) · **`novedades_uso` 23 (serie NUEVA, nace 09-17)** · `telegram_mensajes` 21 (125 / 61,3) · `chat_messages` 12 (9 / 7,8) · `hato_eventos` 9 (18 / 4,8) · `movimientos_diarios` 7 (3 / 6,3) · **`hato_capturas_foto` 5 (serie NUEVA, 2 de 5 en `ocr_fallo`)** · `informes_visita` 4 (0 / 0,3) · `hato_alertas` 4 (16 / 13,8) · `hato_correcciones` 3 · `hato_pajillas_uso` 2 · `fin_ingresos` 1 · `hato_tratamientos` 1 (26 / 6,5) · `hato_produccion_quincenal` 1 · **ceros**: `fin_gastos` (55 prev), `monitoreos`, `movimientos_inventario`, `rondas_inventario`, `hato_chequeos`, `tareas`, `aplicaciones`, `gan_movimientos`, `reportes_semanales`, `rondas_monitoreo`.
+
+**El número que más se movió**: `hato_pesajes_leche` 0 → 45. La captura vuelve a existir tras dos semanas en cero, pero **por Telegram y con 10 y 17 días de rezago**, y el miércoles 2026-09-16 sigue sin capturar.
+
+**Quién escribe (7d)**: David García 56 (registros_trabajo 49 · movimientos_diarios 7) · Fernando Jiménez 46 (pesajes 45) · Santiago Forero 21 · **Grok Bot 9 (cuenta de pruebas)** · Martha Vega 6. **5 de 10 cuentas — iguala el récord; 4 humanas si se descuenta la de pruebas.** Cero escrituras: Consuelito, Efraín, María Paula, Santiago Admin, Uriel.
+
+### Estados aceptados (nuevos)
+- **`fin_gastos` en 0 después de una semana de 55 es cadencia por lotes. No filar.** Confirmado por tercera vez (09-07, 09-14, 09-21).
+- **`monitoreos` en 0 por tercera semana NO es abandono.** R30 abrió el 08-26 y **cerró el 2026-09-18** con 44 obs / 12 sublotes, nivel normal post-salida de Daniela. Las rondas abren cada ~33-35 días: la próxima cae ~2026-09-23/09-30. **A partir del 2026-10-05, un cero SÍ es señal.** (Infra filó esto como P2 esta corrida midiendo sólo `max(fecha_inicio)`; el orquestador lo mató en consolidación con esta evidencia.)
+- **`hato_chequeos` en 0 es lo esperado hasta ~2026-11-12.** Cadencia 65-71 días, último el 2026-09-08.
+- **Las 4 alertas del hato en `pendiente` (09-15 y 09-16) no se filaron**: n=4 sobre 5 escritores es ruido, y el tick corre `ok` a diario. **Si el 2026-09-28 siguen pendientes, entonces sí.**
+- **ESCO-107/109 siguen ACEPTADAS y la captura RESUMIÓ** — no se re-filaron. Lo que sí se filó es distinto: el fallo específico de la ruta WEB (ESCO-123).
+
+### Navegación (nueva)
+- **`hato_capturas_foto` NO tiene `ronda_id` ni `chequeo_id`.** Columnas útiles: **`creado_en`** (no `created_at`), `tipo` (`pesaje|chequeo`), `origen` (`web|telegram`), `desenlace`, `storage_ok`, `storage_rutas`, `celdas_leidas_ocr`, `celdas_confirmadas`, `filas_escritas`, `detalle`, `created_by`. **`detalle` trae el mensaje de error literal que vio el usuario — leerlo SIEMPRE antes de teorizar sobre un `ocr_fallo`.** `fecha` está NULL en las 5 filas: la instrumentación no guarda para qué fecha escribió.
+- **`novedades_uso` usa `ocurrido_at`, no `created_at`**; columnas `tipo` (`expansion|navegacion`), `fuente_novedad` (tabla de origen, NULL en expansiones), `usuario_id`.
+- **`hato_chequeo_vacas` no tiene `ultima_cria` ni `issues`. `registros_trabajo` no tiene `created_by`** — la atribución vive en **`registrado_por`** (migración 074). Las dos costaron round-trips.
+- **Un pico de `hato_chequeo_vacas` sin fila nueva en `hato_chequeos` es una RECAPTURA**: `fn_hato_commit_chequeo` borra e inserta las vacas del mismo encabezado. Esta semana: 34 filas nuevas, 0 encabezados. **Antes de leerlo como adopción, mirar `hato_chequeos.created_at`.**
+- **`Grok Bot` es una cuenta de `usuarios` con rol Gerencia y los 4 módulos, alta 2026-08-30. Escribe filas indistinguibles de uso humano** (8 de 23 `novedades_uso` y 1 de 5 `hato_capturas_foto` esta semana). **Descontarla de cualquier conteo de adopción** hasta que se decida lo contrario (ESCO-122).
+
+### Baselines
+Hato completitud: **activas 66** (era 65) · sin raza 63 · sin fecha_nacimiento 20 · sin madre 31 · provisionales 0 · fichas completas 1. **Sigue siendo el #56, NO refilar.**
+`hato_alertas` por estado: 83 descartada / 24 confirmada / 10 escalada / 4 pendiente / 2 expirada (123 total). `hato_alertas_tick_runs` corre a diario `ok`, 179 evaluados; generadas 09-15=2, 09-16=2, **cero del 09-17 al 09-21**. El tick NO está caído.
+Chequeos: 9 filas; el del 2026-09-08 pasa de 19 a **34** vacas tras la recaptura del 09-15. **34 de 66 activas = 52%**, contra 39-45 en los ocho históricos (ESCO-124).
+Pesajes: 646 filas, última fecha 2026-09-09, `fuente='telegram'` por primera vez. **Cobertura por sesión descendente seis semanas seguidas: 27, 27, 26, 26, 23, 22.**
+Rondas de monitoreo: R30 inicio 08-26, **fin 2026-09-18**, 44 obs / 12 sublotes. **OJO: R29 sigue con `fecha_fin` NULL (nunca se cerró).**
+Storage por bucket (objetos / nuevos esta semana): informes-visita 201/149 · reportes-semanales 55/0 · hato-pesajes-fotos 13/4 · hato-liquidaciones-fotos 13/1 · chequeos-fotos 10/4 · facturas 5/0 · photos 2/0 · monitoreo-fotos 1/0.
+`informes_visita`: 5 filas / 170 filas de foto / 78 snippets contra 201 objetos = **31 huérfanos**, que son el guardado fallido del 09-03. Esta semana 149 objetos contra 145 filas de foto: sano.

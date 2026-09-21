@@ -480,3 +480,35 @@ silencio es por construccion.** Ventanas de deriva reales medidas: **42 h** (`e2
 - Migraciones hasta 154 aplicadas. 6/6 crons `active`.
 - Cadencia (2,2 dias): 20 commits, 6 PR, 6 migraciones, fix share 5/9 = 55,6%. **Sexta
   ventana seguida con sesgo distinto: sigue sin ser interpretable fuera de la medicion mensual.**
+
+## Corrida 2026-09-21-lunes
+
+### Estados aceptados (nuevos)
+- **Migraciones 155 y 156 están aplicadas SIN fila de ledger**, verificado contra el catálogo vivo (`novedades_uso` + `fn_novedades_autores` existen; `acciones-recomendadas-tick` ausente; `acciones_recomendadas` lleva el COMMENT de retiro). Misma familia que 035–039, 041, 046, 093. **No re-filar como «sin aplicar».**
+- **`cron.job` tiene 5 jobs, no 6.** La 156 desprogramó `acciones-recomendadas-tick` (jobid 6) el 2026-09-17. **La línea base de «6/6 crons activos» queda superada: 5/5 es el estado sano.**
+- **`list_edge_functions` devolviendo exactamente una función es correcto**: `informes-visita-proponer` sigue retirada desde el 2026-09-16.
+- **Paridad de árboles re-verificada: 74 ficheros, 0 diferencias reales** tras quitar la línea `// ARCHIVO:`; `index.tsx` vs `index.ts` idénticos desde la línea 2. **El conteo de `diff -w -q` creció de 16 a 24 porque los árboles crecieron — el conteo NO es la señal, el diff sin la línea 1 sí.**
+
+### Navegación (nueva)
+- **`scripts/deploy-drift-state/<funcion>.json` es un registro de despliegue gratis, y leerlo POR COMMIT gana a leer su `git log -p`.** `for c in <shas>; do git show $c:scripts/deploy-drift-state/make-server-1ccce916.json; done` da el par `{commit, hash}` en cada corrida; `git log -p` sólo imprime las líneas que cambiaron, así que una corrida donde el hash se mantuvo no muestra línea de hash y la secuencia parece discontinua. **Es lo que destapó el falso positivo del 09-18** (ESCO-126).
+- **`novedades_uso` es la prueba de dominio del bloque Novedades.** Columna **`ocurrido_at`** (no `creado_en`). **Su primera fila precede al commit de fusión por 41m45s** — otro caso de desplegar-antes-de-commitear, ahora del lado frontend.
+- **`cron.job_run_details` no tiene columna `jobname`** — unir a `cron.job` por `jobid`.
+- **Un ref de rama que falla `--is-ancestor` NO prueba que esté sin fusionar.** `cursor/telegram-usuario-lookup-0cc0` falla el test y aun así su contenido está en `main` bajo otro sha (squash merge del #274). **Comparar títulos/cuerpos de commit antes de declarar una rama abandonada.**
+
+### Baselines 2026-09-21
+| Qué | Valor |
+|---|---|
+| Estado de despliegue | HEAD `1672794` · edge **v264, 2026-09-19T15:43:43Z**, hash **`7139fbadbb26a16458ef1a04db000560764b586a0d04cbaa75426669ad218b6d`** — **nuevo punto de comparación** · una sola edge function · frontend al día, probado por dominio · migraciones **hasta 158 aplicadas**, 155/156 sin ledger · **nada pendiente de desplegar** |
+| Lag merge→deploy | **66 s** (`a5e5987` 15:42:37Z → v264 15:43:43Z). Segundo mejor de la historia (récord 25 s). Tercera corrida seguida en verde |
+| Crons | **5/5 `active`** |
+| Cadencia de la ventana (09-14 → 09-21) | 31 commits → **31,5/sem** · 19 aterrizajes first-parent → 19,3/sem · **15 PRs** · **9 migraciones** · fix share **57,1 %** (8 fix / 6 feat) |
+| Cadencia MENSUAL (08-24 → 09-21, 4 sem) | 27,3 commits/sem (109) · 14,8 aterrizajes/sem (59) · fix share **73,2 %** (30 fix / 11 feat), **baja 7,8 pts** desde 81,0 % **con throughput plano** · `docs` 10 de 109 (9 %) vs 30 de 114 (26 %) |
+| Salud del release | `main` **rojo** en `tsc` y en 1 fichero de Vitest desde `a5e5987` (09-19), desplegado 66 s después. **No hay gate de CI de lint/typecheck/test en PR** — sólo `deteccion-deriva-despliegue.yml`. PR #275 lo arregla |
+
+**Lectura de la cadencia mensual, para Code Quality**: el fix share cayó por primera vez desde que se mide, y cayó con el throughput plano — o sea que no es un empujón de features diluyendo el denominador. La advertencia del traspaso del 09-03 sigue en pie pero **más débil, no más fuerte**: la mayoría de los `fix` siguen siendo iteración sobre código escrito días antes (Novedades, la ruta de foto del chequeo, el sol del clima), no regresiones contra código añejo. **Es la primera ventana mensual cuya línea de tendencia vale citar, y la tendencia es levemente favorable.** Entregarlo con ese encuadre, no como «mejoró la calidad».
+
+**Contraseñal que no aparece en los ratios**: lag rápido + sin gate de CI significa que la corrección depende enteramente del autor. La métrica que este rol persiguió tres semanas («el lag es lo importante») está resuelta; **lo que falta es el gate.**
+
+### PRs abiertos al cierre de la corrida
+#275 (0 d, `clean`, abierto por esta corrida — **`main` está rojo hasta que se fusione**) · #272 (3 d, arregla el falso positivo de deriva, ESCO-126) · #270 (4 d, **borrador**, marca la 158 aplicada — plegar ahí también la corrección de `CLAUDE.md:378`, ESCO-118) · #247 (7 d, **estancado sin actividad desde el minuto en que se abrió**, retiene el slot de migración 150) · #228 (10 d, **borrador y con base que NO es `main`** — apunta a `cursor/hato-gestor-alertas-fb81`, 93 commits atrás y no ancestro; **no puede fusionarse nunca así: cerrarlo o reapuntarlo**).
+**Ramas muertas, seguras de borrar**: `cursor/telegram-usuario-lookup-0cc0` (fusionada en contenido como #274) y `cursor/tratamiento-fecha-anio-746a` (fusionada como #214, 100 commits atrás).

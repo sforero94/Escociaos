@@ -71,6 +71,11 @@ import {
   type SemanaPesaje,
 } from "../../importHato/ocrPesaje.ts";
 import { aplicarCorreccionesADiff, interpretarCorreccionPesaje } from "../../importHato/ocrPesajeCorreccion.ts";
+import {
+  exigirUsuarioIdVinculado,
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from "../resolverUsuarioTelegram.ts";
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -231,15 +236,23 @@ export async function pesajeLecheConversation(
   conversation: Conversation<BotContext>,
   ctx: BotContext,
 ) {
-  const usuarioId = ctx.telegramUser?.usuario_id ?? null;
+  // NUNCA `ctx.telegramUser?.usuario_id` -- flavor propio que conversations@2
+  // no lleva al replay (issue #273: Fernando, vinculado, veía "no vinculada"
+  // el 2026-09-19). Se reconsulta `telegram_usuarios` por `ctx.from.id`
+  // (nativo de grammY) dentro de `external()`, cuyo resultado sí sobrevive.
+  const resuelto = await conversation.external(async () =>
+    resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
+  );
+  const atribucion = exigirUsuarioIdVinculado(resuelto);
 
   try {
-    if (!usuarioId) {
+    if (!atribucion.ok) {
       await ctx.reply(
-        "Tu cuenta de Telegram no está vinculada a un usuario del sistema -- avisa a un administrador antes de registrar un pesaje.",
+        mensajeResolverUsuarioTelegram(atribucion.motivo, "registrar un pesaje"),
       );
       return;
     }
+    const usuarioId = atribucion.usuarioId;
 
     const apiKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!apiKey) {

@@ -10,7 +10,10 @@ import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
 import { hoyBogota, leerFecha, restarDias } from "../fechaDDMM.ts";
-import { atribucionDesdeFilaTelegram } from "../eventoHatoUndo.ts";
+import {
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from "../resolverUsuarioTelegram.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -152,26 +155,22 @@ export async function jornalConversation(
   let currentLoteId = "";
   let currentLoteNombre = "";
 
-  // Atribución (F5, issue #266): el bot escribe con service_role, donde
-  // `auth.uid()` es NULL — ni el trigger de la 074 ni ningún otro se
+  // Atribución (F5, issue #266 / #273): el bot escribe con service_role,
+  // donde `auth.uid()` es NULL — ni el trigger de la 074 ni ningún otro se
   // disparan solos. Se busca una sola vez, vía `conversation.external`
   // (cuyo resultado el plugin de conversaciones repite igual en un
   // replay, a diferencia de un flavor propio como `ctx.telegramUser`), y
   // se comparte entre `insertRegistros` y `replaceRegistros`.
-  const filaTelegramJornal = await conversation.external(async () => {
-    const telegramId = ctx.from?.id;
-    if (telegramId == null) return null;
-    const sb = getSupabase();
-    const { data: tgUser } = await sb
-      .from("telegram_usuarios")
-      .select("usuario_id, nombre_display")
-      .eq("telegram_id", telegramId)
-      .eq("activo", true)
-      .maybeSingle();
-    return (tgUser as { usuario_id: string | null; nombre_display: string | null } | null) ??
-      null;
-  });
-  const { usuarioId: registradoPorId } = atribucionDesdeFilaTelegram(filaTelegramJornal);
+  // `usuario_id` NULL en la fila es un desvínculo real (campo sin cuenta
+  // web): se escribe igual, no se inventa un autor.
+  const resueltoJornal = await conversation.external(async () =>
+    resolverUsuarioTelegram(getSupabase(), ctx.from?.id),
+  );
+  if (!resueltoJornal.ok) {
+    await ctx.reply(mensajeResolverUsuarioTelegram(resueltoJornal.motivo));
+    return;
+  }
+  const registradoPorId = resueltoJornal.usuarioId;
 
   // Back signal: returned by ask* functions when the user presses "← Atrás"
   const GO_BACK = Symbol("GO_BACK");

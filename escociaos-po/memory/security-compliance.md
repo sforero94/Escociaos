@@ -347,3 +347,31 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
   idéntico al del 09-07** — ruido, no re-reportar sin cambio de uso.
 - Advisors security: 4 categorías, **ninguna nueva**. `rls_enabled_no_policy` subió a 29 por
   crecimiento de `respaldos`.
+
+## Corrida 2026-09-21-lunes
+
+### Estados aceptados (nuevos)
+- **Las tres tablas nuevas nacieron CERRADAS** (`novedades_uso` mig 155, `hato_capturas_foto` mig 146, `informes_visita`/`_fotos`/`_snippets` mig 134-136): `anon` con cero privilegios en las cinco, escrituras acotadas por rol, `hato_capturas_foto` con `authenticated` en **SELECT solamente**. Es la **5ª corrida seguida** en que el patrón 073/081/101 se aplica solo. No re-barrer salvo tabla nueva.
+- **`hato_alertas_envios` es una 5ª tabla `rls_enabled_no_policy` y es correcta** — deny-all por diseño (mig 096). La lista aceptada pasa de 4 tablas a **5**.
+- **`fn_novedades_autores` (mig 155) valida a su propio llamante**: `RAISE 42501` si `get_user_role()` es NULL, tope de 100 ids, devuelve sólo `id`+nombre. Aparece en el advisor `authenticated_security_definer_function_executable` y **es aceptable**; no re-investigar.
+- **Falso positivo permanente del barrido de secretos**: `escociaos-po/CLAUDE.md:467` contiene el literal `github_pat_` como **marcador de redacción** dentro de la propia regla. No es una fuga.
+- **`uriel@escocia.com` sigue Administrador con `last_sign_in_at` NULL a los 24 días.** Padrón sin cambios: 6 Gerencia + 4 Administrador = 10 activas, 0 inactivas, sin Verificador ni Monitor.
+
+### Refutaciones / correcciones
+- **El hallazgo del hueco de `activo` se filó P2, NO P1** (ESCO-119). El verificador confirmó la estructura y **corrigió los conteos**: son **45 políticas en `public` sobre 31 tablas + 23 en `storage.objects`** = 68, no «50/26 + 18». El total coincidía por casualidad.
+- **La exposición es una VENTANA, no una puerta.** `usuarios.tsx:188-192` — el único camino de desactivación de la app — **también banea la cuenta de auth** (`banDuration = '876000h'`), y `authenticated` no tiene UPDATE sobre `usuarios`. Un baneado no puede iniciar sesión ni refrescar; su token vivo dura hasta `exp` (TTL 1 h). **El agujero indefinido sólo aparece si alguien desactiva por SQL directo, sin baneo** — y ése es el caso que justifica el arreglo.
+- **Refutación intentada y fallida, vale guardarla**: ¿la RLS de `usuarios` ya esconde las filas inactivas? **No.** Su policy SELECT es `id = (SELECT auth.uid()) OR (SELECT get_user_role()) = 'Gerencia'`, y la rama `id = auth.uid()` **no filtra `activo`**, así que una cuenta desactivada sigue viendo su propia fila y el `EXISTS` la encuentra. La RLS aplica **a favor** del desactivado.
+
+### Navegación (nueva)
+- **La consulta que mide el hueco de `activo` va sobre `pg_policy`, NO `pg_policies`** — esta última filtrada a `schemaname='public'` **no ve las 23 de `storage.objects`**, y ése es el error que dejó la nota del 09-14 en 4 políticas cuando eran 68.
+- **Regla general que se gana el sitio**: cuando una migración arregla una primitiva de autorización (la 137 sobre `get_user_role()`), hay que barrer las políticas que **NO la llaman** y hacen el mismo trabajo a mano. El arreglo de la primitiva no las alcanza, y son las que menos se miran porque no aparecen en ningún listado de llamantes.
+- **Escocia OS tiene DOS sistemas de autorización y sólo uno se ve desde el padrón** (ESCO-117): `usuarios.rol`+`modulos_acceso` gobierna el navegador y lo evalúa la RLS; **`telegram_usuarios.modulos_permitidos` gobierna el bot y no tiene FK, CHECK ni trigger que lo ate al primero**. El bot escribe con `SUPABASE_SERVICE_ROLE_KEY`, o sea `rolbypassrls`: **la RLS nunca se evalúa en el camino de Telegram**. Consecuencia de método: **contar el padrón por `usuarios.rol` NO basta para cerrar una brecha latente.**
+- **Mapa de módulos de Telegram a tablas** (`telegram/bot.ts:414-500`): `gastos`→`/gasto`, que escribe `fin_gastos` (estado `Pendiente`, contenido) **Y `fin_transacciones_ganado` (sin estado, entra directo al Flujo de Caja y al COGS path-dependent)**. **Un mismo módulo puede abrir dos caminos de riesgo muy distinto.**
+- **ESCO-96 cubre UNA cosa**: el ascenso de `uriel@escocia.com` a Administrador. **NO cubre `modulos_permitidos`.** No confundir los dos objetos.
+- `src/components/Layout.tsx` tiene ahora **DOS** URLs firmadas de Storage (líneas **471 y 539**), no una.
+
+### Baselines 2026-09-21
+**112 tablas en `public`, 112 con RLS (100%), 314 políticas**, **14 funciones SECURITY DEFINER** todas con `search_path` fijado. Advisors security **45 lints, 4 categorías, ninguna nueva**.
+**Clase always-true — escritura (INSERT/UPDATE/DELETE/ALL): CERO, 3ª corrida seguida** (sólo `reportes_semanales ALL TO service_role`). **Lectura: 67 políticas SELECT `qual=true` TO authenticated sobre 44 tablas**, con `productos` duplicada — filado P3 (ESCO-... SELECT half). Ningún `fin_*`, ni `empleados`/`contratistas`/`usuarios`/`novedades_uso` está en las 67.
+**Ninguna política alcanza `anon` con predicado satisfacible**: 100 apuntan a PUBLIC y todas resuelven por `get_user_role()`/`es_usuario_gerencia()`/`auth.uid()`, NULL para `anon`. La trampa de GRANT de la 081 sigue armada en ~55 tablas legacy pero inalcanzable.
+`npm audit --omit=dev`: 9 vulnerabilidades (2 críticas, 5 altas, 2 moderadas), **conjunto byte-idéntico al 09-07 y al 09-14**. Ruido aceptado.

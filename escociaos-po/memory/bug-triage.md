@@ -645,3 +645,36 @@ escribe en un dia de cobertura parcial.** Filado ESCO-108.
   **El camino correcto es `SUPABASE_GET_PROJECT_LOGS` via Composio** — no reintentar el otro.
 - **`scripts/deploy-drift-state/<slug>.json` es la forma barata de saber QUE commit esta
   desplegado**, y tiene historia en git.
+
+## Corrida 2026-09-21-lunes
+
+### Baseline
+| Qué | Valor |
+|---|---|
+| `main@1672794` | **ROJO EN DOS SITIOS.** `tsc --noEmit` exit 2 (2× TS2339) + vitest 185/1 rojo (`finTransaccionesGanadoEsHatoGuard`). lint verde, 0 errores / **919 warnings** (eran 914 el 09-17). Los dos rojos los metió el PR #274 (`a5e5987`, 2026-09-19), fusionado sin correr typecheck ni la suite |
+| con PR #275 | **186 ficheros / 3.857 tests verde**, tsc limpio, lint 919 warnings |
+
+Ojo con la cuenta de ficheros: bajó de 189/4.048 (09-17) a 186/3.857 por el **archivado** de `acciones-recomendadas` (11 tests movidos a `archive/`, excluido de vitest). **No es pérdida de cobertura.**
+
+### Estados aceptados (nuevos)
+- **`archive/acciones-recomendadas/` NO tiene ni un import vivo.** Barrido sobre `src/`, `supabase/`, `scripts/`: las ~28 apariciones son TODAS comentarios de procedencia. La ruta `/acciones/tick` salió de `index.tsx` Y de `index.ts` de forma simétrica. **No re-auditar el retiro del motor.**
+- **`cursor/tratamiento-fecha-anio-746a` ya está CONTENIDA en `main`** (`--is-ancestor` = YES, 100 commits atrás; aterrizó como PR #214). El nombre sugiere un defecto de año/fecha vivo y **no lo hay**. Rama muerta, no perseguirla.
+- **`cursor/telegram-usuario-lookup-0cc0` está fusionada EN CONTENIDO** aunque falle `--is-ancestor`: `main`'s `a5e5987` lleva título y cuerpo idénticos (squash del PR #274). **Un ref que falla `--is-ancestor` NO prueba que una rama esté sin fusionar — comparar títulos/cuerpos antes de declararla abandonada.**
+- **Los dos árboles de edge function siguen sincronizados** tras el #274 (12 ficheros en cada uno): 74 comparados, 0 diffs reales.
+
+### Navegación — la trampa que costó el rojo de esta corrida
+- **`ALLOWLIST_FROM` de `finTransaccionesGanadoEsHatoGuard.test.ts` está indexada por `fichero:línea`.** Cualquier commit que meta líneas ARRIBA del selector de fincas de `gasto.ts`/`ingreso.ts` pone el guard en rojo con 4 falsos infractores. **Ya pasó TRES veces**: 290 → 308 (#266) y 308 → 311 (#274); `ingreso.ts` 295 → 296 → 299. **Antes de creerle a un fallo de esa guarda, comparar el cuerpo de la consulta entre commits con `git show <commit>:<fichero> | grep -c`** — si el conteo no cambió, la consulta no cambió y el rojo es de numeración. Hay un SEGUNDO `.from("fin_transacciones_ganado")` en cada fichero (gasto.ts:499, ingreso.ts:507) que es el INSERT, y el guard lo excluye solo.
+- **Vitest NO hace typecheck.** Un test puede estar verde y `tsc --noEmit` rojo por el mismo fichero — exactamente lo que pasó con `resolverUsuarioTelegram.test.ts`. **Correr SIEMPRE los tres, nunca inferir typecheck desde la suite.**
+- **`node_modules/.bin/tsc --noEmit 2>&1 | tail -5; echo $?` imprime el código de `tail`, no el de `tsc`.** Mismo falso verde del preflight del 09-17. Redirigir a fichero y leer `exit=$?` en la misma línea.
+- **`node_modules/.bin/vitest run --reporter=basic` falla al cargar el reporter y sale 1 sin correr nada** en esta versión. Invocarlo sin `--reporter`. Y nunca `npx vitest` (segundo modo de falso verde, ya ledgereado).
+- **`git checkout -b` está DENEGADO por el clasificador de auto-mode.** Para abrir un PR sin cambiar de rama: commitear en la rama del propio worktree y `git push origin HEAD:refs/heads/<rama-nueva>`. Verificar después con `git ls-remote origin <rama>` y `git diff --name-only origin/main...HEAD`.
+- **`clima_resumen_diario` NO tiene `temp_max`/`temp_min`**: son `temp_c_max`/`temp_c_min`.
+
+### Clima — el cero fabricado se movió de columna, no se fue
+- La 158 funciona: **29 días parciales, los 29 con `horas_sol_duracion` NULL**. Pero **`radiacion_wm2_avg` y `uv_index_max` siguen poblados en los 29** (ESCO-116). 2026-09-17: 189/288 lecturas → **417,07 W/m²** contra **156,64** de media en días completos (2,66×). Alimenta el informe semanal y su comparación de 4 semanas (o sea los dos lados), Esco (`energia_kwh_m2` lo multiplica) y `ClimaCard`.
+- **DISTINGUIR DOS POBLACIONES dentro de `lecturas_count < 240`**: los días truncados (09-17, 09-16, 08-20, 08-19), donde el promedio SÍ está sesgado, y los días de **48 lecturas exactas** (marzo–mayo) que son días COMPLETOS muestreados cada 30 min por la History API — ahí el promedio es correcto y NULLearlo perdería dato bueno. **Un umbral por CONTEO no los distingue; uno por hueco temporal máximo sí.**
+
+### BUG_REPORT.md
+- No re-verificado línea por línea (presupuesto). Veredictos sin cambio desde el 09-07.
+- **Cabecera obsoleta por segunda vez**: dice «28 reportes … hasta la semana 35»; lo vivo es **30/30 con `url_storage`, último 2026-09-14, semana 37**. Refuerza el veredicto «no reproducible» de la incidencia 6, así que ningún veredicto se mueve. Refresco de cabecera = commit limpio de un fichero para una corrida futura.
+- **La incidencia 3b sigue siendo el único punto abierto** (`fetchDatosReporteSemanal.ts:511-522`, inventario consumido valorado en $0). Es `clase: decision`, de Santiago, no un PR.

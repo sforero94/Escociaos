@@ -34,6 +34,10 @@ import {
   obtenerRondaEnCurso,
   payloadActorTelegram,
 } from '../ronda-helpers.ts';
+import {
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from '../resolverUsuarioTelegram.ts';
 
 function getSupabaseAdmin() {
   const url = Deno.env.get('SUPABASE_URL')!;
@@ -62,27 +66,17 @@ export async function cierreRondaConversation(conversation: Conversation<BotCont
     // excepcionDavid.ts (hallazgo real de Santiago probando en vivo,
     // 2026-08-28): esa propiedad custom no sobrevive confiablemente el
     // replay del plugin de conversaciones. Se reconsulta por `ctx.from.id`
-    // (nativo de grammY), envuelto en `external()` como el resto de este
-    // archivo.
-    const telegramId = ctx.from?.id;
-    if (!telegramId) {
-      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
+    // (nativo de grammY) vía `resolverUsuarioTelegram`, envuelto en
+    // `external()` como el resto de este archivo. Este flujo autoriza por
+    // `telegram_usuarios.id` (actor del RPC), no por `usuario_id`.
+    const resueltoCierre = await conversation.external(async () =>
+      resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
+    );
+    if (!resueltoCierre.ok) {
+      await ctx.reply(mensajeResolverUsuarioTelegram(resueltoCierre.motivo));
       return;
     }
-    const telegramUsuario = await conversation.external(async () => {
-      const { data } = await getSupabaseAdmin()
-        .from('telegram_usuarios')
-        .select('id')
-        .eq('telegram_id', telegramId)
-        .eq('activo', true)
-        .maybeSingle();
-      return data as { id: string } | null;
-    });
-    const telegramUsuarioId = telegramUsuario?.id;
-    if (!telegramUsuarioId) {
-      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
-      return;
-    }
+    const telegramUsuarioId = resueltoCierre.fila.id;
 
     // ── Paso 0: tiene que haber una ronda en_curso para cerrar. ───────────
     const ronda = await conversation.external(async () => obtenerRondaEnCurso(getSupabaseAdmin()));
