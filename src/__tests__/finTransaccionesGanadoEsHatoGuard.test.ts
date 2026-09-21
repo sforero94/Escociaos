@@ -49,13 +49,14 @@ const ALLOWLIST_FROM = new Set([
   'src/components/finanzas/components/TransaccionGanadoForm.tsx:138',
   // Corrido de 295 a 296 (ingreso.ts) y de 290 a 308 (gasto.ts) al agregar
   // la atribución de Telegram (F5) y el arreglo de fecha UTC (F5-bis) del
-  // issue #266 -- líneas nuevas antes de este selector, la consulta en sí
-  // no cambió.
-  'src/supabase/functions/server/telegram/conversations/ingreso.ts:296',
-  'src/supabase/functions/server/telegram/conversations/gasto.ts:308',
+  // issue #266; corrido otra vez de 296 a 299 (ingreso.ts) y de 308 a 311
+  // (gasto.ts) por `resolverUsuarioTelegram` (#274) -- líneas nuevas antes
+  // de este selector, la consulta en sí no cambió en ninguno de los dos casos.
+  'src/supabase/functions/server/telegram/conversations/ingreso.ts:299',
+  'src/supabase/functions/server/telegram/conversations/gasto.ts:311',
   // Árbol espejo (supabase/functions/make-server-1ccce916) — mismo motivo.
-  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:296',
-  'supabase/functions/make-server-1ccce916/telegram/conversations/gasto.ts:308',
+  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:299',
+  'supabase/functions/make-server-1ccce916/telegram/conversations/gasto.ts:311',
 ]);
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
