@@ -121,8 +121,14 @@ may not be auto-registered. The reliable pattern, which works everywhere:
 3. Launch with the `Agent` tool, `subagent_type: "general-purpose"`, passing
    **the full brief body**, then **the full memory file**, then a `## Run
    context` block with: run id, repo path, Supabase project ref, Notion data
-   source id, the standing priorities, write mode, and the dedupe set of open
-   findings.
+   source id, the standing priorities, write mode, the dedupe set of open
+   findings, **and the do-not-refile set** — everything closed as `Resolucion =
+   Aceptado (no se arregla)` or `Refutado`. Both sets, every time: `run-lunes.md`
+   step 8 has always required the second one and this template used to omit it,
+   so five agents were once dispatched blind to nine accepted decisions and the
+   set had to be sent as a follow-up message. **Since the Friday drain empties
+   the board, the accepted set is now the larger and more load-bearing of the
+   two** — it is the one an agent will otherwise re-file.
 4. Launch all agents for a phase **in a single message** so they run in parallel.
 
 If the subagent types *are* registered (local interactive sessions), use them by
@@ -146,7 +152,8 @@ Every run follows this. Do not skip phases; do not reorder them.
 
   1. **Bare MCP tool names** on each connector (`COMPOSIO_SEARCH_TOOLS`,
      `COMPOSIO_GET_TOOL_SCHEMAS`, `COMPOSIO_MULTI_EXECUTE_TOOL` on `Composio`;
-     `apply_migration` on `Supabase_Escritura`) — confirm each still resolves.
+     `SUPABASE_APPLY_A_MIGRATION` on the `supabase_bitis-coward` account via
+     Composio) — confirm each still resolves.
      The canonical expected set lives in `memory/_compartida.md`.
   2. **Composio's own layer, underneath those three bare names.** A `tool_slug`
      (e.g. `SUPABASE_RUN_READ_ONLY_QUERY`) and an `account` (e.g.
@@ -183,11 +190,13 @@ Every run follows this. Do not skip phases; do not reorder them.
 - **Resolve the connectors** (§6): confirm which are enabled in this session and
   which accounts they resolve to. Diagnosis (Supabase reads, Notion, Vercel)
   goes through **Composio**, pinned to the `escocia-os` / `thinksid` / `escocia`
-  accounts respectively. Any Supabase write still needs the separate,
-  purpose-built **`Supabase_Escritura`** connector — the one piece this
-  migration deliberately did not move to Composio (§6). Record both in the
-  report. Discovering at "go" time that the write connector is off wastes a
-  live exchange — check at boot.
+  accounts respectively. **Since 2026-09-21 Supabase writes go through Composio
+  too** (`SUPABASE_APPLY_A_MIGRATION`, same `escocia-os` account), so the read
+  and the write path are now the same connector and the same bare tool name —
+  which is exactly why §6 says the separation between them is now a prompt rule
+  and nothing more. Record it in the report. Confirm at boot that the write slug
+  still resolves: discovering at "go" time that it does not wastes a live
+  exchange.
 - **Dead-man check**: find the date of the previous run (latest row in the
   Notion `Corrida` field, or `escociaos-po/reports/`). If the gap is more than
   8 days, that is itself a **P1 finding against the operation** — something
@@ -340,7 +349,7 @@ never by convenience.
 | Phase | Path | Access |
 |---|---|---|
 | Diagnosis — Phases 0–3, every sweep, every agent | **Composio**, `tool_slug: SUPABASE_RUN_READ_ONLY_QUERY`, `account: supabase_bitis-coward` (alias `escocia-os`) | read-only, mechanically enforced by Supabase itself (runs as `supabase_read_only_user`; write statements are rejected server-side, not by a prompt rule — verified 2026-09-14) |
-| Remediation — Phase 4 only | **`Supabase_Escritura`**, a dedicated connector permitting `apply_migration` and nothing else | write-capable, mechanically bounded to one tool |
+| Remediation — Phase 4 only | **Composio**, `tool_slug: SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward` | write-capable. **Bounded by prompt, not by mechanism** — see the note below, this changed on 2026-09-21 |
 
 - **All diagnosis is `SELECT` only.** Agents may **compose** DDL/DML but must
   never execute it. This is not a matter of which connector happens to be
@@ -357,35 +366,50 @@ never by convenience.
   Santiago approved for Vercel on 2026-08-21 ("Composio is for reading Vercel
   and nothing else"), now extended to Supabase reads and Notion. Full reasoning
   in `memory/_compartida.md`.
-- **Supabase writes deliberately did NOT move to Composio (2026-09-14).**
-  Composio's Supabase toolkit does expose a scoped `SUPABASE_APPLY_A_MIGRATION`
-  tool distinct from `SUPABASE_BETA_RUN_SQL_QUERY` — the *tool* distinction
-  exists — but the Routine's `always_ask`/`always_allow` policy still can't see
-  past `COMPOSIO_MULTI_EXECUTE_TOOL` to gate a specific `tool_slug`. Moving
-  writes there would make Monday and Thursday **mechanically capable** of
-  applying a migration — today they are not: `Supabase_Escritura` sits
-  `always_ask`, which an unattended run can never satisfy. Santiago reviewed
-  this tradeoff explicitly and chose to keep the dedicated write connector; see
-  `memory/po-routines-mecanica-edicion.md` (2026-09-14 entry) for the full
-  discussion. **Do not "simplify" this by moving writes to Composio too**
-  unless he reopens that decision.
+- **Supabase writes MOVED to Composio on 2026-09-21, by Santiago's decision,
+  and this reversed the 2026-09-14 call.** The write path is now
+  `tool_slug: SUPABASE_APPLY_A_MIGRATION` on `account: supabase_bitis-coward`,
+  which takes `ref`, `query`, `name` and `rollback`. The dedicated
+  `Supabase_Escritura` connector is retired from this operation.
+  **Be clear about what was traded away.** The old connector permitted
+  `apply_migration` and nothing else, so freehand SQL was *mechanically*
+  impossible. Composio's tool is reached through `COMPOSIO_MULTI_EXECUTE_TOOL`,
+  which the Routine's `always_ask`/`always_allow` policy already allows for
+  reads and cannot gate per `tool_slug`. Two consequences follow, and neither is
+  hypothetical:
+  1. **Monday and Thursday are now mechanically capable of writing to
+     production.** Before, `always_ask` blocked them and an unattended run could
+     never satisfy it. That block is gone. "Monday and Thursday never write" is
+     now a **prompt rule with nothing underneath it.**
+  2. `SUPABASE_APPLY_A_MIGRATION` accepts arbitrary SQL — its own description
+     says "DDL/DML operations". The name bounds the *intent*, not the *blast
+     radius*.
+  **The compensating control is the go rule (below), and it is now the only one
+  left.** Never compose a mutation in the moment. What runs is a numbered
+  migration that exists as a file in a PR, transferred verbatim. An unattended
+  run that finds itself able to write must still not write.
+  `SUPABASE_BETA_RUN_SQL_QUERY` stays forbidden in every phase — that
+  prohibition did not move and is now the only distinction left between the safe
+  and unsafe Supabase write tools.
 - Any `INSERT`/`UPDATE`/`DELETE`/`ALTER`/`DROP` goes into the finding as exact
   SQL with `requiere_aprobacion: true`, plus a matching rollback statement and
   the row count it will touch.
 - **Monday and Thursday never write.** They fire at 07:00 with nobody watching;
-  there is no one present to authorise anything, so their write path stays
-  dormant (`Supabase_Escritura` is `always_ask` on those two, which an
-  unattended run can never satisfy) and the run ends with the SQL filed. Their
-  writes happen only in a live exchange — in practice, a follow-up conversation
-  about findings the run already filed.
+  there is no one present to authorise anything, so the run ends with the SQL
+  filed. Their writes happen only in a live exchange — in practice, a follow-up
+  conversation about findings the run already filed.
+  **Since 2026-09-21 this rule has no mechanism behind it.** The write tool is
+  now reachable from the same `COMPOSIO_MULTI_EXECUTE_TOOL` the reads use, so an
+  unattended run *can* write and is trusted not to. Treat the rule as load-
+  bearing rather than as a description of what is possible.
 - **Friday has exactly one unattended write**, and it is deliberately narrow:
   a single strictly-additive migration per run, behind the five gates in
   `runbooks/run-viernes.md` §Phase 2 (additive-by-allowlist, own guards,
   independent adversarial review defaulting to "unsafe", correct sequential
   number, byte-identical transfer from the file in the PR). Nothing else. No
-  `SUPABASE_BETA_RUN_SQL_QUERY` via Composio — its only write path is
-  `apply_migration` on `Supabase_Escritura`, and that connector permits nothing
-  else. **Friday never merges**, so the ordering is apply-then-merge, chosen knowingly
+  `SUPABASE_BETA_RUN_SQL_QUERY` via Composio, ever — its write path is
+  `SUPABASE_APPLY_A_MIGRATION` on `account: supabase_bitis-coward`, and since
+  2026-09-21 nothing but this rule keeps the two apart. **Friday never merges**, so the ordering is apply-then-merge, chosen knowingly
   on 2026-08-21: it buys a cycle of speed and costs a window in which production
   runs a schema `main` does not yet document. Monday polices that window
   (§ Phase 0), and **a migration applied but unmerged for more than 7 days is a
@@ -617,10 +641,10 @@ honestly is what makes the loud weeks credible.
 | Cloud Routine — Friday | `trig_01AbCfQPNmRh7Jq8fX8yktSe` · `0 11 * * 5` UTC · backlog drain, reads `runbooks/run-viernes.md` (created 2026-08-21, first fire 2026-08-28) |
 | Notifications | Routine push + email, one per run |
 | Runtime decision | Cloud Routines (2026-07-31): always fire, MCPs authenticated account-level, clean clone of `main` by construction — never sees Santiago's local worktrees/WIP |
-| DB connectors | **Two, since 2026-09-14, and still not interchangeable.** Diagnosis reads go through **Composio** (`2982c4d2-…`), `tool_slug: SUPABASE_RUN_READ_ONLY_QUERY`, `account: supabase_bitis-coward` (alias `escocia-os`) — verified 2026-09-14: connects as `supabase_read_only_user`, write statements rejected server-side. The dedicated read-only `Supabase` connector (`1e08d12f-…`) this replaced is detached from all three Routines. **`Supabase_Escritura`** (`1eeabe38-…`) is unchanged and is the one connector this migration deliberately did NOT move to Composio — it permits **`apply_migration` and nothing else**, no `execute_sql`/`SUPABASE_BETA_RUN_SQL_QUERY`, so freehand SQL is mechanically impossible, not merely forbidden. Its policy is `always_ask` on Monday/Thursday (an unattended run can never satisfy it) and `always_allow` on Friday (which needs it for the additive lane). See §6 for why Composio can't replicate this bound for writes |
+| DB connectors | **One, since 2026-09-21.** Everything — diagnosis reads AND remediation writes — goes through **Composio** (`2982c4d2-…`) on `account: supabase_bitis-coward` (alias `escocia-os`). Reads: `SUPABASE_RUN_READ_ONLY_QUERY`, which connects as `supabase_read_only_user` and has write statements rejected server-side, so that half is still mechanically enforced. Writes: `SUPABASE_APPLY_A_MIGRATION` (`ref`, `query`, `name`, `rollback`). **The dedicated `Supabase_Escritura` connector (`1eeabe38-…`) is retired from this operation** — Santiago reversed the 2026-09-14 decision on 2026-09-21 after `apply_migration` went missing from it for four consecutive sessions (ESCO-114). **What the reversal cost**: that connector permitted one tool, so freehand SQL was mechanically impossible; Composio's write tool shares `COMPOSIO_MULTI_EXECUTE_TOOL` with the reads, which `always_ask`/`always_allow` cannot gate per `tool_slug`. Monday and Thursday are therefore now *able* to write and are trusted not to. See §6 |
 | Notion | Since 2026-09-14, through **Composio**, `account: notion_awork-knit` (alias `thinksid`), slugs `NOTION_SEARCH_NOTION_PAGE` / `NOTION_FETCH_DATABASE` / `NOTION_QUERY_DATABASE_WITH_FILTER` / `NOTION_INSERT_ROW_DATABASE` / `NOTION_UPDATE_ROW_DATABASE`. Mantenimiento database id (plain UUID Composio wants, **not** the `collection://…` data-source id the old direct connector used): `c52d9258-fed7-466d-8e70-0fa92980d3df`. `Estado` is a Notion `status`-type property — pass `type: "status"` on writes, never `"select"`. The dedicated `Notion` connector (`af1e5776-…`) is detached from all three Routines. There is a second, redundant Notion account (`notion_triact-lord`, same workspace/integration) — pin the alias, don't rely on default |
 | Tool allowlists | `permitted_tools` + `tool_policy_overrides` per connector, **hand-maintained and therefore rot-prone** — this got worse, not better, after 2026-09-14: a Composio `tool_slug`/`account` pair now rots one layer below where this allowlist can even see it (§4 Phase 0). Corrected 2026-08-21: `get_logs` → `query_logs` on all three (see the Phase 0 preflight note in §4 for what the stale entry cost). Also dropped the deprecated `notion-query-database-view`. **The preflight is the durable fix, not the rename** — the next rot will happen too, and now at the Composio layer as easily as the connector layer |
-| Vercel | Read through **Composio** (`2982c4d2-…`), slugs `VERCEL_GET_*`, account `vercel_tetric-hash`. The direct Vercel connector is retired. **The six runs that filed "Vercel connector broken, re-authenticate" were chasing the wrong thing**: both connectors were healthy and both were OAuth'd as `thinksid`, who is not a member of the team owning the project — a 403 says *this user cannot*, not *this connector is broken*. Fixed 2026-08-21 by reconnecting as the owning account. **`COMPOSIO_MULTI_EXECUTE_TOOL` is a generic executor across every connected toolkit, so it does NOT bound the blast radius the way `apply_migration`-only bounds `Supabase_Escritura`. Rule, prompt-enforced: Composio is for reading Vercel, Supabase and Notion — never for a Supabase write.** Slugs, the accounts and their traps: `memory/_compartida.md` |
+| Vercel | Read through **Composio** (`2982c4d2-…`), slugs `VERCEL_GET_*`, account `vercel_tetric-hash`. The direct Vercel connector is retired. **The six runs that filed "Vercel connector broken, re-authenticate" were chasing the wrong thing**: both connectors were healthy and both were OAuth'd as `thinksid`, who is not a member of the team owning the project — a 403 says *this user cannot*, not *this connector is broken*. Fixed 2026-08-21 by reconnecting as the owning account. **`COMPOSIO_MULTI_EXECUTE_TOOL` is a generic executor across every connected toolkit, so it bounds no blast radius at all.** That was already the accepted tradeoff for Vercel (2026-08-21) and for Supabase reads and Notion (2026-09-14). Since **2026-09-21 it also carries the Supabase write** (`SUPABASE_APPLY_A_MIGRATION`), so the old rule "never for a Supabase write" is retired and replaced by a narrower one: **`SUPABASE_BETA_RUN_SQL_QUERY` is forbidden in every phase, and a write only ever executes a reviewed migration file verbatim.** Slugs, the accounts and their traps: `memory/_compartida.md` |
 
 **DST**: both crons are UTC and currently resolve to 7:00 am EDT. When the US
 falls back on **1 November 2026**, 7:00 am ET becomes `0 12 * * 1` /
