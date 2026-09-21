@@ -25,9 +25,28 @@
 -- camino** y se recalcula sobre TODA la historia. Una captura equivocada
 -- desde un teléfono corre el costo de ventas de todos los años.
 --
--- COSTO DE RETIRARLO: CERO. El camino /gasto de Telegram nunca produjo una
--- fila. Desde el 2026-08-01 las 108 filas de `fin_gastos` las capturó
--- Consuelito, que no es una fila de `telegram_usuarios`.
+-- COSTO DE RETIRARLO: NINGUNA FILA VIVA ES ATRIBUIBLE A ESTE CAMINO.
+--
+-- OJO con el argumento que NO sirve, porque estuvo escrito acá y es falso:
+-- «lo capturó Consuelito, que no es una fila de telegram_usuarios», por
+-- `created_by`. No prueba nada — el insert borrado SÍ ponía autor
+-- (`created_by: usuarioId` desde `resolverUsuarioTelegram`, issue #274),
+-- así que una escritura por Telegram también habría llevado uno.
+--
+-- La evidencia que sí se sostiene, verificada en vivo el 2026-09-21:
+--   * `fin_gastos`: 4.534 de 4.534 filas están en `Confirmado`. NO existe
+--     una sola fila en ningún otro estado. El flujo borrado escribía
+--     `estado: "Pendiente"` fijo, así que ninguna fila viva salió de él.
+--   * `fin_transacciones_ganado`: el sub-flujo sólo escribía
+--     `tipo = 'compra'` y nunca ponía `created_by`. La única fila sin autor
+--     posterior al trigger de la 050 (2026-07-21) es la VENTA del
+--     2026-07-14; las dos compras llevan autor.
+--
+-- Y el límite honesto de esa evidencia: un gasto `Pendiente` confirmado
+-- después a mano sería indistinguible de uno capturado en la web. O sea
+-- que lo demostrable es «ninguna fila viva es atribuible a este camino»,
+-- NO «nunca produjo una fila». La segunda es una negación que no se puede
+-- probar y no se afirma acá.
 --
 -- ALCANCE: SÓLO `gastos`. `ingresos` NO se toca — Santiago nombró gastos.
 --
@@ -48,6 +67,43 @@
 -- `array_remove` conserva el orden de los elementos que quedan y no toca
 -- las 2 filas sin la llave.
 --
+-- ORDEN DE APLICACIÓN: MIGRACIÓN PRIMERO, `functions deploy` DESPUÉS.
+-- La primera versión de este encabezado recomendaba lo contrario. Es al
+-- revés, y la razón no es cuál ventana es más segura — LAS DOS son
+-- inofensivas: con la llave quitada y el comando todavía vivo, el
+-- `if (!modulos_permitidos?.includes("gastos"))` de `bot.ts` contesta «No
+-- tienes acceso a este módulo»; con el comando quitado y la llave viva,
+-- `/gasto` cae al manejador de texto libre de Esco. Ninguna escribe.
+-- Migración primero gana por dos razones distintas:
+--   1. LA LLAVE *ES* LA AUTORIZACIÓN. Quitarla cierra /gasto contra
+--      cualquier versión del código, incluido un despliegue viejo o
+--      revertido. Desplegar primero deja la llave viva y el flujo
+--      re-armable con un redespliegue de una versión anterior.
+--   2. Desplegar primero abre una ventana en la que la llave se vuelve
+--      IMPOSIBLE DE QUITAR desde la interfaz y ADEMÁS se reescribe sola.
+--      `TelegramConfig.tsx:216` siembra el formulario desde la fila
+--      (`setModulosPermitidos([...(usuario.modulos_permitidos ?? [])])`),
+--      las casillas se dibujan desde `TELEGRAM_MODULES` (línea 683) y
+--      `handleSubmit` reescribe el arreglo ENTERO (líneas 254/273). Sin
+--      `gastos` en el catálogo no hay casilla que desmarcar, y guardar la
+--      ficha de David vuelve a persistir la llave. Después de la
+--      migración ese mismo camino ya no puede reponerla.
+--
+-- LA COLUMNA ES NULLABLE (`text[] NULL DEFAULT '{labores}'`), y da igual:
+-- `'gastos' = ANY(NULL::text[])` da NULL y no true, así que una fila NULL
+-- nunca entra al WHERE ni llega a `array_remove`; la guarda 3.5 también es
+-- NULL-safe (`NULL IS DISTINCT FROM NULL` es falso). Hoy ninguna es NULL.
+--
+-- DOS DETALLES DEL RESPALDO Y DEL ROLLBACK:
+--   * El trigger `update_telegram_usuarios_updated_at` mueve `updated_at`
+--     en las 3 filas, y el ROLLBACK restituye sólo `modulos_permitidos`.
+--     La marca de tiempo queda movida. Es cosmético, pero no estaba dicho.
+--   * El respaldo es `SELECT *` a propósito (precedente 081/152), así que
+--     copia también `telegram_id`, `telegram_username`, `usuario_id` y
+--     `codigo_vinculacion`. Las guardas y el ROLLBACK sólo necesitan `id`
+--     y `modulos_permitidos`; la fila entera se guarda porque a esta tabla
+--     no la traza nadie más.
+--
 -- Filas afectadas: 3.
 -- ============================================================================
 
@@ -67,8 +123,17 @@ BEGIN
   FROM telegram_usuarios
   WHERE 'gastos' = ANY(modulos_permitidos);
 
-  IF v_con_gastos <> 3 THEN
-    RAISE EXCEPTION '0.2: % filas llevan la llave gastos; se esperaban exactamente 3 (David, Martha, Santiago)', v_con_gastos;
+  -- NO aborta por conteo. Un `<> 3` se negaria a correr justo cuando hay
+  -- MAS que limpiar: hasta que salga el despliegue, la casilla `gastos`
+  -- sigue existiendo en Configuracion -> Telegram, asi que una cuarta
+  -- concesion es alcanzable. Es el veredicto de la 120 al pie de la letra
+  -- («se negaba a correr justo cuando el agujero se vuelve real») y el
+  -- literal de padron que la 133 prohibio. La afirmacion dura ya vive en
+  -- la post-condicion 3.1, que exige CERO al terminar.
+  IF v_con_gastos = 0 THEN
+    RAISE NOTICE '0.2: ninguna fila lleva la llave gastos -- la 162 no tiene nada que hacer.';
+  ELSE
+    RAISE NOTICE '0.2: % fila(s) llevan la llave gastos (eran 3 el 2026-09-21).', v_con_gastos;
   END IF;
 END $$;
 
@@ -123,17 +188,25 @@ BEGIN
 
   SELECT count(*) INTO v_total FROM telegram_usuarios;
   SELECT count(*) INTO v_backup FROM respaldos.backup_162_telegram_usuarios_gastos;
-  IF v_total <> 5 THEN
-    RAISE EXCEPTION '3.2: hay % filas en telegram_usuarios; se esperaban 5 — un UPDATE de array no crea ni borra filas', v_total;
-  END IF;
-  IF v_total <> v_backup THEN
-    RAISE EXCEPTION '3.3: el vivo (%) no coincide con el respaldo (%)', v_total, v_backup;
+  -- Sin literal de padron, y denunciando SOLO hacia abajo (patron 133).
+  -- Gerencia da de alta usuarios de Telegram desde Configuracion -> Telegram
+  -- y el padron se movio de 2 (2026-03-19) a 4 (08-12) a 5 (08-28): un alta
+  -- legitima a mitad de la transaccion abortaria una migracion sana. Un
+  -- UPDATE de array no puede BORRAR filas, asi que la unica direccion que
+  -- denuncia algo roto es que falten.
+  IF v_total < v_backup THEN
+    RAISE EXCEPTION '3.3: hay % filas vivas contra % en el respaldo -- un UPDATE de array no borra filas', v_total, v_backup;
   END IF;
 
   -- `ingresos` NO se toca: mismo conteo antes y después.
+  -- Acotado a los ids respaldados, igual que la 3.5 -- que es la unica
+  -- post-condicion que ya estaba bien. Sin el JOIN, un usuario nuevo con
+  -- `ingresos` concedido entre el respaldo y esta comprobacion aborta la
+  -- corrida sin que nada este mal.
   SELECT count(*) INTO v_con_ingresos
-  FROM telegram_usuarios
-  WHERE 'ingresos' = ANY(modulos_permitidos);
+  FROM telegram_usuarios t
+  JOIN respaldos.backup_162_telegram_usuarios_gastos b ON b.id = t.id
+  WHERE 'ingresos' = ANY(t.modulos_permitidos);
   SELECT count(*) INTO v_ingresos_backup
   FROM respaldos.backup_162_telegram_usuarios_gastos
   WHERE 'ingresos' = ANY(modulos_permitidos);
