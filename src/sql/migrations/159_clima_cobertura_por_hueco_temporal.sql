@@ -148,7 +148,25 @@
 -- Precondicion: md5(prosrc) del cuerpo VIVO de la 158,
 -- `60b95011b820082e879339bead553b76` (verificado 2026-09-21). Patron de la
 -- 143: si produccion divergio, abortar en vez de pisar.
--- =============================================================================
+--
+-- CONSECUENCIA VISIBLE QUE NO ES UN DEFECTO -- leer antes de filar una ficha.
+-- Despues de esta migracion, los 19 dias gruesos completos (30 min, marzo a
+-- mayo) quedan con `lluvia_confianza = 'cobertura_parcial'` Y, al mismo
+-- tiempo, con `radiacion_wm2_avg`, `uv_index_max` y `temp_c_min/max` sellados
+-- como dia entero. Visto de frente se lee incoherente: una fila que declara
+-- cobertura parcial para la lluvia y un promedio de radiacion de dia
+-- completo. Es DELIBERADO y las dos mitades son correctas por separado:
+--   * La radiacion y la temperatura SI son del dia entero -- 48 muestras
+--     repartidas de 00:00 a 23:30 cubren el dia; la cadencia es gruesa, no
+--     truncada. Por eso no se anulan.
+--   * La lluvia NO se re-evalua porque su regla (la de la 122) necesita las
+--     lecturas de 5 minutos para reconstruir por evento, y esas lecturas ya
+--     no existen: `clima_lecturas` guarda 24 horas. Sin la evidencia, la
+--     etiqueta vieja se conserva en vez de fabricar una nueva.
+-- Cambiar la etiqueta de lluvia de esos 19 dias exige backfill desde Ecowitt,
+-- que para marzo-mayo ya no sirve 5 minutos. O sea: no se puede, y por eso
+-- no se intenta aca.
+-- ==============================================================================
 
 
 -- -----------------------------------------------------------------------------
@@ -394,9 +412,9 @@ BEGIN
       -- Cadencia nominal encajada. Cualquier otra -> NULL: cadencia
       -- desconocida no se traduce a horas de sol.
       CASE
-        WHEN c.mediana_min IS NULL           THEN NULL
-        WHEN c.mediana_min < 15              THEN 5
-        WHEN c.mediana_min <= 45             THEN 30
+        WHEN c.mediana_min IS NULL                        THEN NULL
+        WHEN c.mediana_min >= 4  AND c.mediana_min <= 7   THEN 5
+        WHEN c.mediana_min >= 25 AND c.mediana_min <= 35  THEN 30
         ELSE NULL
       END::numeric AS intervalo_min
     FROM cobertura c
@@ -605,8 +623,16 @@ BEGIN
 
   -- Los dias completos NO se tocan. Comparacion contra la linea base
   -- relativa de la pre-condicion, nunca contra un literal.
-  IF v_completos <> current_setting('m159.completos_pre')::integer THEN
-    RAISE EXCEPTION 'Migracion 159 ABORTADA (post): la poblacion de dias completos cambio de % a %.',
+  -- Solo denuncia hacia ABAJO (patron de la 133, el mismo que ya usa la
+  -- guarda de v_total mas abajo). El cron `clima-daily-rollup` corre a las
+  -- 00:15 de Bogota e INSERTA una fila en clima_resumen_diario; bajo READ
+  -- COMMITTED cada sentencia toma una instantanea nueva, asi que una fila
+  -- confirmada por el cron a mitad de la transaccion sube este conteo en 1
+  -- y un `<>` abortaria una migracion sana. Un UPDATE de columnas no puede
+  -- ENCOGER el conjunto de dias completos, asi que la unica direccion que
+  -- denuncia algo roto es hacia abajo.
+  IF v_completos < current_setting('m159.completos_pre')::integer THEN
+    RAISE EXCEPTION 'Migracion 159 ABORTADA (post): la poblacion de dias completos bajo de % a %.',
       current_setting('m159.completos_pre'), v_completos;
   END IF;
   IF v_coarse = 0 THEN
@@ -632,8 +658,13 @@ BEGIN
 
   -- Respaldo con el mismo numero de filas que se reparo.
   SELECT count(*) INTO v_resp FROM respaldos.backup_159_clima_cobertura;
-  IF v_resp <> current_setting('m159.truncados_pre')::integer THEN
-    RAISE EXCEPTION 'Migracion 159 ABORTADA (post): el respaldo tiene % filas y se detectaron % dias truncados.',
+  -- Misma razon que la guarda de dias completos: el cron de las 00:15 puede
+  -- agregar un dia truncado a mitad de la transaccion, que entonces entra al
+  -- respaldo Y se repara -- correcto, y con `<>` abortaria. Lo que si es un
+  -- defecto es un respaldo INCOMPLETO: menos filas que dias truncados
+  -- detectados significa que el ROLLBACK no podria restituirlos todos.
+  IF v_resp < current_setting('m159.truncados_pre')::integer THEN
+    RAISE EXCEPTION 'Migracion 159 ABORTADA (post): el respaldo tiene % filas y se detectaron % dias truncados -- el respaldo esta incompleto y el ROLLBACK no alcanzaria.',
       v_resp, current_setting('m159.truncados_pre');
   END IF;
 
