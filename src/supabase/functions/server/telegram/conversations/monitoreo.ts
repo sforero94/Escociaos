@@ -12,6 +12,10 @@ import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import type { BotContext } from "../types.ts";
+import {
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from "../resolverUsuarioTelegram.ts";
 // El corte de gravedad (10 % / 30 %) es contrato del proyecto y tiene UNA sola
 // copia por árbol. `priorizacion-scouting.ts` es el puerto Deno de
 // `src/utils/calculosMonitoreo.ts` y no tiene ni un import propio, así que es el
@@ -57,25 +61,21 @@ export async function monitoreoConversation(
 ) {
   const telegramId = ctx.from?.id;
   if (!telegramId) {
-    await ctx.reply("Error: usuario no identificado.");
+    await ctx.reply(mensajeResolverUsuarioTelegram("sin_telegram_id"));
     return;
   }
 
-  const user = await conversation.external(async () => {
-    const sb = getSupabaseAdmin();
-    const { data } = await sb
-      .from("telegram_usuarios")
-      .select("*")
-      .eq("telegram_id", telegramId)
-      .eq("activo", true)
-      .single();
-    return data;
-  });
-
-  if (!user) {
-    await ctx.reply("Error: usuario no registrado.");
+  const resuelto = await conversation.external(async () =>
+    resolverUsuarioTelegram(getSupabaseAdmin(), telegramId),
+  );
+  if (!resuelto.ok) {
+    await ctx.reply(mensajeResolverUsuarioTelegram(resuelto.motivo));
     return;
   }
+  const user = {
+    nombre_display: resuelto.nombreDisplay,
+    usuario_id: resuelto.usuarioId,
+  };
 
   try {
   // ── Step 1: Select lote ──────────────────────────────────────────────

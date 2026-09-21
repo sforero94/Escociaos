@@ -336,8 +336,7 @@ describe('contrato en el código (no volver al callback largo ni al catch mentir
     it(`${ruta} resuelve telegram_usuarios en el instante de escribir`, () => {
       const fuente = leer(ruta);
       expect(fuente).toContain('ctx.from?.id');
-      expect(fuente).toContain('telegram_usuarios');
-      expect(fuente).toContain('atribucionDesdeFilaTelegram');
+      expect(fuente).toContain('resolverUsuarioTelegram');
       // La lectura al entrar al flujo es la que dejaba created_by en NULL
       // cuando el plugin replayaba sin ctx.telegramUser.
       expect(fuente).not.toMatch(/const usuarioId = ctx\.telegramUser/);

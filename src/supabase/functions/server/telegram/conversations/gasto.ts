@@ -2,7 +2,10 @@ import { Conversation } from "npm:@grammyjs/conversations@2";
 import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
-import { atribucionDesdeFilaTelegram } from "../eventoHatoUndo.ts";
+import {
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from "../resolverUsuarioTelegram.ts";
 
 function isGanadoNegocio(nombre: string): boolean {
   const lower = nombre.toLowerCase();
@@ -1015,24 +1018,15 @@ export async function gastoConversation(
         const insertResult = await conversation.external(async () => {
           const sb = getSupabaseAdmin();
 
-          // F5 (issue #266): `created_by`, buscado en el instante de
+          // F5 (issue #266 / #273): `created_by`, buscado en el instante de
           // escribir — no al entrar al flujo — para que un replay tardío
           // del plugin de conversaciones no lo deje en NULL (mismo motivo
           // documentado en `eventoHato.ts`).
-          const telegramId = ctx.from?.id;
-          let filaTelegram: { usuario_id: string | null; nombre_display: string | null } | null =
-            null;
-          if (telegramId != null) {
-            const { data: tgUser } = await sb
-              .from("telegram_usuarios")
-              .select("usuario_id, nombre_display")
-              .eq("telegram_id", telegramId)
-              .eq("activo", true)
-              .maybeSingle();
-            filaTelegram = (tgUser as { usuario_id: string | null; nombre_display: string | null } | null) ??
-              null;
+          const resuelto = await resolverUsuarioTelegram(sb, ctx.from?.id);
+          if (!resuelto.ok) {
+            return { id: null, error: mensajeResolverUsuarioTelegram(resuelto.motivo) };
           }
-          const { usuarioId } = atribucionDesdeFilaTelegram(filaTelegram);
+          const { usuarioId } = resuelto;
 
           const { data, error } = await sb
             .from("fin_gastos")

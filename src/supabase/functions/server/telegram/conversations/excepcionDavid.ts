@@ -39,6 +39,10 @@ import {
   obtenerExcepcionDetalle,
   payloadActorTelegram,
 } from '../ronda-helpers.ts';
+import {
+  mensajeResolverUsuarioTelegram,
+  resolverUsuarioTelegram,
+} from '../resolverUsuarioTelegram.ts';
 import { formatearCantidad } from '../../rondaInventario/preview.ts';
 import { renderCasoDavid, renderCitaDavid } from '../../rondaInventario/resolucion.ts';
 
@@ -132,27 +136,18 @@ export async function excepcionDavidConversation(
     // que reventaba con "no vinculada" pese a tener la cuenta activa
     // (hallazgo real de Santiago probando en vivo, 2026-08-28). Se
     // reconsulta acá, por `ctx.from.id` -- SIEMPRE nativo de grammY, nunca
-    // inyectado por middleware propio -- envuelto en `external()` como toda
-    // lectura de este archivo.
-    const telegramId = ctx.from?.id;
-    if (!telegramId) {
-      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
+    // inyectado por middleware propio -- vía `resolverUsuarioTelegram`,
+    // envuelto en `external()` como toda lectura de este archivo. Este
+    // flujo autoriza por `telegram_usuarios.id` (actor del RPC), no por
+    // `usuario_id`.
+    const resueltoDavid = await conversation.external(async () =>
+      resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
+    );
+    if (!resueltoDavid.ok) {
+      await ctx.reply(mensajeResolverUsuarioTelegram(resueltoDavid.motivo));
       return;
     }
-    const telegramUsuario = await conversation.external(async () => {
-      const { data } = await getSupabaseAdmin()
-        .from('telegram_usuarios')
-        .select('id')
-        .eq('telegram_id', telegramId)
-        .eq('activo', true)
-        .maybeSingle();
-      return data as { id: string } | null;
-    });
-    const telegramUsuarioId = telegramUsuario?.id;
-    if (!telegramUsuarioId) {
-      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
-      return;
-    }
+    const telegramUsuarioId = resueltoDavid.fila.id;
 
     // ── Paso 0: la excepción tiene que seguir pendiente de David ──────────
     const excepcion = await conversation.external(async () =>

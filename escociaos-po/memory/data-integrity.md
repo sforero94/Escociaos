@@ -621,3 +621,28 @@ Sonda barata al auditar cualquier agregado diario nuevo:
 (**congelado, ultima fecha 08-28, 20 dias — umbral rojo 28 = 25-sep**) ·
 `registros_trabajo` 2.920 (+15) · `fin_gastos` 4.534 (=) · `clima_resumen_diario` 1.937.
 Integridad: 0 huerfanos en 11 relaciones, 0 stock negativo, 0 chapetas duplicadas activas.
+
+## Corrida 2026-09-21-lunes
+
+### Estados aceptados (nuevos)
+- **La migración 158 está VIVA, verificada contra el dato y no contra el ledger**: 2026-09-16 (11 lecturas) y 2026-09-17 (189) tienen `horas_sol_duracion IS NULL`; todos los días con ≥240 llevan valor. **ESCO-108 cerrado. NO re-auditar `horas_sol_duracion`** — lo abierto son sus columnas hermanas (ESCO-116).
+- **ESCO-110 NO regresó**: `registros_trabajo where fecha_trabajo < current_date - 120 and created_at > '2026-06-01'` → **0 filas**. Guardar esa consulta: es la sonda barata de la clase «año tecleado mal».
+- **La migración 149 aguanta**: 0 grupos nuevos (fecha, persona) > 1,0 jornal; el más reciente es 2026-08-26, anterior a la guarda.
+- **Las 2 cargas `ocr_fallo` de pesaje del 2026-09-20 04:59 NO son defecto de tubería**: el `detalle` nombra la causa real y 90 s después el usuario cargó bien por la ruta correcta. Es la 146 haciendo su trabajo.
+- **`cron.job` tiene 5 jobs, todos `active`** (1 clima-sync-wu, 2 clima-daily-rollup, 4 hato-alertas-tick, 8 clima-reintento-sin-dato, 9 ronda-inventario-tick). El jobid 6 ya no existe: la 156 se sostiene. **5/5 es el estado sano; la línea base vieja de 6/6 está superada.**
+
+### Navegación (nueva)
+- **`hato_capturas_foto` tiene `tipo_check` acotado a `('pesaje','chequeo')`** — la instrumentación de la 146 **no puede** cubrir una tercera ruta sin DDL. `periodo_pesaje` exige anio+mes sólo cuando `tipo='pesaje'`. `origen_check` es `('web','telegram')`. **No tiene `error_mensaje`: el texto vive en `detalle`.** Tampoco tiene `fecha` poblada (NULL en las 5 filas).
+- **Hay TRES rutas de carga por foto del hato, no dos**: `hato-pesajes-fotos` (13), `chequeos-fotos` (10) y **`hato-liquidaciones-fotos` (13)**, esta última servida por `hato-produccion-quincena-foto.ts` y **sin instrumentar** (ESCO-115). Al auditar cobertura, **enumerar `storage.objects` por `bucket_id`, nunca asumir dos rutas.**
+- **`hato_produccion_quincenal` empuja la venta de leche a Finanzas** (`fin_ingreso_id` NOT NULL) y no aparece en ningún conteo de la familia `hato_*` de captura. Añadida a la línea base.
+- **Un pico de `hato_chequeo_vacas` sin fila nueva en `hato_chequeos` es una RECAPTURA**, no un chequeo nuevo: `fn_hato_commit_chequeo` borra e inserta las vacas del mismo encabezado.
+
+### Baselines 2026-09-21
+`hato_eventos` 794 (+2) · `hato_chequeos` 34 · `hato_chequeo_vacas` 1.513 · **`hato_pesajes_leche` 646 (+45, sesiones 09-02 y 09-09 entraron el 09-19 por telegram; falta el 09-16)** · `hato_tratamientos` 27 · `hato_alertas` 123 · `hato_capturas_foto` 5 · `hato_produccion_quincenal` 84 · `monitoreos` **4.244 congelado, última fecha 2026-08-28** · `movimientos_inventario` **165, congelado desde 09-05** · `movimientos_diarios` 181 (+6) · **`compras` 32, congelado desde 2026-08-05 (47 días)** · `productos` 341 (0 negativos) · `registros_trabajo` 2.961 (+41) · `fin_gastos` 4.534 · `clima_resumen_diario` 1.941 · `gan_movimientos` 54 · `aplicaciones` 21 · `logs_auditoria` 0.
+**Integridad: 0 huérfanos en 8 relaciones. 0 duplicados en 5 clases. 0 stock negativo.** Sin cambio: 86 monitoreos con `ronda_id` NULL · 2 partos post-salida.
+**Inventario libro-vs-stock: 1 sola divergencia** (TecniFeed Boro +18,69), idéntica desde el 09-07.
+**Clima SANO**: última lectura hace 0,02 h, 288 en 24 h, 0 duplicados.
+
+### Vigilancia
+- **`monitoreos` a 24 días sin fila nueva.** OJO: la ronda R30 abrió el 08-26 y **cerró el 2026-09-18** con 44 obs / 12 sublotes — o sea que las observaciones están congeladas desde el 08-28 pero la ronda SÍ se cerró. Usage Analytics fija el umbral real: las rondas abren cada ~33-35 días, la próxima cae ~09-23/09-30, y **a partir del 2026-10-05 un cero SÍ es señal.** No filar antes.
+- **`compras` 47 días sin fila** mientras el consumo sigue. Cambia de naturaleza si algún insumo activo se acerca a cero.

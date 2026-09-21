@@ -77,6 +77,7 @@ describe('evaluarDerivaPorHash', () => {
   it('siembra la linea base cuando no hay estado previo, sin marcar deriva', () => {
     const r = evaluarDerivaPorHash({ hashActual: 'abc', commitActual: 'c1', estadoPrevio: null });
     expect(r.hayDerivaPorHash).toBe(false);
+    expect(r.aviso).toBe(false);
   });
 
   it('NO marca deriva si el commit no cambio, aunque el hash sea el mismo (nada nuevo que desplegar)', () => {
@@ -86,6 +87,7 @@ describe('evaluarDerivaPorHash', () => {
       estadoPrevio: { commit: 'c1', hash: 'abc' },
     });
     expect(r.hayDerivaPorHash).toBe(false);
+    expect(r.aviso).toBe(false);
   });
 
   it('NO marca deriva si el commit cambio Y el hash tambien cambio (se desplego el contenido nuevo)', () => {
@@ -95,16 +97,124 @@ describe('evaluarDerivaPorHash', () => {
       estadoPrevio: { commit: 'c1', hash: 'abc' },
     });
     expect(r.hayDerivaPorHash).toBe(false);
+    expect(r.aviso).toBe(false);
   });
 
-  it('MARCA deriva si el commit cambio pero el hash publicado sigue igual — el caso real de v223/v236', () => {
+  // Issue #271: ezbr_sha256 sticky con reloj OK no es fallo de contenido.
+  // Caso real 2026-09-18: version 261→263, updated_at avanzó, hash a9fe8807…
+  // no se movió, y el bundle nuevo sí estaba vivo (/acciones/tick → 404).
+  it('NO marca deriva si el commit cambio, el hash no se movio y el reloj esta OK (hash sticky)', () => {
+    const r = evaluarDerivaPorHash({
+      hashActual: 'abc',
+      commitActual: 'c2',
+      estadoPrevio: { commit: 'c1', hash: 'abc' },
+      hayDerivaReloj: false,
+    });
+    expect(r.hayDerivaPorHash).toBe(false);
+    expect(r.aviso).toBe(true);
+    expect(r.motivo).toMatch(/sticky/);
+    expect(r.motivo).toMatch(/AVISO/);
+  });
+
+  it('el default (sin hayDerivaReloj) trata el hash sticky como aviso, no como fallo', () => {
     const r = evaluarDerivaPorHash({
       hashActual: 'abc',
       commitActual: 'c2',
       estadoPrevio: { commit: 'c1', hash: 'abc' },
     });
+    expect(r.hayDerivaPorHash).toBe(false);
+    expect(r.aviso).toBe(true);
+  });
+
+  it('MARCA deriva de contenido si el hash no se movio Y el reloj tambien marca deriva', () => {
+    const r = evaluarDerivaPorHash({
+      hashActual: 'abc',
+      commitActual: 'c2',
+      estadoPrevio: { commit: 'c1', hash: 'abc' },
+      hayDerivaReloj: true,
+    });
     expect(r.hayDerivaPorHash).toBe(true);
+    expect(r.aviso).toBe(false);
     expect(r.motivo).toMatch(/republic/);
+  });
+});
+
+/**
+ * El job sale 1 cuando reloj O contenido marcan deriva — la misma
+ * combinacion que `main()` usa para process.exit(1).
+ * @param {{ hayDeriva: boolean, hayDerivaPorHash: boolean }} senales
+ */
+function elJobFallaria({ hayDeriva, hayDerivaPorHash }) {
+  return hayDeriva || hayDerivaPorHash;
+}
+
+describe('combinacion reloj + hash (contrato de exit 1, issue #271)', () => {
+  const HASH_STICKY = 'a9fe8807f8471cda71c46a086c10644f2e4a40c279c779712b3dba97c5517580';
+
+  it('hash sticky + reloj OK: el job NO falla (falso positivo del 2026-09-18)', () => {
+    // Despliegue ~2026-09-18 17:34Z, ultimo commit del arbol anterior a eso.
+    const reloj = evaluarDeriva({
+      desplegadoEnMs: Date.UTC(2026, 8, 18, 17, 34, 0),
+      commitISO: '2026-09-18T16:00:00.000Z',
+    });
+    expect(reloj.hayDeriva).toBe(false);
+
+    const contenido = evaluarDerivaPorHash({
+      hashActual: HASH_STICKY,
+      commitActual: '083856864fc8e59b8038ad7af8e1b279affa8552',
+      estadoPrevio: {
+        commit: 'a4f3ce6000000000000000000000000000000000',
+        hash: HASH_STICKY,
+      },
+      hayDerivaReloj: reloj.hayDeriva,
+    });
+    expect(contenido.hayDerivaPorHash).toBe(false);
+    expect(contenido.aviso).toBe(true);
+    expect(elJobFallaria({ hayDeriva: reloj.hayDeriva, hayDerivaPorHash: contenido.hayDerivaPorHash })).toBe(
+      false,
+    );
+  });
+
+  it('deriva de reloj sigue haciendo fallar el job aunque el hash no se mueva', () => {
+    // Arbol en main posterior a updated_at de produccion: sigue siendo exit 1.
+    const reloj = evaluarDeriva({
+      desplegadoEnMs: Date.UTC(2026, 8, 18, 12, 0, 0),
+      commitISO: '2026-09-18T17:00:00.000Z',
+    });
+    expect(reloj.hayDeriva).toBe(true);
+
+    const contenido = evaluarDerivaPorHash({
+      hashActual: HASH_STICKY,
+      commitActual: '083856864fc8e59b8038ad7af8e1b279affa8552',
+      estadoPrevio: {
+        commit: 'a4f3ce6000000000000000000000000000000000',
+        hash: HASH_STICKY,
+      },
+      hayDerivaReloj: reloj.hayDeriva,
+    });
+    expect(contenido.hayDerivaPorHash).toBe(true);
+    expect(elJobFallaria({ hayDeriva: reloj.hayDeriva, hayDerivaPorHash: contenido.hayDerivaPorHash })).toBe(
+      true,
+    );
+  });
+
+  it('deriva de reloj hace fallar el job aunque el hash del contenido haya cambiado', () => {
+    const reloj = evaluarDeriva({
+      desplegadoEnMs: DESPLIEGUE_2026_08_18_MS,
+      commitISO: '2026-08-20T13:03:24-05:00',
+    });
+    expect(reloj.hayDeriva).toBe(true);
+
+    const contenido = evaluarDerivaPorHash({
+      hashActual: 'nuevo',
+      commitActual: 'c2',
+      estadoPrevio: { commit: 'c1', hash: 'viejo' },
+      hayDerivaReloj: reloj.hayDeriva,
+    });
+    expect(contenido.hayDerivaPorHash).toBe(false);
+    expect(elJobFallaria({ hayDeriva: reloj.hayDeriva, hayDerivaPorHash: contenido.hayDerivaPorHash })).toBe(
+      true,
+    );
   });
 });
 

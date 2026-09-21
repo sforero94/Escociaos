@@ -1835,3 +1835,107 @@ dispara por segunda vez en tres dias sin que nadie toque nada. Comprobacion del 
 - **ESCO-110**: al confirmar David, comprobar
   `select count(*) from registros_trabajo where fecha_trabajo='2025-09-14'` = 0 y que
   `min(fecha_trabajo)` suba a 2025-10-16.
+
+## Corrida 2026-09-18-viernes (drenaje del backlog)
+
+**Conjunto elegible VACIO.** Cero filas en `Estado = Not started` en toda la base de
+hallazgos. Cero pendientes de 60+ dias. **El viernes no filo ningun hallazgo de producto
+y no abrio ninguna investigacion** — ningun PR, ninguna migracion, ningun cierre.
+
+### REGRESION DE TOOLING — `apply_migration` desaparecio del conector de escritura (ESCO-114, P1)
+
+**El hecho, medido, no inferido**: `mcp__Supabase_Escritura__apply_migration` **no existe en la
+sesion**. Busqueda por selector directo → "No matching deferred tools found". En su lugar el
+conector expone `execute_sql`, que probado con un SELECT inofensivo entra como
+**`supabase_read_only_user` con `default_transaction_read_only = on`**.
+
+**Existia hace una semana**: `reports/2026-09-11-viernes.md:213` registra
+`Supabase_Escritura | apply_migration | OK`. Es regresion, no confusion de nombres.
+
+**CONSECUENCIA OPERATIVA: el carril `ddl_aditivo` no puede correr hasta que Santiago lo
+restaure en la Routine del viernes.** No lo intentes por Composio — `CLAUDE.md` §6 y §12
+prohiben `SUPABASE_BETA_RUN_SQL_QUERY` y `SUPABASE_APPLY_A_MIGRATION` en cualquier fase.
+Si un viernes futuro saca una migracion elegible y el tool sigue ausente: **filar el estado,
+no buscar un rodeo.**
+
+### LEDGER DE REFUTACIONES — lo que murio en verificacion esta corrida
+
+**`infra-perf/conector-escritura/el-conector-gano-escritura-libre` → REFUTADO 2026-09-18.**
+La primera lectura de ESCO-114 afirmaba que el conector habia ganado una herramienta de
+escritura mas amplia (`execute_sql` = DML/DDL arbitrario) y que por tanto la propiedad de
+seguridad "freehand SQL es mecanicamente imposible" se habia roto **hacia afuera**.
+**Lo mato una medicion directa**: `execute_sql` de ese conector resuelve read-only. El
+conector no se abrio, **se cerro**. La perdida es de **capacidad**, no de **contencion**.
+No re-investigar como agujero de seguridad: **no lo es**.
+
+Matiz que aporto el verificador y conviene guardar: la propiedad documentada
+("permite `apply_migration` y nada mas") describia siempre la **allowlist**, no lo **expuesto**.
+Ya el 2026-09-17 `query_logs` de ese mismo conector fue **denegado por el clasificador**
+(`memory/bug-triage.md:644`) — o sea que el conector ya exponia mas de un tool antes de esto.
+`CLAUDE.md:343` y `:620` estan desactualizados en ese punto.
+
+### VIGILANCIAS DEL LUNES QUE SE PUEDEN CERRAR (verificadas contra produccion hoy)
+
+- **La 158 funciono.** La memoria advertia que el 17-sep sellaria "una cifra plausible pero
+  baja" de `horas_sol_duracion`, mas dificil de ver que el `0,00` del 16-sep. **No paso**:
+  `2026-09-16` (11 lecturas) y `2026-09-17` (189 lecturas) estan **los dos en NULL**, los dos
+  bajo el umbral de 240. El cuerpo vivo de `fn_clima_rollup_diario` lleva la guarda de
+  cobertura. **ESCO-108 esta arreglado Y aplicado**, no solo fusionado.
+- **La estacion de clima volvio sola.** El jueves llevaba 29 h muda. Hoy: ultima lectura
+  `2026-09-18 11:20:02 UTC`, **0,0 h de silencio**, 266 lecturas en 24 h. **No hace falta ir a
+  la finca.** El corte fue fisico y se resolvio sin intervencion.
+- **ESCO-112 esta sustancialmente completo** en `8de246e`: la guarda de la 147 ahora busca
+  `%"Ajuste"%` (comillas dobles, linea 274) y ya no aborta siempre; la migracion huerfana
+  quedo como `157_limpieza_chequeo_prueba_qa.sql` con cabecera `NO APLICAR`; `CLAUDE.md:417`
+  corregido. **Ninguna de las dos fichas se cerro** — las dos llevan `Requiere aprobacion`.
+
+### DERIVA NUEVA, NO ARREGLADA A PROPOSITO
+
+`CLAUDE.md:439` sigue diciendo que la **158** esta "**ESCRITA, SIN APLICAR**". Se aplico el
+2026-09-17 20:45:45 UTC (ledger `20260917204545`), dos minutos despues de fusionarse. **Sexta
+vez que falla el punto 5 de la lista de cierre** — y esta vez dentro del mismo commit que
+arreglaba ESCO-112, cuyo tema es esa misma deriva. **No se toco** porque ESCO-112 lleva
+`Requiere aprobacion`, y esa marca anula la clase por completo.
+
+### ORDEN CORRECTO OBSERVADO, vale la pena registrarlo
+La 158 se fusiono (20:43:49 UTC) **y luego** se aplico (20:45:45 UTC). Cero ventana de
+"produccion corre un esquema que `main` no documenta". No hay nada en APLICADO SIN FUSIONAR.
+
+## Racha del viernes (regla de auto-poda del drenaje) — actualizada 2026-09-18
+
+| Corrida | Conjunto elegible | Racha de vacios |
+|---|---|---|
+| 2026-09-04-viernes | 8 elegibles | 0 |
+| 2026-09-11-viernes | 9 elegibles | 0 |
+| **2026-09-18-viernes** | **VACIO** | **1** |
+
+**La auto-poda NO aplica todavia** (hace falta tres seguidos). **Y hay que leer este vacio con
+cuidado antes de sacar conclusiones**: no es que el viernes se haya quedado sin trabajo
+estructuralmente — es que **Santiago drenó el backlog a mano el miercoles** con `8de246e`. Si el
+lunes vuelve a llenarlo, la racha se corta. **No recomendar mover el viernes a mensual sobre la
+base de un vaciado manual puntual.**
+
+## 2026-09-21-lunes — hechos transversales
+
+### El preflight de Fase 0 volvió a pagar, y esta vez el hallazgo es de la propia operación
+- **`apply_migration` SIGUE ausente del conector `Supabase_Escritura`** — tercera corrida seguida (viernes 09-18, y re-verificado hoy). El manifiesto lista 13 herramientas y ninguna es ésa. **Monday nunca escribe, así que no bloqueó nada hoy.** Se añadió como evidencia a ESCO-114 en vez de filar un duplicado.
+- **El prompt almacenado de la Routine del lunes afirma literalmente «A `Supabase_Escritura` connector is attached and exposes `apply_migration` and nothing else».** Las dos mitades son falsas. La misma afirmación está en `escociaos-po/CLAUDE.md` líneas 343 y 620. **Arreglar el conector no arregla los tres textos.**
+- Todo lo demás del preflight, verde: 4/4 toolkits `active`; `supabase_bitis-coward` devuelve **exactamente 1 proyecto** (`Escocia OS`, `ywhtjwawnkeqlwxbvgup`, ACTIVE_HEALTHY, PG 17.6.1.042); `SELECT current_user` → **`supabase_read_only_user`**. **Cero prompts de permiso en toda la corrida.**
+
+### La plantilla de despacho estaba incompleta — hallazgo contra la operación (ESCO-120)
+`runbooks/run-lunes.md` paso 8 exige DOS conjuntos: el de deduplicación (`Estado != Done`) **y el de no-refilar** (`Resolucion = Aceptado (no se arregla)` o `Refutado`). **`CLAUDE.md` §3 paso 3 sólo menciona el primero.** Despaché 5 de 6 agentes sin el segundo y tuve que mandarlo después por `SendMessage`. Funcionó —Data Integrity confirma explícitamente que honró ESCO-100/101/103/104/107/111— **pero funcionó porque lo noté, no porque la plantilla lo produjera.**
+**Importa más ahora que antes**: el drenaje del viernes dejó el tablero en 1 fila, así que el conjunto de deduplicación está casi vacío mientras el de aceptados es grande (**9 cerrados como «Aceptado (no se arregla)» en 7 días**). **El conjunto de no-refilar es hoy el más cargado de los dos, y es el que la plantilla olvida.**
+
+### La consolidación mató un P2, y el método vale guardarlo
+Infra filó «monitoreo congelado 26 días» midiendo `max(fecha_inicio)` de `rondas_monitoreo` = 2026-08-26. Usage Analytics tenía el dato que lo refuta: **la ronda R30 cerró el 2026-09-18** con 44 obs / 12 sublotes, y la cadencia real entre rondas es de ~33-35 días. **`max(fecha_inicio)` no mide abandono.** No se filó. Umbral acordado y anotado en las dos memorias: **a partir del 2026-10-05 un cero sí es señal.**
+
+### Un P1 verificado por reproducción independiente en vez de por un refutador
+`main` llevaba dos días en rojo y **lo encontraron Bug Triage y Usage Analytics por separado**, cada uno corriendo las tres comprobaciones desde su propio worktree, con resultados idénticos. Para una afirmación que es un código de salida —no una inferencia— **la reproducción mutua es evidencia más fuerte que una pasada de refutación**, y gastar un agente en «¿de verdad falla `npm test`?» habría sido desperdicio. Se filó como P1 diciendo esto explícitamente. **El precedente aplica sólo a afirmaciones mecánicamente comprobables; una inferencia sigue necesitando su refutador.**
+
+### La receta de worktrees se ganó su sitio otra vez
+Un `npm ci` en el checkout principal + 6 `git worktree add` con `node_modules` simbolizado. **Cuatro agentes corrieron lint/typecheck/suite en paralelo sin colisionar, y el rojo de dos días salió en los primeros minutos.** Es exactamente el escenario del hallazgo #92. Coste: ~2 min. Limpieza: `git worktree remove --force <path>` + `git worktree prune`.
+
+### Trampas de herramienta de esta corrida (transversales)
+- **`NOTION_QUERY_DATABASE_WITH_FILTER` sin filtro sobre esta base devuelve ~429k tokens** y va al workbench. **Filtrar siempre** (`{"property":"Estado","status":{"does_not_equal":"Done"}}` da el conjunto abierto en una sola llamada pequeña) o procesar con `COMPOSIO_REMOTE_BASH_TOOL` + `jq` sobre el fichero guardado. La línea que extrae el tablero compacto: `jq -r '.results[0].response.data.results[] | [(.properties.ID.unique_id.prefix + "-" + (.properties.ID.unique_id.number|tostring)), .properties.Severidad.select.name, .properties.Estado.status.name, (.properties.Resolucion.select.name // "-"), (.properties.Hallazgo.title[0].plain_text // "-")] | @tsv'`
+- **`Severidad` usa raya larga**: `P1 — Alto`, `P2 — Medio`, `P3 — Bajo`. `Estado` es `status`, no `select`.
+- **`net._http_response` no tiene columna `url`** y **`cron.job_run_details` no tiene `jobname`**. Las dos costaron round-trips.
