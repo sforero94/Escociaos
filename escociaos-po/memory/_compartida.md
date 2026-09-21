@@ -1963,3 +1963,46 @@ corrida no los re-investigue.
   propia accion recomendada pedia hacer si vencia el plazo.
   **Leccion de operacion: una accion con FECHA DURA que depende de un paso humano necesita
   que alguien la persiga antes del vencimiento. Filarla no la ejecuta.**
+
+---
+
+## `hato_capturas_foto.desenlace = 'pendiente'` va a significar DOS cosas (desde la 160)
+
+Escrito 2026-09-21, al revisar la migración 160. **Todavía no muerde — anotado para
+cuando muerda.**
+
+La 146 creó la tabla con un contrato simple: `pendiente` = se subió la foto y se leyó,
+pero **nadie aprobó** — o sea, una alerta. `describirUltimaCaptura` la pinta con
+`tono: 'alerta'`, y existe `idx_hato_capturas_foto_desenlace`.
+
+La 160 agrega `tipo = 'liquidacion'`, y en ese carril **`pendiente` es el estado final
+SANO**. El motivo es estructural, no un olvido: el guardado real de la liquidación pasa
+por `fn_hato_guardar_quincena_venta` **desde el navegador**, y el navegador no tiene
+UPDATE sobre `hato_capturas_foto` — la 146 se lo revocó (`REVOKE INSERT, UPDATE, DELETE,
+TRUNCATE … FROM authenticated`, verificado en vivo). Así que el endpoint no tiene cómo
+cerrar la fila, y toda carga de liquidación correcta muere en `pendiente`.
+
+**Hoy no rompe nada**: `useUltimaCapturaFoto` filtra por `tipo` y su único llamador
+(`PesajeLecheCard.tsx:58`) pasa `'pesaje'`. Una fila `liquidacion` no puede colarse en la
+tarjeta de Pesaje.
+
+**Condición de disparo: la primera tarjeta, consulta o alerta de liquidación que cuente
+`pendiente` como problema va a marcar como fallidas TODAS las cargas sanas.** Quien la
+escriba tiene que ramificar por `tipo`, no por `desenlace` a secas.
+
+### Y el límite de lo que la 160 puede medir
+
+Una fila `liquidacion` prueba que **se leyó la foto**. NO prueba que la venta de leche
+haya aterrizado en `fin_ingresos` / `hato_produccion_quincenal`. Cerrar esa mitad exige
+que el guardado del navegador escriba en esta tabla, o sea revertir la revocación de la
+146 o mover el guardado al servidor — decisión de producto, no un ajuste. **No se filó**:
+ESCO-115 pedía que la carga dejara rastro, y eso sí queda cerrado.
+
+### Lección de método que se repitió dos veces hoy
+
+**Un barrido de números de migración caduca en minutos, no en días.** El encabezado de la
+160 afirmaba que 159, 160 y 161 estaban libres: cierto a las 14:55, falso a las 14:56,
+cuando `claude/po-rls-161` se empujó. Es el mismo error que ya forzó tres renumeraciones
+(ver la entrada de la 144 en CLAUDE.md). **El barrido se corre en el momento de elegir el
+número, y nunca se cita de un encabezado ajeno ni de memoria** — y tiene que incluir las
+ramas de `origin`, que no están ni en el ledger ni en `respaldos`.
