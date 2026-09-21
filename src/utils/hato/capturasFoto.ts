@@ -13,7 +13,10 @@
 // (`formatShortDate`), para que esta función se pueda probar sin fijar una
 // zona horaria ni un locale.
 
-export type TipoCapturaFoto = 'pesaje' | 'chequeo';
+// `liquidacion` entró con la migración 160 (hallazgo ESCO-115): la
+// liquidación quincenal de leche de El Pomar es la tercera ruta de foto
+// del módulo, y era la única sin registro de intentos.
+export type TipoCapturaFoto = 'pesaje' | 'chequeo' | 'liquidacion';
 export type DesenlaceCapturaFoto = 'pendiente' | 'ok' | 'ocr_fallo' | 'abandonado' | 'error';
 
 export interface CapturaFotoResumen {
@@ -40,6 +43,53 @@ export interface DescripcionCaptura {
   tono: 'neutro' | 'alerta';
 }
 
+/** Vocabulario por planilla. Cada ruta cuenta cosas distintas -- el pesaje
+ * cuenta celdas, el chequeo filas, la liquidación campos de un documento de
+ * una sola fila -- y el género tampoco coincide, así que las frases se
+ * declaran enteras en vez de armarse concatenando. */
+interface VocabularioCaptura {
+  unidadSingular: string;
+  unidadPlural: string;
+  /** "el OCR no leyó ___". */
+  ningunaUnidad: string;
+  /** Participio que concuerda con la unidad: "12 celdas leídas". */
+  leidas: string;
+  guardadaSingular: string;
+  guardadaPlural: string;
+  /** "no guardó ___" cuando el conteo medido es 0. */
+  noGuardo: string;
+}
+
+const VOCABULARIO: Record<TipoCapturaFoto, VocabularioCaptura> = {
+  pesaje: {
+    unidadSingular: 'celda',
+    unidadPlural: 'celdas',
+    ningunaUnidad: 'ninguna celda',
+    leidas: 'leídas',
+    guardadaSingular: 'pesaje guardado',
+    guardadaPlural: 'pesajes guardados',
+    noGuardo: 'celdas',
+  },
+  chequeo: {
+    unidadSingular: 'fila',
+    unidadPlural: 'filas',
+    ningunaUnidad: 'ninguna fila',
+    leidas: 'leídas',
+    guardadaSingular: 'fila guardada',
+    guardadaPlural: 'filas guardadas',
+    noGuardo: 'filas',
+  },
+  liquidacion: {
+    unidadSingular: 'campo',
+    unidadPlural: 'campos',
+    ningunaUnidad: 'ningún campo',
+    leidas: 'leídos',
+    guardadaSingular: 'campo guardado',
+    guardadaPlural: 'campos guardados',
+    noGuardo: 'campos',
+  },
+};
+
 function plural(n: number, singular: string, pluralForma: string): string {
   return `${n} ${n === 1 ? singular : pluralForma}`;
 }
@@ -62,8 +112,7 @@ export function describirUltimaCaptura(
   }
 
   const prefijo = `Última captura: ${fechaTexto}`;
-  const unidad = captura.tipo === 'pesaje' ? ['celda', 'celdas'] : ['fila', 'filas'];
-  const guardadas = captura.tipo === 'pesaje' ? ['pesaje guardado', 'pesajes guardados'] : ['fila guardada', 'filas guardadas'];
+  const v = VOCABULARIO[captura.tipo];
 
   switch (captura.desenlace) {
     case 'ok': {
@@ -72,24 +121,24 @@ export function describirUltimaCaptura(
       }
       if (captura.filasEscritas === 0) {
         // Cero MEDIDO: aprobó y no entró nada. Es un hecho, y es un problema.
-        return { texto: `${prefijo}, no guardó ${unidad[1]}`, tono: 'alerta' };
+        return { texto: `${prefijo}, no guardó ${v.noGuardo}`, tono: 'alerta' };
       }
       return {
-        texto: `${prefijo}, ${plural(captura.filasEscritas, guardadas[0], guardadas[1])}`,
+        texto: `${prefijo}, ${plural(captura.filasEscritas, v.guardadaSingular, v.guardadaPlural)}`,
         tono: 'neutro',
       };
     }
     case 'ocr_fallo':
-      return { texto: `${prefijo}, el OCR no leyó ninguna ${unidad[0]}`, tono: 'alerta' };
+      return { texto: `${prefijo}, el OCR no leyó ${v.ningunaUnidad}`, tono: 'alerta' };
     case 'pendiente': {
       if (captura.celdasLeidasOcr === 0) {
-        return { texto: `${prefijo}, el OCR no leyó ninguna ${unidad[0]}`, tono: 'alerta' };
+        return { texto: `${prefijo}, el OCR no leyó ${v.ningunaUnidad}`, tono: 'alerta' };
       }
       if (captura.celdasLeidasOcr === null) {
         return { texto: `${prefijo}, quedó sin terminar`, tono: 'alerta' };
       }
       return {
-        texto: `${prefijo}, ${plural(captura.celdasLeidasOcr, unidad[0], unidad[1])} leídas sin aprobar`,
+        texto: `${prefijo}, ${plural(captura.celdasLeidasOcr, v.unidadSingular, v.unidadPlural)} ${v.leidas} sin aprobar`,
         tono: 'alerta',
       };
     }
@@ -116,7 +165,7 @@ export interface FilaCapturaFotoDb {
   detalle: string | null;
 }
 
-const TIPOS: TipoCapturaFoto[] = ['pesaje', 'chequeo'];
+const TIPOS: TipoCapturaFoto[] = ['pesaje', 'chequeo', 'liquidacion'];
 const DESENLACES: DesenlaceCapturaFoto[] = ['pendiente', 'ok', 'ocr_fallo', 'abandonado', 'error'];
 
 /**
