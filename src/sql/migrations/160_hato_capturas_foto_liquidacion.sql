@@ -51,12 +51,33 @@
 --     que es el estado honesto y ya es la senal accionable -- mismo
 --     criterio con el que la 146 dejo `abandonado` sin escritor.
 --
--- VERIFICACION DEL NUMERO contra las cuatro fuentes del runbook
--- (2026-09-21): el fichero mas alto del repo es `158_*`; el ledger
--- `supabase_migrations.schema_migrations` no tiene ningun `159_*` ni
--- `160_*`; el esquema `respaldos` tampoco; y el barrido de las 100 ramas
--- de `origin` sobre `src/sql/migrations/` no devuelve ningun `159_*`,
--- `160_*` ni `161_*`.
+-- VERIFICACION DEL NUMERO contra las cuatro fuentes del runbook.
+-- Re-verificada 2026-09-21 despues de que dos ramas hermanas tomaran sus
+-- numeros: `160_` es UNICO en las 106 referencias de `origin`, no esta en
+-- el ledger `supabase_migrations.schema_migrations` (cabeza
+-- `20260921132809 / 150_retirar_stock_15_15_15_prueba`) ni en `respaldos`,
+-- y `origin/main` llega hasta `158_`.
+--   OJO, el 159 y el 161 YA NO ESTAN LIBRES: los tomaron
+--   `claude/po-clima-159` y `claude/po-rls-161`, empujadas DESPUES de que
+--   se escribiera la primera version de este encabezado. La version
+--   anterior de estas lineas decia que los tres numeros estaban libres;
+--   era cierta al escribirla y falsa una hora despues. Es exactamente la
+--   nota que el proximo autor lee para elegir numero, asi que el barrido
+--   se corre de nuevo en el momento de elegir -- nunca se cita de memoria
+--   ni de un encabezado ajeno.
+--
+-- ORDEN DE APLICACION: MIGRACION PRIMERO, `functions deploy` DESPUES.
+-- Este PR SI embarca un productor del valor nuevo --
+-- `registrarCapturaFoto({ tipo: 'liquidacion' })` en
+-- `hato-produccion-quincena-foto.ts`, en los DOS arboles -- asi que no es
+-- un CHECK ampliado para un valor que nadie escribe todavia. Mismo
+-- criterio explicito que la 140, y la leccion de la 105.
+--   Al reves el fallo es DEGRADADO, no duro: el INSERT choca con el CHECK
+--   viejo y devuelve 23514, pero `registrarCapturaFoto` no lanza nunca --
+--   lo registra en el log y devuelve `null`, y `cerrarCapturaFoto` no hace
+--   nada con un id nulo. La carga de la liquidacion sigue funcionando
+--   igual que hoy. Lo que se pierde, en silencio, es justo la
+--   instrumentacion que esta migracion existe para agregar.
 --
 -- Aditiva al dominio: amplia un CHECK, no toca ninguna fila.
 -- Filas afectadas: cero.
@@ -257,6 +278,12 @@ END $$;
 --     CHECK (tipo IN ('pesaje', 'chequeo'));
 --   COMMENT ON TABLE public.hato_capturas_foto IS
 --     'Un intento de carga por foto (pesaje/chequeo) por fila. Se inserta como pendiente justo despues de guardar la foto en Storage y ANTES del OCR, y se cierra con el desenlace real. Hallazgo ESCO-76.';
+--   -- La migracion escribe DOS comentarios y el rollback tiene que
+--   -- deshacer los dos. `col_description` sobre `tipo` estaba en NULL
+--   -- antes de la 160 (verificado en vivo 2026-09-21), asi que NULL es el
+--   -- estado previo real. Sin esta linea, la columna se queda describiendo
+--   -- `liquidacion` mientras el CHECK vuelto atras lo prohibe.
+--   COMMENT ON COLUMN public.hato_capturas_foto.tipo IS NULL;
 --   COMMIT;
 --
 -- El lado codigo se revierte aparte: hay que sacar la llamada a
