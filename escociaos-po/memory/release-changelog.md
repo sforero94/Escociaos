@@ -512,3 +512,7 @@ silencio es por construccion.** Ventanas de deriva reales medidas: **42 h** (`e2
 ### PRs abiertos al cierre de la corrida
 #275 (0 d, `clean`, abierto por esta corrida — **`main` está rojo hasta que se fusione**) · #272 (3 d, arregla el falso positivo de deriva, ESCO-126) · #270 (4 d, **borrador**, marca la 158 aplicada — plegar ahí también la corrección de `CLAUDE.md:378`, ESCO-118) · #247 (7 d, **estancado sin actividad desde el minuto en que se abrió**, retiene el slot de migración 150) · #228 (10 d, **borrador y con base que NO es `main`** — apunta a `cursor/hato-gestor-alertas-fb81`, 93 commits atrás y no ancestro; **no puede fusionarse nunca así: cerrarlo o reapuntarlo**).
 **Ramas muertas, seguras de borrar**: `cursor/telegram-usuario-lookup-0cc0` (fusionada en contenido como #274) y `cursor/tratamiento-fecha-anio-746a` (fusionada como #214, 100 commits atrás).
+
+### Cierre el mismo día (2026-09-21, ~11:56Z)
+Santiago fusionó **#275 y #272** ~35 min después de la notificación de la corrida. **ESCO-125 (P1) y ESCO-126 (P2) cerrados como `Arreglado` el mismo día en que se filaron.** `main` verificado verde de forma independiente contra el árbol fusionado: lint exit 0 (0 errores / 919 warnings), typecheck exit 0, **vitest 186 ficheros / 3.862 pruebas exit 0**. Las 3.862 (vs 3.857) son pruebas que trajo el propio #272.
+**Lo que NO cierra**: sigue sin haber gate de CI. La única comprobación que corrió sobre el #275 fue el preview de Vercel — **el PR que arregló dos días de rojo tampoco estuvo verificado por CI**. Nuevo HEAD de `main`: `7a4ede4`.
