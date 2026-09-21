@@ -62,14 +62,22 @@
 -- Filas afectadas: cero.
 -- =====================================================================
 
-BEGIN;
-
 -- ---------------------------------------------------------------------
 -- Linea base + precondiciones.
 -- La linea base va en una tabla temporal y NO en un literal: es la
 -- leccion de la 103 y de la 120 (`monitoreos` con el literal 4000). Esta
 -- tabla la escribe la edge function en cualquier momento, asi que un
 -- numero contado hoy puede estar viejo cuando la migracion corra.
+--
+-- SIN `BEGIN;`/`COMMIT;` propios: `apply_migration` ya envuelve el fichero
+-- entero, y esta acreditado -- 080, 081, 099 y 103 abortaron por
+-- `RAISE EXCEPTION` y revirtieron todo sin aportar su propia transaccion.
+-- Solo 4 de 167 ficheros de este directorio traen `BEGIN;`, y ninguna de
+-- las siete migraciones aplicadas mas recientes. Un `COMMIT;` propio
+-- cerraria la transaccion EXTERNA, y lo que viniera despues correria
+-- fuera de ella, donde ninguna guarda posterior puede revertirlo.
+-- Por eso `ON COMMIT DROP` de aca abajo cuelga de ESA transaccion: la
+-- tabla temporal muere con ella.
 -- ---------------------------------------------------------------------
 CREATE TEMP TABLE _base_160 ON COMMIT DROP AS
 SELECT count(*) AS filas FROM public.hato_capturas_foto;
@@ -231,8 +239,6 @@ BEGIN
   RAISE NOTICE '160 OK: tipo admite pesaje/chequeo/liquidacion, 10 CHECK intactos, % filas (base %), RLS y grants sin cambios.',
     v_filas, v_base;
 END $$;
-
-COMMIT;
 
 -- ---------------------------------------------------------------------------
 -- ROLLBACK (ejecutable, si hubiera que revertir).
