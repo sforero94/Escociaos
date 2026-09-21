@@ -49,7 +49,10 @@ export interface ValidationResult {
 export const TELEGRAM_MODULES: TelegramModulo[] = [
   { key: 'labores', label: 'Labores', description: 'Registrar jornales de trabajo' },
   { key: 'monitoreo', label: 'Monitoreo', description: 'Registrar monitoreo de plagas' },
-  { key: 'gastos', label: 'Gastos', description: 'Registrar gastos' },
+  // `gastos` se retiró el 2026-09-21 (ESCO-117): el flujo /gasto de Telegram
+  // escribía con el service role, que salta la RLS de las 13 tablas `fin_*`.
+  // Ver la migración 162 y la nota de retiro en CLAUDE.md. NO reintroducir la
+  // clave sin decidir antes cómo se autoriza una escritura financiera por bot.
   { key: 'ingresos', label: 'Ingresos', description: 'Registrar ingresos' },
   { key: 'hato_produccion', label: 'Producción Hato Lechero', description: 'Pesaje semanal de leche y producción quincenal (litros al camión)' },
   // Fase 3 de docs/brief_tecnico_verificacion_inventario.md (§3.2/§3.3): el

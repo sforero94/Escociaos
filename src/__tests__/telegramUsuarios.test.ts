@@ -27,14 +27,14 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('TELEGRAM_MODULES', () => {
-  it('exports exactly 9 modules', () => {
-    expect(TELEGRAM_MODULES).toHaveLength(9);
+  it('exports exactly 8 modules', () => {
+    expect(TELEGRAM_MODULES).toHaveLength(8);
   });
 
   it('contains the expected module keys', () => {
     const keys = TELEGRAM_MODULES.map((m) => m.key);
     expect(keys).toEqual([
-      'labores', 'monitoreo', 'gastos', 'ingresos', 'hato_produccion',
+      'labores', 'monitoreo', 'ingresos', 'hato_produccion',
       'inventario_ronda', 'inventario_explicacion', 'inventario_aprobacion',
       'consultas',
     ]);
@@ -301,7 +301,7 @@ describe('toggleModulo', () => {
 
   it('returns a new array (immutability)', () => {
     const original = ['labores', 'monitoreo'];
-    const result = toggleModulo(original, 'gastos');
+    const result = toggleModulo(original, 'ingresos');
     expect(result).not.toBe(original);
     expect(original).toEqual(['labores', 'monitoreo']);
   });
