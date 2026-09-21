@@ -646,3 +646,23 @@ Integridad: 0 huerfanos en 11 relaciones, 0 stock negativo, 0 chapetas duplicada
 ### Vigilancia
 - **`monitoreos` a 24 días sin fila nueva.** OJO: la ronda R30 abrió el 08-26 y **cerró el 2026-09-18** con 44 obs / 12 sublotes — o sea que las observaciones están congeladas desde el 08-28 pero la ronda SÍ se cerró. Usage Analytics fija el umbral real: las rondas abren cada ~33-35 días, la próxima cae ~09-23/09-30, y **a partir del 2026-10-05 un cero SÍ es señal.** No filar antes.
 - **`compras` 47 días sin fila** mientras el consumo sigue. Cambia de naturaleza si algún insumo activo se acerca a cero.
+
+### 2026-09-21 — ANULAR EN SITIO LE GANA A BORRAR, y corrige una propuesta propia
+El stock de 15-15-15 (150 kg de una prueba del circuito de la ronda de agosto) se resolvio,
+pero **NO como lo proponia el PR #247, que Santiago cerro sin fusionar**. Mi propuesta era
+borrar la fila de `movimientos_inventario` invocando el precedente 119. El la **anulo en
+sitio**: `cantidad` 150 -> 0, `saldo_nuevo` 150 -> 0, `valor_movimiento` 654.000 -> 0, y
+anexo a `observaciones` el motivo con la referencia al PR.
+
+**Por que su via es mejor, y vale como regla:** conserva la fila como evidencia de que la
+prueba ocurrio, con su explicacion escrita al lado, y aun asi deja el libro cuadrado contra
+el stock (`saldo_nuevo = 0` contra `cantidad_actual = 0`, sin divergencia). Borrar la fila
+habria destruido la evidencia; compensar con una Salida habria escrito un consumo falso.
+**La tercera via -- anular los importes y dejar la fila con su nota -- logra las dos cosas, y
+no estaba en mi analisis.** `movimientos_inventario` no esta trazada por
+`globalgap_correcciones`, asi que esa nota en `observaciones` ES el registro.
+
+Estado final verificado: 1 movimiento, todo en 0,00, `cantidad_actual = 0,00`,
+`activo = false`, las 2 filas de la ronda intactas. **Tema cerrado, no re-filar.**
+El numero de migracion **150 quedo como hueco** (el repo sigue en 151-158); no reutilizarlo
+sin comprobar antes, por la misma regla de siempre.

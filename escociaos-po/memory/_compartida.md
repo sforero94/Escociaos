@@ -1939,3 +1939,27 @@ Un `npm ci` en el checkout principal + 6 `git worktree add` con `node_modules` s
 - **`NOTION_QUERY_DATABASE_WITH_FILTER` sin filtro sobre esta base devuelve ~429k tokens** y va al workbench. **Filtrar siempre** (`{"property":"Estado","status":{"does_not_equal":"Done"}}` da el conjunto abierto en una sola llamada pequeña) o procesar con `COMPOSIO_REMOTE_BASH_TOOL` + `jq` sobre el fichero guardado. La línea que extrae el tablero compacto: `jq -r '.results[0].response.data.results[] | [(.properties.ID.unique_id.prefix + "-" + (.properties.ID.unique_id.number|tostring)), .properties.Severidad.select.name, .properties.Estado.status.name, (.properties.Resolucion.select.name // "-"), (.properties.Hallazgo.title[0].plain_text // "-")] | @tsv'`
 - **`Severidad` usa raya larga**: `P1 — Alto`, `P2 — Medio`, `P3 — Bajo`. `Estado` es `status`, no `select`.
 - **`net._http_response` no tiene columna `url`** y **`cron.job_run_details` no tiene `jobname`**. Las dos costaron round-trips.
+
+## Desenlace de los P1 del 2026-09-14 (verificado 2026-09-21, fuera de corrida)
+
+Ninguno de estos quedo en el informe del 2026-09-21; se anotan aca para que la proxima
+corrida no los re-investigue.
+
+- **EL REINICIO DEL PROYECTO RESOLVIO LOS 504. Confirmado por medicion, no por ausencia de
+  quejas.** Mismo barrido de `edge_logs` por User-Agent, ventana 2026-09-20T13:30Z ->
+  09-21T13:30Z: **edge-runtime 316 peticiones, CERO fallos** (289 `201`, 26 `200`, 1 `409`
+  benigno). La semana anterior eran 153 fallos de 416. Navegador limpio tambien.
+  **La hipotesis de «un solo problema de plataforma, tres sintomas» queda cerrada con el
+  desenlace a favor.**
+- **El tick del hato revivio solo**, sin desplegar nada: corre a diario, `estado = ok`, y la
+  duracion volvio a la linea base sana (1.643-2.428 ms contra los 31.054 ms del 09-07).
+  Confirma que la degradacion de duracion era el carril roto, no el tick.
+- **La lluvia volvio a 287-288 lecturas/dia con `ok`** (09-18, 09-19, 09-20). Hubo un bache
+  aparte el **09-16 (11 lecturas) y 09-17 (189)** que no es el mismo problema y que ya se
+  recupero; si reaparece, mirarlo como incidente propio.
+- **EL DIA DE CLIMA 2026-08-28 SE PERDIO DEFINITIVAMENTE.** Sigue sin fila; la ventana de 21
+  dias cerro el 2026-09-18 y el backfill manual nunca se disparo. **Cerrar la ficha como
+  perdida, no dejarla abierta con el reintento corriendo** -- que es exactamente lo que su
+  propia accion recomendada pedia hacer si vencia el plazo.
+  **Leccion de operacion: una accion con FECHA DURA que depende de un paso humano necesita
+  que alguien la persiga antes del vencimiento. Filarla no la ejecuta.**
