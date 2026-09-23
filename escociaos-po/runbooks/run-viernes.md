@@ -135,10 +135,16 @@ five gates, and **every one must pass or the migration is not applied**:
    statement). Never retyped. The bytes that run must provably be the bytes in
    the PR.
 
-Then: capture the pre-state → apply via `mcp__Supabase_Escritura__apply_migration`
-→ verify the post-state with an explicit query through the **read-only**
-connector → report both. **If a guard aborts, report the abort.** Never edit the
-guard to make it pass.
+Then: capture the pre-state → apply via Composio, `tool_slug:
+SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward`, passing `ref`,
+`query`, `name` and `rollback` → verify the post-state with an explicit query
+through `SUPABASE_RUN_READ_ONLY_QUERY` → report both. **If a guard aborts,
+report the abort.** Never edit the guard to make it pass.
+
+**Phase 0 must confirm `SUPABASE_APPLY_A_MIGRATION` resolves before the run
+reaches this point.** The lane once failed silently for four sessions because
+the write tool had vanished from the old connector and nothing checked until it
+was needed (ESCO-114). Check it at boot, not here.
 
 Then push the branch and open the PR containing the migration file.
 
