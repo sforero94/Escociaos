@@ -244,7 +244,7 @@ reportes-semanales 53. Ronda de inventario: **1 en toda su historia**, 0 en sept
 - **ESCO-107/109 siguen ACEPTADAS y la captura RESUMIÓ** — no se re-filaron. Lo que sí se filó es distinto: el fallo específico de la ruta WEB (ESCO-123).
 
 ### Navegación (nueva)
-- **`hato_capturas_foto` NO tiene `ronda_id` ni `chequeo_id`.** Columnas útiles: **`creado_en`** (no `created_at`), `tipo` (`pesaje|chequeo`), `origen` (`web|telegram`), `desenlace`, `storage_ok`, `storage_rutas`, `celdas_leidas_ocr`, `celdas_confirmadas`, `filas_escritas`, `detalle`, `created_by`. **`detalle` trae el mensaje de error literal que vio el usuario — leerlo SIEMPRE antes de teorizar sobre un `ocr_fallo`.** `fecha` está NULL en las 5 filas: la instrumentación no guarda para qué fecha escribió.
+- **`hato_capturas_foto` NO tiene `ronda_id` ni `chequeo_id`.** Columnas útiles: **`creado_en`** (no `created_at`), `tipo` (`pesaje|chequeo`), `origen` (`web|telegram`), `desenlace`, `storage_ok`, `storage_rutas`, `celdas_leidas_ocr`, `celdas_confirmadas`, `filas_escritas`, `detalle`, `created_by`. **`detalle` trae el mensaje de error literal que vio el usuario — leerlo SIEMPRE antes de teorizar sobre un `ocr_fallo`.** ~~`fecha` está NULL en las 5 filas: la instrumentación no guarda para qué fecha escribió.~~ **CORREGIDO 2026-09-21 contra producción — esta frase era falsa.**
 - **`novedades_uso` usa `ocurrido_at`, no `created_at`**; columnas `tipo` (`expansion|navegacion`), `fuente_novedad` (tabla de origen, NULL en expansiones), `usuario_id`.
 - **`hato_chequeo_vacas` no tiene `ultima_cria` ni `issues`. `registros_trabajo` no tiene `created_by`** — la atribución vive en **`registrado_por`** (migración 074). Las dos costaron round-trips.
 - **Un pico de `hato_chequeo_vacas` sin fila nueva en `hato_chequeos` es una RECAPTURA**: `fn_hato_commit_chequeo` borra e inserta las vacas del mismo encabezado. Esta semana: 34 filas nuevas, 0 encabezados. **Antes de leerlo como adopción, mirar `hato_chequeos.created_at`.**
@@ -258,3 +258,73 @@ Pesajes: 646 filas, última fecha 2026-09-09, `fuente='telegram'` por primera ve
 Rondas de monitoreo: R30 inicio 08-26, **fin 2026-09-18**, 44 obs / 12 sublotes. **OJO: R29 sigue con `fecha_fin` NULL (nunca se cerró).**
 Storage por bucket (objetos / nuevos esta semana): informes-visita 201/149 · reportes-semanales 55/0 · hato-pesajes-fotos 13/4 · hato-liquidaciones-fotos 13/1 · chequeos-fotos 10/4 · facturas 5/0 · photos 2/0 · monitoreo-fotos 1/0.
 `informes_visita`: 5 filas / 170 filas de foto / 78 snippets contra 201 objetos = **31 huérfanos**, que son el guardado fallido del 09-03. Esta semana 149 objetos contra 145 filas de foto: sano.
+
+---
+
+## ESCO-122 — RESUELTO 2026-09-21. `Grok Bot` se queda, y se MIDE APARTE.
+
+**Decisión de Santiago, literal:** «Deja la cuenta, tengo un bot que efectúa cosas por
+web y hay que monitorearlo igual para tener observabilidad y trazabilidad».
+
+Esto **cierra** la nota provisional de más arriba («descontarla … hasta que se decida lo
+contrario»), y la cierra en una dirección distinta de la que esa nota anticipaba. La regla
+decidida no es descontar. Es **separar**:
+
+1. **La cuenta no se borra ni se desactiva.** Es un agente que opera por la web y su
+   trabajo es parte de la operación real de la finca.
+2. **Nunca se suma a la adopción humana.** Una cifra de adopción que incluye al bot
+   contesta una pregunta que nadie hizo. «5 de 10 cuentas escribieron» es falso si una
+   es el bot; lo cierto es «4 humanas + el bot».
+3. **Tampoco se omite.** Omitirla pierde la trazabilidad que Santiago pide. El bot
+   aparece en su **propia línea**, con su propio conteo, en todo informe donde se cuenten
+   escrituras.
+4. **Formato obligatorio en el informe semanal**: `N humanas + bot` — nunca un solo
+   número, nunca una nota al pie.
+
+**Cómo identificarla.** Fila de `usuarios`, rol Gerencia, los 4 módulos, alta
+2026-08-30, nombre `Grok Bot`. **No hay ninguna columna que la marque como agente**: sus
+filas son indistinguibles de las humanas en `novedades_uso`, `hato_capturas_foto` y
+cualquier otra tabla con atribución. El discriminante es el `usuarios.id`, y hay que
+resolverlo por nombre en cada corrida.
+
+**Consecuencia que conviene tener presente y NO se filó:** si algún día existe una segunda
+cuenta de agente, esta regla no escala — la detección por nombre es manual. La solución
+estructural sería una columna `usuarios.es_agente`, que es una migración `ddl_aditivo` y
+una decisión de producto, no un arreglo de medición. Se anota acá; no se filó porque hoy
+hay exactamente un agente y la regla manual alcanza.
+
+**Cero código.** Se verificó que `novedades_uso` **sólo la escribe `useNovedades.ts` y no
+la lee ninguna pantalla**, así que no hay ningún consumidor que hoy esté mezclando bot y
+humano en una cifra mostrada al usuario. El riesgo era de medición, y vivía acá.
+
+### Corrección 2026-09-21 — `hato_capturas_foto` SÍ guarda el período. No filar.
+
+La nota de navegación de arriba decía que «la instrumentación no guarda para qué fecha
+escribió». **Es falso, y casi cuesta un PR.** Un agente lo leyó, propuso «un cambio de una
+línea en la edge function» para persistir `fecha`/`anio`/`mes`, y la comprobación contra
+producción lo refutó antes de despacharlo.
+
+Estado real de las 5 filas:
+
+| tipo | origen | `anio` | `mes` | `fecha` |
+|---|---|---|---|---|
+| chequeo ×2 | web | NULL | NULL | NULL |
+| pesaje ×3 | telegram / web ×2 | **2026** | **9** | NULL |
+
+**Los dos call sites ya pasan todo lo que tienen**, y las dos formas son deliberadas:
+
+- **Pesaje** se identifica por `anio` + `mes` (la liquidación es mensual), y los pasa.
+  `fecha` no aplica; no hay un día único que persistir.
+- **Chequeo** se identifica por su fecha, y `hato-chequeo-foto.ts:397` sólo la persiste
+  **si un humano la mandó**. El comentario del código lo dice literal: «una fecha leída de
+  la imagen nunca se persiste». Es la misma regla que gobierna todo el módulo — un dato
+  que el modelo dedujo no entra como hecho. Un NULL acá es el contrato funcionando.
+
+**El hueco que SÍ existe es otro, y no es una línea**: `hato_capturas_foto` no tiene
+`chequeo_id` ni `pesaje_id`, así que una carga `ok` no se puede enlazar con las filas de
+dominio que escribió. **No se filó** — es `ddl_aditivo`, la 146 es de hace 8 días y hoy
+hay 5 filas. **Condición de disparo: si pasa de ~30 filas o si hace falta auditar una
+carga concreta, entonces sí vale la columna.**
+
+**Lección de método, que es lo que se guarda acá:** el informe de un agente sobre el
+estado de producción es una hipótesis, no un hecho. Esta se refutó con un solo `SELECT`.
