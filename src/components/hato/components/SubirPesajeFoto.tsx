@@ -21,6 +21,17 @@
 // sigue el mismo patrón que `SubirChequeoExcel.tsx` (`ChequeosList.tsx` ya
 // lo hace para el chequeo): la tarjeta exterior elige "Tomar foto"/"Subir
 // archivo" y pasa la selección ya hecha, este diálogo solo la pre-carga.
+//
+// Hallazgo ESCO-123 (2026-09-19): un fallo del OCR TERMINABA el flujo. El
+// mensaje decía "vuelve a intentar", pero las fotos que fallaron seguían en
+// la lista y `agregarFotos` APILA, así que "otra foto" reenviaba también la
+// mala; y `modoInicial` era una prop fija, así que digitar a mano obligaba a
+// cerrar el diálogo y volver a empezar. Medido: dos cargas fallidas con 24
+// segundos de diferencia, ningún tercer intento, y el pesaje del mes nunca
+// entró. Por eso `modo` es ESTADO, no prop, y el panel de error ofrece las
+// dos salidas en sitio: descartar las fotos o pasar a la grilla en blanco.
+// Ninguna de las dos inventa un valor -- la grilla manual arranca vacía
+// (`construirDiffPesajeManual`) y una celda sin dato se queda sin dato.
 
 import { useState, useEffect } from 'react';
 import { Camera, Loader2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
@@ -123,13 +134,17 @@ export function SubirPesajeFoto({
   const [mesSeleccionado, setMesSeleccionado] = useState(() => `${anioInicial}-${String(mesInicial).padStart(2, '0')}`);
   const [cargandoManual, setCargandoManual] = useState(false);
   const [errorManual, setErrorManual] = useState<string | null>(null);
+  // El modo es ESTADO y no la prop directa (ESCO-123): tras un fallo del OCR
+  // el usuario pasa a la grilla en blanco SIN cerrar el diálogo, conservando
+  // el mes que ya eligió.
+  const [modo, setModo] = useState<'foto' | 'manual'>(modoInicial);
 
   const [anioTexto, mesTexto] = mesSeleccionado.split('-');
   const anioSel = parseInt(anioTexto, 10);
   const mesSel = parseInt(mesTexto, 10);
   const mesValido = Number.isInteger(anioSel) && Number.isInteger(mesSel) && mesSel >= 1 && mesSel <= 12;
 
-  const titulo = modoInicial === 'manual' ? 'Ingresar pesaje a mano' : 'Cargar pesaje mensual por foto';
+  const titulo = modo === 'manual' ? 'Ingresar pesaje a mano' : 'Cargar pesaje mensual por foto';
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -138,6 +153,7 @@ export function SubirPesajeFoto({
       setValores(new Map());
       setFilas([]);
       setErrorManual(null);
+      setModo(modoInicial);
       limpiar();
       onCompletado?.();
     }
@@ -152,6 +168,7 @@ export function SubirPesajeFoto({
     if (!open) return;
     setMesSeleccionado(`${anioInicial}-${String(mesInicial).padStart(2, '0')}`);
     setErrorManual(null);
+    setModo(modoInicial);
     if (fotosIniciales && fotosIniciales.length > 0) {
       setFotos((previas) => {
         const total = [...previas, ...fotosIniciales];
@@ -187,6 +204,10 @@ export function SubirPesajeFoto({
   };
 
   const agregarFotos = (nuevas: File[]) => {
+    // Un error de la carga anterior deja de aplicar en cuanto cambia la
+    // selección: dejarlo en pantalla hace parecer que la foto nueva también
+    // falló, antes de haberla enviado.
+    if (error) limpiar();
     setFotos((previas) => {
       const total = [...previas, ...nuevas];
       if (total.length > MAX_FOTOS) {
@@ -207,6 +228,36 @@ export function SubirPesajeFoto({
     } catch {
       // El error ya queda en el hook (`error`), se muestra abajo.
     }
+  };
+
+  /** ESCO-123, salida 1: descarta las fotos que fallaron y deja la lista
+   * vacía para elegir otras. Sin esto, "Cargar planilla" APILA y la foto
+   * mala volvía a viajar en el reintento. Las fotos descartadas siguen
+   * guardadas en el servidor como capa cruda -- acá solo se sacan de la cola
+   * de envío. */
+  const handleDescartarFotos = () => {
+    setFotos([]);
+    setAvisoFotos(null);
+    limpiar();
+  };
+
+  /** ESCO-123, salida 2: pasa a la grilla en blanco sin cerrar el diálogo,
+   * con el mismo mes ya elegido. La planilla en papel está en la mano del
+   * usuario; obligarlo a reabrir desde la tarjeta es lo que hizo que el
+   * pesaje del 2026-09-16 nunca entrara. */
+  const handleIngresarAMano = async () => {
+    limpiar();
+    setModo('manual');
+    await handleComenzarManual();
+  };
+
+  /** Vuelve a la subida por foto desde el modo manual al que se llegó por un
+   * fallo -- sin esto, cambiar de opinión obliga a cerrar y empezar de cero,
+   * que es justo el defecto que este cambio corrige. */
+  const handleVolverAFoto = () => {
+    setErrorManual(null);
+    limpiar();
+    setModo('foto');
   };
 
   const handleEditarCelda = (animalId: string, semana: (typeof SEMANAS_PESAJE)[number], campo: 'am' | 'pm', valor: number | undefined) => {
@@ -282,13 +333,13 @@ export function SubirPesajeFoto({
             </div>
           )}
 
-          {!resultado && modoInicial === 'manual' && (
+          {!resultado && modo === 'manual' && (
             <p className="text-sm text-gray-600">
               Vas a digitar los pesajes de este mes directamente, sin foto -- vacía por defecto, corrige el mes arriba si no es el correcto.
             </p>
           )}
 
-          {!resultado && modoInicial !== 'manual' && (
+          {!resultado && modo !== 'manual' && (
             <>
               <div className="flex items-center gap-3">
                 <CapturaArchivo
@@ -378,6 +429,31 @@ export function SubirPesajeFoto({
             </div>
           )}
 
+          {/* ESCO-123: las dos salidas, en sitio. El mensaje de arriba no
+              cambia -- su especificidad ("¿era la liquidación de El Pomar?")
+              es lo que lo hace accionable; lo que faltaba era poder actuar
+              sin cerrar el diálogo. */}
+          {error && !resultado && !loading && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-sm font-medium text-gray-900">¿Qué quieres hacer?</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {fotos.length > 0 && (
+                  <Button type="button" variant="outline" size="sm" onClick={handleDescartarFotos}>
+                    Descartar estas fotos y elegir otras
+                  </Button>
+                )}
+                <Button type="button" variant="outline" size="sm" onClick={handleIngresarAMano} disabled={!mesValido || cargandoManual}>
+                  {cargandoManual && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Ingresar el pesaje a mano
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Las fotos que enviaste ya quedaron guardadas como respaldo. Ingresar a mano abre la planilla de este mes
+                en blanco para digitarla: no se rellena ningún valor.
+              </p>
+            </div>
+          )}
+
           {errorManual && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -449,10 +525,15 @@ export function SubirPesajeFoto({
           )}
         </DialogBody>
         <DialogFooter>
-          {!resultado && modoInicial === 'manual' ? (
+          {!resultado && modo === 'manual' ? (
             <>
-              <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={cargandoManual}>
-                Cancelar
+              <Button
+                type="button"
+                variant="outline"
+                onClick={modoInicial === 'manual' ? () => handleClose(false) : handleVolverAFoto}
+                disabled={cargandoManual}
+              >
+                {modoInicial === 'manual' ? 'Cancelar' : 'Volver a las fotos'}
               </Button>
               <Button type="button" onClick={handleComenzarManual} disabled={cargandoManual || !mesValido}>
                 {cargandoManual && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
