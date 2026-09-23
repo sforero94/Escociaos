@@ -47,16 +47,16 @@ const ALLOWLIST_FROM = new Set([
   // Corrido a 138 al añadir la guarda de edición de ESCO-90 (re-derivar
   // gan_movimientos/gan_pesos_historico al editar cantidad_cabezas/peso).
   'src/components/finanzas/components/TransaccionGanadoForm.tsx:138',
-  // Corrido de 295 a 296 (ingreso.ts) y de 290 a 308 (gasto.ts) al agregar
-  // la atribución de Telegram (F5) y el arreglo de fecha UTC (F5-bis) del
-  // issue #266; corrido otra vez de 296 a 299 (ingreso.ts) y de 308 a 311
-  // (gasto.ts) por `resolverUsuarioTelegram` (#274) -- líneas nuevas antes
-  // de este selector, la consulta en sí no cambió en ninguno de los dos casos.
+  // Corrido de 295 a 296 al agregar la atribución de Telegram (F5) y el
+  // arreglo de fecha UTC (F5-bis) del issue #266; corrido otra vez de 296 a
+  // 299 por `resolverUsuarioTelegram` (#274) -- líneas nuevas antes de este
+  // selector, la consulta en sí no cambió.
+  //
+  // Las dos entradas de `gasto.ts` salieron el 2026-09-21 (ESCO-117): el
+  // flujo /gasto de Telegram se retiró junto con su sub-flujo de ganado.
   'src/supabase/functions/server/telegram/conversations/ingreso.ts:299',
-  'src/supabase/functions/server/telegram/conversations/gasto.ts:311',
   // Árbol espejo (supabase/functions/make-server-1ccce916) — mismo motivo.
   'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:299',
-  'supabase/functions/make-server-1ccce916/telegram/conversations/gasto.ts:311',
 ]);
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {

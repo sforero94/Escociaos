@@ -35,7 +35,6 @@ const CONVERSACIONES = [
   'conversations/pesajeLeche.ts',
   'conversations/eventoHato.ts',
   'conversations/jornal.ts',
-  'conversations/gasto.ts',
   'conversations/ingreso.ts',
   'conversations/monitoreo.ts',
   'conversations/cierreRonda.ts',

@@ -15,7 +15,6 @@ import { Context as HonoContext } from "npm:hono";
 import type { BotContext, TelegramUsuario } from "./types.ts";
 import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
-import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
@@ -274,7 +273,6 @@ function getBot(): Bot<BotContext> {
 
   bot.use(createConversation(jornalConversation, "jornal"));
   bot.use(createConversation(monitoreoConversation, "monitoreo"));
-  bot.use(createConversation(gastoConversation, "gasto"));
   bot.use(createConversation(ingresoConversation, "ingreso"));
   bot.use(createConversation(pesajeLecheConversation, "pesajeLeche"));
   bot.use(createConversation(eventoHatoConversation, "eventoHato"));
@@ -294,9 +292,6 @@ function getBot(): Bot<BotContext> {
     }
     if (mods.includes("monitoreo")) {
       kb.text("🔍 Registrar monitoreo", "start_monitoreo").row();
-    }
-    if (mods.includes("gastos")) {
-      kb.text("💰 Registrar gasto", "start_gasto").row();
     }
     if (mods.includes("ingresos")) {
       kb.text("💵 Registrar ingreso", "start_ingreso").row();
@@ -425,14 +420,6 @@ function getBot(): Bot<BotContext> {
       return;
     }
     await ctx.conversation.enter("monitoreo");
-  });
-
-  bot.command("gasto", async (ctx) => {
-    if (!ctx.telegramUser?.modulos_permitidos?.includes("gastos")) {
-      await ctx.reply("No tienes acceso a este módulo.");
-      return;
-    }
-    await ctx.conversation.enter("gasto");
   });
 
   bot.command("ingreso", async (ctx) => {
@@ -1242,7 +1229,6 @@ function getBot(): Bot<BotContext> {
         "/start — Menú principal",
         "/jornal — Registrar un jornal",
         "/monitoreo — Registrar monitoreo",
-        "/gasto — Registrar un gasto",
         "/ingreso — Registrar un ingreso",
         "/pesaje — Cargar la planilla de pesaje de leche por foto",
         "/evento — Registrar monta, inseminación, secado, parto, aborto o tratamiento",
@@ -1282,15 +1268,6 @@ function getBot(): Bot<BotContext> {
       return;
     }
     await ctx.conversation.enter("monitoreo");
-  });
-
-  bot.callbackQuery("start_gasto", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    if (!ctx.telegramUser?.modulos_permitidos?.includes("gastos")) {
-      await ctx.reply("No tienes acceso a este módulo.");
-      return;
-    }
-    await ctx.conversation.enter("gasto");
   });
 
   bot.callbackQuery("start_ingreso", async (ctx) => {
@@ -2533,7 +2510,6 @@ function getBot(): Bot<BotContext> {
     { command: "start", description: "Menú principal" },
     { command: "jornal", description: "Registrar jornal" },
     { command: "monitoreo", description: "Registrar monitoreo" },
-    { command: "gasto", description: "Registrar un gasto" },
     { command: "ingreso", description: "Registrar un ingreso" },
     { command: "pesaje", description: "Cargar pesaje de leche por foto" },
     { command: "evento", description: "Registrar evento del hato" },
