@@ -170,3 +170,46 @@ parte se drena sola**: el cron `clima-reintento-sin-dato` (migración 121, jobid
 06:00 Bogotá) le vuelve a preguntar a Ecowitt por los días de los últimos 21 que sigan sin
 dato confiable. La cola reciente se recupera sin intervención; los días más viejos, dentro
 de la ventana de 90 días de Ecowitt, necesitan un disparo manual.
+
+---
+
+## Cierre — 2026-09-23
+
+**Los seis PR fusionados** (#278–#283). `main` en `af9640a`, suite verde (186 ficheros /
+3.873 pruebas), `typecheck` limpio, los dos árboles de edge function **sin una sola
+divergencia** ignorando la línea de cabecera generada, y cero marcadores de conflicto en
+todo el repo.
+
+### Un conflicto que me tocó a mí provocar
+
+Las entradas de CLAUDE.md de la 159, 160 y 161 las inserté las tres **en el mismo punto de
+anclaje**, antes de la línea de la 158. En cuanto se fusionó la primera, las otras dos
+chocaron — y encima el orden quedó mal: la 159 aterrizó **entre la 157 y la 158**,
+rompiendo la secuencia ascendente. Se resolvió dejando 158 → 159 → 160 → 161 → 162 en
+orden, y hoy el fichero está correcto.
+
+**La lección: cuando varios PR abiertos agregan a la misma lista, el conflicto no es
+posible, es seguro.** Conviene anclar cada entrada a su vecino inmediato (la anterior por
+número) en vez de a un punto común, o aceptar de entrada que habrá que re-resolver en cada
+merge.
+
+### Lo que falta, y es de Santiago
+
+**El `functions deploy` NO ha ocurrido.** Verificado contra la API: la edge function corre
+la **v264, desplegada el 2026-09-19 15:43 UTC**, cuatro días antes de estos merges. Hasta
+que se despliegue:
+
+- **ESCO-115** — la instrumentación de la liquidación está dormida: el CHECK ya admite
+  `tipo='liquidacion'` pero el código que lo escribe no está en producción. Inofensivo.
+- **ESCO-117** — el comando `/gasto` sigue registrado en la función desplegada, pero
+  **falla cerrado**: la llave ya no está en la base y el gate contesta «No tienes acceso a
+  este módulo». La casilla de Configuración → Telegram **sí** desapareció, porque eso viaja
+  por Vercel y se desplegó al fusionar — o sea que la ventana de re-otorgamiento que
+  documenté ya está cerrada.
+
+### Ledger
+
+**3 cerradas** (ESCO-116, ESCO-120, ESCO-122), **6 en curso**, **1 aplazada** (ESCO-124).
+De las 6 en curso: dos esperan el deploy (115, 117), una espera el backfill (121), una
+espera las políticas de `storage.objects` (119), una espera las Rutinas (114) y una espera
+que Santiago identifique las dos fotos (123).
