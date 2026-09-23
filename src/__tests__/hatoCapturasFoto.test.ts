@@ -12,7 +12,16 @@ import {
  * Registro de cargas por foto del hato — hallazgo ESCO-76 (migración 146,
  * `hato_capturas_foto`).
  *
- * **El defecto.** Las dos rutas de foto del módulo guardaban la imagen en
+ * **Ampliado por ESCO-115 (migración 160).** Las rutas de foto del módulo
+ * son TRES, no dos: la liquidación quincenal de leche de El Pomar
+ * (`hato-produccion-quincena-foto.ts`) subía al bucket
+ * `hato-liquidaciones-fotos` sin escribir una sola fila de registro — 13
+ * cargas entre el 2026-08-06 y el 2026-09-20, y el CHECK de `tipo` ni
+ * siquiera admitía el valor. Es la ruta que termina creando
+ * `hato_produccion_quincenal`, cuya `fin_ingreso_id` es NOT NULL: la venta
+ * de leche que aterriza en el P&G.
+ *
+ * **El defecto.** Las rutas de foto del módulo guardaban la imagen en
  * Storage y devolvían un diff, sin dejar rastro de qué pasaba después.
  * Medido contra producción el 2026-09-13: 9 cargas de pesaje en
  * `storage.objects` (2026-08-11 → 2026-09-04) y ningún `hato_pesajes_leche`
@@ -109,6 +118,18 @@ describe('describirUltimaCaptura', () => {
     expect(ok.texto).toContain('2 filas guardadas');
   });
 
+  it('la liquidación habla de campos, no de celdas ni de filas', () => {
+    const d = describirUltimaCaptura(captura({ tipo: 'liquidacion', desenlace: 'ocr_fallo' }), '20 sept 2026');
+    expect(d.texto).toContain('ningún campo');
+    const pendiente = describirUltimaCaptura(
+      captura({ tipo: 'liquidacion', desenlace: 'pendiente', celdasLeidasOcr: 8 }),
+      '20 sept 2026',
+    );
+    // El estado normal de esta ruta: se leyó y nadie puede cerrarla con
+    // 'ok' porque el guardado pasa por un RPC desde el navegador.
+    expect(pendiente.texto).toContain('8 campos leídos sin aprobar');
+  });
+
   it('error y abandono nunca se leen como éxito', () => {
     expect(describirUltimaCaptura(captura({ desenlace: 'error' }), 'x').tono).toBe('alerta');
     expect(describirUltimaCaptura(captura({ desenlace: 'abandonado' }), 'x').tono).toBe('alerta');
@@ -142,8 +163,14 @@ describe('normalizarCapturaFoto', () => {
   });
 
   it('devuelve null ante un tipo/desenlace fuera del contrato, en vez de adivinar', () => {
-    expect(normalizarCapturaFoto({ ...fila, tipo: 'liquidacion' })).toBeNull();
+    expect(normalizarCapturaFoto({ ...fila, tipo: 'planilla_marciana' })).toBeNull();
     expect(normalizarCapturaFoto({ ...fila, desenlace: 'quien_sabe' })).toBeNull();
+  });
+
+  it('acepta el tipo liquidacion — la tercera ruta, migración 160', () => {
+    const c = normalizarCapturaFoto({ ...fila, tipo: 'liquidacion' });
+    expect(c).not.toBeNull();
+    expect(c!.tipo).toBe('liquidacion');
   });
 
   it('conserva el 0 medido y no lo confunde con ausencia', () => {
@@ -189,6 +216,38 @@ describe('rutas de foto — el intento se registra ANTES del OCR', () => {
     expect(fuente.indexOf('.from(BUCKET_FOTOS)')).toBeLessThan(iRegistro);
   });
 
+  it.each(ARBOLES)('%s/hato-produccion-quincena-foto.ts', (arbol) => {
+    // ESCO-115 / migración 160. La tercera ruta de foto, y la que pesa más:
+    // es la que termina creando la venta quincenal de leche en el P&G.
+    const fuente = leer(`${arbol}/hato-produccion-quincena-foto.ts`);
+    const iRegistro = fuente.indexOf('registrarCapturaFoto({');
+    const iModelo = fuente.indexOf('fotos.map((foto) => leerFotoConModelo');
+    expect(iRegistro, 'la ruta de liquidación tiene que registrar el intento').toBeGreaterThan(-1);
+    expect(iModelo).toBeGreaterThan(-1);
+    expect(
+      iRegistro,
+      'el registro del intento tiene que insertarse ANTES de llamar al modelo de visión: si se registra después, un fallo del OCR no deja ninguna fila y la carga de la liquidación vuelve a ser invisible.',
+    ).toBeLessThan(iModelo);
+    // Y después de subir la foto: la capa cruda primero, siempre.
+    expect(fuente.indexOf('.from(BUCKET_FOTOS)')).toBeLessThan(iRegistro);
+    // El tipo correcto, o la fila entra como pesaje/chequeo y contamina la
+    // tarjeta de la otra ruta.
+    expect(fuente).toContain("tipo: 'liquidacion'");
+  });
+
+  it.each(ARBOLES)('%s cierra la captura de la liquidación con el desenlace real', (arbol) => {
+    const fuente = leer(`${arbol}/hato-produccion-quincena-foto.ts`);
+    // El caso del hallazgo: el OCR no leyó nada y la foto ya está guardada.
+    expect(fuente).toContain("desenlace: 'ocr_fallo'");
+    // Y el caso normal: leyó, pero nadie puede confirmar que se guardó
+    // (el RPC corre desde el navegador, que no tiene UPDATE sobre la tabla).
+    expect(fuente).toContain("desenlace: 'pendiente'");
+    expect(
+      fuente,
+      'esta ruta nunca escribe en tablas de dominio, así que no puede cerrar una captura como ok: diría que la venta llegó al P&G sin tener con qué saberlo.',
+    ).not.toContain("desenlace: 'ok'");
+  });
+
   it.each(ARBOLES)('%s cierra la captura en el commit de pesaje', (arbol) => {
     const fuente = leer(`${arbol}/hato-pesaje-pipeline.ts`);
     expect(fuente).toContain("desenlace: 'ok'");
@@ -209,6 +268,7 @@ describe('rutas de foto — el intento se registra ANTES del OCR', () => {
       'hato-pesaje-commit.ts',
       'hato-chequeo-foto.ts',
       'hato-chequeo-commit.ts',
+      'hato-produccion-quincena-foto.ts',
       'telegram/conversations/pesajeLeche.ts',
     ];
     for (const fichero of FICHEROS) {
@@ -262,5 +322,42 @@ describe('migración 146 — hato_capturas_foto', () => {
       .filter((l) => /^\s*(ALTER TABLE|DROP |UPDATE |DELETE FROM|TRUNCATE)/i.test(l))
       .filter((l) => !/hato_capturas_foto/i.test(l));
     expect(peligrosas).toEqual([]);
+  });
+});
+
+
+describe('migración 160 — hato_capturas_foto acepta liquidacion', () => {
+  const RUTA = join(__dirname, '../sql/migrations/160_hato_capturas_foto_liquidacion.sql');
+
+  it('existe', () => {
+    expect(existsSync(RUTA)).toBe(true);
+  });
+
+  it('amplía el CHECK de tipo con liquidacion, sin perder los dos valores previos', () => {
+    const sql = readFileSync(RUTA, 'utf-8');
+    expect(sql).toContain('DROP CONSTRAINT hato_capturas_foto_tipo_check');
+    expect(sql).toMatch(/CHECK \(tipo IN \('pesaje', 'chequeo', 'liquidacion'\)\)/);
+  });
+
+  it('no toca la guarda del período de pesaje — sólo la comprueba', () => {
+    const sql = readFileSync(RUTA, 'utf-8');
+    // Se lee para verificar que sigue acotada a `pesaje` (y que por eso el
+    // tipo nuevo queda exento), nunca se modifica.
+    expect(sql).toContain('hato_capturas_foto_periodo_pesaje');
+    expect(sql).not.toMatch(/(DROP|ADD) CONSTRAINT hato_capturas_foto_periodo_pesaje/);
+  });
+
+  it('lleva guardas que abortan y un ROLLBACK ejecutable', () => {
+    const sql = readFileSync(RUTA, 'utf-8');
+    expect((sql.match(/RAISE EXCEPTION/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect(sql).toContain('ROLLBACK');
+  });
+
+  it('no toca ninguna fila de ninguna tabla', () => {
+    const sql = readFileSync(RUTA, 'utf-8');
+    const mutaciones = sql
+      .split('\n')
+      .filter((l) => /^\s*(UPDATE |DELETE FROM|TRUNCATE|INSERT INTO)/i.test(l));
+    expect(mutaciones).toEqual([]);
   });
 });
