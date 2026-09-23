@@ -37,9 +37,19 @@
 //
 // NUNCA escribe en tablas de dominio. Sí guarda las fotos en Storage: la
 // foto ES la capa cruda de esta ruta.
+//
+// REGISTRO DEL INTENTO (hallazgo ESCO-115, migración 160). Esta es la
+// TERCERA ruta de foto del módulo; la 146 instrumentó las otras dos y ésta
+// quedó afuera -- 13 cargas en `hato-liquidaciones-fotos` entre el
+// 2026-08-06 y el 2026-09-20 sin una sola fila de `hato_capturas_foto`.
+// Pesa más que las otras dos: es la que termina creando
+// `hato_produccion_quincenal`, cuya `fin_ingreso_id` es NOT NULL, o sea la
+// venta de leche que aterriza en el P&G. Si la carga falla, la venta no
+// llega a Finanzas y nada dice que hubo un intento.
 
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { cerrarCapturaFoto, registrarCapturaFoto } from './hato-capturas-foto.ts';
 import {
   CAMPOS_OCR_LIQUIDACION,
   combinarLecturasLiquidacion,
@@ -364,6 +374,27 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
     }
   }
 
+  // --- 2.b Registrar el INTENTO (hallazgo ESCO-115, migración 160) ---------
+  // Acá y no más abajo a propósito, igual que en `hato-chequeo-foto.ts`: la
+  // foto ya está en Storage y el modelo TODAVÍA no corrió, así que un fallo
+  // del modelo -- el caso que motivó el hallazgo -- queda registrado igual.
+  // Si el registro falla, `capturaId` es `null` y esta ruta se comporta
+  // exactamente como antes: `registrarCapturaFoto` nunca lanza.
+  //
+  // Sin `anio`/`mes`: el período lo LEE el modelo del documento, y todavía
+  // no corrió. Inventarlo acá sería fabricar un dato. El CHECK
+  // `hato_capturas_foto_periodo_pesaje` está acotado a `tipo = 'pesaje'`,
+  // así que una fila `liquidacion` sin período es válida.
+  const capturaId = await registrarCapturaFoto({
+    supabase,
+    tipo: 'liquidacion',
+    origen: 'web',
+    createdBy: acceso.userId,
+    storage: { bucket: BUCKET_FOTOS, prefijo: prefijoStorage, rutas: rutasStorage, errores: erroresStorage },
+    fotosRecibidas: fotos.length,
+    modelo: MODELO_VISION,
+  });
+
   // --- 3. Lectura con el modelo de visión (una llamada por foto) -----------
   const prompt = construirPromptOcrLiquidacion();
   const esquema = esquemaJsonOcrLiquidacion();
@@ -377,19 +408,42 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
   }
 
   if (lecturas.length === 0) {
-    return respuestaError(
-      c,
-      502,
-      `No se pudo leer ninguno de los archivos. ${erroresLectura.join(' | ')}${
-        rutasStorage.some((r) => r !== null) ? ' El archivo sí quedó guardado.' : ''
-      }`,
-    );
+    // El caso exacto del hallazgo: la foto está guardada y el OCR no leyó
+    // nada. Antes de la 160 esto no dejaba rastro en ningún lado.
+    const error = `No se pudo leer ninguno de los archivos. ${erroresLectura.join(' | ')}${
+      rutasStorage.some((r) => r !== null) ? ' El archivo sí quedó guardado.' : ''
+    }`;
+    await cerrarCapturaFoto({
+      supabase,
+      capturaId,
+      desenlace: 'ocr_fallo',
+      celdasLeidasOcr: 0,
+      detalle: error,
+    });
+    return respuestaError(c, 502, error);
   }
 
   // --- 4. Combinar + interpretar (lógica pura) ------------------------------
   const { resultado: documento, interpretadas } = combinarLecturasLiquidacion(lecturas);
   const avisoCoherencia = validarCoherenciaLiquidacion(documento);
   const advertencias = avisoCoherencia ? [...documento.advertencias, avisoCoherencia] : documento.advertencias;
+
+  // --- 4.b Cerrar el registro del intento con lo que el OCR alcanzó a leer -
+  // Queda en `pendiente`, NO en `ok`, y eso es deliberado: esta ruta nunca
+  // escribe en tablas de dominio. El guardado real pasa por
+  // `fn_hato_guardar_quincena_venta` desde el navegador, que no tiene
+  // UPDATE sobre `hato_capturas_foto` (la 146 se lo revocó). Así que
+  // `pendiente` + los campos leídos es el estado honesto: "se leyó, no
+  // consta que se haya guardado". Mismo criterio con el que la 146 dejó
+  // `abandonado` sin escritor -- inventar un `ok` acá diría que la venta
+  // llegó al P&G sin tener con qué saberlo.
+  const camposLeidos = CAMPOS_OCR_LIQUIDACION.length - documento.camposNoConfiables.length;
+  await cerrarCapturaFoto({
+    supabase,
+    capturaId,
+    desenlace: 'pendiente',
+    celdasLeidasOcr: camposLeidos,
+  });
 
   // --- 5. Respuesta: campos interpretados + reporte de calidad del OCR -----
   // NUNCA escribe en tablas de dominio -- el guardado real pasa por
@@ -413,6 +467,11 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
     },
     ocr: {
       modelo: MODELO_VISION,
+      // Fila de `hato_capturas_foto` de ESTE intento (migración 160), o
+      // `null` si el registro no se pudo escribir. Viaja solo para poder
+      // atar una carga concreta a su fila cuando se audita; hoy nadie la
+      // cierra desde el cliente, porque el navegador no tiene UPDATE.
+      capturaId,
       fotos: fotos.map((f, i) => ({
         pagina: f.pagina,
         nombre: f.nombre,

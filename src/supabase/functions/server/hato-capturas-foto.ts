@@ -34,7 +34,10 @@ type SupabaseAdmin = ReturnType<typeof createClient>;
 
 const TABLA = 'hato_capturas_foto';
 
-export type TipoCapturaFoto = 'pesaje' | 'chequeo';
+// `liquidacion` entró con la migración 160 (hallazgo ESCO-115): la
+// liquidación quincenal de leche de El Pomar es la tercera ruta de foto
+// del módulo, y era la única sin registro de intentos.
+export type TipoCapturaFoto = 'pesaje' | 'chequeo' | 'liquidacion';
 export type OrigenCapturaFoto = 'web' | 'telegram';
 /** `abandonado` existe en el CHECK de la 146 pero hoy no lo escribe nadie:
  * una carga que el usuario nunca aprueba se queda en `pendiente`, que ya
