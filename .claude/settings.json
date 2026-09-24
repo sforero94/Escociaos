@@ -1,0 +1,17 @@
+{
+  "inputNeededNotifEnabled": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__Supabase_Routines__.*|mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/supabase-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
