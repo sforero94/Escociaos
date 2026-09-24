@@ -678,3 +678,59 @@ Ojo con la cuenta de ficheros: bajó de 189/4.048 (09-17) a 186/3.857 por el **a
 - No re-verificado línea por línea (presupuesto). Veredictos sin cambio desde el 09-07.
 - **Cabecera obsoleta por segunda vez**: dice «28 reportes … hasta la semana 35»; lo vivo es **30/30 con `url_storage`, último 2026-09-14, semana 37**. Refuerza el veredicto «no reproducible» de la incidencia 6, así que ningún veredicto se mueve. Refresco de cabecera = commit limpio de un fichero para una corrida futura.
 - **La incidencia 3b sigue siendo el único punto abierto** (`fetchDatosReporteSemanal.ts:511-522`, inventario consumido valorado en $0). Es `clase: decision`, de Santiago, no un PR.
+
+## Corrida 2026-09-24-jueves
+
+### Baseline VERDE
+`main@db0897e`: `node_modules/.bin/vitest run` **187 ficheros / 3.873 pruebas, TODO VERDE**
+(30,0 s) · `npx tsc --noEmit` limpio (exit 0, salida vacia) · `npm run lint` **0 errores /
+919 avisos**. Progresion: 189/4.048 (09-17, `55ca4af`) -> 186/3.857 (09-21, tras archivar
+`acciones-recomendadas`) -> **187/3.873** hoy. **La suite volvio a ser senal y lo sigue
+siendo.** `node_modules/.bin/vitest`, nunca `npx vitest` (resuelve remoto, falla con
+«Cannot find module vite» **y sale con codigo 0**).
+
+### SIGUE SIN HABER GATE DE CI EN PR — filado ESCO-132
+`.github/workflows/` tiene **un solo fichero**, `deteccion-deriva-despliegue.yml`, con
+triggers `schedule` + `workflow_dispatch`. **No existe `on: pull_request` en todo el
+repositorio** y ningun workflow corre lint, typecheck ni vitest. **13 PR fusionados desde el
+lunes sin esa red**, 11 de ellos en una rafaga de 4 minutos. Es la mitad estructural de
+ESCO-125, que se cerro arreglando el rojo y no el hueco.
+
+### El PR #280 ADELANTO la trampa de `hato_capturas_foto` — filado y DIFERIDO por el tope
+`src/utils/hato/capturasFoto.ts:133-144`: el `case 'pendiente'` devuelve `tono: 'alerta'` y
+«sin aprobar» para **los tres tipos**, mientras
+`hato-produccion-quincena-foto.ts:444` escribe `desenlace: 'pendiente'` como **estado final
+SANO** de la ruta de liquidacion (el guardado real pasa por el navegador, al que la 146 le
+revoco el UPDATE, asi que el endpoint no tiene como cerrar la fila). El #280 metio el
+vocabulario `liquidacion` (`:81-89`) **sin ramificar por `tipo`**, o sea que la funcion ya
+**anuncia** soporte con la semantica invertida. `src/__tests__/hatoCapturasFoto.test.ts:121-131`
+construye el caso, lo comenta como «El estado normal de esta ruta» y **solo afirma `texto`,
+nunca `tono`** — por eso el ambar equivocado viaja sin prueba.
+**Hoy no se ve nada mal**: `useUltimaCapturaFoto` filtra por `tipo`, su unico llamador
+(`PesajeLecheCard.tsx:58`) pasa `'pesaje'`, y produccion tiene **0 filas `liquidacion`**.
+**DIFERIDO AL LUNES por el tope de 5 del jueves — no re-investigar, filarlo.**
+
+### El CHECK de la 160 esta bien acotado
+`hato_capturas_foto_periodo_pesaje` es `CHECK ((tipo <> 'pesaje') OR (anio IS NOT NULL AND
+mes IS NOT NULL))`, asi que una fila `liquidacion` sin periodo es valida y el INSERT no
+puede fallar en silencio (el modo de fallo temido, porque `registrarCapturaFoto` nunca
+lanza). Comprobado contra `pg_constraint`, no contra el fichero.
+
+### Estados aceptados (nuevos, no re-auditar)
+- **El retiro de `/gasto` (#282) esta COMPLETO en los dos arboles.** Cero referencias en
+  `bot.ts`, nada en `setMyCommands`/`/ayuda`/menu, y en produccion las 5 filas de
+  `telegram_usuarios` no tienen la llave `gastos`.
+- **El #283 (reintento de foto) es solido**: `handleVolverAFoto` solo es alcanzable con
+  `resultado` en null, y el reset de `modo` esta en `handleClose` y en el efecto de `open`.
+- **La tuberia de pesaje FUNCIONA**: la carga de Telegram del 2026-09-19 escribio 45 filas.
+  Los dos `ocr_fallo` del 09-20 son la misma persona subiendo la liquidacion por la ruta de
+  pesaje — error de usuario que el #283 ya deja reintentar. **No es defecto del OCR.**
+- **Senal de silencio**: cero firmas de error reales en 24 h de `function_logs` y
+  `postgres_logs`; el unico no-2xx es **un** `409` en `POST /rest/v1/rondas_avisos`, que es
+  la idempotencia claim-before-send. `hato-alertas-tick` corrio `ok` en 1.380 ms / 179 animales.
+- **`get_advisors(security)` sin novedad** tras las 159-166.
+
+### Herramientas
+**`mcp__Supabase_Escritura__query_logs` ya NO esta denegado por el clasificador** — corrio
+sin prompt esta corrida, y es hoy el **unico** camino a los logs
+(`SUPABASE_GET_PROJECT_LOGS` por Composio devuelve **410 Gone**). Ver `_compartida.md`.

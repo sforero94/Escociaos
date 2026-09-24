@@ -23,6 +23,107 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-09-24 — corrida jueves
+
+The busiest release window on record, and a clean one. **13 PRs merged** (#270, #272,
+#275, #277–#288), **nine migrations applied** (150, 159, 160, 161, 162, 163, 164, 165,
+166), **one edge-function deploy** (v265, 2026-09-23 09:26 UTC — **7 minutes 2 seconds**
+after the commit that needed it) and **zero open PRs** at the close. Frontend and edge
+function are both at `main` (`db0897e`), verified by content against the served bundle.
+The three-day sunshine-and-rain backfill that ran unattended across this window finished
+**today at 10:43 UTC**, all 28 legs done, and unscheduled its own cron.
+
+### Clima
+- **Sunshine hours are real data again, for 92 days instead of one.** The daily summary
+  now measures coverage by the **largest gap in time** rather than by counting readings,
+  so a day sampled every 30 minutes is no longer mistaken for a truncated day, and a day
+  that stopped recording at 15:50 is no longer sealed as complete. 2026-08-27 — 288
+  readings but 8 h 10 min unmeasured — is the case no reading-count threshold could ever
+  find. (PR #279, migration 159)
+- **A temporary robot re-asked Ecowitt for 95 missing days, one leg at a time.** It ran
+  every 10 minutes from 2026-09-23 12:53 UTC to 2026-09-24 10:43 UTC, in series, never in
+  parallel, with a control day first and a stop-on-harm guard after every leg. It removed
+  itself when it finished. **Frozen rain counters are now at zero** across the Ecowitt
+  series; 173 days read `ok`, 13 stay `cobertura_parcial` and every one of those 13 is
+  explained (four March–April days sampled hourly, the August blackout, and the days the
+  station genuinely cut out). (PRs #286 #287, migrations 164, 165, 166)
+- **Two false alarms and one real one, all handled without losing data.** The robot
+  stopped twice on days that only looked worse (2026-06-30 lost 4 readings with coverage
+  intact; 2026-07-05 dropped 1,78 mm that was a duplicate of 07-04) — migration 165 taught
+  it to tell those apart. Then 2026-07-09 came back from Ecowitt's history with **less**
+  data than the live feed had captured, so migration 166 restored it from the snapshot and
+  carried on. Six days in total were restored rather than overwritten. The lesson is worth
+  keeping: **the history API is not always better than what was recorded live.**
+
+### Hato Lechero
+- **A failed milk-liquidation photo no longer dead-ends.** When the reader cannot make
+  sense of the photos, the screen now offers the two real exits in place — discard these
+  photos and pick others, or type the month in by hand — instead of forcing the user to
+  close the dialog and start over. The photos already sent stay saved as backup, and
+  typing by hand opens a blank sheet: nothing is pre-filled. This was measured, not
+  guessed: two failures 24 seconds apart, no third attempt, and that month's weighing was
+  never captured. (PR #283)
+- **The milk-liquidation photo route is now instrumented like the other two.** Every
+  attempt leaves a row, so "the reader failed", "nobody approved it", "the server broke"
+  and "it saved, in another month" stop looking identical from outside. Note for whoever
+  builds the card: for liquidación, `pendiente` is the healthy final state, not an alert.
+  (PR #280, migration 160)
+- **COPITA and COMETA now read as the vet's sheet says.** Four events were removed: a
+  service the photo reader picked up from the row above (Martha's handwritten `12/08/26`
+  belonged to COMETA, not COPITA), a duplicate February service, and two dry-off events
+  that were not real. COPITA keeps two 2026 events; COMETA keeps its August service.
+  (PR #285, migration 163)
+
+### Telegram
+- **The `/gasto` command is gone, key and all.** The flow wrote to the finance tables with
+  the service role, which bypasses the only permission check those 13 tables have. The
+  expense half was contained — everything it wrote landed as `Pendiente` and the reports
+  only count `Confirmado` — but the cattle half wrote straight into the ledger that drives
+  the moving-average cost of every animal ever sold, across all years. No live row is
+  attributable to it. `/ingreso` is untouched. The key is also out of the Configuración →
+  Telegram screen, so it cannot be granted again by accident. (PR #282, migration 162)
+
+### Seguridad
+- **A deactivated account is now shut out everywhere, not almost everywhere.** 45 policies
+  across the database read the user table inline instead of going through the helper that
+  filters `activo`, so a disabled account kept its access through them. All 45 now go
+  through the helper. Nobody lost a capability today — the register is 10 active users,
+  none disabled — and no row changed. Verified after the fact: the sweep for
+  write-anything policies now returns **zero**. Storage buckets are still open and cannot
+  be closed from the migration lane. (PR #281, migration 161)
+
+### Inventario
+- **The 15-15-15 test stock is off the books.** Santiago confirmed those 150 kg were a
+  trial during the August round and never physically existed. The purchase entry is
+  voided rather than deleted, so the round that recorded it stays intact. The Inventory
+  dashboard's Entradas total drops $654.000; P&G and cash flow are unchanged.
+  (PR #284, migration 150 — a record file, applied 2026-09-21 before its file existed)
+
+### Interno
+- Supabase writes for the maintenance operation moved to Composio, and the dispatch
+  template now carries the do-not-refile set. (PR #278)
+- Supabase reads and recoverable writes no longer stop for a permission prompt; DELETE,
+  DROP, TRUNCATE and `cron.unschedule` still ask, with a push to the phone. (PR #288)
+- Migration 158 and the `/evento → Tratamiento` deploy were marked applied in the root
+  `CLAUDE.md`. (PRs #270, #277)
+
+### Requiere despliegue manual
+- Nothing. `make-server-1ccce916` is at **v265**, bundle hash
+  `86d6f5cbff2e3035709b704106f701ceb6c5dd9d25ade013a69dfe091f58fe49`, matching the repo's
+  own drift-state file at commit `ba2aeb6` — the last commit that touched either edge
+  tree. The two trees are 74 files each with no difference beyond a trailing newline, and
+  `telegram/conversations/gasto.ts` is gone from both.
+
+### Known holes in this record
+- Migrations **159, 160, 161 and 162** reached production on 2026-09-21 at 15:26–15:35 UTC
+  and their files and `CLAUDE.md` entries only landed on 2026-09-23 — applied-but-unmerged
+  for **1 day 18 hours**. Well inside the 7-day threshold, and closed now, but it is the
+  seventh time the "mark it applied in the same session" step has slipped.
+- No row with `tipo = 'liquidacion'` exists in `hato_capturas_foto` yet, so PR #280's
+  producer is deployed but has not been exercised. Expected — liquidación is fortnightly.
+
+---
+
 ## 2026-09-21 — corrida lunes
 
 A clean release week. 15 PRs merged (#248–#274), nine migrations applied (147, 151, 152,

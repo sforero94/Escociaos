@@ -516,3 +516,59 @@ silencio es por construccion.** Ventanas de deriva reales medidas: **42 h** (`e2
 ### Cierre el mismo día (2026-09-21, ~11:56Z)
 Santiago fusionó **#275 y #272** ~35 min después de la notificación de la corrida. **ESCO-125 (P1) y ESCO-126 (P2) cerrados como `Arreglado` el mismo día en que se filaron.** `main` verificado verde de forma independiente contra el árbol fusionado: lint exit 0 (0 errores / 919 warnings), typecheck exit 0, **vitest 186 ficheros / 3.862 pruebas exit 0**. Las 3.862 (vs 3.857) son pruebas que trajo el propio #272.
 **Lo que NO cierra**: sigue sin haber gate de CI. La única comprobación que corrió sobre el #275 fue el preview de Vercel — **el PR que arregló dos días de rojo tampoco estuvo verificado por CI**. Nuevo HEAD de `main`: `7a4ede4`.
+
+## Corrida 2026-09-24-jueves
+
+### Estado de despliegue
+HEAD `db0897e` · edge **v265, 2026-09-23T09:26:28Z**, hash
+**`86d6f5cbff2e3035709b704106f701ceb6c5dd9d25ade013a69dfe091f58fe49`** — **nuevo punto de
+comparacion**, corresponde al commit `ba2aeb6` · frontend al dia, probado POR CONTENIDO
+(presencia + ausencia, las dos con control positivo) · migraciones **hasta 166 aplicadas**,
+155/156 siguen sin fila de ledger · **0 PR abiertos** · **nada pendiente de desplegar**.
+Lag merge->deploy **7 m 02 s**; cuarta corrida seguida en verde.
+
+### LA PRUEBA MAS BARATA DE ESTA CORRIDA: la ausencia de una etiqueta de catalogo
+El retiro de la llave `gastos` de `TELEGRAM_MODULES` borra el literal `'Registrar gastos'`
+del bundle y deja intacto `'Registrar ingresos'` **en el mismo chunk**
+(`ConfiguracionDashboard-*.js`). La sonda de ausencia trae su control positivo incorporado,
+en el mismo fichero, sin elegirlo a mano. **Cuando un PR retira UN elemento de un array de
+catalogo, sus hermanos son el control positivo perfecto.**
+
+### UN COMMIT QUE DICE «falta el deploy» CADUCA EN MINUTOS
+`5cdddcc` se titulo asi a las 09:22:37Z; la v265 salio a las **09:26:28Z**. Esta corrida
+arranco con ese titulo como premisa y la premisa era falsa. **Un mensaje de commit NO es
+estado de despliegue.**
+
+### La linea del ledger que NO hay que volver a leer mal
+150/159/160/161/162 se aplicaron el 2026-09-21 13:28-15:35Z y sus ficheros y entradas de
+`CLAUDE.md` llegaron a `main` el 2026-09-23 09:16-09:27Z: **1 d 17 h 50 m aplicadas sin
+fusionar**, dentro del umbral de 7 dias, **no es P1 y no se filo**. Septima vez que resbala
+el paso de «marcarla aplicada en la misma sesion» — **pero la tendencia mejora**: la 163 se
+documento a 1 minuto, la 164 a 26, la 166 a 9. Hoy: **0 aplicadas sin fusionar**, y las 12
+entradas de 155-166 existen y dicen «Aplicada».
+
+### Recomendaciones de cierre de esta corrida (las tres llevan `Requiere aprobacion`)
+- **ESCO-121 -> cerrar `Arreglado`**: cumplio su propio criterio, 28/28 tramos `hecho`, cron
+  autodesprogramado, `contador_congelado` en 0, dias con sol de 1 a 92.
+- **ESCO-114 -> cerrar `Arreglado`**: la capacidad esta restaurada por Composio y se
+  ejercito con 4 migraciones. El conector sigue sin `apply_migration`, pero eso es otro
+  problema y se cubre en ESCO-130.
+- **ESCO-127 -> mantener abierta, bajando la urgencia**: 0 PR, cero trabajo hecho, y la
+  deuda historica que la motivaba en parte ya la pagaron las migraciones 164-166. Queda como
+  el boton recurrente para el proximo apagon.
+
+### Estados aceptados (nuevos)
+- **`hato_capturas_foto` sin ninguna fila `tipo='liquidacion'` es correcto**: la liquidacion
+  es quincenal y el productor (#280) lleva un dia vivo.
+- **13 dias en `cobertura_parcial` es el estado sano tras el backfill**, no un residuo, y
+  los 13 estan explicados uno por uno.
+- **Un dia restaurado por la 166 vuelve con `cobertura_hueco_max_min` en NULL**, porque la
+  restauracion repone la fila entera anterior a la 159. No es una columna sin poblar.
+- **`cron.job` con 5 jobs es el estado sano** (el 10, temporal, se autoelimino).
+
+### Cadencia
+Ventana 2026-09-21 11:53Z -> 2026-09-24 08:02Z (2,84 dias): 25 commits = **61,6/semana**,
+13 PR, 9 migraciones, 1 deploy. Fix share 5 fix / 3 feat = 62,5 %. **No interpretable como
+tendencia** — septima ventana seguida con sesgo propio; esta es el drenaje del lunes
+aterrizando dos dias tarde, con 11 de 13 PR en una rafaga de 4 minutos. **La medicion
+mensual sigue siendo la unica legible.**

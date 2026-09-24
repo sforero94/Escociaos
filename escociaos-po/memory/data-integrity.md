@@ -666,3 +666,81 @@ Estado final verificado: 1 movimiento, todo en 0,00, `cantidad_actual = 0,00`,
 `activo = false`, las 2 filas de la ronda intactas. **Tema cerrado, no re-filar.**
 El numero de migracion **150 quedo como hueco** (el repo sigue en 151-158); no reutilizarlo
 sin comprobar antes, por la misma regla de siempre.
+
+## Corrida 2026-09-24-jueves (ventana de 72 h)
+
+### Linea base
+`hato_eventos` **790 (-4, migracion 163)** · `hato_chequeos` 34 · `hato_chequeo_vacas` 1.513 ·
+`hato_pesajes_leche` 646 (**ultima fecha 2026-09-09**) · `hato_tratamientos` 27 ·
+`hato_alertas` 123 · `hato_capturas_foto` 5 · `hato_produccion_quincenal` 84 ·
+`movimientos_diarios` 187 (+6) / `mdp` 819 (+7) · `movimientos_inventario` **165, congelado
+desde 09-05** · `monitoreos` **4.244 congelado, ultima fecha 2026-08-28** · `compras`
+**32, congelado desde 2026-08-05** · `registros_trabajo` 2.994 (+33) · `fin_gastos` **4.534,
+ultimo write 2026-09-12** · `aplicaciones` 21 (**2 abiertas**) · `globalgap_correcciones`
+164 (+17) · `logs_auditoria` 0.
+Integridad: **0 huerfanos en 12 relaciones**, 0 duplicados en 3 clases, 0 stock negativo,
+0 fechas futuras, 0 grupos (fecha, persona) > 1,0 jornal entre los 33 registros nuevos.
+Libro vs stock: **1 divergencia** (TecniFeed Boro, libro -18,29 vs stock 0,40), identica
+desde el 09-07.
+
+### LA PROYECCION AL CIERRE DIO NEGATIVO POR PRIMERA VEZ (ESCO-129)
+`Nutrifeed menor` en «Drench Septiembre»: stock 59,00 contra 59,600 consumidos = **-0,600**.
+El cruce ocurrio DENTRO de la ventana (2026-09-23 19:55:28, movimiento del 09-22, acumulado
+57,4 -> 59,6). `fn_cerrar_aplicacion` valida TODOS los productos antes de escribir, asi que
+el cierre entero aborta. **Esta comprobacion estaba en el runbook y siempre habia dado
+positivo; el dia que da negativo es un hallazgo, no una nota.**
+**Bajado a P2 por el verificador**: existe salida en la app sin tocar la base —
+`DailyMovementsDashboard.tsx:470-493` ofrece Eliminar movimiento a los mismos roles que
+cierran. Pero **no hay camino de EDICION** de un movimiento diario (`DailyMovementForm` solo
+inserta), asi que el unico arreglo en la app es destruir y recrear una fila de trazabilidad
+GlobalGAP. **Siguiente en la fila: `Fosfato monopotasico`, 8,6 contra 9,80 = 1,2 de margen.**
+
+### `v_hato_estado_actual` NO deriva la prenez de `hato_eventos` (ESCO-128)
+`meses_prenez`, `fecha_secar` y `fecha_probable_parto` salen del `DISTINCT ON (cv.animal_id)`
+sobre `hato_chequeo_vacas`, verificado en `pg_get_viewdef`. **Una migracion que corrige
+`hato_eventos` NO corrige la pantalla.** Le paso a la 163 con COPITA #166: borro el servicio
+falso del 12/08 y dejo `fecha_probable_parto = 2027-05-12` (contra `pp_raw = '13/11/2026'`) y
+`meses_prenez = 0` en la fila `7cba844d`. La aritmetica prueba el linaje: 2026-08-12 + 9
+meses = 2027-05-12 exacto; -2 meses = 2027-03-12 exacto. Consecuencia real: la regla
+`parto_proximo` dispara 14 dias antes de la fecha almacenada, asi que **COPITA no recibe
+alerta de parto** cerca de su fecha real de ~2026-11-13.
+
+### SONDA BARATA NUEVA — normalizado contra crudo dentro del mismo chequeo
+`abs(fecha_probable_parto - to_date(pp_raw,'FMDD/FMMM/YYYY')) > 20` sobre las filas con
+`pp_raw ~ '^\d{1,2}/\d{1,2}/\d{4}$'`, agrupado por `hato_chequeos.fecha`. Dio **1 divergente
+de 24 el 2026-09-08 y 0 de 222 en los nueve chequeos anteriores** — separa un error puntual
+de OCR de un defecto del normalizador en una sola consulta. Guardarla.
+
+### Migraciones 159-166 verificadas contra FILAS VIVAS, no encabezados — no re-auditar
+162: 0 llaves `gastos` / 2 `ingresos` / 5 usuarios de telegram. 163: `hato_eventos`
+794 -> 790, COPITA con exactamente 2 eventos en 2026. 159: 2026-08-27 (288 lecturas,
+cierra 15:50) y 2026-09-17 (189) con radiacion, UV y temperatura en NULL;
+`wunderground-historico` intacto en **1.757 de 1.757 con temperatura** — la trampa de la
+103 no se disparo.
+
+### El backfill de la 164 TERMINO y NO empeoro ningun dia
+28/28 tramos `hecho` (ultimo 2026-09-24 10:43Z), el cron jobid 10 **se desprogramo solo**.
+Contra `respaldos.clima_backfill_164_foto` (95 dias): **82 ganaron `horas_sol_duracion`,
+0 lo perdieron, 0 perdieron lluvia.** Los 2 dias que perdieron radiacion y temperatura
+(2026-07-10 hueco 110 min, 2026-08-04 hueco 90 min) **conservan sus lecturas** (255 y 271):
+es la **159 operando**, no una regresion. Los 6 dias restaurados por la 166 coinciden
+**exactos** con su foto.
+
+### Estados aceptados (nuevos)
+- **Las 17 `globalgap_correcciones` del 2026-09-23 19:51 son un re-guardado de «Drench
+  Septiembre»** (1 usuario, 3 segundos, 4 lotes + 4 productos + 4 calculos + 4 compras), NO
+  una perdida. Y **el defecto de rehidratacion del CLAUDE.md raiz NO se disparo**: las 4
+  filas de `aplicaciones_calculos` traian `mezcla_id` antes y las 4 lo traen despues.
+- **`fin_gastos` plano 12 dias no es senal**: la captura es a rafagas (55 filas la semana del
+  09-07, 1 la del 08-17). Mirarlo por semana antes de concluir abandono.
+- **`monitoreos` congelado 27 dias sigue sin ser senal.** Umbral acordado: **2026-10-05**.
+
+### Navegacion (columnas que rompen queries escritas de memoria)
+- **`novedades_uso` usa `ocurrido_at`**, no `created_at`.
+- **`globalgap_correcciones` usa `fila_id`**, no `registro_id`, y lleva `aplicacion_id`
+  propio — no hay que sacarlo del jsonb.
+- **`aplicaciones_productos` NO tiene `aplicacion_id`**: cuelga de `mezcla_id`.
+- **`hato_chequeo_vacas` NO tiene `ultima_cria`** (solo `ultima_cria_raw`) ni `origen_check`.
+- **`hato_capturas_foto` no tiene `created_at`** (tiene `created_by`; la fecha util es `fecha`).
+- `aplicaciones.estado` es ENUM: castear `::text`. Valores abiertos: `'En ejecución'`, `'Calculada'`.
+- El join de productos es `movimientos_diarios_productos.movimiento_diario_id`, **no `movimiento_id`**.

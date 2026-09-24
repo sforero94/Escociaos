@@ -583,3 +583,54 @@ Edge **v264** (2026-09-19T15:43:43Z), `ezbr_sha256` **`7139fbadbb26a16458ef1a04d
 **Estación RECUPERADA** tras el corte: silencio actual 0,03 h. **Perdidos permanentemente 2 días**: 09-16 (11 lecturas) y 09-17 (189), ambos sellados `cobertura_parcial`.
 `hato_alertas_tick_runs`: **7 corridas `ok` seguidas** (09-15..09-21), 179 animales, 1.643–2.428 ms. **ESCO-106 y ESCO-97 aguantan.**
 Rendimiento: ninguna consulta de aplicación por encima de ~100 ms de media. La mayor real es `fn_clima_rollup_diario()` a 205,3 ms × 59 llamadas, una vez al día.
+
+## Corrida 2026-09-24-jueves
+
+### Linea de salud
+Vercel PROMOTED en `db0897e` = HEAD · edge **v265 (2026-09-23T09:26:28Z)**, `ezbr_sha256`
+**`86d6f5cbff2e3035709b704106f701ceb6c5dd9d25ade013a69dfe091f58fe49` = commit `ba2aeb6`**,
+deriva 0 · **320 peticiones de edge function / 0 no-200 en 24 h** · edge-runtime -> PostgREST
+**591 / 0 de 5xx** · `postgres_logs` 0 errores · **5 pg_cron, 907 corridas / 0 fallos en
+3 dias** · clima 2 min de atraso, 288/288 los dias 09-21/22/23 · DB 125 MB / 8 GB ·
+migraciones 160-166 en `main` Y en el ledger · arboles edge 74/74, **0 diffs reales**.
+
+### EL DESPLIEGUE QUE `5cdddcc` DABA POR FALTANTE YA HABIA OCURRIDO
+v265 salio **7 minutos despues** del ultimo commit del arbol edge (`ba2aeb6` 09:19:26Z ->
+09:26:28Z) y **el hash se movio** de `7139fbad…` a `86d6f5cb…`, que es la pata que
+`updated_at` no puede dar. Tercera pata: la corrida **#31** de
+`deteccion-deriva-despliegue.yml` con `conclusion: success`.
+**`scripts/deploy-drift-state/<slug>.json` se escribe con `if: always()`**, asi que su sola
+existencia NO prueba ausencia de deriva — la prueba es la `conclusion` del workflow, via
+`actions_list method=list_workflow_runs`. Barata y concluyente; anadirla al chequeo de cada
+corrida.
+
+### TRAMPA CARA: `SUPABASE_GET_PROJECT_LOGS` DEVUELVE **410 GONE** (ESCO-131)
+El slug de Composio sigue pegandole a `analytics/endpoints/logs.all`, que Supabase retiro
+(changelog 48235). **El camino que SI funciona es `mcp__Supabase_Escritura__query_logs`**,
+con la forma **VIEJA**: tabla `logs`, `source='edge_logs'`,
+`log_attributes['response.status_code']` — no `cross join unnest(metadata)`. El match es
+`positionCaseInsensitive(...)>0`, **no `ILIKE`**, y **la ventana es ~24 h** (dos dias atras
+da `FetchException`). **Agregar `query_logs` al preflight**: este preflight paso en verde
+con el lane de logs roto, porque resolver un slug no es lo mismo que el slug funcione.
+
+### EL BACKFILL DE LA 164 TERMINO SOLO Y SE DESPROGRAMO SOLO
+28/28 `hecho`, todos HTTP 200, `intentos = 1`, cero `fallo`; tramo 28 cerrado
+2026-09-24T10:43Z. `cron.job` vuelve a **5 jobs**. `cobertura_parcial` bajo de **25 a 13**,
+`lluvia_total_mm` NULL en **0 de 187 dias**, y `reconstruido` **disparo por primera vez**:
+2026-04-15, contador y evento coinciden en 12,70 mm. **2026-09-16 es irrecuperable**
+(`"sin datos de Ecowitt para ese dia"`), misma firma que el 2026-08-28.
+**Columna de orden de `respaldos.clima_backfill_164_tramos` es `n`, no `orden`.**
+
+### LA GUARDA DE LA 166 PROTEGE LA LLUVIA Y REGALA EL SOL — residuo de ESCO-121
+Los 6 dias «restaurados desde la foto» vuelven a la fila ANTERIOR al backfill, que es de
+antes de que `horas_sol_duracion` se calculara nunca. Resultado: **3 dias de cobertura buena
+se quedan sin sol para siempre** — 2026-07-09 (268 lecturas, `ok`, 28,19 mm), 2026-08-21
+(249), 2026-08-29 (288) — y `clima_lecturas` se poda a 24 h, asi que no hay segunda
+oportunidad. **El log del tramo dice «restaurado desde la foto», que se lee como «sin
+dano», y no lo es del todo.** Global: 95 de 187 sin sol, pero **82 son el grupo B**
+(decision del dueno); el grupo A quedo 67 de 79.
+
+### Cero liquidacion en `hato_capturas_foto` NO es defecto
+El ultimo objeto de `hato-liquidaciones-fotos` es del 2026-09-20T05:00:34Z, **anterior** al
+despliegue de la v265. No ha habido carga que instrumentar. **Antes de leer una tabla de
+instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del despliegue.**
