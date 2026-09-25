@@ -464,7 +464,15 @@ export function construirPayloadCierreAplicacion(params: {
       _deleted: !!r._deleted,
       _modified: !!r._modified,
     })),
-    insumos_aplicados: Array.from(insumosMap.values()),
+    // Redondeo a 4 decimales: la suma en coma flotante de 17 movimientos de
+    // 0,1 kg por caneca da 59,599999999999994 o 59,60000000000001 según el
+    // orden en que llegan las filas. `fn_cerrar_aplicacion` compara contra un
+    // `numeric` exacto, así que el segundo caso abortaba el cierre entero por
+    // "inventario negativo" con el stock exacto (ESCO-129).
+    insumos_aplicados: Array.from(insumosMap.values()).map((i) => ({
+      ...i,
+      cantidad: Math.round(i.cantidad * 1e4) / 1e4,
+    })),
   };
 }
 
