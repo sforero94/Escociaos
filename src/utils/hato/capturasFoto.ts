@@ -137,6 +137,18 @@ export function describirUltimaCaptura(
       if (captura.celdasLeidasOcr === null) {
         return { texto: `${prefijo}, quedó sin terminar`, tono: 'alerta' };
       }
+      if (captura.tipo === 'liquidacion') {
+        // En la ruta de liquidación `pendiente` es el estado final SANO, no
+        // una alerta: el guardado real pasa por `fn_hato_guardar_quincena_venta`
+        // desde el navegador, que no tiene UPDATE sobre `hato_capturas_foto`
+        // (migración 146), así que el endpoint nunca puede cerrar la fila con
+        // 'ok' (migración 160). Se dice lo que se sabe -- que se leyó -- sin
+        // afirmar que la venta llegó a Finanzas: esta fila no lo prueba.
+        return {
+          texto: `${prefijo}, ${plural(captura.celdasLeidasOcr, v.unidadSingular, v.unidadPlural)} ${v.leidas}`,
+          tono: 'neutro',
+        };
+      }
       return {
         texto: `${prefijo}, ${plural(captura.celdasLeidasOcr, v.unidadSingular, v.unidadPlural)} ${v.leidas} sin aprobar`,
         tono: 'alerta',

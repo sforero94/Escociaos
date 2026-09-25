@@ -126,8 +126,24 @@ describe('describirUltimaCaptura', () => {
       '20 sept 2026',
     );
     // El estado normal de esta ruta: se leyó y nadie puede cerrarla con
-    // 'ok' porque el guardado pasa por un RPC desde el navegador.
-    expect(pendiente.texto).toContain('8 campos leídos sin aprobar');
+    // 'ok' porque el guardado pasa por un RPC desde el navegador. Por eso NO
+    // es alerta ni dice «sin aprobar» (migración 160).
+    expect(pendiente.texto).toContain('8 campos leídos');
+    expect(pendiente.texto).not.toContain('sin aprobar');
+    expect(pendiente.tono).toBe('neutro');
+  });
+
+  it('pendiente sigue siendo alerta en pesaje y chequeo', () => {
+    for (const tipo of ['pesaje', 'chequeo'] as const) {
+      const d = describirUltimaCaptura(captura({ tipo, desenlace: 'pendiente', celdasLeidasOcr: 8 }), 'x');
+      expect(d.texto).toContain('sin aprobar');
+      expect(d.tono).toBe('alerta');
+    }
+  });
+
+  it('una liquidación que el OCR no leyó sigue siendo alerta', () => {
+    const d = describirUltimaCaptura(captura({ tipo: 'liquidacion', desenlace: 'pendiente', celdasLeidasOcr: 0 }), 'x');
+    expect(d.tono).toBe('alerta');
   });
 
   it('error y abandono nunca se leen como éxito', () => {
