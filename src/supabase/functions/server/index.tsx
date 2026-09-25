@@ -7,7 +7,7 @@ import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.tsx";
 import { toggleProductoActivo } from "./productos.tsx";
 import { handleGenerarReporteSemanal } from "./generar-reporte-semanal-endpoint.ts";
 import { handleChatMessage } from "./chat.tsx";
-import { handleClimaSync, handleClimaBackfill, handleClimaReintentoSinDato, handleClimaForecast } from "./clima.tsx";
+import { handleClimaSync, handleClimaBackfill, handleClimaActualizar, handleClimaReintentoSinDato, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
 import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
 import { handleHatoChequeoFoto } from "./hato-chequeo-foto.ts";
@@ -117,6 +117,14 @@ app.post("/make-server-1ccce916/clima/sync", async (c) => {
 // de Ecowitt de una sola llamada.
 app.post("/make-server-1ccce916/clima/backfill", async (c) => {
   return await handleClimaBackfill(c);
+});
+
+// Botón «Actualizar» de la vista de Clima (ESCO-127). Un clic, sin fechas:
+// mira los últimos 7 días, elige sólo los incompletos y les vuelve a
+// preguntar a Ecowitt, en serie y aplicando la guarda de no-empeorar. Mismo
+// gate que /clima/sync y /clima/backfill (en la práctica, JWT de Gerencia).
+app.post("/make-server-1ccce916/clima/actualizar", async (c) => {
+  return await handleClimaActualizar(c);
 });
 
 // Reintento diario de días sin dato confiable de lluvia (migración 121,

@@ -2,6 +2,14 @@ import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { parseOpenWeatherForecast } from './external-tools.ts';
 import { debeReagregarDia } from './clima-reagregacion.ts';
+import {
+  clasificarDia,
+  fechasVentanaActualizar,
+  resumirActualizacion,
+  seleccionarDiasIncompletos,
+  type DesenlaceDia,
+  type FilaResumenDia,
+} from './clima-actualizar.ts';
 import { conReintento, esStatusReintentable } from './reintento.ts';
 
 // ============================================================================
@@ -686,6 +694,178 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
   } catch (error) {
     console.error(`${log} Unhandled error:`, error);
     return c.json({ error: String(error) }, 500);
+  }
+}
+
+// ============================================================================
+// Handler: botón «Actualizar» de la vista de Clima (ESCO-127)
+// POST /clima/actualizar -- sin parámetros, un clic.
+//
+// Repara los días INCOMPLETOS de la última semana y nada más. Es la mitad que
+// faltaba: `/clima/backfill` existe desde siempre pero hay que pedirlo en una
+// sesión (ningún componente lo llamaba), y el cron de la migración 121 sólo
+// mira la lluvia sin dato confiable -- no mira `horas_sol_duracion`,
+// `lluvia_mm_evento` ni `cobertura_hueco_max_min`. Ecowitt sólo entrega
+// resolución de 5 minutos unos 90 días hacia atrás, así que un día que no se
+// repara a tiempo pierde esa resolución para siempre.
+//
+// Tres diferencias deliberadas con `/clima/backfill`:
+//
+//   1. **Elige los días**: si no hay ninguno incompleto responde «todo al
+//      día» sin llamar a Ecowitt ni una vez. Tope duro de 7 llamadas por clic.
+//   2. **APLICA la guarda de no-empeorar** (`debeReagregarDia`, pasando
+//      `lecturasPrevias`), que el backfill manual salta a propósito por ser
+//      una acción humana deliberada sobre un rango elegido a mano. Acá el
+//      rango no lo elige nadie, así que un clic no puede dejar un día peor:
+//      el 2026-08-19 pasó de 167 a 105 lecturas por una respuesta parcial.
+//   3. **Verifica por fila**, releyendo `clima_resumen_diario` después de cada
+//      día. «La consulta a Ecowitt no dio error» no es «el día se arregló».
+//
+// Exclusión mutua -- ver `actualizacionEnCurso` y `VENTANAS_CRON_UTC`.
+// ============================================================================
+
+/** Un solo `/clima/actualizar` a la vez por instancia. Dos clics seguidos, o
+ *  dos personas a la vez, se pisarían: `fn_clima_rollup_diario` termina
+ *  podando `clima_lecturas` de forma GLOBAL (no acotada a su `p_fecha`), así
+ *  que el segundo proceso pierde en silencio las lecturas que acaba de
+ *  insertar y su día queda intacto -- con la respuesta diciendo que todo
+ *  salió bien (migración 122).
+ *
+ *  ALCANCE HONESTO: esto cubre una instancia del edge runtime. Dos peticiones
+ *  servidas por instancias distintas no se ven entre sí. El candado real sería
+ *  `pg_try_advisory_lock` vía RPC, que es DDL y va en su propia ficha; lo que
+ *  queda cubierto sin DDL son los dos casos frecuentes (doble clic y dos
+ *  pestañas) más la coincidencia con los crons, de abajo. */
+let actualizacionEnCurso = false;
+
+/** Ventanas UTC en las que NO se corre, porque un pg_cron está tocando las
+ *  mismas tablas. `clima-daily-rollup` (migración 036/068) dispara a las 05:15
+ *  UTC y `clima-reintento-sin-dato` (migración 121) a las 11:00 UTC --
+ *  verificado contra `cron.job` el 2026-09-25. La ventana del rollup arranca a
+ *  las 05:00 a propósito: 00:00-00:15 Bogotá es el rato en que el día de ayer
+ *  ya cerró y todavía no tiene fila. */
+const VENTANAS_CRON_UTC: { desde: number; hasta: number; job: string }[] = [
+  { desde: 5 * 60 + 0, hasta: 5 * 60 + 30, job: 'clima-daily-rollup' },
+  { desde: 10 * 60 + 55, hasta: 11 * 60 + 15, job: 'clima-reintento-sin-dato' },
+];
+
+function cronEnCurso(ahora: Date): string | null {
+  const minutos = ahora.getUTCHours() * 60 + ahora.getUTCMinutes();
+  for (const v of VENTANAS_CRON_UTC) {
+    if (minutos >= v.desde && minutos <= v.hasta) return v.job;
+  }
+  return null;
+}
+
+/** Día calendario en Bogotá (UTC-5, sin horario de verano). El edge function
+ *  corre en UTC, donde `toISOString().slice(0,10)` ya es *mañana* desde las
+ *  19:00 locales -- misma trampa que `obtenerFechaHoy()` cubre del lado del
+ *  navegador, mirando desde el otro lado. */
+function hoyBogota(): string {
+  return new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+async function leerResumenDias(
+  sb: { supabaseUrl: string; serviceKey: string },
+  mac: string,
+  desde: string,
+  hasta: string,
+): Promise<FilaResumenDia[] | null> {
+  const url = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
+    + `?station_id=eq.${encodeURIComponent(mac)}`
+    + `&fecha=gte.${desde}&fecha=lte.${hasta}`
+    + `&select=fecha,lluvia_confianza,lluvia_mm_evento,horas_sol_duracion,cobertura_hueco_max_min,lecturas_count`;
+  const res = await fetch(url, {
+    headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as FilaResumenDia[];
+}
+
+export async function handleClimaActualizar(c: Context): Promise<Response> {
+  const log = '[clima-actualizar]';
+
+  const acceso = await verificarAccesoClima(c);
+  if (acceso instanceof Response) return acceso;
+
+  const job = cronEnCurso(new Date());
+  if (job) {
+    return c.json({
+      message: `El proceso automático «${job}» está corriendo en este momento. Espera unos minutos y vuelve a intentarlo.`,
+      ocupado: true,
+    }, 409);
+  }
+  if (actualizacionEnCurso) {
+    return c.json({
+      message: 'Ya hay una actualización de clima en curso. Espera a que termine.',
+      ocupado: true,
+    }, 409);
+  }
+  actualizacionEnCurso = true;
+
+  try {
+    const creds = getEcowittCredentials();
+    if (!creds) return c.json({ error: 'Missing Ecowitt credentials' }, 500);
+    const sb = getSupabaseConfig();
+    if (!sb) return c.json({ error: 'Missing Supabase config' }, 500);
+
+    const ventana = fechasVentanaActualizar(hoyBogota());
+    const desde = ventana[0];
+    const hasta = ventana[ventana.length - 1];
+
+    const filasAntes = await leerResumenDias(sb, creds.mac, desde, hasta);
+    if (filasAntes === null) {
+      return c.json({ error: 'No se pudo leer clima_resumen_diario' }, 502);
+    }
+
+    const candidatos = seleccionarDiasIncompletos(ventana, filasAntes);
+    if (candidatos.length === 0) {
+      console.info(`${log} ${desde} → ${hasta}: nada que reparar`);
+      return c.json({
+        message: 'Todo al día',
+        desde,
+        hasta,
+        resumen: resumirActualizacion([], 0),
+        dias: [],
+      }, 200);
+    }
+
+    console.info(`${log} ${candidatos.length} día(s) incompleto(s): ${candidatos.map((d) => d.fecha).join(', ')}`);
+
+    const antesPorFecha = new Map(filasAntes.map((f) => [f.fecha, f]));
+    const dias: { fecha: string; desenlace: DesenlaceDia; detalle?: string }[] = [];
+
+    // En serie, un día a la vez. Nunca en paralelo: la poda global de
+    // `fn_clima_rollup_diario` haría que un día borrara las lecturas que el
+    // otro acaba de insertar, y la respuesta seguiría diciendo que todo salió
+    // bien (migración 122).
+    for (const candidato of candidatos) {
+      const fecha = new Date(Date.parse(`${candidato.fecha}T12:00:00Z`));
+      let resultado: { ok: boolean; omitido?: boolean; error?: string };
+      try {
+        resultado = await backfillUnDia(fecha, creds, sb, log, candidato.lecturasPrevias);
+      } catch (err) {
+        resultado = { ok: false, error: String(err) };
+      }
+
+      // Verificación POR FILA: se relee el día en vez de creerle al HTTP.
+      const filasDespues = await leerResumenDias(sb, creds.mac, candidato.fecha, candidato.fecha);
+      const despues = filasDespues?.find((f) => f.fecha === candidato.fecha) ?? null;
+      const desenlace = clasificarDia(antesPorFecha.get(candidato.fecha), despues, resultado);
+      if (desenlace === 'error') console.error(`${log} ${candidato.fecha}: ${resultado.error}`);
+      dias.push({ fecha: candidato.fecha, desenlace, detalle: resultado.error });
+      await sleep(150);
+    }
+
+    const resumen = resumirActualizacion(dias.map((d) => d.desenlace), candidatos.length);
+    console.info(`${log} ${resumen.recuperados}/${resumen.revisados} recuperado(s)`);
+
+    return c.json({ message: 'Actualización completa', desde, hasta, resumen, dias }, 200);
+  } catch (error) {
+    console.error(`${log} Unhandled error:`, error);
+    return c.json({ error: String(error) }, 500);
+  } finally {
+    actualizacionEnCurso = false;
   }
 }
 
