@@ -1,0 +1,53 @@
+# Verificacion de PR: lint, typecheck y pruebas en cada pull request a `main`.
+#
+# ESCO-132. Hasta este archivo NO existia `on: pull_request` en el repositorio:
+# el unico workflow era la deteccion de deriva de despliegue (cron). Entre el
+# 2026-09-21 y el 2026-09-24 entraron 13 PR sin esta red, 11 de ellos en una
+# rafaga de cuatro minutos, y la regresion del 2026-09-19 se vio dos dias
+# despues en vez de en el propio PR.
+#
+# Arranca como check NO obligatorio (decision de Santiago, 2026-09-25). Se
+# vuelve obligatorio desde GitHub -> Settings -> Branches -> regla de `main`
+# despues de una semana en verde. Este archivo no necesita cambiar para eso.
+#
+# Los tres pasos son los mismos que corre un contribuyente a mano:
+#   npm run lint       -> 0 errores (los avisos no fallan el paso)
+#   npm run typecheck  -> tsc --noEmit
+#   npm test           -> vitest run
+name: Verificacion de PR
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificacion-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Pruebas
+        run: npm test
