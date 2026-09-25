@@ -792,6 +792,34 @@ aparece en ninguno de los 192 chunks de la app, solo en el vendor
 | Corrida | Conjunto elegible | Racha de vacios |
 |---|---|---|
 | 2026-08-28-viernes | **6 elegibles** (5 `codigo` + 1 `ddl_aditivo`) | **0** |
+| 2026-09-25-viernes | **1 elegible** (1 `codigo`, 0 `ddl_aditivo`) | **0** |
+
+> **OJO: hay DOS tablas "Racha del viernes" en este fichero** (esta y otra mas arriba,
+> vacia, hacia la linea 658). Esta es la viva. La duplicada habria que podarla.
+
+## El cuello de botella del tablero se movio: de capacidad a decisiones [corrida: 2026-09-25-viernes]
+
+El viernes se creo porque el backlog se llenaba mas rapido de lo que se drenaba. El
+2026-09-25 el cupo era de 5 PRs `codigo` y **el conjunto elegible era de UNO**: de 7 fichas
+abiertas, 5 esperaban una decision de Santiago (`clase: datos`/`decision` o
+`Requiere aprobacion`) y 1 esperaba evidencia (`Confianza: Media`).
+**El drenaje ya no es el limite.** Si esto se repite dos o tres viernes seguidos, la
+recomendacion util no es pasar el viernes a mensual —la regla de auto-poda no se dispara
+porque el conjunto no esta vacio— sino decirle a Santiago que el tablero es suyo, no del
+robot. Anotar el reparto elegible/bloqueado en cada corrida del viernes para tener la serie.
+
+## Cron de clima al 2026-09-25 [corrida: 2026-09-25-viernes]
+
+`cron.job` tiene **5 filas**: `clima-sync-wu` (*/5), `clima-daily-rollup` (15 5),
+`hato-alertas-tick` (45 10), `clima-reintento-sin-dato` (0 11), `ronda-inventario-tick`
+(0 12). **El `clima-backfill-164` YA NO EXISTE** — se desprogramo solo al terminar sus 28
+tramos, como estaba disenado. **No filarlo como "cron colgado" ni como fuente de
+concurrencia.**
+
+## Composio: `SUPABASE_RUN_READ_ONLY_QUERY` exige `ref`, no `project_id` [corrida: 2026-09-25-viernes]
+
+Con `project_id` devuelve 400 `Following fields are missing: {'ref'}`. Cuesta un round-trip
+por agente que no lo sepa.
 
 ## Estado de la operacion (corrida 2026-08-28-viernes — PRIMER viernes)
 - Primera corrida de la Routine del viernes (`trig_01AbCfQPNmRh7Jq8fX8yktSe`), estrenada segun lo

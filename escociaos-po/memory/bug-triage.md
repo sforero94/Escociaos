@@ -734,3 +734,39 @@ lanza). Comprobado contra `pg_constraint`, no contra el fichero.
 **`mcp__Supabase_Escritura__query_logs` ya NO esta denegado por el clasificador** — corrio
 sin prompt esta corrida, y es hoy el **unico** camino a los logs
 (`SUPABASE_GET_PROJECT_LOGS` por Composio devuelve **410 Gone**). Ver `_compartida.md`.
+
+## Clima — backfill: TRES llamadores de `backfillUnDia`, no dos [corrida: 2026-09-25-viernes]
+
+- `POST /clima/backfill` **no aplica** `debeReagregarDia` a proposito (accion humana con
+  rango elegido a mano). El cron de la 121 (`clima-reintento-sin-dato`) **si** lo aplica,
+  pasando `lecturasPrevias`. El endpoint nuevo `/clima/actualizar` (PR #291) tambien.
+  **Al auditar backfill de clima hay que contar tres, no dos.**
+- `backfillUnDia` **borra** las lecturas ya guardadas del rango que va a cubrir antes de
+  insertar (dedup de origen, ESCO-65). Consecuencia que no es obvia y que decidio el diseno
+  del boton: para un dia **sin fila**, `debeReagregarDia(n, null)` devuelve `true`, o sea
+  que la guarda no protege nada. **Por eso el dia en curso nunca puede entrar a un backfill
+  automatico** — se cambiarian lecturas vivas de 5 min por lo que la History API tenga.
+- `cobertura_hueco_max_min` (migracion 159) **solo esta poblada desde el 2026-09-21**; las
+  filas anteriores la tienen NULL. Un predicado sobre esa columna tiene que tratar NULL como
+  "no medido", nunca como 0.
+- `verificarAccesoClima` restringe el disparo manual a **Gerencia sola** (no Administrador),
+  porque `clima_*` no tiene ninguna politica RLS de escritura. El gate del navegador es
+  `profile.rol` de `useAuth()`.
+- Patron de llamada a edge function desde el navegador con JWT de sesion:
+  `InventoryList.tsx:170-200` (`import('@/utils/supabase/info')` +
+  `getSupabase().auth.getSession()`). Es el que se copio en `ActualizarClima.tsx`.
+
+## Falso verde de vitest — TERCERA variante confirmada [corrida: 2026-09-25-viernes]
+
+`node_modules/.bin/vitest run <fichero>` **sale con codigo 0 cuando el fichero falla al
+IMPORTAR** (modulo inexistente): imprime "1 failed / no tests" y `$?` es 0. Ya habia dos
+modos ledgereados (`--reporter=basic`, `npx vitest`); este es el tercero y es el que muerde
+justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
+**Regla: leer la salida, nunca el codigo de salida.**
+
+## Linea base del repo [corrida: 2026-09-25-viernes]
+
+| Que | Valor |
+|---|---|
+| `main@94a334a` | vitest **187 / 3.873** verde · `tsc --noEmit` exit 0 · lint 0 errores / **919 avisos** |
+| con PR #291 | **188 ficheros / 3.900** verde · tsc exit 0 · lint 0 errores / 919 avisos (cero avisos nuevos) |
