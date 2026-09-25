@@ -205,3 +205,50 @@ describe('paridad entre los dos árboles de edge function', () => {
     }
   });
 });
+
+/**
+ * Candado entre instancias (migración 169, ESCO-133). La bandera en memoria
+ * del botón sólo ve su propia instancia; los tres caminos que reagregan días
+ * viejos tienen que tomar el lease de la base, o dos de ellos se borran las
+ * lecturas por la poda global de `fn_clima_rollup_diario` (migración 122).
+ */
+describe('candado de clima entre instancias', () => {
+  const raiz = resolve(__dirname, '../..');
+  const arboles = [
+    'src/supabase/functions/server/clima.tsx',
+    'supabase/functions/make-server-1ccce916/clima.tsx',
+  ];
+
+  /** Cuerpo de un handler exportado: desde su firma hasta el próximo export. */
+  function cuerpo(fuente: string, nombre: string): string {
+    const inicio = fuente.indexOf(`export async function ${nombre}(`);
+    expect(inicio).toBeGreaterThan(-1);
+    const fin = fuente.indexOf('\nexport ', inicio + 1);
+    return fuente.slice(inicio, fin === -1 ? undefined : fin);
+  }
+
+  it('las dos copias de clima.tsx son idénticas', () => {
+    const [a, b] = arboles.map((p) => readFileSync(resolve(raiz, p), 'utf8'));
+    expect(b).toBe(a);
+  });
+
+  it.each(['handleClimaActualizar', 'handleClimaBackfill', 'handleClimaReintentoSinDato'])(
+    '%s toma el candado y lo suelta en un finally',
+    (handler) => {
+      const fuente = readFileSync(resolve(raiz, arboles[0]), 'utf8');
+      const c = cuerpo(fuente, handler);
+      const toma = c.indexOf('await tomarCandadoClima(');
+      const reagrega = c.indexOf('backfillUnDia(');
+      expect(toma).toBeGreaterThan(-1);
+      // El candado se toma ANTES de tocar ningún día.
+      expect(toma).toBeLessThan(reagrega);
+      expect(c).toMatch(/finally \{\s*await soltarCandadoClima\(sb, dueno\);/);
+    },
+  );
+
+  it('la migración 169 crea las dos funciones del candado', () => {
+    const sql = readFileSync(resolve(raiz, 'src/sql/migrations/169_clima_candado_backfill.sql'), 'utf8');
+    expect(sql).toContain('CREATE FUNCTION public.fn_clima_candado_tomar(p_dueno text, p_segundos integer)');
+    expect(sql).toContain('CREATE FUNCTION public.fn_clima_candado_soltar(p_dueno text)');
+  });
+});
