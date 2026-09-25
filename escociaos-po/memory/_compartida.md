@@ -2201,3 +2201,41 @@ verificar ahi.**
 La auto-poda **no aplica**: ocho jueves seguidos con hallazgos. Y este jueves encontro un
 cierre de aplicacion que se rompio **el 2026-09-23 a las 19:55**, o sea 36 horas antes —
 habria esperado al lunes.
+
+## REFUTADO: `pg_try_advisory_lock` NO sirve detras de PostgREST [corrida: 2026-09-25-viernes]
+
+**Fingerprint**: `bug-triage/clima-concurrencia/usar-pg_try_advisory_lock`.
+El viernes filo ESCO-133 recomendando un RPC con `pg_try_advisory_lock`. **Es incorrecto y se
+refuto el mismo dia**: PostgREST usa un **pool de conexiones**, asi que un advisory lock de
+**sesion** se queda pegado a una conexion del pool (y lo hereda quien la reuse), y uno de
+**transaccion** se suelta al terminar la llamada al RPC — antes de que el trabajo que debia
+proteger haya empezado siquiera. El mecanismo correcto, y el que quedo aplicado en la
+**migracion 169** (`clima_candado_backfill` + `fn_clima_candado_tomar/soltar`, solo
+`service_role`), es un **lease en tabla** con expiracion, tomado y soltado explicitamente.
+**Regla general: detras de PostgREST, exclusion mutua = lease en tabla, jamas advisory lock.**
+
+## El viernes que viene: comprobar si el hook mata el carril `ddl_aditivo` [corrida: 2026-09-25-viernes]
+
+El PR #292 cambia el hook de permisos de Supabase para decidir **por nombre de herramienta**.
+Consecuencia declarada en su propio cuerpo y **aprobada por Santiago**: si ese hook carga en
+una Routine desatendida, **`SUPABASE_APPLY_A_MIGRATION` pasa a PEDIR permiso**, y el carril
+`ddl_aditivo` del viernes muere en ese prompt. El 2026-09-24 el hook **no** cargo en las
+Routines, asi que hoy es condicional, no seguro.
+**Accion en el preflight de Phase 0, no al llegar al carril** (leccion ESCO-114): comprobar
+que el slug resuelve Y que no pide permiso. Si pide, el carril no corre esa semana: se
+registra como NO CORRIO y se sigue. **Nunca esperar en el prompt** (constitucion §7).
+
+## Una corrida puede quedar obsoleta en una hora [corrida: 2026-09-25-viernes]
+
+El viernes cerro a las 11:40 con el PR #291 abierto. A las 12:45 una **sesion en vivo** lo
+reemplazo por el **#292** (mismo commit `56ef9a9` sin cambios, mas el resto encima) y aplico
+las migraciones **167, 168 y 169**, resolviendo las tres decisiones que el reporte del
+viernes acababa de poner en REQUIERE TU DECISION. **El reporte funciono: fue el insumo de esa
+sesion.**
+Dos lecciones operativas:
+1. **La sesion en vivo NO actualizo Notion.** Las filas quedaron con la marca de tiempo de la
+   corrida. Si llega un evento de PR cerrado, **verificar el tablero contra el ledger vivo**,
+   no asumir que la otra sesion hizo su parte.
+2. **Corregir solo las filas propias.** Se re-apuntaron ESCO-127 y ESCO-133 (esta ultima era
+   lo urgente: quedaba elegible para el viernes siguiente y habria reescrito la 169 ya
+   aplicada). ESCO-128/129/130/131/132 se dejaron a la sesion que las trabajo.
