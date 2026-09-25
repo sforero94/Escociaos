@@ -2239,3 +2239,49 @@ Dos lecciones operativas:
 2. **Corregir solo las filas propias.** Se re-apuntaron ESCO-127 y ESCO-133 (esta ultima era
    lo urgente: quedaba elegible para el viernes siguiente y habria reescrito la 169 ya
    aplicada). ESCO-128/129/130/131/132 se dejaron a la sesion que las trabajo.
+
+## Desenlace de la corrida 2026-09-24-jueves (verificado 2026-09-25)
+
+Los cinco hallazgos se recogieron en el **PR #292**, que reemplaza a #289/#290/#291 y
+se **fusionó el 2026-09-25** (`56de0c9`). **Migraciones 167, 168 y 169 YA APLICADAS** (ledger `20260925124250`,
+`…124320`, `…124346`). Verificado contra filas vivas por el orquestador, **no** contra el
+texto del PR:
+- **ESCO-128 cerrado `Arreglado`**: `v_hato_estado_actual` sirve `fecha_probable_parto =
+  2026-11-13` para COPITA #166. El consumidor quedó arreglado, que es la prueba que
+  importaba.
+- **ESCO-129 sigue abierta**: la 168 subió el stock de Nutrifeed 59,00 → 59,60 (`Ajuste`,
+  0,60 kg, `sforero94@gmail.com`) y la proyección al cierre es **0,000**, así que el cierre
+  ya no aborta — **pero la aplicación sigue `En ejecución` con 0 filas de cierre**.
+- **ESCO-130/131/132 cerrados `Arreglado`** al fusionarse #292: `verificacion-pr.yml` está
+  en `main`, el hook decide por nombre de herramienta y la guía de logs apunta a
+  `query_logs`. Verificado sobre el árbol, no sobre el texto del PR.
+
+### DEFECTO PROPIO: alias de vista que colisiona con una variable `RECORD` de PL/pgSQL
+**El primer intento de la 167 abortó con `42703` y revirtió entero.** En la post-condición
+declaré `v RECORD` y luego escribí `FROM public.v_hato_estado_actual v`: dentro de un
+bloque `DO`, el alias de la tabla y la variable comparten espacio de nombres, y el
+`SELECT … INTO` no resuelve. El alias vivo es `ve`.
+**Regla: dentro de un bloque `DO`, ningún alias de tabla o vista puede repetir el nombre de
+una variable declarada.** Y la lección de método: abrí ese fichero como «listo para
+revisar» sin haberlo podido ejecutar nunca — el carril de solo lectura no puede probar una
+migración, así que **un fichero de migración no revisado por ejecución es una hipótesis, no
+un entregable**, y conviene decirlo así en el PR. Las guardas transaccionales hicieron su
+trabajo: abortó limpio, cero escrituras a medias.
+
+### SANTIAGO ELIGIÓ LA RAMA CONTRARIA A LA QUE RECOMENDÉ EN ESCO-129
+Mi acción recomendada decía literalmente «DO NOT add an Ajuste movement to manufacture
+0,600 kg», por el precedente de la 119. Él decidió que el número equivocado era el
+**stock** y lo subió. **No es una contradicción que haya que re-litigar**: él ve la bodega
+y la base no, la fila queda anotada con autor y con la advertencia de que no es un conteo
+físico. Lo que sí hay que preservar es que el ledger no lea como si la operación lo hubiera
+recomendado. **Cuando el dueño elige la otra rama de una pregunta bien planteada, se
+registra como decisión suya con información externa, no como refutación del hallazgo.**
+
+### LO QUE NINGUNA DE LAS TRES MIGRACIONES RESUELVE
+El drench está al **87,3 %** (832 de 953 canecas; La Vega 150 de 271) y terminar las 121
+que faltan pide **~8,7 kg más de Nutrifeed**, con el saldo en 0,00 después del cierre.
+**Cerrar la aplicación y terminarla son dos problemas distintos.** Y sigue abierta la
+divergencia de dosis: Amisol MKP en **0 de 571,23** planeados, Amisol KP al 18 % de su
+dosis y Fosfato al 10 %, contra Nutrifeed al 72 % — o sea que Nutrifeed es el único
+producto registrado cerca de lo planeado, lo que debilita la hipótesis de que sobre
+consumo suyo.
