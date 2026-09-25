@@ -28,6 +28,10 @@ outputs to `/build` not `dist`, and Tailwind now compiles during the build
 
 ### 2. Runtime errors
 - `get_runtime_errors` and `get_runtime_logs` since the last run.
+- Supabase edge-function and API logs: `mcp__Supabase_Escritura__query_logs`
+  only (window ~24 h, old `logs`/`edge_logs` shape — see the logs row in
+  `escociaos-po/CLAUDE.md` §6). **Never** Composio `SUPABASE_GET_PROJECT_LOGS`:
+  it answers 410 Gone to every query (ESCO-131).
 - Group by signature, count occurrences, identify first-seen. **New signatures
   and rising counts matter; a flat known error does not need refiling.**
 - Map each to a module and a probable file. Anything that reaches a user as a

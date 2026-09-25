@@ -1,0 +1,84 @@
+# Corre lint, chequeo de tipos y la suite en cada pull request.
+#
+# POR QUE EXISTE (ESCO-132). Hasta ahora el repositorio tenia UN solo workflow,
+# `deteccion-deriva-despliegue.yml`, que comprueba el DESPLIEGUE, no la
+# CORRECCION. No habia ningun `on: pull_request` en todo el repositorio, asi que
+# nada corria las pruebas al mezclar.
+#
+# Lo que costo: el commit `a5e5987` (PR #274, 2026-09-19) se mezclo con dos
+# errores TS2339 y una prueba de proteccion financiera en rojo, y `main` estuvo
+# ROTO DOS DIAS hasta el PR #275. Nadie se entero, porque lo unico que corre la
+# suite es la operacion de mantenimiento, dos veces por semana. El 2026-09-11
+# una revision completa tambien paso por encima de un prefijo de migracion
+# duplicado que tuvo la suite en rojo 48 horas.
+#
+# Los tres pasos van SEPARADOS a proposito: asi el nombre del check que falla
+# dice cual de los tres fue, sin abrir el log.
+#
+# ARRANCA COMO CHECK NO OBLIGATORIO. Volverlo obligatorio en la proteccion de
+# rama SOLO despues de una semana en verde -- un check obligatorio que falla por
+# una prueba inestable el primer dia se desactiva y no vuelve nunca.
+name: Verificacion de PR
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Si se empujan dos commits seguidos al mismo PR, cancela la corrida vieja:
+# no tiene sentido pagar por verificar un arbol que ya quedo atras.
+concurrency:
+  group: verificacion-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificacion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # `npm ci` y no `npm install`: respeta el lockfile exactamente, que es lo
+      # que hace reproducible la comprobacion.
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Chequeo de tipos
+        run: npx tsc --noEmit
+
+      # `node_modules/.bin/vitest` y NUNCA `npx vitest`: `npx` resuelve un vitest
+      # remoto contra el `vite.config.ts` local, falla con
+      # "Cannot find module 'vite'" Y SALE CON CODIGO 0 -- o sea que daria verde
+      # sin correr una sola prueba. Esa trampa ya costo una corrida.
+      - name: Pruebas
+        run: node_modules/.bin/vitest run
+
+      # Solo avisa cuando se rompe `main`. En un PR el autor ya ve el check en
+      # rojo; avisar ahi seria ruido. Si los secretos no estan configurados,
+      # deja un warning y no falla el job -- el aviso es un extra, no el control.
+      - name: Avisar por Telegram si `main` quedo roto
+        if: failure() && github.ref == 'refs/heads/main'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no estan configurados -- no se pudo avisar."
+            exit 0
+          fi
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="Escocia OS: \`main\` quedo en rojo. Commit ${GITHUB_SHA:0:7}. Corrida: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            > /dev/null

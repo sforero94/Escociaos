@@ -4,6 +4,7 @@ import { ClimaSubNav } from './ClimaSubNav';
 import { ClimaKPICards } from './components/ClimaKPICards';
 import { ClimaPeriodosTable } from './components/ClimaPeriodosTable';
 import { ContextoSolar } from './components/ContextoSolar';
+import { ActualizarClima } from './components/ActualizarClima';
 
 export function ClimaDashboard() {
   const { lecturaActual, resumenPeriodos, rawLecturas, resumenesDiarios, estacionConfigurada, loading, error } = useClimaData();
@@ -40,7 +41,10 @@ export function ClimaDashboard() {
       <div className="space-y-6">
         {/* Condiciones Actuales */}
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Condiciones Actuales</h2>
+          <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-start sm:justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Condiciones Actuales</h2>
+            <ActualizarClima />
+          </div>
           <ClimaKPICards lecturaActual={lecturaActual} todasLecturas={rawLecturas} loading={loading} />
         </section>
 

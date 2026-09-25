@@ -2,6 +2,14 @@ import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { parseOpenWeatherForecast } from './external-tools.ts';
 import { debeReagregarDia } from './clima-reagregacion.ts';
+import {
+  clasificarDia,
+  fechasVentanaActualizar,
+  resumirActualizacion,
+  seleccionarDiasIncompletos,
+  type DesenlaceDia,
+  type FilaResumenDia,
+} from './clima-actualizar.ts';
 import { conReintento, esStatusReintentable } from './reintento.ts';
 
 // ============================================================================
@@ -429,6 +437,86 @@ function parseEcowittHistory(histData: EcowittHistoryData, stationId: string) {
 }
 
 // ============================================================================
+// Candado entre instancias (migración 169, ESCO-133)
+//
+// Los tres caminos que reagregan días viejos -- `/clima/actualizar`,
+// `/clima/backfill` y `/clima/reintentar-sin-dato` -- se excluyen entre sí con
+// un lease en `clima_candado_backfill`. La bandera en memoria
+// (`actualizacionEnCurso`) sólo ve su propia instancia del edge runtime; el
+// lease vive en la base y lo ven todas. Vence solo, así que una función que
+// muere a mitad de camino no deja el candado tomado para siempre.
+//
+// FALLA CERRADO: si la RPC no responde (p. ej. la migración 169 no está
+// aplicada) el endpoint responde 503 y no escribe nada. Correr sin candado es
+// exactamente la carrera silenciosa que esto existe para impedir.
+// ============================================================================
+
+/** Duración del lease. Cubre de sobra el tope de pared del edge runtime; si
+ *  la función muere, el candado vence solo en este plazo. */
+const SEGUNDOS_CANDADO_CLIMA = 15 * 60;
+
+type ResultadoCandado = 'tomado' | 'ocupado' | 'error';
+
+async function tomarCandadoClima(
+  sb: { supabaseUrl: string; serviceKey: string },
+  dueno: string,
+): Promise<ResultadoCandado> {
+  try {
+    const res = await fetch(`${sb.supabaseUrl}/rest/v1/rpc/fn_clima_candado_tomar`, {
+      method: 'POST',
+      headers: {
+        apikey: sb.serviceKey,
+        Authorization: `Bearer ${sb.serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ p_dueno: dueno, p_segundos: SEGUNDOS_CANDADO_CLIMA }),
+    });
+    if (!res.ok) {
+      console.error(`[clima-candado] tomar falló (${res.status}): ${await res.text().catch(() => '')}`);
+      return 'error';
+    }
+    return (await res.json()) === true ? 'tomado' : 'ocupado';
+  } catch (err) {
+    console.error(`[clima-candado] tomar lanzó: ${err}`);
+    return 'error';
+  }
+}
+
+async function soltarCandadoClima(
+  sb: { supabaseUrl: string; serviceKey: string },
+  dueno: string,
+): Promise<void> {
+  try {
+    const res = await fetch(`${sb.supabaseUrl}/rest/v1/rpc/fn_clima_candado_soltar`, {
+      method: 'POST',
+      headers: {
+        apikey: sb.serviceKey,
+        Authorization: `Bearer ${sb.serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ p_dueno: dueno }),
+    });
+    // Si no se pudo soltar, el lease vence solo en SEGUNDOS_CANDADO_CLIMA.
+    if (!res.ok) console.warn(`[clima-candado] soltar falló (${res.status}); vencerá solo`);
+  } catch (err) {
+    console.warn(`[clima-candado] soltar lanzó: ${err}; vencerá solo`);
+  }
+}
+
+/** Respuesta estándar cuando el candado no se pudo tomar. */
+function respuestaCandado(c: Context, resultado: 'ocupado' | 'error'): Response {
+  if (resultado === 'ocupado') {
+    return c.json({
+      message: 'Ya hay otro proceso reparando datos de clima. Espera unos minutos y vuelve a intentarlo.',
+      ocupado: true,
+    }, 409);
+  }
+  return c.json({
+    error: 'Candado de clima no disponible (¿migración 169 sin aplicar?). No se escribió nada.',
+  }, 503);
+}
+
+// ============================================================================
 // Backfill de UN día: pide la History API de Ecowitt para ese día, inserta
 // las lecturas crudas en clima_lecturas (mismo camino que el sync de 5 min,
 // `handleClimaSync`) y deja que `fn_clima_rollup_diario` (068/103/115) sea
@@ -643,49 +731,236 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
       }, 400);
     }
 
-    console.info(`${log} Backfilling ${formatDateParam(fromDate)} → ${formatDateParam(toDate)} for station ${creds.mac}`);
+    const dueno = `backfill-${crypto.randomUUID()}`;
+    const candado = await tomarCandadoClima(sb, dueno);
+    if (candado !== 'tomado') return respuestaCandado(c, candado);
 
-    let totalSynced = 0;
-    let totalDays = 0;
-    const errors: string[] = [];
+    try {
+      console.info(`${log} Backfilling ${formatDateParam(fromDate)} → ${formatDateParam(toDate)} for station ${creds.mac}`);
 
-    // Iterate day by day -- backfillUnDia hace la pregunta a Ecowitt y deja
-    // que fn_clima_rollup_diario clasifique lluvia_confianza (ver el
-    // comentario de esa función).
-    const current = new Date(fromDate);
-    while (current <= toDate) {
-      const dateStr = formatDateParam(current);
+      let totalSynced = 0;
+      let totalDays = 0;
+      const errors: string[] = [];
 
-      try {
-        const resultado = await backfillUnDia(current, creds, sb, log);
-        totalDays++;
-        if (resultado.ok) {
-          totalSynced += 1;
-        } else {
-          errors.push(`${dateStr}: ${resultado.error}`);
-          console.warn(`${log} ${dateStr}: ${resultado.error}`);
+      // Iterate day by day -- backfillUnDia hace la pregunta a Ecowitt y deja
+      // que fn_clima_rollup_diario clasifique lluvia_confianza (ver el
+      // comentario de esa función).
+      const current = new Date(fromDate);
+      while (current <= toDate) {
+        const dateStr = formatDateParam(current);
+
+        try {
+          const resultado = await backfillUnDia(current, creds, sb, log);
+          totalDays++;
+          if (resultado.ok) {
+            totalSynced += 1;
+          } else {
+            errors.push(`${dateStr}: ${resultado.error}`);
+            console.warn(`${log} ${dateStr}: ${resultado.error}`);
+          }
+        } catch (err) {
+          totalDays++;
+          errors.push(`${dateStr}: ${String(err)}`);
+          console.error(`${log} ${dateStr}: ${err}`);
         }
-      } catch (err) {
-        totalDays++;
-        errors.push(`${dateStr}: ${String(err)}`);
-        console.error(`${log} ${dateStr}: ${err}`);
+
+        current.setDate(current.getDate() + 1);
+        await sleep(100);
       }
 
-      current.setDate(current.getDate() + 1);
-      await sleep(100);
+      console.info(`${log} Done: ${totalSynced} readings across ${totalDays} days, ${errors.length} errors`);
+
+      return c.json({
+        message: 'Backfill complete',
+        synced: totalSynced,
+        days: totalDays,
+        errors: errors.length > 0 ? errors : undefined,
+      }, 200);
+    } finally {
+      await soltarCandadoClima(sb, dueno);
     }
-
-    console.info(`${log} Done: ${totalSynced} readings across ${totalDays} days, ${errors.length} errors`);
-
-    return c.json({
-      message: 'Backfill complete',
-      synced: totalSynced,
-      days: totalDays,
-      errors: errors.length > 0 ? errors : undefined,
-    }, 200);
   } catch (error) {
     console.error(`${log} Unhandled error:`, error);
     return c.json({ error: String(error) }, 500);
+  }
+}
+
+// ============================================================================
+// Handler: botón «Actualizar» de la vista de Clima (ESCO-127)
+// POST /clima/actualizar -- sin parámetros, un clic.
+//
+// Repara los días INCOMPLETOS de la última semana y nada más. Es la mitad que
+// faltaba: `/clima/backfill` existe desde siempre pero hay que pedirlo en una
+// sesión (ningún componente lo llamaba), y el cron de la migración 121 sólo
+// mira la lluvia sin dato confiable -- no mira `horas_sol_duracion`,
+// `lluvia_mm_evento` ni `cobertura_hueco_max_min`. Ecowitt sólo entrega
+// resolución de 5 minutos unos 90 días hacia atrás, así que un día que no se
+// repara a tiempo pierde esa resolución para siempre.
+//
+// Tres diferencias deliberadas con `/clima/backfill`:
+//
+//   1. **Elige los días**: si no hay ninguno incompleto responde «todo al
+//      día» sin llamar a Ecowitt ni una vez. Tope duro de 7 llamadas por clic.
+//   2. **APLICA la guarda de no-empeorar** (`debeReagregarDia`, pasando
+//      `lecturasPrevias`), que el backfill manual salta a propósito por ser
+//      una acción humana deliberada sobre un rango elegido a mano. Acá el
+//      rango no lo elige nadie, así que un clic no puede dejar un día peor:
+//      el 2026-08-19 pasó de 167 a 105 lecturas por una respuesta parcial.
+//   3. **Verifica por fila**, releyendo `clima_resumen_diario` después de cada
+//      día. «La consulta a Ecowitt no dio error» no es «el día se arregló».
+//
+// Exclusión mutua -- ver `actualizacionEnCurso` y `VENTANAS_CRON_UTC`.
+// ============================================================================
+
+/** Un solo `/clima/actualizar` a la vez por instancia. Dos clics seguidos, o
+ *  dos personas a la vez, se pisarían: `fn_clima_rollup_diario` termina
+ *  podando `clima_lecturas` de forma GLOBAL (no acotada a su `p_fecha`), así
+ *  que el segundo proceso pierde en silencio las lecturas que acaba de
+ *  insertar y su día queda intacto -- con la respuesta diciendo que todo
+ *  salió bien (migración 122).
+ *
+ *  Esta bandera sólo cubre una instancia del edge runtime y responde rápido
+ *  al doble clic sin tocar la base. Entre instancias manda el lease de la
+ *  migración 169 (`tomarCandadoClima`), que también excluye a
+ *  `/clima/backfill` y a `/clima/reintentar-sin-dato`. */
+let actualizacionEnCurso = false;
+
+/** Ventanas UTC en las que NO se corre, porque un pg_cron está tocando las
+ *  mismas tablas. `clima-daily-rollup` (migración 036/068) dispara a las 05:15
+ *  UTC y `clima-reintento-sin-dato` (migración 121) a las 11:00 UTC --
+ *  verificado contra `cron.job` el 2026-09-25. La ventana del rollup arranca a
+ *  las 05:00 a propósito: 00:00-00:15 Bogotá es el rato en que el día de ayer
+ *  ya cerró y todavía no tiene fila. */
+const VENTANAS_CRON_UTC: { desde: number; hasta: number; job: string }[] = [
+  { desde: 5 * 60 + 0, hasta: 5 * 60 + 30, job: 'clima-daily-rollup' },
+  { desde: 10 * 60 + 55, hasta: 11 * 60 + 15, job: 'clima-reintento-sin-dato' },
+];
+
+function cronEnCurso(ahora: Date): string | null {
+  const minutos = ahora.getUTCHours() * 60 + ahora.getUTCMinutes();
+  for (const v of VENTANAS_CRON_UTC) {
+    if (minutos >= v.desde && minutos <= v.hasta) return v.job;
+  }
+  return null;
+}
+
+/** Día calendario en Bogotá (UTC-5, sin horario de verano). El edge function
+ *  corre en UTC, donde `toISOString().slice(0,10)` ya es *mañana* desde las
+ *  19:00 locales -- misma trampa que `obtenerFechaHoy()` cubre del lado del
+ *  navegador, mirando desde el otro lado. */
+function hoyBogota(): string {
+  return new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+async function leerResumenDias(
+  sb: { supabaseUrl: string; serviceKey: string },
+  mac: string,
+  desde: string,
+  hasta: string,
+): Promise<FilaResumenDia[] | null> {
+  const url = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
+    + `?station_id=eq.${encodeURIComponent(mac)}`
+    + `&fecha=gte.${desde}&fecha=lte.${hasta}`
+    + `&select=fecha,lluvia_confianza,lluvia_mm_evento,horas_sol_duracion,cobertura_hueco_max_min,lecturas_count`;
+  const res = await fetch(url, {
+    headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as FilaResumenDia[];
+}
+
+export async function handleClimaActualizar(c: Context): Promise<Response> {
+  const log = '[clima-actualizar]';
+
+  const acceso = await verificarAccesoClima(c);
+  if (acceso instanceof Response) return acceso;
+
+  const job = cronEnCurso(new Date());
+  if (job) {
+    return c.json({
+      message: `El proceso automático «${job}» está corriendo en este momento. Espera unos minutos y vuelve a intentarlo.`,
+      ocupado: true,
+    }, 409);
+  }
+  if (actualizacionEnCurso) {
+    return c.json({
+      message: 'Ya hay una actualización de clima en curso. Espera a que termine.',
+      ocupado: true,
+    }, 409);
+  }
+  actualizacionEnCurso = true;
+
+  try {
+    const creds = getEcowittCredentials();
+    if (!creds) return c.json({ error: 'Missing Ecowitt credentials' }, 500);
+    const sb = getSupabaseConfig();
+    if (!sb) return c.json({ error: 'Missing Supabase config' }, 500);
+
+    const dueno = `actualizar-${crypto.randomUUID()}`;
+    const candado = await tomarCandadoClima(sb, dueno);
+    if (candado !== 'tomado') return respuestaCandado(c, candado);
+
+    try {
+      const ventana = fechasVentanaActualizar(hoyBogota());
+      const desde = ventana[0];
+      const hasta = ventana[ventana.length - 1];
+
+      const filasAntes = await leerResumenDias(sb, creds.mac, desde, hasta);
+      if (filasAntes === null) {
+        return c.json({ error: 'No se pudo leer clima_resumen_diario' }, 502);
+      }
+
+      const candidatos = seleccionarDiasIncompletos(ventana, filasAntes);
+      if (candidatos.length === 0) {
+        console.info(`${log} ${desde} → ${hasta}: nada que reparar`);
+        return c.json({
+          message: 'Todo al día',
+          desde,
+          hasta,
+          resumen: resumirActualizacion([], 0),
+          dias: [],
+        }, 200);
+      }
+
+      console.info(`${log} ${candidatos.length} día(s) incompleto(s): ${candidatos.map((d) => d.fecha).join(', ')}`);
+
+      const antesPorFecha = new Map(filasAntes.map((f) => [f.fecha, f]));
+      const dias: { fecha: string; desenlace: DesenlaceDia; detalle?: string }[] = [];
+
+      // En serie, un día a la vez. Nunca en paralelo: la poda global de
+      // `fn_clima_rollup_diario` haría que un día borrara las lecturas que el
+      // otro acaba de insertar, y la respuesta seguiría diciendo que todo salió
+      // bien (migración 122).
+      for (const candidato of candidatos) {
+        const fecha = new Date(Date.parse(`${candidato.fecha}T12:00:00Z`));
+        let resultado: { ok: boolean; omitido?: boolean; error?: string };
+        try {
+          resultado = await backfillUnDia(fecha, creds, sb, log, candidato.lecturasPrevias);
+        } catch (err) {
+          resultado = { ok: false, error: String(err) };
+        }
+
+        // Verificación POR FILA: se relee el día en vez de creerle al HTTP.
+        const filasDespues = await leerResumenDias(sb, creds.mac, candidato.fecha, candidato.fecha);
+        const despues = filasDespues?.find((f) => f.fecha === candidato.fecha) ?? null;
+        const desenlace = clasificarDia(antesPorFecha.get(candidato.fecha), despues, resultado);
+        if (desenlace === 'error') console.error(`${log} ${candidato.fecha}: ${resultado.error}`);
+        dias.push({ fecha: candidato.fecha, desenlace, detalle: resultado.error });
+        await sleep(150);
+      }
+
+      const resumen = resumirActualizacion(dias.map((d) => d.desenlace), candidatos.length);
+      console.info(`${log} ${resumen.recuperados}/${resumen.revisados} recuperado(s)`);
+
+      return c.json({ message: 'Actualización completa', desde, hasta, resumen, dias }, 200);
+    } finally {
+      await soltarCandadoClima(sb, dueno);
+    }
+  } catch (error) {
+    console.error(`${log} Unhandled error:`, error);
+    return c.json({ error: String(error) }, 500);
+  } finally {
+    actualizacionEnCurso = false;
   }
 }
 
@@ -793,60 +1068,71 @@ export async function handleClimaReintentoSinDato(c: Context): Promise<Response>
       return c.json({ message: 'Nada que reintentar', candidatos: 0 }, 200);
     }
 
-    console.info(`${log} ${candidatos.length} día(s) candidato(s): ${candidatos.map((cand) => formatEcowittDate(cand.fecha)).join(', ')}`);
+    const dueno = `reintento-${crypto.randomUUID()}`;
+    const candado = await tomarCandadoClima(sb, dueno);
+    if (candado !== 'tomado') {
+      console.warn(`${log} candado ${candado}: se omite esta corrida, mañana se reintenta`);
+      return respuestaCandado(c, candado);
+    }
 
-    const resultados: { fecha: string; consultaOk: boolean; omitido?: boolean; error?: string }[] = [];
-    for (const dia of candidatos) {
-      const r = await backfillUnDia(dia.fecha, creds, sb, log, dia.lecturasPrevias);
-      // El cuerpo de la respuesta no llega a ningún lado: pg_net corta a los
-      // 5 s y guarda `content = NULL`, y pg_cron reporta `succeeded` igual.
-      // Sin esta línea, un día que falla NO deja rastro y no se distingue de
-      // uno que nadie intentó (2026-08-28: 7 reintentos, 0 líneas de log).
-      if (!r.ok) console.error(`${log} ${formatEcowittDate(dia.fecha)}: NO recuperado -- ${r.error}`);
-      resultados.push({
-        fecha: formatEcowittDate(dia.fecha),
-        consultaOk: r.ok,
-        omitido: r.omitido,
-        error: r.ok ? undefined : r.error,
+    try {
+      console.info(`${log} ${candidatos.length} día(s) candidato(s): ${candidatos.map((cand) => formatEcowittDate(cand.fecha)).join(', ')}`);
+
+      const resultados: { fecha: string; consultaOk: boolean; omitido?: boolean; error?: string }[] = [];
+      for (const dia of candidatos) {
+        const r = await backfillUnDia(dia.fecha, creds, sb, log, dia.lecturasPrevias);
+        // El cuerpo de la respuesta no llega a ningún lado: pg_net corta a los
+        // 5 s y guarda `content = NULL`, y pg_cron reporta `succeeded` igual.
+        // Sin esta línea, un día que falla NO deja rastro y no se distingue de
+        // uno que nadie intentó (2026-08-28: 7 reintentos, 0 líneas de log).
+        if (!r.ok) console.error(`${log} ${formatEcowittDate(dia.fecha)}: NO recuperado -- ${r.error}`);
+        resultados.push({
+          fecha: formatEcowittDate(dia.fecha),
+          consultaOk: r.ok,
+          omitido: r.omitido,
+          error: r.ok ? undefined : r.error,
+        });
+        await sleep(150);
+      }
+      const omitidos = resultados.filter((r) => r.omitido).length;
+
+      // Se vuelve a preguntar a la base cuántos candidatos quedaron 'ok'
+      // DESPUÉS del reintento -- "la consulta a Ecowitt no dio error" no es
+      // lo mismo que "el día se resolvió"; puede seguir incompleto del lado
+      // de Ecowitt. Si esta verificación en sí falla, se dice explícitamente
+      // (`resueltos: null`) en vez de reportar 0 como si nada se hubiera
+      // arreglado.
+      let resueltos: number | null = null;
+      const verifQueryUrl = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
+        + `?station_id=eq.${encodeURIComponent(creds.mac)}`
+        + `&fecha=gte.${desdeStr}&fecha=lte.${ayerStr}`
+        + `&lluvia_confianza=eq.ok`
+        + `&select=fecha`;
+      const verifRes = await fetch(verifQueryUrl, {
+        headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
       });
-      await sleep(150);
+      if (verifRes.ok) {
+        const fechasOk = new Set(((await verifRes.json()) as { fecha: string }[]).map((f) => f.fecha));
+        resueltos = candidatos.filter((d) => fechasOk.has(formatEcowittDate(d.fecha))).length;
+      } else {
+        console.warn(`${log} no se pudo verificar cuántos candidatos quedaron 'ok' tras el reintento`);
+      }
+
+      console.info(
+        `${log} ${resueltos ?? '?'}/${candidatos.length} día(s) resuelto(s) a 'ok' en esta corrida`
+        + (omitidos > 0 ? `, ${omitidos} dejado(s) intacto(s) por cobertura menor` : ''),
+      );
+
+      return c.json({
+        message: 'Reintento completo',
+        candidatos: candidatos.length,
+        resueltos,
+        omitidos,
+        resultados,
+      }, 200);
+    } finally {
+      await soltarCandadoClima(sb, dueno);
     }
-    const omitidos = resultados.filter((r) => r.omitido).length;
-
-    // Se vuelve a preguntar a la base cuántos candidatos quedaron 'ok'
-    // DESPUÉS del reintento -- "la consulta a Ecowitt no dio error" no es
-    // lo mismo que "el día se resolvió"; puede seguir incompleto del lado
-    // de Ecowitt. Si esta verificación en sí falla, se dice explícitamente
-    // (`resueltos: null`) en vez de reportar 0 como si nada se hubiera
-    // arreglado.
-    let resueltos: number | null = null;
-    const verifQueryUrl = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
-      + `?station_id=eq.${encodeURIComponent(creds.mac)}`
-      + `&fecha=gte.${desdeStr}&fecha=lte.${ayerStr}`
-      + `&lluvia_confianza=eq.ok`
-      + `&select=fecha`;
-    const verifRes = await fetch(verifQueryUrl, {
-      headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
-    });
-    if (verifRes.ok) {
-      const fechasOk = new Set(((await verifRes.json()) as { fecha: string }[]).map((f) => f.fecha));
-      resueltos = candidatos.filter((d) => fechasOk.has(formatEcowittDate(d.fecha))).length;
-    } else {
-      console.warn(`${log} no se pudo verificar cuántos candidatos quedaron 'ok' tras el reintento`);
-    }
-
-    console.info(
-      `${log} ${resueltos ?? '?'}/${candidatos.length} día(s) resuelto(s) a 'ok' en esta corrida`
-      + (omitidos > 0 ? `, ${omitidos} dejado(s) intacto(s) por cobertura menor` : ''),
-    );
-
-    return c.json({
-      message: 'Reintento completo',
-      candidatos: candidatos.length,
-      resueltos,
-      omitidos,
-      resultados,
-    }, 200);
   } catch (error) {
     console.error(`${log} Unhandled error:`, error);
     return c.json({ error: String(error) }, 500);

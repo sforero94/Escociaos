@@ -316,6 +316,26 @@ describe('construirPayloadCierreAplicacion', () => {
     ]);
   });
 
+  it('redondea la cantidad consolidada: la coma flotante no aborta el cierre (ESCO-129)', () => {
+    // Los 17 consumos reales de Nutrifeed menor en el Drench Septiembre, en dos
+    // órdenes. Sumados en coma flotante dan 59,599999999999994 en uno y un
+    // valor por encima de 59,6 en otros; `fn_cerrar_aplicacion` compara contra
+    // un numeric exacto de 59,60 y el segundo caso abortaba el cierre.
+    const cantidades = [5.5, 2.5, 4, 2.5, 2.5, 2.5, 3.5, 5, 2, 4, 5, 3.8, 4, 2.8, 2.2, 5, 2.8];
+    for (const orden of [cantidades, [...cantidades].reverse(), [...cantidades].sort((a, b) => a - b)]) {
+      const payload = construirPayloadCierreAplicacion({
+        aplicacionId: 'app1',
+        registrosEditados: [],
+        datosFinales: datosFinalesBase,
+        lotes: [],
+        movimientos: orden.map((c) => ({
+          producto_id: 'nutri', producto_nombre: 'Nutrifeed menor', cantidad_utilizada: c, costo_unitario: 6520,
+        })),
+      });
+      expect(payload.insumos_aplicados[0].cantidad).toBe(59.6);
+    }
+  });
+
   it('lote_aplicacion une los nombres de lote con coma y espacio', () => {
     const payload = construirPayloadCierreAplicacion({
       aplicacionId: 'app1',

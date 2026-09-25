@@ -168,6 +168,12 @@ Every run follows this. Do not skip phases; do not reorder them.
      accounts, and calling without `account` silently uses whichever one is
      `is_default`, which is **not** the Escocia OS one (§6, `memory/_compartida.md`).
 
+  3. **The log lane actually answers** (ESCO-131). Run one trivial
+     `mcp__Supabase_Escritura__query_logs` query over the last hour and confirm
+     it returns rows or an empty set, not an error. Resolving a tool name is not
+     the same as the tool working: the 2026-09-24 preflight passed green while
+     `SUPABASE_GET_PROJECT_LOGS` answered 410 to every call.
+
   **A missing/renamed tool, an inactive toolkit connection, or an account that
   resolves to the wrong project is a P1 finding against the operation**, filed
   in this run, and every specialty that depended on it is labelled NO CORRIÓ.
@@ -350,6 +356,7 @@ never by convenience.
 |---|---|---|
 | Diagnosis — Phases 0–3, every sweep, every agent | **Composio**, `tool_slug: SUPABASE_RUN_READ_ONLY_QUERY`, `account: supabase_bitis-coward` (alias `escocia-os`) | read-only, mechanically enforced by Supabase itself (runs as `supabase_read_only_user`; write statements are rejected server-side, not by a prompt rule — verified 2026-09-14) |
 | Remediation — Phase 4 only | **Composio**, `tool_slug: SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward` | write-capable. **Bounded by prompt, not by mechanism** — see the note below, this changed on 2026-09-21 |
+| Logs (edge function, API, Postgres) — any phase | **`query_logs` of the `Supabase_Escritura` connector** (`mcp__Supabase_Escritura__query_logs`). **Never Composio `SUPABASE_GET_PROJECT_LOGS`**: it calls the retired `analytics/endpoints/logs.all` and answers **410 Gone** to every query (ESCO-131, 2026-09-24) | read-only. Use the OLD shape: table `logs`, `source='edge_logs'`, nested `log_attributes['response.status_code']` — not `cross join unnest(metadata)`. Match with `positionCaseInsensitive(...)>0`, not `ILIKE`. **The window is ~24 h**: asking two days back gives `FetchException`, so this path has no history |
 
 - **All diagnosis is `SELECT` only.** Agents may **compose** DDL/DML but must
   never execute it. This is not a matter of which connector happens to be

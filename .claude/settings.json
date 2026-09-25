@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__Supabase_Routines__.*|mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+        "matcher": "mcp__Supabase.*|mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL",
         "hooks": [
           {
             "type": "command",
