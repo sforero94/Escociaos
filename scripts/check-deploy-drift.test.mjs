@@ -1,9 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   evaluarDeriva,
   parsearUpdatedAt,
   evaluarDerivaPorHash,
   rutaEstadoDriftPorHash,
+  mensajeErrorManagementApi,
+  resumenFalloParaTelegram,
+  FRASE_SECRETO_INVALIDO,
+  datosDelDespliegue,
 } from './check-deploy-drift.mjs';
 
 // El caso real: `updated_at` de la Management API llega en epoch MILISEGUNDOS.
@@ -215,6 +221,118 @@ describe('combinacion reloj + hash (contrato de exit 1, issue #271)', () => {
     expect(elJobFallaria({ hayDeriva: reloj.hayDeriva, hayDerivaPorHash: contenido.hayDerivaPorHash })).toBe(
       true,
     );
+  });
+});
+
+describe('mensajeErrorManagementApi (issue #293)', () => {
+  const url = 'https://api.supabase.com/v1/projects/ywhtjwawnkeqlwxbvgup/functions';
+
+  it('401 es secreto invalido o expirado, y no habla de deriva', () => {
+    const mensaje = mensajeErrorManagementApi(401, 'Unauthorized', url);
+    expect(mensaje).toContain(FRASE_SECRETO_INVALIDO);
+    expect(mensaje).toMatch(/401/);
+    expect(mensaje).toMatch(/No es deriva de reloj ni de hash/);
+    expect(mensaje).not.toMatch(/DERIVA DE DESPLIEGUE/);
+  });
+
+  it('403 usa la misma clase que 401', () => {
+    const mensaje = mensajeErrorManagementApi(403, 'Forbidden', url);
+    expect(mensaje).toContain(FRASE_SECRETO_INVALIDO);
+    expect(mensaje).toMatch(/403/);
+    expect(mensaje).not.toMatch(/DERIVA DE DESPLIEGUE/);
+  });
+
+  it('500 sigue siendo un fallo de la API, no un secreto', () => {
+    const mensaje = mensajeErrorManagementApi(500, 'Internal Server Error', url);
+    expect(mensaje).not.toContain(FRASE_SECRETO_INVALIDO);
+    expect(mensaje).toMatch(/500/);
+    expect(mensaje).toContain(url);
+  });
+
+  it('el resumen de Telegram distingue 401 de deriva de reloj', () => {
+    const logAuth = `ERROR: ${mensajeErrorManagementApi(401, 'Unauthorized', url)}`;
+    const avisoAuth = resumenFalloParaTelegram(logAuth);
+    expect(avisoAuth).toMatch(/fallo de autenticación/);
+    expect(avisoAuth).toContain(FRASE_SECRETO_INVALIDO);
+    expect(avisoAuth).toMatch(/No es deriva de reloj ni de hash/);
+
+    const logDeriva =
+      'DERIVA DE DESPLIEGUE (reloj): hay codigo en main desde hace 42 h que no esta en produccion.';
+    const avisoDeriva = resumenFalloParaTelegram(logDeriva);
+    expect(avisoDeriva).toMatch(/deriva de despliegue/);
+    expect(avisoDeriva).toMatch(/No es un fallo de autenticación/);
+    expect(avisoDeriva).not.toContain(FRASE_SECRETO_INVALIDO);
+    expect(avisoAuth).not.toBe(avisoDeriva);
+  });
+
+  it('un 500 y un log vacio no se disfrazan de deriva ni de secreto', () => {
+    const log = `ERROR: ${mensajeErrorManagementApi(502, 'Bad Gateway', url)}`;
+    expect(resumenFalloParaTelegram(log)).toMatch(/otra causa/);
+    expect(resumenFalloParaTelegram('')).toMatch(/otra causa/);
+    expect(resumenFalloParaTelegram(null)).toMatch(/otra causa/);
+  });
+
+  it('un secreto ausente tampoco se llama deriva', () => {
+    const aviso = resumenFalloParaTelegram(
+      'ERROR: falta SUPABASE_ACCESS_TOKEN (personal access token de Supabase).',
+    );
+    expect(aviso).toMatch(/falta SUPABASE_ACCESS_TOKEN/);
+    expect(aviso).toMatch(/No es deriva/);
+    expect(aviso).not.toContain(FRASE_SECRETO_INVALIDO);
+  });
+});
+
+describe('datosDelDespliegue ante 401/403', () => {
+  const fetchOriginal = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+  });
+
+  it('un 401 lanza la frase de secreto y no lee el cuerpo', async () => {
+    let leyoCuerpo = false;
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: async () => {
+        leyoCuerpo = true;
+        return [];
+      },
+    });
+    await expect(
+      datosDelDespliegue({ proyecto: 'p', funcion: 'make-server-1ccce916', token: 'sbp_test' }),
+    ).rejects.toThrow(new RegExp(FRASE_SECRETO_INVALIDO));
+    expect(leyoCuerpo).toBe(false);
+  });
+
+  it('un 403 lanza la misma frase', async () => {
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      json: async () => [],
+    });
+    await expect(
+      datosDelDespliegue({ proyecto: 'p', funcion: 'make-server-1ccce916', token: 'sbp_test' }),
+    ).rejects.toThrow(new RegExp(`${FRASE_SECRETO_INVALIDO}[\\s\\S]*403`));
+  });
+});
+
+describe('workflow de aviso (issue #293)', () => {
+  const yml = readFileSync(
+    fileURLToPath(new URL('../.github/workflows/deteccion-deriva-despliegue.yml', import.meta.url)),
+    'utf8',
+  );
+
+  it('nombra los secretos de Telegram y no avisa en silencio si faltan', () => {
+    expect(yml).toContain('secrets.TELEGRAM_BOT_TOKEN');
+    expect(yml).toContain('secrets.TELEGRAM_CHAT_ID');
+    expect(yml).toContain('secrets.SUPABASE_ACCESS_TOKEN');
+    expect(yml).toContain('--resumen-aviso');
+    expect(yml).toMatch(/::warning::/);
+    expect(yml).toContain('ESCO-78');
+    expect(yml).toMatch(/no se pudo avisar/);
   });
 });
 

@@ -12,6 +12,7 @@ Esta carpeta contiene documentación vigente para operar, mantener y extender el
 - [`PLAN_MEJORAS_MODULO_LABORES.md`](./PLAN_MEJORAS_MODULO_LABORES.md) — hoja de ruta del módulo de labores.
 - [`PLAN_REPORTE_HTML_GEMINI.md`](./PLAN_REPORTE_HTML_GEMINI.md) — propuesta pendiente para el Reporte Semanal.
 - [`SPEC_TELEGRAM_BOT.md`](./SPEC_TELEGRAM_BOT.md) — especificación del bot de campo.
+- [`runbook_detector_deriva.md`](./runbook_detector_deriva.md) — rotar `SUPABASE_ACCESS_TOKEN` del detector de deriva y configurar `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (issue #293).
 
 ## Contratos de implementación
 
