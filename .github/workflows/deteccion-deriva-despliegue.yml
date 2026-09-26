@@ -17,6 +17,9 @@
 #     Telegram -- antes solo quedaba en rojo en la pestana Actions y mandaba
 #     correo a una cuenta que nadie lee, así que un fallo real (el que
 #     detecto esta misma tanda) paso varios dias sin que nadie se enterara.
+# (4) un HTTP 401/403 de la Management API es "secret inválido/expirado"
+#     (issue #293). No es deriva de reloj ni de hash. El aviso de Telegram
+#     dice cuál de los dos es. El hash sticky de #272 no se toca.
 name: Deteccion de deriva de despliegue
 
 on:
@@ -89,19 +92,34 @@ jobs:
             done
           fi
 
-      - name: Avisar por Telegram si hubo deriva
+      # Cualquier fallo del job (401/403, deriva, u otro). El cuerpo distingue
+      # autenticacion de deriva leyendo salida-deriva.txt. Si faltan los
+      # secretos, warning y exit 0: el job sigue rojo por el chequeo, y el
+      # aviso no desaparece en silencio (ESCO-78).
+      - name: Avisar por Telegram si el chequeo fallo
         if: failure()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "::warning::TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no estan configurados como secretos del repositorio -- no se pudo avisar. Ver hallazgo ESCO-78."
+            echo "::warning::TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no estan configurados como secretos del repositorio -- no se pudo avisar. Ver hallazgo ESCO-78 y docs/runbook_detector_deriva.md."
             exit 0
           fi
-          mensaje="⚠️ Deriva de despliegue en *${{ matrix.slug }}* — ver ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          if [ -f salida-deriva.txt ]; then
+            tipo=$(node scripts/check-deploy-drift.mjs --resumen-aviso salida-deriva.txt)
+          else
+            tipo="el chequeo no dejo log. No es deriva clasificada. Revisar el paso que fallo antes del script."
+          fi
+          mensaje="Detector de deriva (${{ matrix.slug }}): ${tipo} Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          codigo=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d parse_mode="Markdown" \
             --data-urlencode text="$mensaje" \
-            -o /dev/null -w "telegram respondio %{http_code}\n"
+            -o /tmp/telegram-aviso.json \
+            -w "%{http_code}")
+          echo "telegram respondio ${codigo}"
+          if [ "$codigo" -lt 200 ] || [ "$codigo" -ge 300 ]; then
+            echo "::error::Telegram rechazo el aviso (HTTP ${codigo})."
+            cat /tmp/telegram-aviso.json || true
+            exit 1
+          fi

@@ -93,6 +93,10 @@ export function evaluarDeriva({ desplegadoEnMs, commitISO }) {
  * al último commit del árbol, hay deriva de despliegue. Un republicado del
  * bundle viejo con reloj verde queda como aviso, no como exit 1.
  *
+ * Un HTTP 401/403 NO entra en esta función. Es un secreto inválido o
+ * expirado (`mensajeErrorManagementApi`), y no se confunde con el reloj
+ * ni con este hash sticky.
+ *
  * @param {{ hashActual: string, commitActual: string, estadoPrevio: { commit: string, hash: string } | null, hayDerivaReloj?: boolean }} entrada
  * @returns {{ hayDerivaPorHash: boolean, aviso: boolean, motivo: string }}
  */
@@ -135,6 +139,68 @@ export function evaluarDerivaPorHash({
     };
   }
   return { hayDerivaPorHash: false, aviso: false, motivo: 'hash coherente con el commit del árbol' };
+}
+
+/**
+ * Frase estable que el log y el aviso de Telegram comparten.
+ * Un 401/403 es esta frase. Una deriva de reloj o de hash es
+ * `DERIVA DE DESPLIEGUE`. Las dos no se mezclan.
+ */
+export const FRASE_SECRETO_INVALIDO = 'secret inválido/expirado';
+
+/**
+ * Clasifica un HTTP de la Management API.
+ * 401 y 403 son el personal access token (`SUPABASE_ACCESS_TOKEN`):
+ * inválido, revocado o expirado. No son deriva de reloj ni de hash.
+ *
+ * @param {number} status
+ * @param {string} statusText
+ * @param {string} url
+ * @returns {string}
+ */
+export function mensajeErrorManagementApi(status, statusText, url) {
+  const estado = `${status}${statusText ? ` ${statusText}` : ''}`;
+  if (status === 401 || status === 403) {
+    return (
+      `${FRASE_SECRETO_INVALIDO}: la Management API respondió HTTP ${estado}. ` +
+      `SUPABASE_ACCESS_TOKEN no autentica. No es deriva de reloj ni de hash. ` +
+      `Rotar el secreto (docs/runbook_detector_deriva.md).`
+    );
+  }
+  return `Management API respondio ${estado} en ${url}`;
+}
+
+/**
+ * Una línea para el cuerpo del aviso de Telegram. Distingue autenticación
+ * de deriva. No incluye el log crudo.
+ *
+ * @param {string} log
+ * @returns {string}
+ */
+export function resumenFalloParaTelegram(log) {
+  const texto = typeof log === 'string' ? log : '';
+  if (texto.includes(FRASE_SECRETO_INVALIDO)) {
+    return (
+      'fallo de autenticación: secret inválido/expirado. ' +
+      'No es deriva de reloj ni de hash. Rotar SUPABASE_ACCESS_TOKEN.'
+    );
+  }
+  if (texto.includes('falta SUPABASE_ACCESS_TOKEN')) {
+    return (
+      'fallo de autenticación: falta SUPABASE_ACCESS_TOKEN en los secretos del repositorio. ' +
+      'No es deriva de reloj ni de hash.'
+    );
+  }
+  if (texto.includes('DERIVA DE DESPLIEGUE')) {
+    return (
+      'deriva de despliegue: hay código en main que no está en producción ' +
+      '(reloj o contenido). No es un fallo de autenticación.'
+    );
+  }
+  return (
+    'el chequeo falló por otra causa. No es un 401/403 ni deriva clasificada. ' +
+    'Revisar el log de la corrida.'
+  );
 }
 
 /**
@@ -210,9 +276,9 @@ export async function datosDelDespliegue({ proyecto, funcion, token }) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!respuesta.ok) {
-    throw new Error(
-      `Management API respondio ${respuesta.status} ${respuesta.statusText} en ${url}`,
-    );
+    // Antes de leer el cuerpo y antes de escribir el estado de hash.
+    // Un 401 no debe reescribir scripts/deploy-drift-state/.
+    throw new Error(mensajeErrorManagementApi(respuesta.status, respuesta.statusText, url));
   }
   const funciones = await respuesta.json();
   const encontrada = Array.isArray(funciones)
@@ -294,8 +360,16 @@ async function main() {
 
 // Solo corre si se invoca como programa; importarlo desde el test no ejecuta nada.
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
-    console.error(`ERROR: ${error.message}`);
-    process.exit(1);
-  });
+  // El workflow lo usa para armar el aviso. No llama a la Management API
+  // y no exige SUPABASE_ACCESS_TOKEN.
+  if (process.argv[2] === '--resumen-aviso') {
+    const rutaLog = process.argv[3];
+    const texto = rutaLog && existsSync(rutaLog) ? readFileSync(rutaLog, 'utf8') : '';
+    process.stdout.write(resumenFalloParaTelegram(texto));
+  } else {
+    main().catch((error) => {
+      console.error(`ERROR: ${error.message}`);
+      process.exit(1);
+    });
+  }
 }
