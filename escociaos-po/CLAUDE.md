@@ -549,6 +549,22 @@ reachable another way, and carry on. Then file the P1 against the operation that
 §4 Phase 0 requires, because a prompt in an unattended run always means the
 allowlist is wrong.
 
+**Composio `COMPOSIO_MULTI_EXECUTE_TOOL` for Notion write + read-only SQL is
+expected unattended work**, not an edge case. Notion read/write on *Escocia OS —
+Mantenimiento* (mark `In progress`, link PR, close `Obsoleto`) and
+`SUPABASE_RUN_READ_ONLY_QUERY` (`SELECT` / schema reads) go through that same
+bare tool name by design. A permission prompt on those paths is a
+**harness / allowlist / connector-config problem** — file it as an operación
+finding and continue or stop cleanly. **Never sleep waiting for Santiago's
+phone.**
+
+**Claude.ai UI often cannot edit Composio tool permissions** (Routine
+`permitted_tools` / `tool_policy_overrides` only see the bare MCP name, and the
+UI frequently refuses to change Composio allowlists). The fix is
+**RemoteTrigger / connector config by the owner**, not waiting for a prompt to
+be answered mid-run. Encode the expected behaviour here and in the runbooks;
+do not treat a prompt as something Santiago can clear from his phone in time.
+
 **Write the report before the session can end, for any reason.** Set a hard
 deadline of **90 minutes** from Phase 0. At the deadline — or the moment
 anything threatens the session — file whatever survived verification, apply the
