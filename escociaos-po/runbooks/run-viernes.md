@@ -208,3 +208,21 @@ Same as Monday and Thursday, and the unattended-run rules of constitution §7 bi
 hardest here: **never wait on a permission prompt, and never end without writing
 the report.** A Friday that fixed three things and filed none of them has done
 worse than a Friday that did nothing.
+
+### Prompts de permiso en trabajo de bajo riesgo
+
+Trabajo que la allowlist *debería* cubrir no debe esperar al teléfono de
+Santiago. Si aparece un prompt de permiso en cualquiera de estos caminos,
+trátalo como **fallo de operación** en el primer intento — no reintentar, no
+dormir, no reescribir el llamado:
+
+- `SELECT` / lectura SQL vía Composio (`SUPABASE_RUN_READ_ONLY_QUERY`)
+- Notion read + write en *Escocia OS — Mantenimiento* (marcar `In progress`,
+  linkear el PR, cerrar `Obsoleto`)
+- `npm run lint` / `typecheck` / `test`
+- abrir el PR
+
+Regístralo bajo **NO CORRIÓ** (o como finding de operación) y continúa o para
+limpio según constitución §7. La escritura a Notion en Mantenimiento es
+**intencional** (allowlist intent): no es un write improvisado. Un prompt ahí
+es problema de harness / allowlist / RemoteTrigger — no de juicio del agente.
