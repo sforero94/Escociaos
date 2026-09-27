@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__Supabase.*|mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+        "matcher": "mcp__Supabase.*|mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL|mcp__github__(merge_pull_request|enable_pr_auto_merge)",
         "hooks": [
           {
             "type": "command",
