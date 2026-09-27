@@ -100,53 +100,38 @@ Each agent must, in this order:
    `npm test` are all green.
 4. Push `claude/po-viernes-<slug>` and open one PR per finding.
 
-**Phase 2 — Migrate (`ddl_aditivo` lane)**
+**Phase 2 — Prepare (`ddl_aditivo` lane). The Friday run NEVER applies it.**
 
-This is the only unattended write the operation makes anywhere. It is bounded by
-five gates, and **every one must pass or the migration is not applied**:
+Decision of Santiago, 2026-09-27 ("option A"): **no Routine writes to the
+database.** In five Fridays the unattended write lane applied one migration,
+and almost every permission change made to serve it left a new silent defect.
+The Friday run now does all the work up to the apply, and stops there:
 
-1. **Additive by allowlist, not by denylist.** Every statement in the migration
-   must begin with one of: `CREATE TABLE` · `CREATE INDEX` / `CREATE UNIQUE
-   INDEX` · `CREATE OR REPLACE FUNCTION` · `CREATE TRIGGER` · `CREATE POLICY` ·
-   `ALTER POLICY` · `ALTER TABLE … ADD COLUMN` · `ALTER TABLE … ADD CONSTRAINT` ·
-   `ALTER TABLE … ENABLE ROW LEVEL SECURITY` · `GRANT` · `REVOKE` · `COMMENT ON`
-   · a `DO $$ … $$` block whose only effect is `RAISE EXCEPTION` guards.
-   Anything else — any `UPDATE`, `DELETE`, `TRUNCATE`, `DROP`, `ALTER COLUMN …
-   TYPE`, `DROP POLICY` — means the change is **not** `ddl_aditivo`. Reclassify
-   the finding and leave it. Do not "mostly" pass this gate.
-2. **Guards.** The migration carries its own `RAISE EXCEPTION` pre- and
-   post-conditions, in the style of 080/081/099. **No absolute row-count literal
-   may be written into a migration that runs against a table a cron writes** —
-   capture the starting count and check it against itself. That lesson cost the
-   103 a whole day (see the 2026-08-20 report).
-3. **Independent adversarial review.** A second agent, which did not author the
-   migration, is prompted to **refute that it is safe to apply unattended** and
-   defaults to "unsafe" when uncertain. It gets the SQL and the live schema, not
-   the author's reasoning. Its specific job is to find the case where an
-   "additive" statement is not: a `CREATE OR REPLACE FUNCTION` that changes live
-   behaviour, a `REVOKE` that breaks an RLS policy that calls the function
-   (§082), an `ADD CONSTRAINT` that existing rows violate.
-4. **Numbering.** Next sequential number, taken as `max()` over the filenames in
-   `src/sql/migrations/` **and** `supabase_migrations.schema_migrations` — the
-   ledger is not authoritative and neither is a superset of the other (root
-   CLAUDE.md). Never reuse, never renumber an existing file.
-5. **Byte fidelity.** The SQL that runs is transferred **by content** from the
-   file pushed to the branch (base64 the file, decode, apply in one atomic
-   statement). Never retyped. The bytes that run must provably be the bytes in
-   the PR.
+1. **Additive by allowlist, not by denylist.** Every statement must begin with
+   one of: `CREATE TABLE` · `CREATE INDEX` / `CREATE UNIQUE INDEX` · `CREATE OR
+   REPLACE FUNCTION` · `CREATE TRIGGER` · `CREATE POLICY` · `ALTER POLICY` ·
+   `ALTER TABLE … ADD COLUMN` · `ALTER TABLE … ADD CONSTRAINT` · `ALTER TABLE …
+   ENABLE ROW LEVEL SECURITY` · `GRANT` · `REVOKE` · `COMMENT ON` · a `DO $$ …
+   $$` block whose only effect is `RAISE EXCEPTION` guards. Anything else means
+   the finding is not `ddl_aditivo`: reclassify it and leave it.
+2. **Guards.** `RAISE EXCEPTION` pre- and post-conditions (080/081/099 style).
+   No absolute row-count literal against a table a cron writes (the 103 lesson).
+3. **Independent adversarial review**, defaulting to "unsafe" (unchanged).
+4. **Numbering**: `max()` over `src/sql/migrations/` **and** the ledger, and
+   sweep the open branches (root CLAUDE.md, migration 144).
+5. **Open the PR** with the migration file, and write in the Notion finding the
+   exact apply payload for Santiago's live session: `tool_slug:
+   SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward`, `ref`, `name`,
+   `rollback`, the pre-state query, the expected post-state, and the reviewer's
+   verdict. Set the finding to "Listo para aplicar".
 
-Then: capture the pre-state → apply via Composio, `tool_slug:
-SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward`, passing `ref`,
-`query`, `name` and `rollback` → verify the post-state with an explicit query
-through `SUPABASE_RUN_READ_ONLY_QUERY` → report both. **If a guard aborts,
-report the abort.** Never edit the guard to make it pass.
+**Do not call `SUPABASE_APPLY_A_MIGRATION`, `apply_migration` or any other
+write tool.** If a write tool is ever denied or asks for permission in this
+run, that is expected: record it under NO CORRIÓ and continue.
 
-**Phase 0 must confirm `SUPABASE_APPLY_A_MIGRATION` resolves before the run
-reaches this point.** The lane once failed silently for four sessions because
-the write tool had vanished from the old connector and nothing checked until it
-was needed (ESCO-114). Check it at boot, not here.
-
-Then push the branch and open the PR containing the migration file.
+**Santiago applies it** in a session where he is present, usually when he
+merges the PR. Monday's drift check still runs: it also catches migrations
+applied by hand without their file on `main` (150 and 157 were found that way).
 
 **Friday never merges anything.** Not a doc fix, not a green PR, not its own
 migration. Merging is Santiago's, always.

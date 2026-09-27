@@ -398,20 +398,17 @@ never by convenience.
   `SUPABASE_BETA_RUN_SQL_QUERY` stays forbidden in every phase — that
   prohibition did not move and is now the only distinction left between the safe
   and unsafe Supabase write tools.
-- **Since 2026-09-27 the repo hook `.claude/hooks/supabase-guard.py` enforces
-  this policy per `tool_slug`, below the Routine's `always_allow`.** It checks
-  every item of a `COMPOSIO_MULTI_EXECUTE_TOOL` call, also mixed calls. No prompt
-  for: Supabase reads; Notion slugs of this operation (inserts only into the
-  Mantenimiento database, account `thinksid`); `VERCEL_GET_*`; GitHub reads,
-  open PR, comment. `SUPABASE_APPLY_A_MIGRATION` passes with no prompt **only**
-  on a Friday (America/New_York), with `account: supabase_bitis-coward`,
-  `ref: ywhtjwawnkeqlwxbvgup`, SQL byte-identical to a file in
-  `src/sql/migrations/`, and every statement inside gate 1 of `run-viernes.md`.
-  Anything else asks — including `SUPABASE_BETA_RUN_SQL_QUERY`, any merge, and
-  the retired `Supabase_Escritura.apply_migration`. **This puts a mechanism back
-  under "Monday and Thursday never write"**: on those days the write asks, and
-  an unattended run records NO CORRIÓ. A prompt on a slug of the allowed list is
-  a P1 against the operation (the list rotted), never a reason to wait.
+- **Since 2026-09-27 no Routine writes to the database ("option A", decision
+  of Santiago).** The Friday run prepares the migration and its apply payload;
+  Santiago applies it with `SUPABASE_APPLY_A_MIGRATION` in a session where he is
+  present. `run-viernes.md` Phase 2 carries the procedure. The repo hook
+  `.claude/hooks/supabase-guard.py` checks every item of a
+  `COMPOSIO_MULTI_EXECUTE_TOOL` call per `tool_slug`: Supabase reads, the Notion
+  slugs of this operation (inserts only into the Mantenimiento database),
+  `VERCEL_GET_*` and GitHub read/PR/comment pass with no prompt; everything else
+  asks, every Supabase write and every merge included. A prompt on a slug of the
+  allowed list is a P1 against the operation (the list rotted), never a reason
+  to wait.
 - Any `INSERT`/`UPDATE`/`DELETE`/`ALTER`/`DROP` goes into the finding as exact
   SQL with `requiere_aprobacion: true`, plus a matching rollback statement and
   the row count it will touch.
