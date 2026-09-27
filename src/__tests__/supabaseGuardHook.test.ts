@@ -8,10 +8,9 @@
  * sintéticos y fijan la decisión por NOMBRE de herramienta.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
 const raiz = resolve(__dirname, '../..');
 const script = resolve(raiz, '.claude/hooks/supabase-guard.py');
@@ -19,13 +18,16 @@ const script = resolve(raiz, '.claude/hooks/supabase-guard.py');
 function decision(
   tool_name: string,
   tool_input: unknown,
-  opciones: { fecha?: string; cwd?: string } = {},
+  opciones: { desatendida?: boolean } = {},
 ): string | null {
-  const env = { ...process.env, CLAUDE_PROJECT_DIR: opciones.cwd ?? raiz };
-  if (opciones.fecha) env.SUPABASE_GUARD_FECHA = opciones.fecha;
-  else delete env.SUPABASE_GUARD_FECHA;
+  const env = {
+    ...process.env,
+    CLAUDE_PROJECT_DIR: raiz,
+    CLAUDE_CODE_REMOTE: 'true',
+    CLAUDE_CODE_SESSION_ATTENDED: opciones.desatendida ? '' : '1',
+  };
   const salida = execFileSync('python3', [script], {
-    input: JSON.stringify({ tool_name, tool_input, cwd: opciones.cwd ?? raiz }),
+    input: JSON.stringify({ tool_name, tool_input, cwd: raiz }),
     encoding: 'utf8',
     env,
   }).trim();
@@ -113,63 +115,75 @@ describe('supabase-guard.py', () => {
     expect(decision('mcp__github__merge_pull_request', {})).toBe('ask');
   });
 
-  describe('SUPABASE_APPLY_A_MIGRATION (carril ddl_aditivo del viernes)', () => {
+  describe('po_sonda (migración 170): consultas de prueba sin permiso', () => {
     const composio = 'mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL';
-    const VIERNES = '2026-10-02';
-    const JUEVES = '2026-10-01';
-    let dir = '';
-    const aditivo = [
-      '-- guarda',
-      "DO $$ BEGIN IF (SELECT count(*) FROM t) < 0 THEN RAISE EXCEPTION 'x'; END IF; END $$;",
-      'ALTER TABLE public.t ADD COLUMN c text;',
-      'REVOKE INSERT, UPDATE, DELETE ON public.t FROM anon;',
-      "COMMENT ON COLUMN public.t.c IS 'no DROP aqui';",
-    ].join('\n');
-    const destructivo = 'UPDATE public.t SET c = null;';
-
-    const llamada = (query: string, extra: Record<string, unknown> = {}) => ({
+    const sql = (query: string, extra: Record<string, unknown> = {}) => ({
       tools: [
         {
-          tool_slug: 'SUPABASE_APPLY_A_MIGRATION',
-          account: 'supabase_bitis-coward',
-          arguments: { ref: 'ywhtjwawnkeqlwxbvgup', name: 'x', query, rollback: '', ...extra },
+          tool_slug: 'SUPABASE_BETA_RUN_SQL_QUERY',
+          account: 'escocia-os',
+          arguments: { ref: 'ywhtjwawnkeqlwxbvgup', query, ...extra },
         },
       ],
     });
 
-    beforeAll(() => {
-      dir = mkdtempSync(join(tmpdir(), 'guard-'));
-      mkdirSync(join(dir, 'src/sql/migrations'), { recursive: true });
-      writeFileSync(join(dir, 'src/sql/migrations/999_aditiva.sql'), aditivo + '\n');
-      writeFileSync(join(dir, 'src/sql/migrations/998_destructiva.sql'), destructivo + '\n');
+    it.each([
+      "select public.po_sonda($a$select count(*) from monitoreos$a$)",
+      "SELECT po_sonda($a$insert into t values (1) returning *$a$, ARRAY[$b$set local role authenticated$b$, $b$select set_config('request.jwt.claims','{}',true)$b$])",
+      "select public.po_sonda('explain analyze select 1');",
+    ])('la forma exacta de la sonda pasa: %s', (q) => {
+      expect(decision(composio, sql(q))).toBe('allow');
     });
-    afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-    it('viernes + fichero del repo + aditiva: pasa sin prompt', () => {
-      expect(decision(composio, llamada(aditivo), { fecha: VIERNES, cwd: dir })).toBe('allow');
+    it.each([
+      'delete from productos',
+      "select public.po_sonda('select 1'); delete from productos",
+      "select public.po_sonda('select 1'), (select count(*) from productos)",
+      "select other_fn('x')",
+      "select public.po_sonda('select 1') from productos",
+    ])('SQL libre fuera de la sonda pide permiso: %s', (q) => {
+      expect(decision(composio, sql(q))).toBe('ask');
     });
-    it('fuera del viernes pide permiso (lunes y jueves no escriben)', () => {
-      expect(decision(composio, llamada(aditivo), { fecha: JUEVES, cwd: dir })).toBe('ask');
-    });
-    it('SQL que no es byte a byte un fichero pide permiso', () => {
-      expect(decision(composio, llamada(aditivo + '\nselect 1;'), { fecha: VIERNES, cwd: dir })).toBe('ask');
-    });
-    it('una migración no aditiva pide permiso aunque sea un fichero', () => {
-      expect(decision(composio, llamada(destructivo), { fecha: VIERNES, cwd: dir })).toBe('ask');
-    });
-    it('otro proyecto u otra cuenta pide permiso', () => {
-      expect(decision(composio, llamada(aditivo, { ref: 'otro' }), { fecha: VIERNES, cwd: dir })).toBe('ask');
-      const sinCuenta = llamada(aditivo);
+
+    it('la sonda exige la cuenta escocia-os y el proyecto de producción', () => {
+      const sinCuenta = sql("select po_sonda('select 1')");
       delete (sinCuenta.tools[0] as { account?: string }).account;
-      expect(decision(composio, sinCuenta, { fecha: VIERNES, cwd: dir })).toBe('ask');
+      expect(decision(composio, sinCuenta)).toBe('ask');
+      expect(decision(composio, sql("select po_sonda('select 1')", { ref: 'abcdefghijklmnopqrst' }))).toBe('ask');
     });
-    it('un DO que escribe no es una guarda', () => {
-      const q = 'DO $$ BEGIN DELETE FROM t; END $$;';
-      writeFileSync(join(dir, 'src/sql/migrations/997_do.sql'), q);
-      expect(decision(composio, llamada(q), { fecha: VIERNES, cwd: dir })).toBe('ask');
+
+    it('SUPABASE_APPLY_A_MIGRATION siempre pide permiso (opción A: las Routines no escriben)', () => {
+      const q = 'ALTER TABLE public.t ADD COLUMN c text;';
+      expect(
+        decision(composio, {
+          tools: [{ tool_slug: 'SUPABASE_APPLY_A_MIGRATION', account: 'escocia-os', arguments: { ref: 'ywhtjwawnkeqlwxbvgup', query: q, name: 'x' } }],
+        }),
+      ).toBe('ask');
     });
-    it('el conector viejo Supabase_Escritura sigue pidiendo permiso', () => {
-      expect(decision('mcp__Supabase_Escritura__apply_migration', { query: aditivo }, { fecha: VIERNES, cwd: dir })).toBe('ask');
+  });
+
+  describe('sesión desatendida (Routine): nunca pregunta, deniega', () => {
+    const composio = 'mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL';
+
+    it('lo que pediría permiso se deniega, para que la corrida no quede en espera', () => {
+      const escritura = { tools: [{ tool_slug: 'SUPABASE_BETA_RUN_SQL_QUERY', arguments: { query: 'delete from productos' } }] };
+      expect(decision(composio, escritura, { desatendida: true })).toBe('deny');
+      expect(decision('mcp__Supabase_Escritura__apply_migration', { query: 'select 1' }, { desatendida: true })).toBe('deny');
+      expect(decision('mcp__github__merge_pull_request', {}, { desatendida: true })).toBe('deny');
+    });
+
+    it('lo permitido sigue pasando', () => {
+      const lectura = { tools: [{ tool_slug: 'SUPABASE_RUN_READ_ONLY_QUERY', arguments: { query: 'select 1' } }] };
+      expect(decision(composio, lectura, { desatendida: true })).toBe('allow');
+    });
+
+    it('una CLI local se considera atendida', () => {
+      const salida = execFileSync('python3', [script], {
+        input: JSON.stringify({ tool_name: 'mcp__Supabase__apply_migration', tool_input: {} }),
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_REMOTE: '', CLAUDE_CODE_SESSION_ATTENDED: '' },
+      }).trim();
+      expect(JSON.parse(salida).hookSpecificOutput.permissionDecision).toBe('ask');
     });
   });
 

@@ -174,6 +174,13 @@ Every run follows this. Do not skip phases; do not reorder them.
      the same as the tool working: the 2026-09-24 preflight passed green while
      `SUPABASE_GET_PROJECT_LOGS` answered 410 to every call.
 
+  4. **Record whether the session counts as unattended.** Run
+     `echo "ATTENDED=${CLAUDE_CODE_SESSION_ATTENDED-unset}"` and copy the line
+     into the report's NO CORRIÓ section. The permission hook denies instead of
+     asking only when this is not `1` (2026-09-27). If a Routine ever reports
+     `ATTENDED=1`, the hook cannot tell it from a live session and prompts can
+     stall runs again: that is a P1 against the operation.
+
   **A missing/renamed tool, an inactive toolkit connection, or an account that
   resolves to the wrong project is a P1 finding against the operation**, filed
   in this run, and every specialty that depended on it is labelled NO CORRIÓ.
@@ -401,14 +408,33 @@ never by convenience.
 - **Since 2026-09-27 no Routine writes to the database ("option A", decision
   of Santiago).** The Friday run prepares the migration and its apply payload;
   Santiago applies it with `SUPABASE_APPLY_A_MIGRATION` in a session where he is
-  present. `run-viernes.md` Phase 2 carries the procedure. The repo hook
-  `.claude/hooks/supabase-guard.py` checks every item of a
-  `COMPOSIO_MULTI_EXECUTE_TOOL` call per `tool_slug`: Supabase reads, the Notion
-  slugs of this operation (inserts only into the Mantenimiento database),
-  `VERCEL_GET_*` and GitHub read/PR/comment pass with no prompt; everything else
-  asks, every Supabase write and every merge included. A prompt on a slug of the
-  allowed list is a P1 against the operation (the list rotted), never a reason
-  to wait.
+  present. `run-viernes.md` Phase 2 carries the procedure.
+- **Hypothesis probes go through `public.po_sonda` (migration 170), never
+  through freehand SQL.** A probe is a query that is neither a read nor a
+  migration: simulate a role against an RLS policy, call a function that
+  writes, `EXPLAIN ANALYZE`, rehearse a migration. `po_sonda(consulta,
+  ARRAY[pasos])` runs the steps, runs the query, returns its rows as jsonb and
+  **always rolls everything back**. Call it through `SUPABASE_BETA_RUN_SQL_QUERY`
+  (account `escocia-os`, `ref: ywhtjwawnkeqlwxbvgup`) with exactly this form and
+  nothing else in the statement:
+  `select public.po_sonda($a$<consulta>$a$, ARRAY[$b$<paso 1>$b$, $b$<paso 2>$b$])`.
+  Example, "can a Verificador insert here?": steps `select
+  set_config('request.jwt.claims', '{"sub":"<uuid>","role":"authenticated"}',
+  true)` and `set local role authenticated`, query `insert into … returning *`.
+  An error comes back as data (`error`, `sqlstate`, `paso_fallido`), not as a
+  failed call. It refuses what a rollback cannot undo (`pg_terminate_backend`,
+  advisory locks, `setval`, `vault`, `COPY`…). Until 170 is applied the function
+  does not exist: the call fails, and that is a NO CORRIÓ, not a reason to use
+  freehand SQL.
+- **The repo hook `.claude/hooks/supabase-guard.py` enforces this per
+  `tool_slug`.** No prompt for: Supabase reads, the `po_sonda` form above, the
+  Notion slugs of this operation (inserts only into the Mantenimiento database),
+  `VERCEL_GET_*`, and GitHub read/PR/comment. Everything else asks in a live
+  session and is **denied at once in an unattended one** (a Routine), every
+  Supabase write and every merge included. A denial is expected: record it
+  under NO CORRIÓ and continue, never look for a way around it. A denial on
+  something from the allowed list is a P1 against the operation (the list
+  rotted).
 - Any `INSERT`/`UPDATE`/`DELETE`/`ALTER`/`DROP` goes into the finding as exact
   SQL with `requiere_aprobacion: true`, plus a matching rollback statement and
   the row count it will touch.

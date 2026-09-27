@@ -116,7 +116,13 @@ The Friday run now does all the work up to the apply, and stops there:
    the finding is not `ddl_aditivo`: reclassify it and leave it.
 2. **Guards.** `RAISE EXCEPTION` pre- and post-conditions (080/081/099 style).
    No absolute row-count literal against a table a cron writes (the 103 lesson).
-3. **Independent adversarial review**, defaulting to "unsafe" (unchanged).
+3. **Rehearse it, then review it.** Run the migration through `po_sonda`
+   (constitution §6): the whole file as the preparation step, a post-state
+   query as the consulta. It runs against real data and rolls back. A file
+   with its own `BEGIN;`/`COMMIT;` fails inside the probe: remove those two
+   lines from the rehearsal copy only, never from the file. Then the
+   independent adversarial review, defaulting to "unsafe", gets the SQL, the
+   live schema and the rehearsal result.
 4. **Numbering**: `max()` over `src/sql/migrations/` **and** the ledger, and
    sweep the open branches (root CLAUDE.md, migration 144).
 5. **Open the PR** with the migration file, and write in the Notion finding the

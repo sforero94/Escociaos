@@ -21,14 +21,17 @@ closed:
   when toolkits are mixed, against the policy of the maintenance operation:
   Supabase reads; Notion on the Mantenimiento database (account thinksid);
   Vercel VERCEL_GET_* only; GitHub reads, open PR, comment (never merge);
-  SUPABASE_APPLY_A_MIGRATION only on a Friday (America/New_York), account
-  escocia-os, project ywhtjwawnkeqlwxbvgup, SQL byte-identical to a file in
-  src/sql/migrations/ and strictly additive (gate 1 of run-viernes.md).
-  Everything else asks, SUPABASE_BETA_RUN_SQL_QUERY included.
+  SUPABASE_BETA_RUN_SQL_QUERY only as a hypothesis probe with the exact form
+  `select public.po_sonda(...)` (migration 170: runs and ALWAYS rolls back),
+  account escocia-os, project ywhtjwawnkeqlwxbvgup. Everything else asks,
+  every Supabase write included: decision of Santiago 2026-09-27 ("option
+  A"), the Routines never write.
 - GitHub MCP merge_pull_request / enable_pr_auto_merge: ask.
 - Any Supabase tool not in these lists: ask.
 
-"ask" shows the permission prompt, which sends the push notification.
+"ask" shows the permission prompt in an attended session. In an unattended
+session (a Routine) every "ask" becomes "deny": a parked prompt stalled runs
+for hours until Santiago opened them.
 """
 import json
 import re
@@ -66,7 +69,27 @@ MODIFICA = re.compile(
 )
 
 
+def sesion_atendida():
+    """True when a person can answer a prompt.
+
+    A cloud session carries CLAUDE_CODE_SESSION_ATTENDED=1 when someone is
+    watching. In a Routine nobody is: a prompt is parked until a human opens
+    the session, which is how runs stalled for hours. A local CLI
+    (CLAUDE_CODE_REMOTE not "true") is always attended.
+    """
+    import os
+    if os.environ.get("CLAUDE_CODE_REMOTE", "").lower() != "true":
+        return True
+    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "1"
+
+
 def decidir(decision, motivo):
+    # Nobody answers a prompt in an unattended run: deny, so the agent gets an
+    # error, records it under NO CORRIÓ and keeps going instead of stalling.
+    if decision == "ask" and not sesion_atendida():
+        decision = "deny"
+        motivo = (motivo + " Sesión desatendida: denegado en vez de preguntar. "
+                  "Anótalo bajo NO CORRIÓ y sigue.")
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -130,89 +153,21 @@ GITHUB_PIDE = {
     "mcp__github__merge_pull_request", "mcp__github__enable_pr_auto_merge",
 }
 
-# Compuerta 1 del runbook del viernes: cada sentencia empieza por una de éstas.
-INICIO_ADITIVO = re.compile(
-    r"^(CREATE\s+(UNIQUE\s+)?INDEX|CREATE\s+TABLE|CREATE\s+OR\s+REPLACE\s+FUNCTION|"
-    r"CREATE\s+TRIGGER|CREATE\s+POLICY|ALTER\s+POLICY|ALTER\s+TABLE|GRANT|REVOKE|"
-    r"COMMENT\s+ON|DO|BEGIN|COMMIT)\b",
-    re.IGNORECASE,
-)
-ALTER_TABLE_ADITIVO = re.compile(
-    r"^ALTER\s+TABLE\s+(IF\s+EXISTS\s+)?(ONLY\s+)?[\w\".]+\s+"
-    r"(ADD\s+COLUMN|ADD\s+CONSTRAINT|ENABLE\s+ROW\s+LEVEL\s+SECURITY)\b",
-    re.IGNORECASE,
-)
-NO_ADITIVO = re.compile(
-    r"\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|MERGE|RENAME)\b|ALTER\s+COLUMN", re.IGNORECASE
-)
-# Cuerpo de un DO: sólo guardas. Nada que escriba ni SQL dinámico.
-CUERPO_DO_ESCRIBE = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|EXECUTE|PERFORM|"
-    r"COPY|CALL)\b",
+# Consulta de prueba (migración 170): la única forma de SQL libre que pasa.
+# Tras quitar literales, debe quedar exactamente una llamada a po_sonda con
+# la consulta y, opcionalmente, un arreglo de pasos de preparación.
+FORMA_SONDA = re.compile(
+    r"^SELECT\s+(public\.)?po_sonda\s*\(\s*''\s*"
+    r"(,\s*(''|ARRAY\s*\[\s*''(\s*,\s*'')*\s*\]))?\s*\)$",
     re.IGNORECASE,
 )
 
 
-def entrada_cwd(evento):
-    return evento.get("cwd") or ""
-
-
-def es_viernes_bogota_ny():
-    """Día de la corrida en America/New_York. SUPABASE_GUARD_FECHA sólo para pruebas."""
-    import datetime
-    import os
-    forzada = os.environ.get("SUPABASE_GUARD_FECHA")
-    if forzada:
-        return datetime.date.fromisoformat(forzada).weekday() == 4
-    try:
-        from zoneinfo import ZoneInfo
-        ahora = datetime.datetime.now(ZoneInfo("America/New_York"))
-    except Exception:
+def es_sonda(sql):
+    if not isinstance(sql, str) or not sql.strip():
         return False
-    return ahora.weekday() == 4
-
-
-def migracion_del_repo(query, cwd):
-    """Compuerta 5: el SQL que corre es byte a byte un fichero de src/sql/migrations/."""
-    import glob
-    import os
-    raices = {os.environ.get("CLAUDE_PROJECT_DIR", ""), cwd}
-    objetivo = query.strip()
-    for raiz in raices:
-        if not raiz:
-            continue
-        for ruta in glob.glob(os.path.join(raiz, "src", "sql", "migrations", "[0-9][0-9][0-9]_*.sql")):
-            try:
-                with open(ruta, encoding="utf-8") as f:
-                    if f.read().strip() == objetivo:
-                        return ruta
-            except OSError:
-                continue
-    return None
-
-
-def sql_es_aditivo(sql):
-    """Compuerta 1 del runbook, aplicada de forma mecánica."""
-    sin_coment = re.sub(r"--[^\n]*", " ", sql)
-    sin_coment = re.sub(r"/\*.*?\*/", " ", sin_coment, flags=re.DOTALL)
-    for cuerpo in re.findall(r"\bDO\s+\$([A-Za-z_]*)\$(.*?)\$\1\$", sin_coment, flags=re.DOTALL | re.IGNORECASE):
-        limpio = re.sub(r"'(?:[^']|'')*'", " '' ", cuerpo[1])
-        if CUERPO_DO_ESCRIBE.search(limpio):
-            return False
-    limpio = quitar_comentarios_y_literales(sql)
-    sentencias = [x.strip() for x in limpio.split(";") if x.strip()]
-    if not sentencias:
-        return False
-    for sentencia in sentencias:
-        if not INICIO_ADITIVO.match(sentencia):
-            return False
-        if re.match(r"^ALTER\s+TABLE\b", sentencia, re.IGNORECASE) and not ALTER_TABLE_ADITIVO.match(sentencia):
-            return False
-        if re.match(r"^(GRANT|REVOKE)\b", sentencia, re.IGNORECASE):
-            continue  # GRANT/REVOKE nombran privilegios (UPDATE, DELETE...), no los ejecutan
-        if NO_ADITIVO.search(sentencia):
-            return False
-    return True
+    limpio = quitar_comentarios_y_literales(sql).rstrip(";").strip()
+    return ";" not in limpio and FORMA_SONDA.match(limpio) is not None
 
 
 def cuenta_ok(item, cuentas, requerida):
@@ -222,26 +177,21 @@ def cuenta_ok(item, cuentas, requerida):
     return str(cuenta) in cuentas
 
 
-def decidir_slug_composio(item, cwd):
+def decidir_slug_composio(item):
     slug = str(item.get("tool_slug", "")).upper()
     args = item.get("arguments") or {}
 
     if slug.startswith("SUPABASE_"):
         if slug in LECTURA_COMPOSIO or slug.startswith(PREFIJOS_LECTURA_COMPOSIO):
             return True, ""
-        if slug == "SUPABASE_APPLY_A_MIGRATION":
-            if not es_viernes_bogota_ny():
-                return False, "SUPABASE_APPLY_A_MIGRATION fuera del viernes, requiere confirmación."
-            if not cuenta_ok(item, CUENTAS_SUPABASE, requerida=True):
-                return False, "SUPABASE_APPLY_A_MIGRATION sin la cuenta escocia-os, requiere confirmación."
-            if args.get("ref") != PROYECTO_PRODUCCION:
-                return False, "SUPABASE_APPLY_A_MIGRATION contra otro proyecto, requiere confirmación."
-            query = args.get("query")
-            if not isinstance(query, str) or not migracion_del_repo(query, cwd):
-                return False, "El SQL no es byte a byte un fichero de src/sql/migrations/, requiere confirmación."
-            if not sql_es_aditivo(query):
-                return False, "La migración no es estrictamente aditiva, requiere confirmación."
-            return True, ""
+        if slug == "SUPABASE_BETA_RUN_SQL_QUERY":
+            query = args.get("query", args.get("sql"))
+            ref = args.get("ref", args.get("project_ref"))
+            if (es_sonda(query) and ref == PROYECTO_PRODUCCION
+                    and cuenta_ok(item, CUENTAS_SUPABASE, requerida=True)):
+                return True, ""
+            return False, ("Supabase vía Composio: SQL libre fuera de po_sonda, requiere confirmación. "
+                           "Para probar una hipótesis usa select public.po_sonda(...).")
         return False, f"Supabase vía Composio: «{slug}» escribe o no está clasificado, requiere confirmación."
 
     if slug.startswith("NOTION_"):
@@ -298,7 +248,7 @@ if herramienta == "mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL":
     for item in items:
         if not isinstance(item, dict):
             decidir("ask", "Composio: elemento no reconocido, requiere confirmación.")
-        permitido, motivo = decidir_slug_composio(item, entrada_cwd(evento))
+        permitido, motivo = decidir_slug_composio(item)
         if not permitido:
             decidir("ask", motivo)
     decidir("allow", "Composio: todas las herramientas están en la política de la operación.")
