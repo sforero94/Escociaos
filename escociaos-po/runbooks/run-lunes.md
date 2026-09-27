@@ -151,3 +151,9 @@ Never let one agent's failure kill the run. If an agent errors or a tool is
 unavailable, record it under **NO CORRIÓ** with the reason and continue. A
 partial sweep honestly labelled is useful; a partial sweep presented as complete
 is not.
+
+**Prompts de permiso en trabajo de bajo riesgo** (SELECT/lectura SQL vía
+Composio, Notion read+write en Mantenimiento, lint/typecheck/test, abrir PR):
+mismo principio que `run-viernes.md` § Failure handling y constitución §7 —
+nunca esperar al teléfono; loguear NO CORRIÓ / finding de operación y continuar
+o parar limpio.
