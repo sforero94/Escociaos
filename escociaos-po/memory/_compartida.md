@@ -2285,3 +2285,11 @@ divergencia de dosis: Amisol MKP en **0 de 571,23** planeados, Amisol KP al 18 %
 dosis y Fosfato al 10 %, contra Nutrifeed al 72 % — o sea que Nutrifeed es el único
 producto registrado cerca de lo planeado, lo que debilita la hipótesis de que sobre
 consumo suyo.
+
+## Corrida 2026-09-28-lunes — hechos transversales
+- Preflight 4/4 toolkits active, identidad `supabase_read_only_user`, Vercel 1 proyecto, `query_logs` responde. `ATTENDED=0`. **Cero prompts y cero denegaciones** en toda la corrida, incluidos `COMPOSIO_REMOTE_BASH_TOOL` y los inserts de Notion: el hook de #296 no estorbo nada del carril permitido.
+- **El conjunto de no-refilar se construye asi, en una llamada chica**: `NOTION_QUERY_DATABASE_WITH_FILTER` con `{"or":[{"property":"Resolucion","select":{"equals":"Aceptado (no se arregla)"}},{"property":"Resolucion","select":{"equals":"Refutado"}}]}` → la respuesta (~72k tokens) va SIEMPRE al workbench aunque se pida `sync_response_to_workbench:false` → `COMPOSIO_REMOTE_BASH_TOOL` + la linea `jq` del 09-21. Hoy: 19 filas. Se paso a los agentes en el despacho, en un fichero de contexto comun (`scratchpad/run-context.md`), no por SendMessage despues — la plantilla de despacho funciono asi.
+- **Los agentes registrados por nombre (`subagent_type: data-integrity`, etc.) funcionaron** en la sesion cloud; el brief carga solo y la memoria se le manda a leer como primer paso obligatorio.
+- **Actualizar Evidencia/Motivo de una ficha existente por API reescribe el campo entero.** Hoy no se toco ESCO-129 en Notion por eso; la evidencia nueva quedo en el reporte. Si hace falta anexar, reconstruir el texto completo (viejo + nuevo) o agregar un bloque hijo a la pagina.
+- **Deriva de migraciones limpia**: 142–170 aplicadas, todas con archivo en `main`. 153/154/157 aparecen en el ledger sin prefijo numerico en `name`.
+- La ficha que mas pesa esta semana es de producto, no de codigo: las alertas sólo-web del hato (142/152) no tienen lector (ESCO-134).

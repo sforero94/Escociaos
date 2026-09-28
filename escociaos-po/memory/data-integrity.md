@@ -744,3 +744,19 @@ es la **159 operando**, no una regresion. Los 6 dias restaurados por la 166 coin
 - **`hato_capturas_foto` no tiene `created_at`** (tiene `created_by`; la fecha util es `fecha`).
 - `aplicaciones.estado` es ENUM: castear `::text`. Valores abiertos: `'En ejecución'`, `'Calculada'`.
 - El join de productos es `movimientos_diarios_productos.movimiento_diario_id`, **no `movimiento_id`**.
+
+## Corrida 2026-09-28-lunes
+### Baselines (ventana desde 09-24)
+hato_eventos 792 (+2) · hato_chequeos 34 · chequeo_vacas 1.513 · hato_pesajes_leche 646 (ultima fecha 09-09; faltan 09-16 y 09-23 — ESCO-107/109, NO refilar) · hato_tratamientos 27 · hato_alertas 125 (+2) · hato_capturas_foto 5 · hato_produccion_quincenal 84 · hato_correcciones 20 · activas 66 · monitoreos 4.244 (ultima 08-28) · movimientos_inventario 166 (+1 = ajuste 168) · movimientos_diarios 189 / mdp 823 · compras 32 (congelado desde 08-05) · registros_trabajo 3.024 · fin_gastos 4.535 · aplicaciones 21 / cierres 19 · clima_resumen_diario 1.948 · logs_auditoria 0.
+Integridad: 0 duplicados manuales (indice 139 aguanta), 29 grupos cross-fuente, 0 pesajes dup, 0 tratamientos dup, 0 chapetas activas dup, 0 partos <270, 0 huerfanos, 0 stock negativo, libro-vs-stock 1 divergencia (TecniFeed Boro, =), 86 monitoreos ronda_id NULL (=).
+Clima: 09-21..27 todos 288 lecturas, ok salvo 09-26 reconstruido 0,00. Candado 169 liberado y sano.
+### Navegacion
+- Sonda «ano tecleado mal» `fecha_trabajo < current_date-120 and created_at > '2026-06-01'` da FALSO POSITIVO (ventana deslizante). Usar `created_at::date - fecha_trabajo > 120`.
+- UI y motor del hato leen fecha_secar/fecha_probable_parto DERIVADAS del ultimo servicio (calculosHato.ts:2136), NO las del chequeo en v_hato_estado_actual. PP rancio en la vista tras un parto/servicio nuevo NO es hallazgo de alertas; solo afecta Esco (chat.tsx:3371) y la tabla historica de chequeos.
+- hato_eventos.cria_id: 0 de 303 partos, sin escritor (filado ESCO-135).
+- globalgap_correcciones usa `corregido_en`. hato_pajillas_uso no tiene `fecha`. hato_alertas_tick_runs no tiene `resumen`.
+- rondas_monitoreo «Ronda 29» sigue con fecha_fin NULL aunque la 30 cerro 09-18. Menor, no filado.
+### Vigilancia
+- ESCO-129: aplicacion completa en campo (952/952 canecas), cierre viable con 3 productos a 0,0000 (Nutrifeed, Fosfato, KP); sigue sin cerrar. El ultimo movimiento (544e4b67, 09-26) registra KP 5 kg y Fosfato 1,2 kg = exactamente el saldo restante; confirmar en campo antes de cerrar (GlobalGAP).
+- monitoreos: umbral 2026-10-05 en pie.
+- Terneras retenidas sin ficha: 2 (ENIGMA, PACIENCIA). Si sube con cada parto Telegram, patron confirmado.

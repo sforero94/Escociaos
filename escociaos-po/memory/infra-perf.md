@@ -634,3 +634,15 @@ dano», y no lo es del todo.** Global: 95 de 187 sin sol, pero **82 son el grupo
 El ultimo objeto de `hato-liquidaciones-fotos` es del 2026-09-20T05:00:34Z, **anterior** al
 despliegue de la v265. No ha habido carga que instrumentar. **Antes de leer una tabla de
 instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del despliegue.**
+
+## Corrida 2026-09-28-lunes
+- Linea de salud: Vercel 5/5 READY/PROMOTED, alias en ad8d7ce. Edge v266 (2026-09-25T12:50:21Z), ezbr_sha256 cc85e523… = f33a943 (ultimo commit del arbol edge). Drift run #37 success; #33/#34 rojos = secreto 401/403 que arreglo #294, no deriva. DB 126 MB (81 MB = net._http_response 59 + cron.job_run_details 22). Storage 253 MB / 302 objetos. 21 conexiones.
+- PR #292 VIVO, verificado por contenido: hash edge coincide; POST anonimo /clima/actualizar -> 401 (ruta desconocida -> 404); 'clima/actualizar' presente en ClimaDashboard-*.js; candado 169 funciona.
+- CANDADO 169: `vence_en IS NULL` = LIBRE. `dueno` no nulo NO significa tomado (soltar solo pone vence_en NULL).
+- Paridad de arboles: 0 diffs reales.
+- Tolerancia de lluvia 'ok' (122) medida y descartada: GREATEST(0,5 mm;10%) > un tic (0,25) -> 3 dias de 117 con evento 0 y contador 0,25 (05-14, 08-06, 09-20), 4,38 mm en total, invisible bajo UMBRAL_LLUVIA_MATERIAL_MM=10. NO re-investigar.
+- Alertas hato generadas con 0 envios = por diseno (web-only 142). Tick 1,2-1,8 s, ok 8 dias seguidos.
+- Build Vercel subiendo: 44,8 s (ad8d7ce) vs 27-31 s en septiembre; vite build local 23,1 s -> el extra es install/cola. Vigilar, no hallazgo.
+- Payload inicial 402 KB gzip (373 JS + 28,6 CSS) vs 386 KB el 08-10. vendor-recharts 124 KB gz eager por modulepreload = el mayor.
+- Suite: 189 ficheros / 3.946 pruebas verdes; tsc limpio; lint 0/919.
+- NAVEGACION: en query_logs el trafico de la edge function esta en `function_edge_logs` (log_attributes['response.status_code']); `edge_logs` filtrado por make-server da VACIO. edge_logs solo para PostgREST.

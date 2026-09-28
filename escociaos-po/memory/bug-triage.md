@@ -770,3 +770,12 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 |---|---|
 | `main@94a334a` | vitest **187 / 3.873** verde · `tsc --noEmit` exit 0 · lint 0 errores / **919 avisos** |
 | con PR #291 | **188 ficheros / 3.900** verde · tsc exit 0 · lint 0 errores / 919 avisos (cero avisos nuevos) |
+
+## Corrida 2026-09-28-lunes
+- Baseline main@ad8d7ce VERDE: vitest 189 ficheros / 3.946 pruebas; tsc exit 0; lint 0/919.
+- #292 fusionado Y desplegado (drift state f33a943; /clima/actualizar -> 401). Cron clima-backfill-164 ya no existe; 5 jobs (1,2,4,8,9).
+- El motor de alertas del hato deriva secar/parto de ultimo_servicio_fecha (calculosHato.ts:2136), no de los campos del chequeo. Una fila de chequeo rancia no rompe alertas; solo llega a Esco (chat.tsx:3371) y a la tabla historica. Mirarlo antes de llamarlo defecto de alertas.
+- Filado ESCO-136 (P3, datos): fila de chequeo de COMETA con el servicio de abril tachado; mismo mecanismo que ESCO-128.
+- Senal de silencio: edge_logs non-2xx = un 409 rondas_avisos (benigno); function_logs 0 errores.
+- PR #296 commiteo `.claude/hooks/__pycache__/supabase-guard.cpython-311.pyc`. Ruido inofensivo, no filado.
+- BUG_REPORT.md: issue 3b sigue ABIERTO (fetchDatosReporteSemanal.ts:511-522, clase decision); issue 6 no reproducible (31/31 con url_storage, ultima 09-21 semana 38); cabecera del fichero rancia por tercera vez.

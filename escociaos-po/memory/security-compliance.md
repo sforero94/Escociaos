@@ -375,3 +375,12 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
 **Clase always-true — escritura (INSERT/UPDATE/DELETE/ALL): CERO, 3ª corrida seguida** (sólo `reportes_semanales ALL TO service_role`). **Lectura: 67 políticas SELECT `qual=true` TO authenticated sobre 44 tablas**, con `productos` duplicada — filado P3 (ESCO-... SELECT half). Ningún `fin_*`, ni `empleados`/`contratistas`/`usuarios`/`novedades_uso` está en las 67.
 **Ninguna política alcanza `anon` con predicado satisfacible**: 100 apuntan a PUBLIC y todas resuelven por `get_user_role()`/`es_usuario_gerencia()`/`auth.uid()`, NULL para `anon`. La trampa de GRANT de la 081 sigue armada en ~55 tablas legacy pero inalcanzable.
 `npm audit --omit=dev`: 9 vulnerabilidades (2 críticas, 5 altas, 2 moderadas), **conjunto byte-idéntico al 09-07 y al 09-14**. Ruido aceptado.
+
+## Corrida 2026-09-28-lunes
+- Baseline: 113 tablas public / 113 con RLS / 314 politicas / 14 SECURITY DEFINER (0 sin search_path). Delta vs 09-21: +1 tabla (clima_candado_backfill, mig 169). Advisors security 55 lints, 4 categorias, ninguna nueva.
+- Estados aceptados nuevos: clima_candado_backfill = tabla public rls_enabled_no_policy, deny-all correcto (ACL solo postgres+service_role). po_sonda (170) y fn_clima_candado_tomar/soltar (169): INVOKER, search_path fijado, EXECUTE solo postgres+service_role. No re-barrer salvo cambio.
+- po_sonda: la denylist es un filtro TEXTUAL sobre SQL que corre por EXECUTE dinamico -> no es frontera de seguridad. La frontera real es el ACL + la forma exacta del hook + callers de confianza. Nota, no hallazgo. No desarrollar tecnicas de evasion para "probarlo" (un clasificador corto esa linea y fue correcto). Sugerencia pendiente: statement_timeout en la proxima revision.
+- Always-true escritura: 0 (4a corrida seguida). Padron 6G+4A, sin cambio; auth.users 10, ultimo alta 2026-08-30.
+- ESCO-117 verificado cerrado: 0 telegram_usuarios con 'gastos', /gasto fuera de los dos arboles.
+- /clima/actualizar (nuevo) gateado con verificarAccesoClima antes del candado.
+- npm audit identico (9) por 4a corrida. Secretos: 45 commits, 0 coincidencias.

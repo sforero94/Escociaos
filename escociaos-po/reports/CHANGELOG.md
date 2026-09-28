@@ -23,6 +23,60 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-09-28 — corrida lunes
+
+A small, clean week. **Three PRs merged** (#292, #294, #296), **four migrations applied**
+(167, 168, 169, 170), **one edge-function deploy** (v266, bundle hash matching `f33a943`,
+the last commit that touched either edge tree) and **zero open PRs** at the close.
+Frontend is at `ad8d7ce` (PR #296), READY and promoted. Four other PRs of the window
+(#289, #290, #291, #295) were closed unmerged because later ones absorbed them. For the
+first time, every merge this week passed a CI gate before landing.
+
+### Clima
+- **Gerencia can now repair the last seven days of weather with one click.** A new
+  "Actualizar" button in the Clima view picks only the incomplete days of the last seven,
+  asks Ecowitt again one day at a time, never leaves a day worse than it was, and re-reads
+  each day to confirm it improved. Only Gerencia sees it; the server enforces the same rule.
+  (PR #292, ESCO-127)
+- **The three weather repair paths can no longer overwrite each other.** The button, the
+  manual backfill and the daily 06:00 retry take a shared lock before they touch a day; if
+  the lock cannot be checked, the endpoint refuses to run. Verified live: this morning's
+  06:00 retry took the lock and released it. (PR #292, migration 169, ESCO-133)
+
+### Hato Lechero
+- **COPITA #166 now shows her real calving date** (2026-11-13), so "parto próximo" fires on
+  time; the raw cell that held COMETA's handwritten date is cleared so a re-upload cannot
+  bring the false service back. (PR #292, migration 167, ESCO-128)
+- **A milk-liquidation photo no longer looks like an alarm**: for liquidación, "pending" is
+  the normal final state and renders neutral. (PR #292)
+
+### Aplicaciones · Inventario
+- **Drench Septiembre can now be closed.** By Santiago's decision a +0,6 kg Adjustment of
+  Nutrifeed menor was recorded (author, reason, "not a physical count"), and closing now
+  rounds each product total to 4 decimals. **The application is still "En ejecución"**:
+  someone must press Close. (PR #292, migration 168, ESCO-129)
+
+### Interno
+- **CI runs lint, typecheck and tests on every PR and every push to `main`** (not required
+  yet; it already stopped two broken commits of #296). (PR #292, ESCO-132)
+- **The deploy-drift check reports an expired token as an expired token**, not as drift, and
+  alerts by Telegram when the bot secrets exist. (PR #294)
+- **Maintenance runs can test hypotheses on production with no side effect** via `po_sonda`
+  (always rolls back, service role only). Unattended runs deny anything that would prompt;
+  no Routine writes to the database (option A). (PR #296, migration 170)
+- The Supabase permission hook decides by tool name; the log lane is `query_logs` only.
+  (PR #292, ESCO-130, ESCO-131)
+
+### Requiere despliegue manual
+- Nothing. `make-server-1ccce916` v266 matches `f33a943`; `POST /clima/actualizar` answers
+  401 to an anonymous call.
+
+### Known holes in this record
+- `.claude/hooks/__pycache__/supabase-guard.cpython-311.pyc` was committed with #296 and no
+  `.gitignore` rule excludes it. Harmless, but it should not be in the repository.
+- Migration 170's file header still says "ESCRITA, SIN APLICAR"; the ledger
+  (`20260927085358`) and root `CLAUDE.md` say applied. Read the ledger, not the header.
+
 ## 2026-09-24 — corrida jueves
 
 The busiest release window on record, and a clean one. **13 PRs merged** (#270, #272,

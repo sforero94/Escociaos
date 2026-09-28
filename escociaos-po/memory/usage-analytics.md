@@ -328,3 +328,15 @@ carga concreta, entonces sí vale la columna.**
 
 **Lección de método, que es lo que se guarda acá:** el informe de un agente sobre el
 estado de producción es una hipótesis, no un hecho. Esta se refutó con un solo `SELECT`.
+
+## Corrida 2026-09-28-lunes
+- Pulso 09-22→09-28 (sem/prev/prom4s): registros_trabajo 63/49/59,8 · movimientos_diarios 8/7/6,3 · hato_eventos 2/8/6,3 · hato_alertas 2/4/14,5 · novedades_uso 2/23/5,8 · fin_gastos 1/0/14,3 · movimientos_inventario 1/0/1,3 (= Ajuste 168) · tareas 1/0/1,0 · CEROS: hato_pesajes_leche (45 prev), hato_chequeo_vacas, hato_tratamientos, hato_capturas_foto, hato_correcciones, telegram_mensajes (21 prev), chat_messages (12 prev), monitoreos, rondas_monitoreo, rondas_inventario, compras, aplicaciones, informes_visita.
+- Quien escribe (7d): David Garcia 72 · Fernando Jimenez 2 · Santiago 2 (solo novedades_uso) · Consuelito 1. Captura del hato = 2 eventos Telegram, 0 web: la semana mas baja desde que arranco la captura viva.
+- ALERTAS WEB-ONLY SIN LECTOR (filado ESCO-134, P2): parto_proximo/servicio_sin_confirmacion/rechequeo_due recibe=false para todos desde 142/152 -> quedan pendiente con 0 envios. Accionadas por humanos: 38 (sem 09-07), 4 (sem 09-14), 0 desde 09-17. `pendiente` con 0 envios es el estado NORMAL de esos 3 tipos: medir "accionadas por semana", no "pendientes".
+- EL TICK NO CIERRA UNA ALERTA CUANDO OCURRE EL HECHO: ENIGMA pario 09-20 y su parto_proximo sigue abierto (fase 0 solo retira regla_superada).
+- Pesaje: miercoles 09-16 y 09-23 sin captura; ultima fecha 09-09. Cubierto por ESCO-107/109/123: NO refilar.
+- Monitoreo: sin R31 (R30 abrio 08-26). Desde 2026-10-05 un cero SI es senal.
+- Clima: 288 lecturas/dia 09-20..09-27. 09-26 = primer `reconstruido` visto (0,00 mm).
+- Esco chat: 393 msgs / 97 conversaciones; 0 esta semana = ruido (rango 0-22).
+- Baselines: hato activas 66 · sin raza 63 · sin fecha_nacimiento 20 · sin madre 31 · provisionales 0. hato_alertas 125: 83 descartada / 24 confirmada / 9 escalada / 6 pendiente / 3 expirada. hato_tratamientos 27. Aplicaciones abiertas: Drench Septiembre (En ejecucion) + Aplicacion Enmienda (Calculada desde 07-24).
+- Navegacion: aplicaciones.nombre_aplicacion (no nombre); rondas_avisos.enviado_en (no created_at); hato_alertas sin columna mensaje (texto en datos->>'mensaje'). Rutas /functions/ estan en function_edge_logs, no en edge_logs.

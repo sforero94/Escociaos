@@ -572,3 +572,11 @@ Ventana 2026-09-21 11:53Z -> 2026-09-24 08:02Z (2,84 dias): 25 commits = **61,6/
 tendencia** — septima ventana seguida con sesgo propio; esta es el drenaje del lunes
 aterrizando dos dias tarde, con 11 de 13 PR en una rafaga de 4 minutos. **La medicion
 mensual sigue siendo la unica legible.**
+
+## Corrida 2026-09-28-lunes
+- Baseline: HEAD `ad8d7ce` · edge v266, hash = drift-state de `f33a943` · migraciones hasta 170 aplicadas, todas con archivo · 0 PRs abiertos · 5/5 crons · nada pendiente de despliegue.
+- Prueba de dominio del candado de clima: `select row_to_json(c) from clima_candado_backfill c`. `dueno` conserva el ultimo dueno tras soltar; `vence_en` NULL = libre.
+- El gate de CI existe (ESCO-132): revisar `verificacion-pr.yml` cada corrida. Un `cancelled` en un push de merge suele ser reemplazo por el push siguiente, no fallo.
+- Notion: el orquestador o una sesion en vivo suelen cerrar fichas con PR antes de que corra Release; leer el estado actual antes de planear cierres. ESCO-127/128/130/131/132/133 ya estaban Done/Arreglado.
+- ESCO-129: Estado In progress + Resolucion Arreglado se contradicen; mantener abierta hasta que exista fila en aplicaciones_cierre para Drench Septiembre.
+- Cadencia (09-24 → 09-28, ~4 dias): 20 commits no-merge, 3 PRs, 4 migraciones, 1 deploy edge. La medida mensual toca el primer lunes de octubre (2026-10-05).
