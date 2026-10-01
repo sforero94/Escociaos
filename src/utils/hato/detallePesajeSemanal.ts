@@ -325,7 +325,36 @@ function casiIgual(a: number | null, b: number | null): boolean {
   return Math.abs(a - b) < 0.0005;
 }
 
-export function efectoFila(original: FilaPesajeSemana, borrador: BorradorFila, turno: TurnoPesaje | null): EfectoFila {
+export function efectoFila(
+  original: FilaPesajeSemana,
+  borrador: BorradorFila,
+  turno: TurnoPesaje | 'ambos' | null,
+): EfectoFila {
+  if (turno === 'ambos') {
+    const amLeido = parseLitrosCampo(borrador.litros_am);
+    if (!amLeido.ok) return { tipo: 'error', error: amLeido.error };
+    const pmLeido = parseLitrosCampo(borrador.litros_pm);
+    if (!pmLeido.ok) return { tipo: 'error', error: pmLeido.error };
+    if (amLeido.valor == null && pmLeido.valor == null) {
+      if (original.litros_am == null && original.litros_pm == null) {
+        return efectoFila(original, borrador, null);
+      }
+      return { tipo: 'borrar' };
+    }
+    const litrosAmbos = sumaTurnos(amLeido.valor, pmLeido.valor);
+    if (
+      casiIgual(amLeido.valor, original.litros_am) &&
+      casiIgual(pmLeido.valor, original.litros_pm) &&
+      casiIgual(litrosAmbos, original.litros_total)
+    ) {
+      return { tipo: 'igual' };
+    }
+    return {
+      tipo: 'actualizar',
+      actualizacion: { id: original.id, litros_am: amLeido.valor, litros_pm: pmLeido.valor, litros_total: litrosAmbos },
+    };
+  }
+
   if (turno === 'am' || turno === 'pm') {
     const texto = turno === 'am' ? borrador.litros_am : borrador.litros_pm;
     const leido = parseLitrosCampo(texto);
@@ -363,10 +392,32 @@ export function efectoFila(original: FilaPesajeSemana, borrador: BorradorFila, t
   };
 }
 
+/** Un solo guardado de la semana: mañana y tarde juntas en las fechas con
+ * turno, y el total en una jornada sin turno. */
+export function planGuardarSemana(
+  filas: readonly FilaPesajeSemana[],
+  borradores: readonly BorradorFila[],
+): ResultadoPlan {
+  const fechasConTurno = new Set(
+    filas.filter((fila) => fila.litros_am != null || fila.litros_pm != null).map((fila) => fila.fecha),
+  );
+  const porId = new Map(borradores.map((b) => [b.id, b]));
+  const plan: PlanEscrituraPesaje = { actualizaciones: [], borrarIds: [] };
+  for (const fila of filas) {
+    const borrador = porId.get(fila.id);
+    if (!borrador) continue;
+    const efecto = efectoFila(fila, borrador, fechasConTurno.has(fila.fecha) ? 'ambos' : null);
+    if (efecto.tipo === 'error') return { ok: false, error: efecto.error };
+    if (efecto.tipo === 'actualizar') plan.actualizaciones.push(efecto.actualizacion);
+    if (efecto.tipo === 'borrar') plan.borrarIds.push(fila.id);
+  }
+  return { ok: true, plan };
+}
+
 export function planGuardarBorrador(
   filas: readonly FilaPesajeSemana[],
   borradores: readonly BorradorFila[],
-  turno: TurnoPesaje | null,
+  turno: TurnoPesaje | 'ambos' | null,
 ): ResultadoPlan {
   const porId = new Map(borradores.map((b) => [b.id, b]));
   const plan: PlanEscrituraPesaje = { actualizaciones: [], borrarIds: [] };

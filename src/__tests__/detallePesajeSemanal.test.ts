@@ -8,6 +8,7 @@ import {
   parseLitrosCampo,
   planBorrarPesaje,
   planGuardarBorrador,
+  planGuardarSemana,
   rangoSemanaMedida,
   textoLitros,
   type CapturaPesajeCandidata,
@@ -214,6 +215,20 @@ describe('planGuardarBorrador', () => {
       { id: 'a', litros_am: 11, litros_pm: 4, litros_total: 15 },
     ]);
     expect(plan.plan.borrarIds).toEqual(['b']);
+  });
+
+  it('la semana guarda mañana y tarde en un solo plan', () => {
+    const original = fila({ id: 'a', fecha: '2026-07-15', litros_am: 10, litros_pm: 4, litros_total: 14 });
+    const plan = planGuardarSemana(
+      [original],
+      [{ ...borradorInicial(original), litros_am: '11', litros_pm: '3,5' }],
+    );
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.plan.actualizaciones).toEqual([
+      { id: 'a', litros_am: 11, litros_pm: 3.5, litros_total: 14.5 },
+    ]);
+    expect(plan.plan.borrarIds).toEqual([]);
   });
 
   it('en jornada el cero se guarda y el vacío no', () => {

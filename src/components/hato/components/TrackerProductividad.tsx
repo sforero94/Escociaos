@@ -353,7 +353,7 @@ export function TrackerProductividad({
       )}
       {onSemanaMedidaClick && hayDatos && !loading && !error && (
         <div className="mt-3 flex flex-wrap gap-2">
-          <p className="w-full text-xs text-gray-500">Toca una barra medida para ver cada pesaje de esa semana.</p>
+          <p className="w-full text-xs text-gray-500">Toca una barra medida para ver la mañana y la tarde de esa semana.</p>
           {puntos
             .filter((p) => p.tipo === 'medido' && p.litrosTotal != null)
             .map((p) => (
