@@ -281,5 +281,13 @@ Both fixes live in `scripts/import-hato/load.ts` only (I/O layer) — no parity-
 - **No inventa nada.** La grilla manual sigue saliendo de `construirDiffPesajeManual` con todas las celdas vacías; una celda sin dato se queda sin dato, nunca 0.
 - **Sabido y NO cerrado acá**: `hato_capturas_foto.fecha` sigue en NULL en las 5 filas (y `anio`/`mes` en las del chequeo), así que una auditoría solo puede ordenar por `creado_en`. El INSERT vive en la edge function y la RLS de la 146 le revoca el INSERT a `authenticated`, así que el navegador **no puede** escribir esa fecha — el arreglo es de edge function, en su propio cambio.
 
+**Detalle de un pesaje desde el tracker (issue #297).** La barra medida de `TrackerProductividad` no es un pesaje: `proyectarHato` suma `litros_total` de una ventana de 7 días. El clic (y el botón «Ver …» bajo la gráfica, para tacto) abre `DetallePesajeSemanalDialog` con la ancla congelada en ese momento.
+
+- En una fecha de planilla los dos pesajes son **mañana y tarde**. Si la ventana trae varias fechas, se listan todas. Si ninguna fila tiene `litros_am` ni `litros_pm` (migración 061), hay una sola tarjeta «Pesaje» con el total: no se fabrican dos turnos vacíos.
+- El detalle pone la planilla al lado de las filas: foto, quién subió, fecha de carga, y los litros. El autor sale de la captura ligada, o de la mayoría de `created_by` vía `fn_novedades_autores`. No se edita el autor ni `created_at`.
+- La foto se liga solo si `creado_en` cae a ±36 h de la mediana de `created_at` de esas filas, mismo mes, con archivo, desenlace `ok|pendiente|ocr_fallo`. Si no hay liga, se muestran las fotos del mes y se dice que no está probado que hayan producido esas filas. Una captura es la planilla del mes (varias semanas, 1–6 imágenes), no un pesaje: **borrar los litros no borra el objeto de Storage**.
+- Corregir y borrar son solo Gerencia en esta pantalla (`hasRole(['Gerencia'])`). La RLS de `hato_pesajes_leche` sigue siendo Administrador+Gerencia (migración 054); no se angostó. Fernando no entra por esta pantalla. `/pesaje` de Telegram no se tocó.
+- Borrar es DELETE de las filas de ese turno. Si la otra jornada sigue en la fila, se anula solo el turno y se recalcula `litros_total`. No se escribe un 0 cuando mañana y tarde quedan vacías. `hato_correcciones` (084) traza el UPDATE/DELETE de la sesión de navegador. Sin migración.
+
 This file loads only when working under `src/components/hato/`.
 It was split out of the root `CLAUDE.md` to keep it out of every unrelated session.
