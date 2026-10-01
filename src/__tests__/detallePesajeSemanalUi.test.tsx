@@ -67,7 +67,6 @@ function renderDetalle(extra: Partial<Parameters<typeof DetalleSemanaPesaje>[0]>
         onEditar={() => undefined}
         onCancelar={() => undefined}
         onGuardar={() => undefined}
-        onPedirBorrado={() => undefined}
         {...extra}
       />
     </Dialog>,
@@ -94,10 +93,8 @@ describe('detalle de pesaje en la semana', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('Guardar cambios');
     expect(html).not.toContain('Volver a los pesajes');
-    expect(html).toContain('Borrar este pesaje · Mañana');
-    expect(html).toContain('Borrar este pesaje · Tarde');
-    expect(html).toContain('border-red-600');
-    expect(html).toContain('text-red-600');
+    expect(html).not.toContain('Borrar este pesaje');
+    expect(html).not.toContain('Descartar esta subida');
   });
 
   it('en edición las dos columnas aceptan litros y hay un solo guardado', () => {
@@ -107,11 +104,11 @@ describe('detalle de pesaje en la semana', () => {
     expect(html).toContain('aria-label="Tarde de #117 Electra"');
     expect(html).toContain('Guardar cambios');
     expect(html).toContain('Cancelar');
-    expect(html).toContain('Borrar este pesaje · Mañana');
-    expect(html).toContain('border-red-600');
+    expect(html).not.toContain('Borrar este pesaje');
+    expect(html).not.toContain('Descartar esta subida');
   });
 
-  it('una jornada sin turno ofrece un solo borrado', () => {
+  it('una jornada sin turno muestra el total y no ofrece borrar', () => {
     const html = renderDetalle({
       fechas: [{ fecha: '2026-07-15', filas: [jornada], conTurno: false }],
       borradores: [borradorInicial(jornada)],
@@ -119,10 +116,7 @@ describe('detalle de pesaje en la semana', () => {
     });
     expect(html).toContain('>Litros<');
     expect(html).not.toContain('>Mañana<');
-    expect(html).toContain('Borrar este pesaje');
-    expect(html).not.toContain('Borrar este pesaje · Mañana');
-    expect(html).toContain('border-red-600');
-    expect(html).toContain('text-red-600');
+    expect(html).not.toContain('Borrar este pesaje');
   });
 
   it('sin Gerencia no ofrece editar ni borrar', () => {
@@ -133,7 +127,7 @@ describe('detalle de pesaje en la semana', () => {
       urls: {},
     });
     expect(html).toContain('Sin autor registrado');
-    expect(html).toContain('Solo Gerencia puede corregir o borrar un pesaje.');
+    expect(html).toContain('Solo Gerencia puede corregir un pesaje.');
     expect(html).toContain('12,5');
     expect(html).toContain('5,5');
     expect(html).not.toContain('Editar');
@@ -151,5 +145,7 @@ describe('detalle de pesaje en la semana', () => {
     expect(hook).not.toContain('hato-pesaje-pipeline');
     expect(dialogo).toContain('planGuardarSemana');
     expect(dialogo).not.toContain('Volver a los pesajes');
+    expect(dialogo).not.toContain('Borrar este pesaje');
+    expect(dialogo).not.toContain('Descartar esta subida');
   });
 });

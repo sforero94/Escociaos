@@ -28,6 +28,7 @@ import { HatoPageHeader } from './components/HatoPageHeader';
 import { ChipVejezPesajes } from './components/ChipVejezPesajes';
 import { TrackerProductividad } from './components/TrackerProductividad';
 import { DetallePesajeSemanalDialog } from './components/DetallePesajeSemanalDialog';
+import { SubidasPesajeMes } from './components/SubidasPesajeMes';
 import { RankingVacas } from './components/RankingVacas';
 import { KpisVentaHato } from './components/KpisVentaHato';
 import { PesajeLecheCard } from './components/PesajeLecheCard';
@@ -94,8 +95,8 @@ export function ProduccionView() {
 
   const [historialQuincenal, setHistorialQuincenal] = useState<HatoProduccionQuincenalConIngreso[]>([]);
   const [ventaOpen, setVentaOpen] = useState(false);
-  // Ancla congelada al clic: borrar el pesaje más reciente mueve
-  // `fechaAncla`, y la ventana abierta no debe saltar con ella.
+  // Ancla congelada al clic: corregir o descartar el pesaje más reciente
+  // mueve `fechaAncla`, y la ventana abierta no debe saltar con ella.
   const [detallePesaje, setDetallePesaje] = useState<{
     semana: number;
     etiqueta: string;
@@ -179,6 +180,8 @@ export function ProduccionView() {
                 setDetallePesaje({ semana, etiqueta: etiquetaSemana, fechaReferencia: fechaAncla })
               }
             />
+
+            <SubidasPesajeMes onCambio={datos.reload} />
 
             {/* 2. Ventas -- GERENCIA-ONLY (decisión 5/14), un solo candado
                 para todo el bloque. Mientras `AuthContext` resuelve el

@@ -63,7 +63,6 @@ export interface DetallePesajeSemanaEstado {
   autores: Map<string, string>;
   urls: Record<string, string>;
   guardar: (plan: PlanEscrituraPesaje) => Promise<boolean>;
-  borrar: (plan: PlanEscrituraPesaje) => Promise<boolean>;
 }
 
 function numero(valor: number | string | null): number | null {
@@ -257,6 +256,5 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
     autores,
     urls,
     guardar: escribir,
-    borrar: escribir,
   };
 }

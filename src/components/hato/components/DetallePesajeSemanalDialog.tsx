@@ -2,16 +2,15 @@
 // DESCRIPCIÓN: al tocar una barra MEDIDA del tracker, abre la semana
 // completa: mañana y tarde en la misma tabla, al lado de la planilla.
 // Solo lectura hasta que Gerencia pulsa Editar. Un guardado escribe
-// los dos turnos. Borrar nombra el turno y no sale de la semana.
-// La foto queda. Issue #297.
+// los dos turnos. No borra la subida: eso vive en Subidas del mes.
+// Issue #297.
 
 import { useMemo, useState, type FormEvent } from 'react';
-import { Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { diaBogota, horaBogota } from '@/utils/fechas';
@@ -23,18 +22,15 @@ import {
   idAutorVisible,
   mesesDelRango,
   ordenarFilasPesaje,
-  planBorrarPesaje,
   planGuardarSemana,
   type BorradorFila,
   type CapturaPesajeCandidata,
   type FilaPesajeSemana,
-  type TurnoPesaje,
 } from '@/utils/hato/detallePesajeSemanal';
 import type { IdentidadAnimalHato } from '../hooks/useDatosProduccionPorVaca';
 import { useDetallePesajeSemana } from '../hooks/useDetallePesajeSemana';
 
 const ETIQUETA_SIN_AUTOR = 'Sin autor registrado';
-const CLASE_BORRAR = 'w-full border-red-600 text-red-600 hover:bg-red-50 hover:text-red-600 sm:w-auto';
 
 export interface FechaPesajeVista {
   fecha: string;
@@ -84,22 +80,6 @@ function agruparFechas(filas: readonly FilaPesajeSemana[]): FechaPesajeVista[] {
   });
 }
 
-function etiquetaBorrar(turno: TurnoPesaje | null, fecha: string, mostrarFecha: boolean): string {
-  const turnoTxt = turno === 'am' ? 'Mañana' : turno === 'pm' ? 'Tarde' : null;
-  const fechaTxt = mostrarFecha ? formatLongDate(fecha) : null;
-  return ['Borrar este pesaje', turnoTxt, fechaTxt].filter(Boolean).join(' · ');
-}
-
-function textoConfirmar(turno: TurnoPesaje | null): string {
-  if (turno === 'am') {
-    return 'Se quitan los litros de la mañana. La tarde y la foto quedan. Esta acción no se puede deshacer.';
-  }
-  if (turno === 'pm') {
-    return 'Se quitan los litros de la tarde. La mañana y la foto quedan. Esta acción no se puede deshacer.';
-  }
-  return 'Se quitan los litros de este pesaje. La foto queda guardada. Esta acción no se puede deshacer.';
-}
-
 function planVacio(plan: { actualizaciones: readonly unknown[]; borrarIds: readonly string[] }): boolean {
   return plan.actualizaciones.length === 0 && plan.borrarIds.length === 0;
 }
@@ -122,7 +102,6 @@ export function DetalleSemanaPesaje({
   onEditar,
   onCancelar,
   onGuardar,
-  onPedirBorrado,
 }: {
   titulo: string;
   subtitulo: string | null;
@@ -141,22 +120,10 @@ export function DetalleSemanaPesaje({
   onEditar: () => void;
   onCancelar: () => void;
   onGuardar: () => void;
-  onPedirBorrado: (fecha: string, turno: TurnoPesaje | null) => void;
 }) {
   const fotos = capturaLigada ? [capturaLigada] : fotosDelMes;
   const porId = new Map(borradores.map((b) => [b.id, b]));
   const hayFilas = fechas.some((grupo) => grupo.filas.length > 0);
-  const mostrarFechaEnBorrar = fechas.length > 1;
-  const accionesBorrar = puedeGerencia
-    ? fechas.flatMap((grupo) => {
-        const turnos: Array<TurnoPesaje | null> = grupo.conTurno ? ['am', 'pm'] : [null];
-        return turnos.flatMap((turno) => {
-          const plan = planBorrarPesaje(grupo.filas, turno);
-          if (planVacio(plan)) return [];
-          return [{ fecha: grupo.fecha, turno, etiqueta: etiquetaBorrar(turno, grupo.fecha, mostrarFechaEnBorrar) }];
-        });
-      })
-    : [];
 
   return (
     <form
@@ -230,7 +197,7 @@ export function DetalleSemanaPesaje({
                 </div>
               ))}
               {!puedeGerencia && (
-                <p className="text-xs text-gray-500">Solo Gerencia puede corregir o borrar un pesaje.</p>
+                <p className="text-xs text-gray-500">Solo Gerencia puede corregir un pesaje.</p>
               )}
             </section>
           </div>
@@ -238,18 +205,6 @@ export function DetalleSemanaPesaje({
       </DialogBody>
       {puedeGerencia && hayFilas && (
         <DialogFooter className="gap-2">
-          {accionesBorrar.map((accion) => (
-            <Button
-              key={`${accion.fecha}|${accion.turno ?? 'jornada'}`}
-              type="button"
-              variant="outline"
-              className={CLASE_BORRAR}
-              disabled={guardando}
-              onClick={() => onPedirBorrado(accion.fecha, accion.turno)}
-            >
-              <Trash2 className="w-4 h-4 mr-1.5" /> {accion.etiqueta}
-            </Button>
-          ))}
           {editando ? (
             <>
               <Button type="button" variant="outline" disabled={guardando} onClick={onCancelar}>
@@ -409,14 +364,12 @@ export function DetallePesajeSemanalDialog({
 
   const [editando, setEditando] = useState(false);
   const [borradores, setBorradores] = useState<BorradorFila[]>([]);
-  const [confirmarBorrado, setConfirmarBorrado] = useState<{ fecha: string; turno: TurnoPesaje | null } | null>(null);
 
   const claveConsulta = consulta ? `${consulta.fechaReferencia}|${consulta.semana}` : '';
   const [claveVista, setClaveVista] = useState(claveConsulta);
   if (claveConsulta !== claveVista) {
     setClaveVista(claveConsulta);
     setEditando(false);
-    setConfirmarBorrado(null);
   }
 
   const filasOrdenadas = useMemo(
@@ -468,19 +421,6 @@ export function DetallePesajeSemanalDialog({
     }
   };
 
-  const borrar = async () => {
-    if (!confirmarBorrado || !puedeGerencia) return;
-    const deLaFecha = detalle.filas.filter((fila) => fila.fecha === confirmarBorrado.fecha);
-    const plan = planBorrarPesaje(deLaFecha, confirmarBorrado.turno);
-    setConfirmarBorrado(null);
-    const ok = await detalle.borrar(plan);
-    if (ok) {
-      toast.success('Pesaje borrado');
-      setEditando(false);
-      onCambio();
-    }
-  };
-
   const cambiar = (id: string, campo: 'litros_am' | 'litros_pm' | 'litros_total', valor: string) => {
     setBorradores((prev) => prev.map((b) => (b.id === id ? { ...b, [campo]: valor } : b)));
   };
@@ -524,20 +464,10 @@ export function DetallePesajeSemanalDialog({
               onEditar={() => setEditando(true)}
               onCancelar={cancelar}
               onGuardar={() => { void guardar(); }}
-              onPedirBorrado={(fecha, turno) => setConfirmarBorrado({ fecha, turno })}
             />
           )}
         </DialogContent>
       </Dialog>
-      <ConfirmDialog
-        open={confirmarBorrado != null}
-        onOpenChange={(open) => { if (!open) setConfirmarBorrado(null); }}
-        title="Borrar este pesaje"
-        description={textoConfirmar(confirmarBorrado?.turno ?? null)}
-        confirmLabel="Borrar"
-        destructive
-        onConfirm={() => { void borrar(); }}
-      />
     </>
   );
 }
