@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { Dialog } from '@/components/ui/dialog';
 import { DetalleUnPesaje, ListaPesajesSemana } from '@/components/hato/components/DetallePesajeSemanalDialog';
 import { borradorInicial, type FilaPesajeSemana, type PesajeEnSemana } from '@/utils/hato/detallePesajeSemanal';
 import type { IdentidadAnimalHato } from '@/components/hato/hooks/useDatosProduccionPorVaca';
@@ -37,6 +38,7 @@ describe('detalle de pesaje en la semana', () => {
 
   it('pone la planilla al lado de los litros', () => {
     const html = renderToStaticMarkup(
+      <Dialog open>
       <DetalleUnPesaje
         pesaje={manana}
         filas={[fila]}
@@ -59,11 +61,13 @@ describe('detalle de pesaje en la semana', () => {
         autorNombre="Martha Vega"
         puedeEditar
         guardando={false}
+        error={null}
         onCambiar={() => undefined}
         onVolver={() => undefined}
         onGuardar={() => undefined}
         onPedirBorrado={() => undefined}
-      />,
+      />
+      </Dialog>,
     );
     expect(html).toContain('lg:grid-cols-2');
     expect(html).toContain('Planilla');
@@ -79,6 +83,7 @@ describe('detalle de pesaje en la semana', () => {
 
   it('sin Gerencia no ofrece guardar ni borrar', () => {
     const html = renderToStaticMarkup(
+      <Dialog open>
       <DetalleUnPesaje
         pesaje={manana}
         filas={[fila]}
@@ -90,11 +95,13 @@ describe('detalle de pesaje en la semana', () => {
         autorNombre={null}
         puedeEditar={false}
         guardando={false}
+        error={null}
         onCambiar={() => undefined}
         onVolver={() => undefined}
         onGuardar={() => undefined}
         onPedirBorrado={() => undefined}
-      />,
+      />
+      </Dialog>,
     );
     expect(html).toContain('Sin autor registrado');
     expect(html).toContain('Solo Gerencia puede corregir o borrar un pesaje.');

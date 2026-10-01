@@ -4,7 +4,7 @@
 // planilla. Gerencia corrige litros o borra el pesaje. La foto queda.
 // Issue #297.
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -111,6 +111,7 @@ export function DetalleUnPesaje({
   autorNombre,
   puedeEditar,
   guardando,
+  error,
   onCambiar,
   onVolver,
   onGuardar,
@@ -126,6 +127,7 @@ export function DetalleUnPesaje({
   autorNombre: string | null;
   puedeEditar: boolean;
   guardando: boolean;
+  error: string | null;
   onCambiar: (id: string, campo: 'litros_am' | 'litros_pm' | 'litros_total', valor: string) => void;
   onVolver: () => void;
   onGuardar: () => void;
@@ -146,6 +148,7 @@ export function DetalleUnPesaje({
         </button>
       </DialogHeader>
       <DialogBody>
+        {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <section className="space-y-2">
             <h4 className="text-sm font-semibold text-gray-900">Planilla</h4>
@@ -341,16 +344,11 @@ export function DetallePesajeSemanalDialog({
   const firmaFilas = filasVisibles
     .map((f) => `${f.id}:${f.litros_am}:${f.litros_pm}:${f.litros_total}`)
     .join('|');
-
-  useEffect(() => {
+  const [firmaBorrador, setFirmaBorrador] = useState<string | null>(null);
+  if (firmaFilas !== firmaBorrador) {
+    setFirmaBorrador(firmaFilas);
     setBorradores(filasVisibles.map(borradorInicial));
-  }, [firmaFilas, filasVisibles]);
-
-  useEffect(() => {
-    if (seleccionClave && !pesajes.some((p) => p.clave === seleccionClave)) {
-      setSeleccionClave(null);
-    }
-  }, [pesajes, seleccionClave]);
+  }
 
   const meses = detalle.inicio && detalle.fin ? mesesDelRango(detalle.inicio, detalle.fin) : [];
   const fotos = seleccion
@@ -412,6 +410,7 @@ export function DetallePesajeSemanalDialog({
               autorNombre={autorNombre}
               puedeEditar={puedeEditar}
               guardando={detalle.guardando}
+              error={detalle.error}
               onCambiar={cambiar}
               onVolver={() => setSeleccionClave(null)}
               onGuardar={() => { void guardar(); }}
@@ -435,9 +434,6 @@ export function DetallePesajeSemanalDialog({
                 )}
               </DialogBody>
             </>
-          )}
-          {seleccion && detalle.error && (
-            <p className="text-sm text-red-600 px-1">{detalle.error}</p>
           )}
         </DialogContent>
       </Dialog>
