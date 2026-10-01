@@ -153,15 +153,16 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
       )
     : '';
 
-  const descartar = async () => {
-    if (!confirmarId || !puedeGerencia) return;
-    const id = confirmarId;
+  const descartar = async (id: string) => {
+    if (!puedeGerencia) return;
     setConfirmarId(null);
-    const ok = await estado.descartar(id);
-    if (ok) {
+    const resultado = await estado.descartar(id);
+    if (resultado.ok) {
       toast.success('Subida descartada');
       onCambio();
+      return;
     }
+    toast.error(resultado.error ?? 'No se pudo descartar la subida.');
   };
 
   return (
@@ -206,7 +207,9 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
         description={descripcion}
         confirmLabel="Descartar"
         destructive
-        onConfirm={() => { void descartar(); }}
+        onConfirm={() => {
+          if (confirmarId) void descartar(confirmarId);
+        }}
       />
     </section>
   );

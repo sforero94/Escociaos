@@ -14,7 +14,9 @@ import { fetchAll } from '@/utils/supabase/fetchAll';
 import {
   BUCKET_PESAJES,
   ligarFilasASubidas,
+  mensajeErrorDescarte,
   mesesAlrededor,
+  rutasFotoABorrar,
   subidasDelMes,
   ventanaCreatedAt,
   type CapturaSubida,
@@ -48,6 +50,11 @@ interface FilaCruda {
   fuente: string | null;
 }
 
+export interface ResultadoDescarte {
+  ok: boolean;
+  error: string | null;
+}
+
 export interface SubidasPesajeMesEstado {
   cargando: boolean;
   descartando: boolean;
@@ -55,7 +62,7 @@ export interface SubidasPesajeMesEstado {
   subidas: SubidaLigada[];
   autores: Map<string, string>;
   urls: Record<string, string>;
-  descartar: (capturaId: string) => Promise<boolean>;
+  descartar: (capturaId: string) => Promise<ResultadoDescarte>;
 }
 
 function capturaDesdeCruda(fila: CapturaCruda): CapturaSubida {
@@ -168,20 +175,25 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
   }, [cargar, tick]);
 
   const descartar = useCallback(
-    async (capturaId: string): Promise<boolean> => {
+    async (capturaId: string): Promise<ResultadoDescarte> => {
+      const fallo = (error: string): ResultadoDescarte => {
+        setError(error);
+        return { ok: false, error };
+      };
       const subida = subidas.find((item) => item.captura.id === capturaId);
-      if (!subida) return false;
+      if (!subida) return fallo('Esta subida ya no está en la lista.');
       setDescartando(true);
       setError(null);
       try {
         const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
         const { captura, filaIds } = subida;
-        if (captura.storageRutas.length > 0) {
+        const rutas = rutasFotoABorrar(captura);
+        if (rutas.length > 0) {
           if (captura.storageBucket !== BUCKET_PESAJES) {
-            throw new Error('Esta subida no está en el bucket de pesajes.');
+            return fallo('Esta subida no está en el bucket de pesajes.');
           }
-          const { error: errorFoto } = await supabase.storage.from(BUCKET_PESAJES).remove(captura.storageRutas);
-          if (errorFoto) throw new Error(errorFoto.message);
+          const { error: errorFoto } = await supabase.storage.from(BUCKET_PESAJES).remove(rutas);
+          if (errorFoto) return fallo(errorFoto.message ?? 'No se pudo borrar la foto.');
         }
         if (filaIds.length > 0) {
           const { data, error: errorFilas } = await supabase
@@ -189,7 +201,7 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
             .delete()
             .in('id', filaIds)
             .select('id');
-          if (errorFilas) throw new Error(errorFilas.message);
+          if (errorFilas) return fallo(errorFilas.message);
           const borrados = new Set(((data ?? []) as Array<{ id: string }>).map((fila) => fila.id));
           // Un reintento llega con litros ya borrados. Solo falla si alguna fila sigue.
           const faltantes = filaIds.filter((id) => !borrados.has(id));
@@ -198,9 +210,9 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
               .from('hato_pesajes_leche')
               .select('id')
               .in('id', faltantes);
-            if (errorSiguen) throw new Error(errorSiguen.message);
+            if (errorSiguen) return fallo(errorSiguen.message);
             if (Array.isArray(siguen) && siguen.length > 0) {
-              throw new Error('No se pudieron borrar todos los litros de esta subida.');
+              return fallo('No se pudieron borrar todos los litros de esta subida.');
             }
           }
         }
@@ -209,15 +221,13 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
           .delete()
           .eq('id', capturaId)
           .select('id');
-        if (errorCaptura) throw new Error(errorCaptura.message);
-        if (!deleteDevolvioFilas(dataCaptura)) {
-          throw new Error('No tienes permisos para descartar esta subida.');
-        }
+        if (errorCaptura) return fallo(mensajeErrorDescarte(errorCaptura, false));
+        if (!deleteDevolvioFilas(dataCaptura)) return fallo(mensajeErrorDescarte(null, true));
+        setSubidas((prev) => prev.filter((item) => item.captura.id !== capturaId));
         setTick((n) => n + 1);
-        return true;
+        return { ok: true, error: null };
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo descartar la subida.');
-        return false;
+        return fallo(err instanceof Error ? err.message : 'No se pudo descartar la subida.');
       } finally {
         setDescartando(false);
       }

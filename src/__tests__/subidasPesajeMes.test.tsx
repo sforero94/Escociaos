@@ -4,8 +4,11 @@ import { join } from 'path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VENTANA_CAPTURA_MS } from '@/utils/hato/detallePesajeSemanal';
 import {
+  MENSAJE_SIN_PERMISO_DESCARTE,
   ligarFilasASubidas,
+  mensajeErrorDescarte,
   mesesAlrededor,
+  rutasFotoABorrar,
   subidasDelMes,
   textoDescartarSubida,
   type CapturaSubida,
@@ -94,6 +97,27 @@ describe('ligar filas a una subida', () => {
     expect(delMes[0].filaIds).toEqual([]);
   });
 
+  it('una captura sin foto no pide borrar Storage', () => {
+    const martha = captura({
+      id: 'martha',
+      creadoEn: '2026-09-20T04:59:00.000Z',
+      origen: 'web',
+      desenlace: 'ocr_fallo',
+      storageRutas: [],
+      storageOk: false,
+    });
+    expect(rutasFotoABorrar(martha)).toEqual([]);
+    expect(ligarFilasASubidas([martha], [])[0].filaIds).toEqual([]);
+  });
+
+  it('el fallo de permisos nombra la migración 171', () => {
+    expect(mensajeErrorDescarte({ code: '42501', message: 'permission denied for table hato_capturas_foto' }, false)).toBe(
+      MENSAJE_SIN_PERMISO_DESCARTE,
+    );
+    expect(mensajeErrorDescarte(null, true)).toBe(MENSAJE_SIN_PERMISO_DESCARTE);
+    expect(mensajeErrorDescarte({ message: 'timeout' }, false)).toBe('timeout');
+  });
+
   it('el texto nombra los litros o dice que no hay', () => {
     expect(textoDescartarSubida(0, null, null)).toContain('No hay litros ligados');
     expect(textoDescartarSubida(2, '2 sep 2026', '16 sep 2026')).toContain('2 pesajes (2 sep 2026 a 16 sep 2026)');
@@ -130,6 +154,32 @@ describe('lista de subidas del mes', () => {
     expect(html).toContain('text-red-600');
   });
 
+  it('muestra Sin foto cuando no hay rutas', () => {
+    const martha = captura({
+      id: 'martha',
+      creadoEn: '2026-09-20T04:59:00.000Z',
+      origen: 'web',
+      desenlace: 'ocr_fallo',
+      storageRutas: [],
+      storageOk: false,
+      createdBy: 'martha',
+    });
+    const html = renderToStaticMarkup(
+      <ListaSubidasMes
+        subidas={filasVisibles(ligarFilasASubidas([martha], []), new Map([['martha', 'Martha Vega']]), {})}
+        puedeGerencia
+        descartando={false}
+        onDescartar={() => undefined}
+      />,
+    );
+    expect(html).toContain('Sin foto');
+    expect(html).toContain('Subió Martha Vega');
+    expect(html).toContain('Desde la web');
+    expect(html).toContain('Falló el OCR');
+    expect(html).toContain('Sin litros ligados');
+    expect(html).toContain('Descartar esta subida');
+  });
+
   it('sin Gerencia no ofrece descartar', () => {
     const visibles = filasVisibles(ligarFilasASubidas([subida], []), new Map(), {});
     const html = renderToStaticMarkup(
@@ -142,14 +192,19 @@ describe('lista de subidas del mes', () => {
   it('la semana no descarta y la página de producción lista las subidas', () => {
     const dialogo = readFileSync(join(__dirname, '../components/hato/components/DetallePesajeSemanalDialog.tsx'), 'utf8');
     const pagina = readFileSync(join(__dirname, '../components/hato/ProduccionView.tsx'), 'utf8');
+    const ui = readFileSync(join(__dirname, '../components/hato/components/SubidasPesajeMes.tsx'), 'utf8');
     const hook = readFileSync(join(__dirname, '../components/hato/hooks/useSubidasPesajeMes.ts'), 'utf8');
     const semana = readFileSync(join(__dirname, '../components/hato/hooks/useDetallePesajeSemana.ts'), 'utf8');
     expect(dialogo).not.toContain('Descartar esta subida');
     expect(dialogo).not.toContain('Borrar este pesaje');
     expect(pagina).toContain('<SubidasPesajeMes');
+    expect(ui).toContain('toast.error');
+    expect(hook).toContain('rutasFotoABorrar');
+    expect(hook).toContain('mensajeErrorDescarte');
     expect(hook).toContain(".from(BUCKET_PESAJES).remove(");
     expect(hook).toContain('fetchAll');
     expect(hook).toContain('siguen');
+    expect(hook).toContain("setSubidas((prev) => prev.filter");
     expect(hook).not.toContain('pesajeLeche');
     expect(semana).not.toMatch(/\.remove\s*\(/);
     const sql = readFileSync(join(__dirname, '../sql/migrations/171_descartar_subida_pesaje.sql'), 'utf8');

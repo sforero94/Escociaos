@@ -141,6 +141,28 @@ export function subidasDelMes(
   return ligadas.filter((subida) => subida.captura.anio === anio && subida.captura.mes === mes);
 }
 
+/** Rutas reales en Storage. `{}` o null (el caso «Sin foto») no pide un borrado. */
+export function rutasFotoABorrar(captura: CapturaSubida): string[] {
+  return captura.storageRutas.map((ruta) => ruta.trim()).filter((ruta) => ruta.length > 0);
+}
+
+export const MENSAJE_SIN_PERMISO_DESCARTE =
+  'No se pudo descartar esta subida. Falta aplicar la migración 171: Gerencia todavía no puede borrar la captura.';
+
+/** PostgREST devuelve 42501 si falta el GRANT, o `data: []` si la política
+ * filtra la fila. Los dos dejan la tarjeta en pantalla. */
+export function mensajeErrorDescarte(
+  error: { message?: string; code?: string } | null,
+  sinFilas: boolean,
+): string {
+  const texto = error?.message ?? '';
+  const codigo = error?.code ?? '';
+  if (sinFilas || codigo === '42501' || /permission denied|42501/i.test(texto)) {
+    return MENSAJE_SIN_PERMISO_DESCARTE;
+  }
+  return texto || 'No se pudo descartar la subida.';
+}
+
 export function textoDescartarSubida(nFilas: number, desde: string | null, hasta: string | null): string {
   const cola = ' Las otras subidas del mes quedan. Fernando puede volver a cargar la planilla por Telegram. Esta acción no se puede deshacer.';
   if (nFilas <= 0) {
