@@ -2293,3 +2293,18 @@ consumo suyo.
 - **Actualizar Evidencia/Motivo de una ficha existente por API reescribe el campo entero.** Hoy no se toco ESCO-129 en Notion por eso; la evidencia nueva quedo en el reporte. Si hace falta anexar, reconstruir el texto completo (viejo + nuevo) o agregar un bloque hijo a la pagina.
 - **Deriva de migraciones limpia**: 142–170 aplicadas, todas con archivo en `main`. 153/154/157 aparecen en el ledger sin prefijo numerico en `name`.
 - La ficha que mas pesa esta semana es de producto, no de codigo: las alertas sólo-web del hato (142/152) no tienen lector (ESCO-134).
+
+## Corrida 2026-10-01-jueves — hechos transversales
+- Preflight: 4/4 toolkits Composio `active`; `supabase_bitis-coward` = `supabase_read_only_user`; `query_logs` responde. `ATTENDED=0`.
+- **Notion devolvio HTTP 500 "Cross-cell memcached access is not allowed" en las 4 primeras llamadas (12:04–12:06Z) y volvio solo a las ~12:09Z.** Es un fallo transitorio de Notion, no del conector ni de la cuenta. Que hacer: despachar igual con el conjunto de deduplicacion del reporte anterior, y reintentar Notion despues de la Fase 1, antes de filar. Funciono.
+- **Probar la otra cuenta de Notion (`notion_triact-lord`) la DENIEGA el hook** ("cuenta distinta de thinksid"). Es lo correcto; no usarla como rodeo.
+- **ERROR PROPIO: inserte `Severidad = "P2"` y Notion creo una opcion de select nueva.** Las opciones canonicas son `P0 — …`/`P1 — …`/`P2 — Medio`/`P3 — Bajo` (con raya larga). Se corrigio la fila (ESCO-137), pero la opcion suelta `P2` quedo en el esquema; borrarla desde la UI de Notion. **Copiar el nombre exacto de una fila existente antes de escribir un select.**
+- Contexto de despacho en fichero comun (`scratchpad/run-context.md`) + agentes por nombre: funciono otra vez, los 4 volvieron en <5 min.
+
+## Racha del jueves (regla de auto-poda) — actualizada 2026-10-01
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-09-17-jueves | 5 |
+| 2026-09-24-jueves | 5 (+1 diferido) |
+| **2026-10-01-jueves** | **1 (ESCO-137, estacion de clima caida). Racha de ceros: 0** |
+La auto-poda no aplica. El hallazgo es de las 05:50Z de hoy: el lunes no lo habria visto hasta 4 dias despues.

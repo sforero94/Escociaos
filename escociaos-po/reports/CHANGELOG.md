@@ -23,6 +23,13 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-01 — corrida jueves
+
+**Nothing shipped.** No PR merged and no migration applied since 2026-09-28. The only
+commit on `main` is the PO memory commit `7eb15b7`. The ledger still ends at 170. Edge
+function v266 (`ezbr_sha256` = drift state of `f33a943`) and Vercel production
+(`7eb15b7`, READY/PROMOTED) both match `main`. 0 PRs open.
+
 ## 2026-09-28 — corrida lunes
 
 A small, clean week. **Three PRs merged** (#292, #294, #296), **four migrations applied**

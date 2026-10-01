@@ -779,3 +779,11 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - Senal de silencio: edge_logs non-2xx = un 409 rondas_avisos (benigno); function_logs 0 errores.
 - PR #296 commiteo `.claude/hooks/__pycache__/supabase-guard.cpython-311.pyc`. Ruido inofensivo, no filado.
 - BUG_REPORT.md: issue 3b sigue ABIERTO (fetchDatosReporteSemanal.ts:511-522, clase decision); issue 6 no reproducible (31/31 con url_storage, ultima 09-21 semana 38); cabecera del fichero rancia por tercera vez.
+
+## Corrida 2026-10-01-jueves
+- Linea base main@7eb15b7 VERDE: vitest 189/3.946, tsc exit 0, lint 0/919 (igual al lunes; sin codigo nuevo).
+- Unica firma nueva en 24 h: '[clima-sync] Empty data from Ecowitt' x75 desde 05:55Z (clima.tsx:295). Corte de estacion, no perdida evitable: 0 fallos 504 de insert. Filado ESCO-137 (fusionado con Infra).
+- 406 de PostgREST sobre telegram_conversations (.single() sobre 0 filas) y 'Warp server error: Thread killed by timeout manager' (~12/h, plano) siguen siendo ruido conocido.
+- `lluvia_confianza='reconstruido'` YA dispara en produccion (09-26, 09-29). La frase de la 122 en CLAUDE.md raiz ("nunca se disparo") esta desactualizada para dias nuevos; es la regla funcionando.
+- `hato_chequeo_vacas` no tiene `updated_at`; para saber si una fila cambio usar created_at del chequeo o el esquema de `hato_correcciones`.
+- ESCO-135 y ESCO-136 sin cambio (0 partos nuevos; fila de COMETA intacta).

@@ -760,3 +760,11 @@ Clima: 09-21..27 todos 288 lecturas, ok salvo 09-26 reconstruido 0,00. Candado 1
 - ESCO-129: aplicacion completa en campo (952/952 canecas), cierre viable con 3 productos a 0,0000 (Nutrifeed, Fosfato, KP); sigue sin cerrar. El ultimo movimiento (544e4b67, 09-26) registra KP 5 kg y Fosfato 1,2 kg = exactamente el saldo restante; confirmar en campo antes de cerrar (GlobalGAP).
 - monitoreos: umbral 2026-10-05 en pie.
 - Terneras retenidas sin ficha: 2 (ENIGMA, PACIENCIA). Si sube con cada parto Telegram, patron confirmado.
+
+## Corrida 2026-10-01-jueves
+- **ESCO-129 RESUELTO y cerrado** (Done/Arreglado): «Drench Septiembre» cerrada 2026-09-28 13:03:19Z por aescociahass@gmail.com. Consumo vs Salida 0,0000 en los 4 productos; mano de obra 13.326.033,08 = sum(costo_jornal), 151 registros. No volver a vigilar. **Leer `created_at` de aplicaciones_cierre para fechar el cierre real; `fecha_cierre` (09-25) es la fecha declarada.**
+- Unica aplicacion abierta: «Aplicacion Enmienda» (`Calculada`, 0 md). Proyeccion al cierre vacia hasta el primer movimiento diario.
+- Baseline: hato_eventos 792 · chequeos 34 / chequeo_vacas 1.513 · pesajes 646 (ultima fecha 09-09; faltan 09-16, 09-23 y 09-30) · tratamientos 27 · alertas 126 · quincenal 84 · movimientos_inventario 170 · md 189 / mdp 823 · registros_trabajo 3.024 · monitoreos 4.244 (ultima 08-28; umbral 10-05) · fin_gastos 4.544 · aplicaciones 21 / cierres 20 · globalgap_correcciones 165 · clima_resumen_diario 1.951 · logs_auditoria 0.
+- Hato: 0 escrituras en 72 h salvo 1 alerta tratamiento_paso (MARIMBA #169, confirmada). Pesaje: tres miercoles seguidos sin sesion (09-16/23/30).
+- Integridad: 0 huerfanos, 0 stock negativo, 0 gastos futuros/sin autor/no confirmados, 0 duplicados. Libro vs stock: 1 divergencia conocida (TecniFeed Boro, libro -18,29, stock 0,40).
+- pg_stat: `aplicaciones_cierre` n_tup_ins 24 / n_tup_del 1 / live 20 — hubo un borrado historico de un cierre (no se sabe cual). 20 cerradas = 20 cierres, no se filo. Linea base para detectar el proximo borrado.

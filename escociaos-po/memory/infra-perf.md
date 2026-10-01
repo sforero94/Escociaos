@@ -646,3 +646,11 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - Payload inicial 402 KB gzip (373 JS + 28,6 CSS) vs 386 KB el 08-10. vendor-recharts 124 KB gz eager por modulepreload = el mayor.
 - Suite: 189 ficheros / 3.946 pruebas verdes; tsc limpio; lint 0/919.
 - NAVEGACION: en query_logs el trafico de la edge function esta en `function_edge_logs` (log_attributes['response.status_code']); `edge_logs` filtrado por make-server da VACIO. edge_logs solo para PostgREST.
+
+## Corrida 2026-10-01-jueves
+- Linea de salud: Vercel 7eb15b7 = HEAD, READY/PROMOTED, build 34,1 s. **El pico de 44,8 s era cola/install, no tendencia: vigilancia cerrada.** Edge v266, hash = f33a943, deriva 0; detector #38/#39/#40 success. function_edge_logs 301/301 en 200 (24 h). 5 pg_cron, 0 fallos en 3 dias. DB 126 MB, 13 conexiones.
+- **Estacion muerta otra vez desde 2026-10-01 05:50Z** (ESCO-137, P2): 200 + {"No data available","synced":0}, '[clima-sync] Empty data from Ecowitt' en cada sync. Tercer episodio (08-28, 09-16/17, 10-01). Pasa a P1 si supera 48 h (2026-10-03 05:50Z). Re-medir lecturas_count de 10-01 el lunes 10-05.
+- clima-backfill-164 desprogramado; respaldos.clima_backfill_164_tramos 28/28 'hecho'. cron.job = 5 jobs.
+- Clima 09-25..09-30: 288/288, hueco max <= 5,67 min; 'reconstruido' disparo 09-26 y 09-29 (0,00 mm). Sano.
+- El 404/NULL de net._http_response a las 12:00:00Z es timeout cosmetico de pg_net (aceptado), no fallo.
+- thinksid/escocia-backups no esta permitido para las tools de GitHub de esta sesion: el estado del backup nocturno NO CORRIO.

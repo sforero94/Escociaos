@@ -580,3 +580,10 @@ mensual sigue siendo la unica legible.**
 - Notion: el orquestador o una sesion en vivo suelen cerrar fichas con PR antes de que corra Release; leer el estado actual antes de planear cierres. ESCO-127/128/130/131/132/133 ya estaban Done/Arreglado.
 - ESCO-129: Estado In progress + Resolucion Arreglado se contradicen; mantener abierta hasta que exista fila en aplicaciones_cierre para Drench Septiembre.
 - Cadencia (09-24 → 09-28, ~4 dias): 20 commits no-merge, 3 PRs, 4 migraciones, 1 deploy edge. La medida mensual toca el primer lunes de octubre (2026-10-05).
+
+## Corrida 2026-10-01-jueves
+- Baseline: HEAD 7eb15b7 · edge v266, hash cc85e523… = drift-state de f33a943, sin cambio desde 2026-09-25 · migraciones hasta 170, todas con fichero · 0 PR abiertos · 5/5 crons, 0 fallos · Vercel prod = HEAD · nada pendiente de despliegue. Barrido de ramas 160–179: 0 colisiones.
+- ESCO-129 cerrado esta corrida contra filas vivas (ver data-integrity). CHANGELOG: entrada "Nothing shipped".
+- Navegacion de esquema: `aplicaciones.nombre_aplicacion` (no `nombre`); `telegram_alertas_suscripciones.alerta_clave` (texto, sin FK); `alertas_catalogo` no tiene `id`, la clave es `clave`; `hato_alertas_envios.enviado_at`; `hato_chequeo_vacas` sin `updated_at`.
+- Una semana quieta (solo el commit de memoria) igual dispara un deploy de produccion en Vercel: un deployment en HEAD no prueba que algo visible haya salido.
+- ESCO-134: alertas de gerencia pendientes bajaron de 6 a 4 (3 parto_proximo + 1 servicio_sin_confirmacion); recibe/escalamiento siguen en 0.
