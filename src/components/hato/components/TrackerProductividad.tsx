@@ -166,6 +166,16 @@ function TrackerTooltip({ active, payload }: { active?: boolean; payload?: Array
   );
 }
 
+function puntoDesdeClickBarra(data: unknown): PuntoTrackerGrafico | null {
+  if (!data || typeof data !== 'object') return null;
+  const candidato = data as { payload?: PuntoTrackerGrafico; semana?: number; tipo?: string };
+  if (candidato.payload && typeof candidato.payload.semana === 'number') return candidato.payload;
+  if (typeof candidato.semana === 'number' && (candidato.tipo === 'medido' || candidato.tipo === 'proyectado')) {
+    return candidato as PuntoTrackerGrafico;
+  }
+  return null;
+}
+
 interface TrackerProductividadProps {
   pesajes: PesajeLecheVaca[];
   /** SOLO para declarar en el tooltip qué deja fuera el hato congelado
@@ -183,6 +193,9 @@ interface TrackerProductividadProps {
   vejez: VejezPesajes;
   loading: boolean;
   error: string | null;
+  /** Abre el detalle de una semana MEDIDA. Las barras proyectadas no
+   * llaman. La barra es la suma de 7 días; el detalle lista cada pesaje. */
+  onSemanaMedidaClick?: (semana: number, etiqueta: string) => void;
 }
 
 export function TrackerProductividad({
@@ -192,6 +205,7 @@ export function TrackerProductividad({
   vejez,
   loading,
   error,
+  onSemanaMedidaClick,
 }: TrackerProductividadProps) {
   const proyeccion = useMemo(
     () =>
@@ -302,6 +316,12 @@ export function TrackerProductividad({
                 fill={COLOR_MEDIDO}
                 radius={[4, 4, 0, 0]}
                 isAnimationActive={false}
+                onClick={(data) => {
+                  if (!onSemanaMedidaClick) return;
+                  const punto = puntoDesdeClickBarra(data);
+                  if (!punto || punto.tipo !== 'medido' || punto.litrosTotal == null) return;
+                  onSemanaMedidaClick(punto.semana, punto.etiqueta);
+                }}
               >
                 {puntos.map((p) => (
                   <Cell
@@ -309,6 +329,7 @@ export function TrackerProductividad({
                     fill={p.tipo === 'medido' ? COLOR_MEDIDO : COLOR_PROYECTADO}
                     stroke={p.tipo === 'proyectado' ? COLOR_MEDIDO : undefined}
                     strokeDasharray={p.tipo === 'proyectado' ? '4 3' : undefined}
+                    cursor={p.tipo === 'medido' && p.litrosTotal != null && onSemanaMedidaClick ? 'pointer' : undefined}
                   />
                 ))}
               </Bar>
@@ -328,6 +349,23 @@ export function TrackerProductividad({
               />
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+      )}
+      {onSemanaMedidaClick && hayDatos && !loading && !error && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <p className="w-full text-xs text-gray-500">Toca una barra medida para ver la mañana y la tarde de esa semana.</p>
+          {puntos
+            .filter((p) => p.tipo === 'medido' && p.litrosTotal != null)
+            .map((p) => (
+              <button
+                key={p.semana}
+                type="button"
+                onClick={() => onSemanaMedidaClick(p.semana, p.etiqueta)}
+                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                Ver {p.etiqueta}
+              </button>
+            ))}
         </div>
       )}
     </div>
