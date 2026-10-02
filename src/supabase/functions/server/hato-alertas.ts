@@ -964,6 +964,157 @@ export function alertasSuperadasPorCambioDeRegla(
 }
 
 // ============================================================================
+// BLOQUE 3d — Retiro de alertas cuyo hecho ya está registrado (ESCO-134)
+//
+// Decisión del dueño (2026-10-02): las alertas de gerencia (`parto_proximo`,
+// `servicio_sin_confirmacion`) pasan a salir por Telegram. Antes de eso el
+// tick tiene que dejar de sostener abiertas las que ya respondió un evento:
+// si no, el primer broadcast manda alertas viejas. Caso vivo: ENIGMA #119
+// parió el 2026-09-20 (evento `parto` por Telegram) y su `parto_proximo`
+// (creada 2026-09-16, programada 2026-09-30) seguía `pendiente`.
+//
+// Conservador por contrato: sin `animal_id`, sin fecha ancla legible o con
+// una alerta manual del gestor, NO se retira. Nunca se inventa un hecho.
+// ============================================================================
+
+/** Valor de `datos.motivo_descarte` cuando el tick retira una alerta porque
+ * el evento que la responde ya está en `hato_eventos`. Separado de
+ * `MOTIVO_DESCARTE_REGLA_SUPERADA` para poder auditar cada mecanismo. */
+export const MOTIVO_DESCARTE_HECHO_REGISTRADO = 'hecho_registrado';
+
+/** Alerta abierta con lo que este mecanismo necesita además de lo de
+ * `AlertaAbiertaParaRetiro`: el animal y el instante de creación (respaldo
+ * del ancla, ver `fechaAnclaHecho`). */
+export interface AlertaAbiertaConHecho extends AlertaAbiertaParaRetiro {
+  animal_id: string | null;
+  created_at: string | null;
+}
+
+/** Fila mínima de `hato_eventos` (tipo según el CHECK de la migración 053). */
+export interface EventoHatoParaRetiro {
+  animal_id: string | null;
+  tipo: string;
+  fecha: string | null;
+}
+
+/** Lo que el caller escribe: `estado = 'descartada'` y estos `datos`. */
+export interface AlertaRetiradaPorHechoRegistrado {
+  id: string;
+  tipo: TipoAlertaHato;
+  regla_clave: string;
+  animal_id: string;
+  /** El evento que respondió la alerta -- para el log del tick. */
+  evento_tipo: string;
+  evento_fecha: string;
+  datos: Record<string, unknown>;
+}
+
+/** Eventos que responden cada tipo, y si un evento con la MISMA fecha que el
+ * ancla cuenta. Solo los dos tipos de gerencia ligados a un servicio: el
+ * resto (`secado_due`, `tratamiento_paso`, `rechequeo_due`) se cierra por
+ * otros caminos y no se opina sobre ellos aquí. */
+const EVENTOS_QUE_RESPONDEN: Partial<Record<TipoAlertaHato, readonly string[]>> = {
+  // Solo `parto`: es literalmente el hecho que la alerta anticipa.
+  parto_proximo: ['parto'],
+  // Cualquiera de estos cierra la pregunta "¿quedó preñada de este
+  // servicio?": confirmada, parió, abortó, o se volvió a servir (ese
+  // servicio nuevo genera su propia alerta con su propia clave).
+  servicio_sin_confirmacion: ['confirmacion_prenez', 'parto', 'aborto', 'servicio'],
+};
+
+const RE_FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Fecha ancla de la alerta y si el evento debe ser ESTRICTAMENTE posterior.
+ *
+ * Ancla preferida: `datos.fecha_servicio`. El generador
+ * (`generarAlertasPendientes`) la escribe en las dos reglas y es la misma
+ * fecha que va en la `regla_clave` (`parto:{animal}:{fecha_servicio}`,
+ * `servconf:{animal}:{fecha_servicio}`), así que es el hecho exacto del que
+ * habla la alerta. Es más precisa que `created_at`: un parto o una
+ * confirmación registrados con fecha anterior a la creación de la alerta
+ * (captura tardía) también la responden. Comparación estricta (`>`): un
+ * evento en la fecha del propio servicio es ese servicio, no su respuesta.
+ *
+ * Respaldo: la fecha de `created_at`, con `>=` -- un evento fechado el día en
+ * que se creó la alerta o después la responde. Si no hay ninguna de las dos,
+ * `null`: no se retira.
+ */
+function fechaAnclaHecho(alerta: AlertaAbiertaConHecho): { fecha: string; estricta: boolean } | null {
+  const servicio = alerta.datos?.fecha_servicio;
+  if (typeof servicio === 'string' && RE_FECHA_ISO.test(servicio)) return { fecha: servicio, estricta: true };
+  const creada = alerta.created_at?.slice(0, 10);
+  if (creada && RE_FECHA_ISO.test(creada)) return { fecha: creada, estricta: false };
+  return null;
+}
+
+/**
+ * Alertas ABIERTAS de `parto_proximo` / `servicio_sin_confirmacion` cuyo
+ * hecho ya está en `hato_eventos`. El caller (`hato-alertas-tick.ts`, fase 0)
+ * las marca `descartada` con `datos.motivo_descarte = 'hecho_registrado'`.
+ *
+ * Puramente decisoria: no escribe nada y no mira el reloj.
+ */
+export function alertasConHechoRegistrado(
+  abiertas: readonly AlertaAbiertaConHecho[],
+  eventos: readonly EventoHatoParaRetiro[],
+  fechaHoraReferencia: string,
+): AlertaRetiradaPorHechoRegistrado[] {
+  const eventosPorAnimal = new Map<string, EventoHatoParaRetiro[]>();
+  for (const ev of eventos) {
+    if (!ev.animal_id || !ev.fecha || !RE_FECHA_ISO.test(ev.fecha.slice(0, 10))) continue;
+    const lista = eventosPorAnimal.get(ev.animal_id);
+    if (lista) lista.push(ev);
+    else eventosPorAnimal.set(ev.animal_id, [ev]);
+  }
+
+  const retiradas: AlertaRetiradaPorHechoRegistrado[] = [];
+  for (const alerta of abiertas) {
+    if (!puedeResponderAlerta(alerta.estado)) continue;
+    const tiposQueResponden = (EVENTOS_QUE_RESPONDEN as Record<string, readonly string[] | undefined>)[alerta.tipo];
+    if (!tiposQueResponden) continue;
+    if (alerta.datos?.origen === 'manual') continue;
+    if (!alerta.animal_id) continue;
+    const ancla = fechaAnclaHecho(alerta);
+    if (!ancla) continue;
+
+    // El evento más temprano que responde -- el primero que la cerró.
+    let respuesta: EventoHatoParaRetiro | null = null;
+    for (const ev of eventosPorAnimal.get(alerta.animal_id) ?? []) {
+      if (!tiposQueResponden.includes(ev.tipo)) continue;
+      const fecha = (ev.fecha as string).slice(0, 10);
+      const posterior = ancla.estricta ? fecha > ancla.fecha : fecha >= ancla.fecha;
+      if (!posterior) continue;
+      if (!respuesta || fecha < (respuesta.fecha as string).slice(0, 10)) respuesta = ev;
+    }
+    if (!respuesta) continue;
+
+    const tipo = alerta.tipo as TipoAlertaHato;
+    const eventoFecha = (respuesta.fecha as string).slice(0, 10);
+    retiradas.push({
+      id: alerta.id,
+      tipo,
+      regla_clave: alerta.regla_clave,
+      animal_id: alerta.animal_id,
+      evento_tipo: respuesta.tipo,
+      evento_fecha: eventoFecha,
+      datos: {
+        ...(alerta.datos ?? {}),
+        motivo_descarte: MOTIVO_DESCARTE_HECHO_REGISTRADO,
+        motivo_descarte_detalle:
+          `Ya hay un evento \`${respuesta.tipo}\` del ${eventoFecha} para este animal, posterior a ` +
+          `${ancla.estricta ? 'el servicio' : 'la creación'} del ${ancla.fecha}. El tick retiró la alerta para ` +
+          'no mandarla ni escalarla sobre un hecho ya registrado (ESCO-134).',
+        hecho_registrado: { tipo: respuesta.tipo, fecha: eventoFecha },
+        descartada_en: fechaHoraReferencia,
+        descartada_por: 'tick_hato_alertas',
+      },
+    });
+  }
+  return retiradas;
+}
+
+// ============================================================================
 // BLOQUE 4 — Utilidades de fecha/hora (independientes de las de calculosHato.ts
 // -- esas trabajan solo con fechas ISO sin hora; este motor también necesita
 // comparar instantes con hora, para el reenvío/escalamiento).
