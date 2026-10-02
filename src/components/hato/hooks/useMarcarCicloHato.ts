@@ -20,6 +20,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hatoConfigDesdeTabla';
 import type { EstadoActualHatoRow, HatoConfig } from '@/utils/calculosHato';
 import { construirEventosMarcaCiclo, type InputMarcaCiclo } from '@/utils/hatoCicloManual';
+import {
+  CHAPETA_PROVISIONAL_DESDE,
+  crearFichaCriaConReintento,
+  debeCrearFichaCria,
+  elegirToroDelServicio,
+  type FilaChapeta,
+  type ServicioMadre,
+} from '@/utils/hato/criaAutomatica';
 import type { EstadoActualHatoViewRow, HatoAnimalRow } from '@/types/hato';
 
 function filaDesdeVista(animal: HatoAnimalRow, vista: EstadoActualHatoViewRow | null): EstadoActualHatoRow {
@@ -60,6 +68,62 @@ function filaDesdeVista(animal: HatoAnimalRow, vista: EstadoActualHatoViewRow | 
 export interface ResultadoMarcarCiclo {
   ok: boolean;
   error?: string;
+  /** ESCO-135: ficha de la ternera retenida creada junto con el parto. */
+  criaCreada?: { id: string; numero: number };
+  /** ESCO-135: el parto se guardó pero la ficha de la ternera NO. */
+  avisoCria?: string;
+}
+
+/**
+ * Crea la ficha de la ternera retenida (ESCO-135): lee la finca de la madre
+ * y sus servicios (para el toro padre, solo si no hay que adivinarlo), y
+ * delega chapeta + reintento ante 23505 en `crearFichaCriaConReintento`.
+ */
+async function crearFichaTernera(
+  supabase: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  madreId: string,
+  input: InputMarcaCiclo,
+  createdBy: string | null,
+): Promise<{ id: string; numero: number }> {
+  const [madreRes, serviciosRes] = await Promise.all([
+    supabase.from('hato_animales').select('finca_id').eq('id', madreId).maybeSingle(),
+    supabase
+      .from('hato_eventos')
+      .select('fecha, toro_id')
+      .eq('animal_id', madreId)
+      .eq('tipo', 'servicio')
+      .lt('fecha', input.fecha),
+  ]);
+  if (madreRes.error) throw new Error(`No se pudo leer la madre: ${madreRes.error.message}`);
+  if (serviciosRes.error) throw new Error(`No se pudieron leer los servicios: ${serviciosRes.error.message}`);
+
+  return crearFichaCriaConReintento(
+    {
+      leerChapetasActivas: async () => {
+        const { data, error } = await supabase
+          .from('hato_animales')
+          .select('numero, estado')
+          .eq('estado', 'activa')
+          .lt('numero', CHAPETA_PROVISIONAL_DESDE);
+        if (error) throw new Error(`No se pudieron leer las chapetas: ${error.message}`);
+        return (data ?? []) as FilaChapeta[];
+      },
+      insertar: async (fila) => {
+        const { data, error } = await supabase.from('hato_animales').insert(fila).select('id').single();
+        if (error) return { error: { code: error.code, message: error.message } };
+        return { id: data.id as string };
+      },
+    },
+    {
+      madreId,
+      fincaId: (madreRes.data?.finca_id as string | null | undefined) ?? null,
+      fechaParto: input.fecha,
+      fechaPartoConfianza: input.fechaConfianza,
+      padreToroId: elegirToroDelServicio((serviciosRes.data ?? []) as ServicioMadre[], input.fecha),
+      createdBy,
+      fuente: 'web',
+    },
+  );
 }
 
 export function useMarcarCicloHato(animalId: string | undefined) {
@@ -113,16 +177,44 @@ export function useMarcarCicloHato(animalId: string | undefined) {
       setGuardando(true);
       try {
         const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+        // ESCO-135 -- ficha de la ternera retenida, ANTES del parto, para que
+        // el parto nazca con `cria_id` en el mismo INSERT (sin un UPDATE
+        // posterior que la traza de la 084 registraría como corrección). Si
+        // la ficha falla, el parto se guarda igual y el fallo se devuelve en
+        // `avisoCria` -- nunca en silencio.
+        let cria: { id: string; numero: number } | null = null;
+        let avisoCria: string | undefined;
+        if (input.marca === 'parida' && debeCrearFichaCria(input.criaDestino)) {
+          try {
+            cria = await crearFichaTernera(supabase, animalId, input, user?.id ?? null);
+          } catch (errCria) {
+            avisoCria = errCria instanceof Error ? errCria.message : 'Error desconocido creando la ficha de la ternera';
+          }
+        }
+
         const eventos = construirEventosMarcaCiclo(input).map((evento) => ({
           ...evento,
+          ...(evento.tipo === 'parto' && cria ? { cria_id: cria.id } : {}),
           animal_id: animalId,
           created_by: user?.id ?? null,
         }));
         // Un solo INSERT con N filas -- una sentencia, una transacción
         // (§3.3: nunca dos llamadas sueltas para esto).
         const { error: insertError } = await supabase.from('hato_eventos').insert(eventos);
-        if (insertError) throw insertError;
-        return { ok: true };
+        if (insertError) {
+          if (cria) {
+            // El parto no entró: la ficha recién creada quedaría huérfana.
+            const { error: borrarError } = await supabase.from('hato_animales').delete().eq('id', cria.id);
+            if (borrarError) {
+              throw new Error(
+                `No se pudo guardar el parto, y la ficha de la ternera #${cria.numero} quedó creada sin parto. Bórrala desde su hoja de vida. (${insertError.message})`,
+              );
+            }
+          }
+          throw insertError;
+        }
+        return { ok: true, criaCreada: cria ?? undefined, avisoCria };
       } catch (err) {
         return {
           ok: false,
