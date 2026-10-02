@@ -32,6 +32,11 @@
 //                    `datos`. Va ANTES de (a) a propósito: así las fases
 //                    (b)/(c)/(d), que vuelven a consultar la tabla, ya no las
 //                    ven y no las despachan ni las escalan una vez más.
+//                    ESCO-134, misma fase: también se retiran las alertas
+//                    abiertas de `parto_proximo` / `servicio_sin_confirmacion`
+//                    cuyo hecho ya está en `hato_eventos` (parto, confirmación,
+//                    aborto, servicio nuevo). Decide `alertasConHechoRegistrado`;
+//                    `datos.motivo_descarte = 'hecho_registrado'`.
 //   (a) Generar   -- motor puro `generarAlertasPendientes` (hatoAlertas.ts)
 //                    sobre `v_hato_estado_actual` + pasos de tratamiento
 //                    pendientes + `HatoConfig` (058/062, vía
@@ -117,11 +122,14 @@ import {
   decidirAccionEscalamiento,
   decidirExpiracionTerminal,
   alertasSuperadasPorCambioDeRegla,
+  alertasConHechoRegistrado,
   claveAlertaCatalogo,
   agruparSuscriptoresPorClave,
   destinatariosTelegramPermitidos,
   ESTADOS_ALERTA_RESPONSIBLES,
   type AlertaAbiertaParaRetiro,
+  type AlertaAbiertaConHecho,
+  type EventoHatoParaRetiro,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type AlertaGenerada,
@@ -425,11 +433,13 @@ async function correrTick(
   // =========================================================================
 
   let retiradasReglaSuperada = 0;
+  let retiradasHechoRegistrado = 0;
+  const idsRetiradas = new Set<string>();
 
   const { data: filasAbiertas, error: errorAbiertas } = await consultarConReintento(() =>
     supabase
       .from('hato_alertas')
-      .select('id, tipo, estado, regla_clave, datos')
+      .select('id, tipo, estado, regla_clave, datos, animal_id, created_at')
       // Una sola definición de "abierta" en todo el módulo -- la misma que usa
       // `puedeResponderAlerta` dentro del motor puro.
       .in('estado', [...ESTADOS_ALERTA_RESPONSIBLES]),
@@ -456,9 +466,64 @@ async function correrTick(
         continue;
       }
       retiradasReglaSuperada += 1;
+      idsRetiradas.add(superada.id);
       console.log(
         `[hato-alertas-tick] alerta ${superada.id} (${superada.tipo}, clave ${superada.regla_clave}) descartada: su regla emite hoy ${superada.forma_vigente}.`,
       );
+    }
+
+    // -----------------------------------------------------------------------
+    // (0b) RETIRAR ALERTAS CUYO HECHO YA ESTÁ REGISTRADO (ESCO-134)
+    //
+    // Solo se leen eventos de los animales con una alerta abierta de los dos
+    // tipos que este mecanismo cubre, y solo de los tipos que pueden
+    // responderlas. Mismo contrato que (0): un fallo de lectura o de escritura
+    // se registra y el tick sigue -- el peor caso es el de antes.
+    // -----------------------------------------------------------------------
+    const candidatasHecho = ((filasAbiertas ?? []) as AlertaAbiertaConHecho[]).filter(
+      (a) =>
+        !idsRetiradas.has(a.id) &&
+        (a.tipo === 'parto_proximo' || a.tipo === 'servicio_sin_confirmacion') &&
+        !!a.animal_id,
+    );
+    const animalesCandidatos = [...new Set(candidatasHecho.map((a) => a.animal_id as string))];
+    if (animalesCandidatos.length > 0) {
+      const { data: filasEventos, error: errorEventos } = await consultarConReintento(() =>
+        supabase
+          .from('hato_eventos')
+          .select('animal_id, tipo, fecha')
+          .in('animal_id', animalesCandidatos)
+          .in('tipo', ['parto', 'confirmacion_prenez', 'aborto', 'servicio']),
+      );
+      if (errorEventos) {
+        console.error(
+          `[hato-alertas-tick] no se pudieron leer los eventos para el retiro por hecho registrado (fase 0, ESCO-134): ${errorEventos.message}`,
+        );
+      } else {
+        const conHecho = alertasConHechoRegistrado(
+          candidatasHecho,
+          (filasEventos ?? []) as EventoHatoParaRetiro[],
+          fechaHoraReferencia,
+        );
+        for (const retirada of conHecho) {
+          const { error } = await supabase
+            .from('hato_alertas')
+            .update({ estado: 'descartada', datos: retirada.datos })
+            .eq('id', retirada.id);
+          if (error) {
+            console.error(
+              `[hato-alertas-tick] no se pudo retirar la alerta ${retirada.id} con hecho registrado (fase 0, ESCO-134):`,
+              error.message,
+            );
+            continue;
+          }
+          retiradasHechoRegistrado += 1;
+          idsRetiradas.add(retirada.id);
+          console.log(
+            `[hato-alertas-tick] alerta ${retirada.id} (${retirada.tipo}, clave ${retirada.regla_clave}) descartada: ya hay un ${retirada.evento_tipo} del ${retirada.evento_fecha}.`,
+          );
+        }
+      }
     }
   }
 
@@ -818,6 +883,9 @@ async function correrTick(
     // migración. Viaja en la respuesta HTTP y en la línea de log del tick,
     // que es donde se lee una corrida puntual.
     retiradas_regla_superada: retiradasReglaSuperada,
+    // ESCO-134. Mismo criterio: viaja en la respuesta y en el log; en la
+    // tabla va dentro del jsonb `cobertura` (ver `registrarCorridaTick`).
+    retiradas_hecho_registrado: retiradasHechoRegistrado,
     generadas: alertasNuevas.length,
     enviadas, // # de alertas con al menos un envío exitoso
     mensajes_enviados: mensajesEnviados, // # de mensajes de Telegram individuales (broadcast, 096)
@@ -860,6 +928,28 @@ async function correrTick(
 // mismo contrato de "no abortar por un fallo de instrumentación" que ya usa
 // el resto de este archivo para `hato_alertas_envios` (fase b, arriba).
 // ---------------------------------------------------------------------------
+/** `hato_alertas_tick_runs` (116) no tiene columnas para los retiros de la
+ * fase 0 y agregarlas exige una migración. Van dentro del jsonb `cobertura`,
+ * bajo una clave que NO es un tipo de alerta (`retiros_fase_0`), así que
+ * quien recorra `cobertura` por tipo no la confunde con una regla. Si la
+ * corrida no llegó a la fase 0 (aborto temprano), no se agrega nada. */
+function coberturaConRetiros(
+  cobertura: ResumenCoberturaAlertas | null,
+  resultado: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const porTipo = cobertura?.por_tipo ?? null;
+  const reglaSuperada = resultado.retiradas_regla_superada;
+  const hechoRegistrado = resultado.retiradas_hecho_registrado;
+  if (typeof reglaSuperada !== 'number' && typeof hechoRegistrado !== 'number') return porTipo;
+  return {
+    ...(porTipo ?? {}),
+    retiros_fase_0: {
+      regla_superada: typeof reglaSuperada === 'number' ? reglaSuperada : null,
+      hecho_registrado: typeof hechoRegistrado === 'number' ? hechoRegistrado : null,
+    },
+  };
+}
+
 async function registrarCorridaTick(
   supabase: ClienteSupabase,
   args: {
@@ -881,6 +971,7 @@ async function registrarCorridaTick(
     animales_sin_raza: args.cobertura?.animales_sin_raza ?? null,
     cobertura: args.cobertura?.por_tipo ?? null,
     retiradas_regla_superada: args.resultado.retiradas_regla_superada,
+    retiradas_hecho_registrado: args.resultado.retiradas_hecho_registrado,
     generadas: args.resultado.generadas,
     enviadas: args.resultado.enviadas,
     escaladas: args.resultado.escaladas,
@@ -900,7 +991,7 @@ async function registrarCorridaTick(
       animales_evaluados: args.cobertura?.animales_evaluados ?? null,
       animales_sin_raza: args.cobertura?.animales_sin_raza ?? null,
       pasos_tratamiento_evaluados: args.cobertura?.pasos_tratamiento_evaluados ?? null,
-      cobertura: args.cobertura?.por_tipo ?? null,
+      cobertura: coberturaConRetiros(args.cobertura, args.resultado),
       generadas: args.resultado.generadas ?? null,
       enviadas: args.resultado.enviadas ?? null,
       mensajes_enviados: args.resultado.mensajes_enviados ?? null,

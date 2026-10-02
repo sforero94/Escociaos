@@ -39,6 +39,17 @@ describe('tick: guardrail Telegram campo (issue #217)', () => {
     }
   });
 
+  it('ambas copias del tick retiran las alertas cuyo hecho ya está registrado (ESCO-134)', () => {
+    for (const rel of COPIAS) {
+      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
+      expect(fuente, rel).toContain('alertasConHechoRegistrado(');
+      expect(fuente, rel).toContain(".from('hato_eventos')");
+      expect(fuente, rel).toContain('retiradas_hecho_registrado');
+      // La fase 0 tiene que leer animal_id y created_at para el ancla.
+      expect(fuente, rel).toContain("select('id, tipo, estado, regla_clave, datos, animal_id, created_at')");
+    }
+  });
+
   it('las dos copias del tick siguen siendo idénticas en el filtro', () => {
     const [a, b] = COPIAS.map((rel) => readFileSync(resolve(__dirname, '../..', rel), 'utf8'));
     expect(a).toBe(b);
