@@ -2308,3 +2308,17 @@ consumo suyo.
 | 2026-09-24-jueves | 5 (+1 diferido) |
 | **2026-10-01-jueves** | **1 (ESCO-137, estacion de clima caida). Racha de ceros: 0** |
 La auto-poda no aplica. El hallazgo es de las 05:50Z de hoy: el lunes no lo habria visto hasta 4 dias despues.
+
+## Corrida 2026-10-02-viernes — hechos transversales
+- Conjunto elegible VACIO: las 4 abiertas (ESCO-134/135/136/137) tienen `Requiere aprobacion` y clase `decision`/`datos`. Cero agentes, cero PRs.
+- Preflight 4/4 `active`, `supabase_read_only_user`, `query_logs` responde, `ATTENDED=0`, cero prompts.
+- Ledger hasta la 171 (`20261001230824`); 164–171 con archivo en `main`.
+- ESCO-137: `max(clima_lecturas.timestamp)` seguia en 2026-10-01 05:50:01Z a las 11:25Z del 10-02 (>29 h). Umbral P1 de la ficha: 2026-10-03 05:50Z. El lunes debe comprobarlo.
+
+## Racha del viernes (regla de auto-poda del drenaje) — actualizada 2026-10-02
+| Corrida | Conjunto elegible | Racha de vacios |
+|---|---|---|
+| 2026-09-18-viernes | VACIO (vaciado manual de Santiago) | 1 |
+| 2026-09-25-viernes | 1 elegible (ESCO-127) | 0 |
+| **2026-10-02-viernes** | **VACIO (las 4 abiertas exigen decision de Santiago)** | **1** |
+La auto-poda no aplica. Ojo: este vacio no es falta de hallazgos sino que todo lo abierto es `decision`/`datos`; el cuello son las decisiones, no el drenaje.
