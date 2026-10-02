@@ -44,6 +44,14 @@ import {
 } from "../../calculos-hato.ts";
 import { construirHatoConfigDesdeFilas } from "../../hato-config-desde-tabla.ts";
 import {
+  CHAPETA_PROVISIONAL_DESDE,
+  crearFichaCriaConReintento,
+  debeCrearFichaCria,
+  elegirToroDelServicio,
+  mensajeCriaCreada,
+  NOMBRE_CRIA_SIN_NOMBRE,
+} from "../../hato-cria-automatica.ts";
+import {
   construirCallbackDeshacerEvento,
   construirCallbackDeshacerTratamiento,
 } from "../eventoHatoUndo.ts";
@@ -819,6 +827,9 @@ export async function eventoHatoConversation(
       advertencias.push(`El lote de ${toro.nombre} ya está en ${toro.stock} pajillas.`);
     }
 
+    // ESCO-135: la hembra que se queda tiene ficha propia desde el parto.
+    const creaFichaCria = clave === "parto" && debeCrearFichaCria(criaDestino);
+
     // ── Paso 7: confirmar ─────────────────────────────────────────────
     const resumen = [
       `📋 *${def.etiqueta.replace(/^\S+\s/, "")}*`,
@@ -837,7 +848,13 @@ export async function eventoHatoConversation(
     const kbConfirmar = new InlineKeyboard()
       .text("✅ Guardar", "ok")
       .text("❌ Cancelar", "cancel_flow");
-    await ctx.reply(`${resumen}\n\n¿Guardo?`, { reply_markup: kbConfirmar, parse_mode: "Markdown" });
+    const avisoFichaCria = creaFichaCria
+      ? `\n\n🆕 Se creará la ficha de la ternera: ${NOMBRE_CRIA_SIN_NOMBRE}, con la chapeta siguiente de la serie.`
+      : "";
+    await ctx.reply(`${resumen}${avisoFichaCria}\n\n¿Guardo?`, {
+      reply_markup: kbConfirmar,
+      parse_mode: "Markdown",
+    });
 
     const cbOk = await conversation.waitForCallbackQuery(["ok", "cancel_flow"]);
     await cbOk.answerCallbackQuery();
@@ -882,13 +899,78 @@ export async function eventoHatoConversation(
           },
         );
         if (errorTtto) throw new Error(`No se pudo guardar: ${errorTtto.message}`);
-        return { tratamientoId: idTratamiento as string, eventoId: null, usoId: null };
+        return { tratamientoId: idTratamiento as string, eventoId: null, usoId: null, cria: null, errorCria: null };
       }
 
       const datosEvento: Record<string, unknown> = {
         origen: "telegram",
         registrado_por: nombreDisplay,
       };
+
+      // ESCO-135 — ficha de la ternera retenida, ANTES del parto: así el
+      // parto nace ya con `cria_id` en un solo INSERT. Si la ficha no se
+      // puede crear, el parto se guarda igual (es el hecho importante) y el
+      // fallo se dice en voz alta en el mensaje final — nunca en silencio.
+      let cria: { id: string; numero: number } | null = null;
+      let errorCria: string | null = null;
+      if (creaFichaCria) {
+        try {
+          const [madreRes, serviciosRes] = await Promise.all([
+            sb.from("hato_animales").select("finca_id").eq("id", vaca!.animal_id).maybeSingle(),
+            sb
+              .from("hato_eventos")
+              .select("fecha, toro_id")
+              .eq("animal_id", vaca!.animal_id)
+              .eq("tipo", "servicio")
+              .lt("fecha", fecha),
+          ]);
+          if (madreRes.error) throw new Error(`No se pudo leer la madre: ${madreRes.error.message}`);
+          if (serviciosRes.error) {
+            throw new Error(`No se pudieron leer los servicios: ${serviciosRes.error.message}`);
+          }
+          cria = await crearFichaCriaConReintento(
+            {
+              leerChapetasActivas: async () => {
+                const { data: filas, error: errChapetas } = await sb
+                  .from("hato_animales")
+                  .select("numero, estado")
+                  .eq("estado", "activa")
+                  .lt("numero", CHAPETA_PROVISIONAL_DESDE);
+                if (errChapetas) throw new Error(`No se pudieron leer las chapetas: ${errChapetas.message}`);
+                return (filas ?? []) as Array<{ numero: number | null; estado: string }>;
+              },
+              insertar: async (fila) => {
+                const { data: nueva, error: errInsert } = await sb
+                  .from("hato_animales")
+                  .insert(fila)
+                  .select("id")
+                  .single();
+                if (errInsert) {
+                  return { error: { code: (errInsert as { code?: string }).code, message: errInsert.message } };
+                }
+                return { id: nueva!.id as string };
+              },
+            },
+            {
+              madreId: vaca!.animal_id,
+              fincaId: ((madreRes.data as { finca_id?: string | null } | null)?.finca_id) ?? null,
+              fechaParto: fecha,
+              // Mismo valor que el parto de abajo: el humano estuvo ahí.
+              fechaPartoConfianza: "exacta",
+              padreToroId: elegirToroDelServicio(
+                (serviciosRes.data ?? []) as Array<{ fecha: string; toro_id: string | null }>,
+                fecha,
+              ),
+              createdBy: usuarioId,
+              fuente: "telegram",
+            },
+          );
+        } catch (errFicha: unknown) {
+          errorCria = errFicha instanceof Error ? errFicha.message : "Error desconocido";
+          console.error("[Telegram] No se pudo crear la ficha de la ternera:", errorCria);
+        }
+      }
+
       const { data, error } = await sb
         .from("hato_eventos")
         .insert({
@@ -901,6 +983,7 @@ export async function eventoHatoConversation(
           tipo_servicio: def.tipoServicio ?? null,
           toro_id: toro?.id ?? null,
           cria_destino: criaDestino,
+          cria_id: cria?.id ?? null,
           fuente: "telegram",
           // chequeo_vaca_id se deja NULL: es lo que vuelve este evento
           // intocable por fn_hato_commit_chequeo (065).
@@ -909,6 +992,17 @@ export async function eventoHatoConversation(
         })
         .select("id")
         .single();
+      if (error && cria) {
+        // El parto no entró: la ficha recién creada quedaría huérfana, sin
+        // parto que la explique. Se borra (solo ESA fila, por id).
+        const { error: errBorrarCria } = await sb.from("hato_animales").delete().eq("id", cria.id);
+        if (errBorrarCria) {
+          console.error("[Telegram] Ficha de ternera huérfana:", cria.id, errBorrarCria.message);
+          throw new Error(
+            `No se pudo guardar el parto, y la ficha de la ternera #${cria.numero} quedó creada sin parto. Bórrala desde la app. (${error.message})`,
+          );
+        }
+      }
       if (error) {
         // 23505 = `hato_eventos_manual_unico` (139). Llega acá solo si Martha
         // pasó por encima del aviso del paso 6, o si otro registró lo mismo
@@ -963,14 +1057,22 @@ export async function eventoHatoConversation(
           }
         }
       }
-      return { tratamientoId: null, eventoId: data!.id as string, usoId };
+      return { tratamientoId: null, eventoId: data!.id as string, usoId, cria, errorCria };
     });
     escrito = true;
 
+    // ESCO-135: la ficha creada se dice con su chapeta; el fallo, también.
+    const lineaCria = guardado.cria
+      ? `\n\n🐄 ${mensajeCriaCreada(guardado.cria.numero)}`
+      : guardado.errorCria
+        ? // Sin caracteres de Markdown: un `_` del mensaje de Postgres rompe el
+          // parse_mode y Telegram rechazaría justo el mensaje que avisa.
+          `\n\n⚠️ El parto quedó guardado, pero NO se creó la ficha de la ternera: ${guardado.errorCria.replace(/[_*`[\]]/g, " ")}`
+        : "";
     const textoExito =
-      `✅ Registrado.\n\n${resumen}\n\nSi te equivocaste de vaca, usa Deshacer.\nUsa /start para volver al menú.`;
+      `✅ Registrado.\n\n${resumen}${lineaCria}\n\nSi te equivocaste de vaca, usa Deshacer.\nUsa /start para volver al menú.`;
     const textoExitoSinBoton =
-      `✅ Registrado.\n\n${resumen}\n\nEl registro quedó guardado. Usa /start para volver al menú.`;
+      `✅ Registrado.\n\n${resumen}${lineaCria}\n\nEl registro quedó guardado. Usa /start para volver al menú.`;
     try {
       const kbDeshacer = new InlineKeyboard().text(
         "↩️ Deshacer",

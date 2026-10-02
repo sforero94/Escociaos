@@ -42,6 +42,7 @@ import {
 } from '@/utils/hatoCicloManual';
 import { chipEstadoReproductivo } from '@/utils/hatoUi';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { mensajeCriaCreada, NOMBRE_CRIA_SIN_NOMBRE } from '@/utils/hato/criaAutomatica';
 import type { CriaDestino } from '@/types/hato';
 
 const MARCAS: { value: MarcaCiclo; label: string }[] = [
@@ -173,7 +174,15 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
       toast.error(resultado.error ?? 'Error desconocido registrando la marca del ciclo');
       return;
     }
-    toast.success('Ciclo actualizado');
+    toast.success(
+      resultado.criaCreada ? `Ciclo actualizado. ${mensajeCriaCreada(resultado.criaCreada.numero)}` : 'Ciclo actualizado',
+    );
+    if (resultado.avisoCria) {
+      // ESCO-135: el parto quedó, la ficha de la ternera no. Se dice en voz alta.
+      toast.error(`El parto quedó guardado, pero NO se creó la ficha de la ternera: ${resultado.avisoCria}`, {
+        duration: 15000,
+      });
+    }
     onGuardado();
     onOpenChange(false);
   };
@@ -263,6 +272,11 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
                         ))}
                       </SelectContent>
                     </Select>
+                    {criaDestino === 'retenida' && (
+                      <p className="text-xs text-gray-500">
+                        Se creará la ficha de la ternera como {NOMBRE_CRIA_SIN_NOMBRE}, con la chapeta siguiente de la serie.
+                      </p>
+                    )}
                   </div>
                 )}
 
