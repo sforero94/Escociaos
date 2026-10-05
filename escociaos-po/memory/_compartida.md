@@ -2322,3 +2322,10 @@ La auto-poda no aplica. El hallazgo es de las 05:50Z de hoy: el lunes no lo habr
 | 2026-09-25-viernes | 1 elegible (ESCO-127) | 0 |
 | **2026-10-02-viernes** | **VACIO (las 4 abiertas exigen decision de Santiago)** | **1** |
 La auto-poda no aplica. Ojo: este vacio no es falta de hallazgos sino que todo lo abierto es `decision`/`datos`; el cuello son las decisiones, no el drenaje.
+
+## Corrida 2026-10-05-lunes (primer lunes, roster de 8)
+
+- Preflight verde, `ATTENDED=0`, cero prompts y cero denegaciones. Deriva de migraciones limpia (ledger hasta 171). [corrida: 2026-10-05-lunes]
+- Los agentes registrados por nombre (`subagent_type: data-integrity`, etc.) funcionan en la Routine; se les inyectó la memoria pidiéndoles leerla como primer paso obligatorio + un archivo de contexto de corrida en el scratchpad. Funcionó: ningún agente re-filó algo aceptado. [corrida: 2026-10-05-lunes]
+- Primer P1 desde el 21-sep: ESCO-140 (escritura fuera de banda en `hato_eventos`, sin rastro). Lección para todos: una escritura con `auth.uid()` NULL (service role / SQL editor / bot) no deja fila en ningún log de correcciones; la técnica `xmin` (memoria data-integrity) es la única forma de fecharla. [corrida: 2026-10-05-lunes]
+- Poda de memoria §8 no aplicada esta corrida (los archivos siguen creciendo: _compartida 165 KB). Aplicarla el próximo lunes. [corrida: 2026-10-05-lunes]

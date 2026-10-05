@@ -340,3 +340,14 @@ estado de producción es una hipótesis, no un hecho. Esta se refutó con un sol
 - Esco chat: 393 msgs / 97 conversaciones; 0 esta semana = ruido (rango 0-22).
 - Baselines: hato activas 66 · sin raza 63 · sin fecha_nacimiento 20 · sin madre 31 · provisionales 0. hato_alertas 125: 83 descartada / 24 confirmada / 9 escalada / 6 pendiente / 3 expirada. hato_tratamientos 27. Aplicaciones abiertas: Drench Septiembre (En ejecucion) + Aplicacion Enmienda (Calculada desde 07-24).
 - Navegacion: aplicaciones.nombre_aplicacion (no nombre); rondas_avisos.enviado_en (no created_at); hato_alertas sin columna mensaje (texto en datos->>'mensaje'). Rutas /functions/ estan en function_edge_logs, no en edge_logs.
+
+## Corrida 2026-10-05-lunes
+
+- sin_hallazgos. Pulso 09-28→10-04 (w0/w1/prom4s): pesajes 60/0/11,3 · registros_trabajo 54/63/67,0 · fin_gastos 52/1/14,3 · monitoreos 26/0/0 (R31) · novedades_uso 5/2/6,3 · mov_inventario 4/1/1,3 · ceros: movimientos_diarios, chat_messages (2.ª semana; último 09-20), hato_tratamientos, chequeos, informes_visita, compras, rondas_inventario. [corrida: 2026-10-05-lunes]
+- Quién escribe (7 d): 5 humanos + bot 0, récord de la serie: David 81 · Fernando 62 · Consuelito 52 · Martha 5 · Santiago 5. [corrida: 2026-10-05-lunes]
+- R31 abrió 2026-10-02 (37 d tras R30): 26 obs / 12 sublotes / Clara, en curso. Próxima esperada ~2026-11-05. El cero dejó de ser señal. [corrida: 2026-10-05-lunes]
+- El pesaje del hato es 100 % Telegram desde septiembre (Fernando). Una foto puede escribir VARIAS sesiones (la del 10-01 escribió 09-16 y 09-23). Leer pesajes por `fecha` de sesión, no por `created_at`. Rezago 8–15 d. [corrida: 2026-10-05-lunes]
+- `rondas_avisos` tiene clave nueva `recordatorio:<AAAA-MM>` (primera 2026-10-01): corrige la nota del 09-14 de que el recordatorio no deja fila. Octubre sin ronda 4 d después (ESCO-100 aceptado). [corrida: 2026-10-05-lunes]
+- Alertas web-only expiran en lote: 10 el 09-30 y 1 el 10-01, sin acción humana (ESCO-134). GALLEGA #148 parto_proximo (FPP 09-28) pendiente sin parto registrado: revisar 10-12. [corrida: 2026-10-05-lunes]
+- Navegación: `hato_alertas_tick_runs` usa `ejecutado_at`/`fecha_referencia`; `chat_messages` se atribuye vía `chat_conversations.user_id` + `role='user'`. [corrida: 2026-10-05-lunes]
+- Mensual sep (ago): registros_trabajo 268 (256) · alertas generadas 61 (3) · fin_gastos 67 (51) · pesajes 45 Telegram (237) · eventos 27 [Tg 23] (31 [web 29]) · tratamientos 27 (0) · chat 21 (82) · monitoreos 0 (89) · rondas_inventario 0 (1) · compras 0 (6). Baselines hato: activas 66 · sin raza 63 · sin fnac 20 · sin madre 31 · completas 1 (congelada 6 semanas). [corrida: 2026-10-05-lunes]

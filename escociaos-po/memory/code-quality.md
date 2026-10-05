@@ -112,3 +112,13 @@ duplicacion latente contando las filas que un umbral divergente habria marcado d
 el codigo borrado), `tsc` limpio, `npx vitest run` **173 ficheros / 3.717 tests con 1 ROJO PREEXISTENTE**
 (`hatoSchemaContract.test.ts`, prefijo de migracion `140` duplicado). **Ese rojo no es de ningun PR de
 esta corrida** — filado como hallazgo contra la operacion.
+
+## Corrida 2026-10-05-lunes (run mensual)
+
+- PRs: #300 (docs: entrada 171, 147/171 aplicadas en contratos anidados) → ESCO-144; #301 (.pyc) → ESCO-142. Hallazgos sin PR: ESCO-143 (database.ts, 46 tablas sin tipo), ESCO-145 (calculosAplicaciones sin tests, 3.er mes). [corrida: 2026-10-05-lunes]
+- Baseline main@22b2265: lint 0 err / 919 warn (any 667, unused-vars 140, exhaustive-deps 76, React Compiler 34) · tsc 0 · vitest 192 / 3.977 VERDE · npm audit 24 (runtime 9). [corrida: 2026-10-05-lunes]
+- Medir deuda tipada con `grep -rnE "getSupabase\(\) as any|supabase as any\)" src` (sin tests): 80 (64 en 0aba907). Causa: database.ts desactualizado. Regenerarlo es trabajo propio (M), nunca parte de un barrido. [corrida: 2026-10-05-lunes]
+- El chequeo de deriva del ledger debe incluir los contratos ANIDADOS (`src/components/*/CLAUDE.md`): grep 'SIN APLICAR' / 'tiene que aplicarse'. [corrida: 2026-10-05-lunes]
+- Para un commit sobre origin/main sin cambiar de rama: plumbing (`GIT_INDEX_FILE=tmp git read-tree origin/main` → update-index → write-tree → commit-tree → push sha:refs/heads/…). Editar archivos con python, no con sed y `#` como delimitador. [corrida: 2026-10-05-lunes]
+- Commit a4f3ce6 (2026-09-16) re-agrega casi todo src/: `git log --since` por archivo engaña antes de esa fecha. [corrida: 2026-10-05-lunes]
+- npm audit runtime: el orquestador NO filó la propuesta de fixes no-major; Security la mantiene como ruido aceptado. Re-proponer sólo con un fix concreto en un PR propio. [corrida: 2026-10-05-lunes]

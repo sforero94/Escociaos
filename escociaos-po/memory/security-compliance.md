@@ -384,3 +384,12 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
 - ESCO-117 verificado cerrado: 0 telegram_usuarios con 'gastos', /gasto fuera de los dos arboles.
 - /clima/actualizar (nuevo) gateado con verificarAccesoClima antes del candado.
 - npm audit identico (9) por 4a corrida. Secretos: 45 commits, 0 coincidencias.
+
+## Corrida 2026-10-05-lunes
+
+- sin_hallazgos. Baseline: 113 tablas / 113 con RLS / 315 políticas (+1 = `hato_capturas_foto_delete_gerencia`, migración 171, correcta) / 14 SECURITY DEFINER (0 sin search_path). Advisors security 55, 4 categorías, ninguna nueva. [corrida: 2026-10-05-lunes]
+- Always-true de escritura: 0 por 5.ª corrida seguida. Padrón 6 Gerencia + 4 Administrador, sin cambio; auth.users 10, última cuenta 2026-08-30. npm audit runtime: los mismos 9 por 5.ª corrida (ruido aceptado). [corrida: 2026-10-05-lunes]
+- Estado aceptado: `hato_capturas_foto` admite DELETE de Gerencia (decisión #297). «Descartar» borra la foto y la fila de captura sin traza; sólo el DELETE de `hato_pesajes_leche` queda en hato_correcciones (084). No filar. [corrida: 2026-10-05-lunes]
+- PR #299 revisado, limpio. Regla de destinatarios `rol_bot='gerencia'` = hoy las cuentas Gerencia de la app; re-verificar esa equivalencia después de aplicar 172 (rol_bot no está atado a usuarios.rol). [corrida: 2026-10-05-lunes]
+- Nota no hallazgo: `hato_ev_undo` no verifica creador ni módulo; cualquier usuario vinculado con el botón puede deshacer un evento `fuente='telegram'`. Telegram valida callback_data contra el botón real. [corrida: 2026-10-05-lunes]
+- Storage: 8 buckets (no 7; `informes-visita` es el 8.º), 28 políticas en storage.objects. [corrida: 2026-10-05-lunes]

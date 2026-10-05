@@ -67,3 +67,12 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 - **`hato_chequeo_vacas.estado` normalizado en 5 de 39 filas NO es defecto del parser**: `estado_raw` es NULL en 107 de 120 filas desde febrero — el veterinario deja la columna en blanco salvo problema. **No re-investigar.**
 - **Ya ledgereado, no volver**: persistir `raza` desde el parser (#56) — el parser cubre 2 de 4 razas y el dueno decidio que Martha la dicta. Prediccion de plagas / ML: NO-GO registrado.
 - **Columnas que costaron round-trips**: `hato_chequeo_vacas` no tiene `ultimo_servicio` (es `tipo_servicio`); `rondas_inventario` no tiene `alcance_total` (es `alcance_nota`).
+
+## Corrida 2026-10-05-lunes
+
+- Recomendación del mes: TERMINAR #299 (merge → deploy → 172 → 173 → 174) y medir respuesta a alertas 2 semanas antes de cualquier superficie nueva del hato. 1 sola propuesta: ESCO-139 (estado de lotes 8/9/10). [corrida: 2026-10-05-lunes]
+- `lotes.activo` es carga útil en dos pantallas: useCostoKg.ts:81-84 (overhead por total_arboles) y usePriorizacionMonitoreo.ts:178 (universo de cobertura). Irlanda+Acueducto = 4.390 de 10.744 árboles activos (40,9 %). [corrida: 2026-10-05-lunes]
+- Baseline monitoreo: rondas 27-31 = sólo Clara, 12 sublotes, 44-55 filas, cadencia ~5 semanas (rondas 22-26: 16-21 sublotes, 96-153 filas). [corrida: 2026-10-05-lunes]
+- REFUTADO: «compras en cero = captura perdida». Gastos Aguacate de insumos desde 08-06 = 1 fila (MELAZA $110.000). No proponer gasto→compra. [corrida: 2026-10-05-lunes]
+- Esco: facelift completo y aun así el uso cae 171 (mar) → 82 (ago) → 21 (sep) → 0 en 2 semanas. No proponer más inversión en Esco sin que el uso vuelva. [corrida: 2026-10-05-lunes]
+- Columnas: compras no tiene `fecha` (fecha_compra/created_at); produccion usa `ano`. [corrida: 2026-10-05-lunes]

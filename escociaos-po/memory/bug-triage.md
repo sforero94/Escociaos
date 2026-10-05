@@ -787,3 +787,11 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - `lluvia_confianza='reconstruido'` YA dispara en produccion (09-26, 09-29). La frase de la 122 en CLAUDE.md raiz ("nunca se disparo") esta desactualizada para dias nuevos; es la regla funcionando.
 - `hato_chequeo_vacas` no tiene `updated_at`; para saber si una fila cambio usar created_at del chequeo o el esquema de `hato_correcciones`.
 - ESCO-135 y ESCO-136 sin cambio (0 partos nuevos; fila de COMETA intacta).
+
+## Corrida 2026-10-05-lunes
+
+- HALLAZGO ESCO-141 (P2) + PR #302: el descarte de subidas de pesaje (#298) liga filas por `created_at` y no ve los UPDATE de una subida posterior (e45424d9 = 94 escritas / 60 creadas; 34 filas de 09-19 sobrescritas el 10-01). [corrida: 2026-10-05-lunes]
+- `hato_pesajes_leche` NO tiene `updated_at`; el commit de pesaje hace UPDATE por id y conserva `created_at`. Para detectar sobrescrituras: comparar `hato_capturas_foto.filas_escritas` con las filas creadas en su ventana de ±36 h. [corrida: 2026-10-05-lunes]
+- Flujo de ramas aprobado por el orquestador: `git branch -m` para el primer arreglo; `git worktree add -b <rama> <ruta-abs> origin/main` para cada arreglo adicional. Para correr la suite de un PR abierto: worktree detached de `origin/prN` (`git fetch origin pull/N/head:refs/remotes/origin/prN`). [corrida: 2026-10-05-lunes]
+- Baseline `main@22b2265` VERDE: vitest 192 / 3.977, tsc 0, lint 0 / 919. PR #299 head `29bb6f8`: 195 / 4.033, tsc 0, sin bugs de corrección. Tras aplicar 172, el primer broadcast manda 3 alertas (GALLEGA, INDIA, COMETA); ENIGMA la retira la fase 0b. [corrida: 2026-10-05-lunes]
+- `postgrest_logs` = 288/24 h, todas `Warp server error: Thread killed by timeout manager` (ruido conocido). BUG_REPORT: issue 3b sigue abierto (decision); cabecera desactualizada por 4.ª vez (32 reportes / semana 39). [corrida: 2026-10-05-lunes]

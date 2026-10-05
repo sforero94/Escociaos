@@ -654,3 +654,10 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - Clima 09-25..09-30: 288/288, hueco max <= 5,67 min; 'reconstruido' disparo 09-26 y 09-29 (0,00 mm). Sano.
 - El 404/NULL de net._http_response a las 12:00:00Z es timeout cosmetico de pg_net (aceptado), no fallo.
 - thinksid/escocia-backups no esta permitido para las tools de GitHub de esta sesion: el estado del backup nocturno NO CORRIO.
+
+## Corrida 2026-10-05-lunes
+
+- sin_hallazgos. ESCO-137 cerrado con evidencia: oscuridad 2026-10-01 05:50Z → ~10-02 13:50Z (~32 h). Días perdidos permanentes: 10-01 (11 lecturas; Ecowitt «sin datos») y 10-02 (183, `omitido`). Cuarto episodio (08-19/20, 08-28, 09-16/17, 10-01/02): corte del lado de la finca; la History API tampoco tiene los datos. [corrida: 2026-10-05-lunes]
+- MÉTODO: para fechar el regreso de la estación cuando `clima_lecturas` ya se podó y `query_logs` da vacío, usar `fecha 05:00Z + cobertura_hueco_max_min`, contrastado con `288 − hueco/5 ≈ lecturas_count`. Vale cuando `ultima_lectura_en` está al final del día. `query_logs` sobre una ventana de más de 2 días devuelve n=0 sin error: no es evidencia de nada. [corrida: 2026-10-05-lunes]
+- Baselines: DB 127 MB (60 net._http_response + 23 cron.job_run_details). Storage 256 MB / 305 objetos. Edge v266 `cc85e523` = `f33a943`, deriva 0; detector #41–#44 en verde. Vercel PROMOTED en `22b2265`, build 38,5 s. 5 crons, 2.044 corridas en 7 d, 0 fallos. Advisors: ufk 110, unused_idx 39, no_pk 48 (todo respaldos), mpp 479. Consulta más lenta `fn_clima_rollup_diario` 197,3 ms. [corrida: 2026-10-05-lunes]
+- `unused_index` bajó de 80 a 39 con `stats_reset` NULL: son escaneos nuevos de índices recientes, no un reset. No filar. [corrida: 2026-10-05-lunes]

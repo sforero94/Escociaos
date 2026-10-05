@@ -23,6 +23,36 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-05 — corrida lunes
+
+A quiet week. **One PR merged since the last entry** (#298, 2026-10-01 23:07 UTC), **one
+migration applied** (171, 35 seconds after the merge), **no edge-function deploy needed**
+(#298 touched no edge file; `make-server-1ccce916` v266 still matches `f33a943`, drift 0).
+Vercel production is at `22b2265` = `main`, and the served `ProduccionView-*.js` chunk
+carries the new strings. Nothing merged after 2026-10-02. Four PRs are open at the close,
+all with green CI; none is merged, so none of their changes is in production.
+
+### Hato Lechero
+- **Gerencia can now open any week of the milk-weighing tracker and correct it.** A click
+  on a weekly bar opens that week read-only, with morning and afternoon side by side and
+  the planilla photo; "Editar" unlocks every cell for one save, and "Borrar" names the
+  milking it removes. (PR #298)
+- **Gerencia can discard a whole planilla upload from Producción → "Subidas del mes".**
+  Discard deletes the photo, the litres that upload created and the upload record. (PR #298,
+  migration 171)
+- **Known hole, fix pending in PR #302 (ESCO-141):** an upload whose rows a later upload
+  overwrote can today be discarded and delete the wrong litres (34 rows of the 09-19 upload
+  carry the 10-01 values). Nobody has pressed Discard yet; until #302 merges, do not discard
+  September uploads.
+
+### Interno
+- Nothing merged. Open and green: #300 (docs — migration 171 ledger entry; 147/171 marked
+  applied in the module contracts), #301 (stop tracking the hook `.pyc`), #302 (above).
+
+### Requiere despliegue manual
+- Nothing for what shipped. **PR #299** (ESCO-134/135/136) changes five edge files: when it
+  merges, the order is deploy `make-server-1ccce916` → apply 172 → 173 and 174.
+
 ## 2026-10-01 — corrida jueves
 
 **Nothing shipped.** No PR merged and no migration applied since 2026-09-28. The only

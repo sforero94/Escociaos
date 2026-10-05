@@ -587,3 +587,12 @@ mensual sigue siendo la unica legible.**
 - Navegacion de esquema: `aplicaciones.nombre_aplicacion` (no `nombre`); `telegram_alertas_suscripciones.alerta_clave` (texto, sin FK); `alertas_catalogo` no tiene `id`, la clave es `clave`; `hato_alertas_envios.enviado_at`; `hato_chequeo_vacas` sin `updated_at`.
 - Una semana quieta (solo el commit de memoria) igual dispara un deploy de produccion en Vercel: un deployment en HEAD no prueba que algo visible haya salido.
 - ESCO-134: alertas de gerencia pendientes bajaron de 6 a 4 (3 parto_proximo + 1 servicio_sin_confirmacion); recibe/escalamiento siguen en 0.
+
+## Corrida 2026-10-05-lunes
+
+- Sin hallazgos; ningún cierre (ESCO-134/135/136 esperan merge + deploy + 172/173/174). [corrida: 2026-10-05-lunes]
+- **El clon del worktree es SHALLOW** (historia sólo hasta 2026-09-16). Antes de cualquier conteo de cadencia: `git fetch --shallow-since=<mes-1> origin main`. Sin eso septiembre dio 60 commits en vez de 153. [corrida: 2026-10-05-lunes]
+- `git merge-tree --write-tree` devuelve un TREE; para encadenar merges simulados envolverlo con `git commit-tree <tree> -p <prev> -p <pr>`. Traer cabezas de PR como `refs/po/prN` vía `pull/N/head`. [corrida: 2026-10-05-lunes]
+- Baseline: HEAD `22b2265` · edge v266 = `f33a943`, sin deploy desde 09-25 · migraciones hasta 171, todas con archivo · Vercel prod = HEAD (sondeo de contenido en `ProduccionView-Cz7hKvtg.js`) · 4 PRs abiertos (#299–#302), todos verdes, merge limpio en secuencia. [corrida: 2026-10-05-lunes]
+- Cadencia mensual septiembre 2026: 35,7 commits/semana · 28,2 aterrizajes/semana · 83 PRs · fix share 75,3 % (55/18); agosto 68,9 % (82/37). Lag: edge 66 s / 7 min / mismo día; migración 171 a 35 s del merge (récord). Próxima medición mensual: 2026-11-02. [corrida: 2026-10-05-lunes]
+- La cabecera de la 171 sigue diciendo «ESCRITA, SIN APLICAR» (mismo patrón que la 170): leer el ledger, no la cabecera. [corrida: 2026-10-05-lunes]
