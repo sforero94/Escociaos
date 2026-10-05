@@ -16,6 +16,7 @@ import {
   ligarFilasASubidas,
   mensajeErrorDescarte,
   mesesAlrededor,
+  motivoBloqueoDescarte,
   rutasFotoABorrar,
   subidasDelMes,
   ventanaCreatedAt,
@@ -25,7 +26,7 @@ import {
 } from '@/utils/hato/subidasPesajeMes';
 
 const SELECT_CAPTURA =
-  'id, anio, mes, storage_bucket, storage_rutas, storage_ok, created_by, creado_en, origen, desenlace';
+  'id, anio, mes, storage_bucket, storage_rutas, storage_ok, created_by, creado_en, origen, desenlace, filas_escritas';
 const SELECT_FILA = 'id, fecha, created_at, created_by, fuente';
 const SEGUNDOS_URL = 60 * 60;
 
@@ -40,6 +41,7 @@ interface CapturaCruda {
   creado_en: string;
   origen: string;
   desenlace: string;
+  filas_escritas: number | null;
 }
 
 interface FilaCruda {
@@ -77,6 +79,7 @@ function capturaDesdeCruda(fila: CapturaCruda): CapturaSubida {
     storageBucket: fila.storage_bucket,
     storageRutas: fila.storage_rutas ?? [],
     storageOk: fila.storage_ok,
+    filasEscritas: fila.filas_escritas,
   };
 }
 
@@ -87,6 +90,8 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
   const [subidas, setSubidas] = useState<SubidaLigada[]>([]);
   const [autores, setAutores] = useState<Map<string, string>>(new Map());
   const [urls, setUrls] = useState<Record<string, string>>({});
+  // Subidas que no se pueden descartar sin dañar litros de otra subida.
+  const [bloqueos, setBloqueos] = useState<Map<string, string>>(new Map());
   const [tick, setTick] = useState(0);
 
   const cargar = useCallback(async () => {
@@ -159,7 +164,14 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
       }
       await Promise.all(firmas);
 
-      setSubidas(subidasDelMes(ligarFilasASubidas(capturas, filas), anio, mes));
+      const ligadas = ligarFilasASubidas(capturas, filas);
+      const bloqueosNuevos = new Map<string, string>();
+      for (const subida of ligadas) {
+        const motivo = motivoBloqueoDescarte(ligadas, subida.captura.id);
+        if (motivo) bloqueosNuevos.set(subida.captura.id, motivo);
+      }
+      setSubidas(subidasDelMes(ligadas, anio, mes));
+      setBloqueos(bloqueosNuevos);
       setAutores(autoresNuevos);
       setUrls(urlsNuevas);
     } catch (err) {
@@ -182,6 +194,8 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
       };
       const subida = subidas.find((item) => item.captura.id === capturaId);
       if (!subida) return fallo('Esta subida ya no está en la lista.');
+      const bloqueo = bloqueos.get(capturaId);
+      if (bloqueo) return fallo(bloqueo);
       setDescartando(true);
       setError(null);
       try {
@@ -232,7 +246,7 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
         setDescartando(false);
       }
     },
-    [subidas],
+    [subidas, bloqueos],
   );
 
   return { cargando, descartando, error, subidas, autores, urls, descartar };
