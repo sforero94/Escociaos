@@ -42,6 +42,10 @@ scripts/import-hato/out/
 .claude/worktrees/
 .claude/settings.local.json
 
+# Bytecode de Python (el hook .claude/hooks/supabase-guard.py lo genera al correr)
+__pycache__/
+*.pyc
+
 # F0 spike Tailwind: capturas locales, no se versionan
 docs/tailwind-spike/antes/
 docs/tailwind-spike/despues/
