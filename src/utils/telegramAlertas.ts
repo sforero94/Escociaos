@@ -6,12 +6,7 @@
 // sin que este archivo cambie. Nada aquí asume una lista fija de módulos o
 // de claves de alerta — todo se deriva de las filas que llegan del catálogo.
 
-import {
-  CLAVES_ALERTA_TELEGRAM_CAMPO,
-  esTipoAlertaTelegramCampo,
-  puedeRecibirAlertaTelegram,
-  tipoDesdeClaveCatalogo,
-} from '@/utils/hatoAlertas';
+import { CLAVES_ALERTA_TELEGRAM_CAMPO } from '@/utils/hatoAlertas';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -174,36 +169,13 @@ export function formatearResumenAlertas(resumen: ResumenSuscripciones): string {
 }
 
 // ---------------------------------------------------------------------------
-// Defaults of issue #217 — Fernando (campo) Telegram = secado + tratamiento;
-// gerencia types stay off Telegram unless someone turns them on from the
-// web manager. Keys live in hatoAlertas so they cannot drift from the tick.
+// Defaults for a new campo user (issue #217). Only a suggestion: since
+// 2026-10-05 (owner decision) no rule in code limits who receives which
+// alert. The subscription rows are the single source of truth, edited from
+// Configuración → Alertas, and the tick sends to exactly those rows.
 // ---------------------------------------------------------------------------
 
-export { CLAVES_ALERTA_TELEGRAM_CAMPO, puedeRecibirAlertaTelegram };
-
-/** Force-off recibe/escalamiento when the guardrail forbids the pair.
- * Both save paths (TelegramConfig + Quién recibe) must go through this so a
- * stale checkbox cannot persist a gerencia subscription on a campo key. */
-export function aplicarGuardrailSuscripcion<
-  T extends { alerta_clave: string; recibe: boolean; escalamiento: boolean },
->(rolBot: string, fila: T): T {
-  const permitido = puedeRecibirAlertaTelegram(rolBot, fila.alerta_clave);
-  return {
-    ...fila,
-    recibe: permitido && fila.recibe,
-    escalamiento: permitido && fila.escalamiento,
-  };
-}
-
-/** Spanish reason the Quién recibe / TelegramConfig checkbox is locked.
- * Null when the pair is allowed. */
-export function motivoBloqueoAlertaTelegram(rolBot: string, claveAlerta: string): string | null {
-  if (puedeRecibirAlertaTelegram(rolBot, claveAlerta)) return null;
-  if (esTipoAlertaTelegramCampo(tipoDesdeClaveCatalogo(claveAlerta))) {
-    return 'Gerencia no recibe Secado ni Paso de tratamiento en Telegram. Esos avisos van a Fernando (campo).';
-  }
-  return 'Campo no recibe este tipo en Telegram.';
-}
+export { CLAVES_ALERTA_TELEGRAM_CAMPO };
 
 /** Default checkboxes for a `rol_bot='campo'` user. Escalamiento is always
  * off: campo answers in the corral, it does not escalate to itself. */

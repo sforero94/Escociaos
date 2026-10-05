@@ -2,14 +2,12 @@
 // DESCRIPCIÓN: Catálogo + usuarios Telegram + suscripciones para
 // Configuración → Usuarios (issue #217). Escribe en
 // `telegram_alertas_suscripciones` (RLS Gerencia-only, migración 096).
-// El tick lee esas mismas filas; no hay un segundo canal. Una clave que
-// el guardrail prohíbe (campo↔gerencia o gerencia↔campo) se persiste
-// apagada aunque la casilla llegue marcada.
+// El tick lee esas mismas filas; no hay un segundo canal. Desde 2026-10-05
+// no hay regla de rol en código: lo que Gerencia marca es lo que se guarda.
 
 import { useCallback, useEffect, useState } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import {
-  aplicarGuardrailSuscripcion,
   construirFilasParaGuardar,
   type AlertaCatalogoRow,
   type AlertaSuscripcionRow,
@@ -54,7 +52,7 @@ export function useAlertasRouting() {
   const filasDeUsuario = useCallback(
     (usuario: TelegramUsuarioRow, estado: SuscripcionEstado, updatedBy: string | null) => {
       return construirFilasParaGuardar(usuario.id, estado, catalogo).map((f) => ({
-        ...aplicarGuardrailSuscripcion(usuario.rol_bot, f),
+        ...f,
         updated_by: updatedBy,
       }));
     },

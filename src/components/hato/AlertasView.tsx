@@ -10,7 +10,7 @@
 //   Configuración — matriz tipo × usuario (`recibe`) + tipos.
 
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, BellRing, Inbox, Plus, ListTodo, History, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -22,8 +22,6 @@ import { AlertaGrupoInformativo } from './components/AlertaGrupoInformativo';
 import { AlertaHistorialTabla } from './components/AlertaHistorialTabla';
 import { CrearAlertaManualDialog } from './components/CrearAlertaManualDialog';
 import { EditarAlertaDialog } from './components/EditarAlertaDialog';
-import { AlertasQuienRecibeTab } from './components/AlertasQuienRecibeTab';
-import { AlertasTiposTab } from './components/AlertasTiposTab';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { LABEL_TIPO_ALERTA_HATO, ordenarAlertasHato } from '@/utils/hatoAlertasUi';
 import {
@@ -102,6 +100,7 @@ export function AlertasView() {
   const { profile, user } = useAuth();
   const canWrite = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const canGerencia = profile?.rol === 'Gerencia';
+  const navigate = useNavigate();
 
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(tabAlertasDesdeParam(searchParams.get('tab')));
@@ -170,7 +169,7 @@ export function AlertasView() {
           breadcrumb="Hato Lechero"
           section="Alertas"
           title="Alertas"
-          subtitle="Activas, historial y quién recibe cada tipo."
+          subtitle="Activas e historial. La configuración vive en Configuración → Alertas."
         />
 
         {error && (
@@ -197,6 +196,14 @@ export function AlertasView() {
           </TabsList>
 
           <TabsContent value="activas" className="mt-6">
+            {canWrite && (
+              <div className="flex justify-end mb-4">
+                <Button size="sm" onClick={() => setCrearOpen(true)}>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Crear alerta
+                </Button>
+              </div>
+            )}
             {loading ? (
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -205,7 +212,7 @@ export function AlertasView() {
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
                 <Inbox className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500 max-w-md mx-auto">
-                  No hay alertas activas. El motor las genera cada día a las 5:45 a.m.
+                  No hay alertas activas. El motor las genera cada día a la hora configurada en Configuración → Alertas.
                 </p>
               </div>
             ) : (
@@ -241,23 +248,20 @@ export function AlertasView() {
             )}
           </TabsContent>
 
-          <TabsContent value="configuracion" className="mt-6 space-y-10">
-            <section>
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Usuarios</h2>
-              <AlertasQuienRecibeTab canGerencia={canGerencia} updatedBy={profile?.id ?? null} />
-            </section>
-            <section>
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Tipos</h2>
-                {canWrite && (
-                  <Button size="sm" onClick={() => setCrearOpen(true)}>
-                    <Plus className="w-4 h-4 mr-1.5" />
-                    Crear alerta
-                  </Button>
-                )}
-              </div>
-              <AlertasTiposTab canWrite={canWrite} />
-            </section>
+          <TabsContent value="configuracion" className="mt-6">
+            <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-3">
+              <p className="text-sm text-gray-700">
+                La hora de envío, quién recibe cada alerta y los tipos activos se manejan en Configuración → Alertas.
+              </p>
+              {canGerencia ? (
+                <Button size="sm" onClick={() => navigate('/configuracion?tab=alertas')}>
+                  <SlidersHorizontal className="w-4 h-4 mr-1.5" />
+                  Ir a Configuración → Alertas
+                </Button>
+              ) : (
+                <p className="text-xs text-gray-500">Solo Gerencia puede cambiar esta configuración.</p>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>

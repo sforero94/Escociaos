@@ -125,7 +125,6 @@ import {
   alertasConHechoRegistrado,
   claveAlertaCatalogo,
   agruparSuscriptoresPorClave,
-  destinatariosTelegramPermitidos,
   ESTADOS_ALERTA_RESPONSIBLES,
   type AlertaAbiertaParaRetiro,
   type AlertaAbiertaConHecho,
@@ -650,7 +649,6 @@ async function correrTick(
   let enviadas = 0; // # de ALERTAS con al menos un envío exitoso en este tick
   let mensajesEnviados = 0; // # de mensajes de Telegram individuales enviados (broadcast)
   let saltadasSinDestinatario = 0;
-  let destinatariosFiltradosCampo = 0; // issue #217: campo blocked from gerencia types
 
   for (const alerta of activas) {
     const config = configPorTipo.get(alerta.tipo);
@@ -663,13 +661,9 @@ async function correrTick(
     // no un único destinatario. `hato_alertas_config.destinatario_telegram_id`
     // ya no se lee -- ver cabecera del archivo.
     const clave = claveAlertaCatalogo(MODULO_ALERTAS, alerta.tipo);
-    const destinatariosBrutos = suscriptoresPorClave.get(clave)?.recibe ?? [];
-    const destinatarios = destinatariosTelegramPermitidos(
-      alerta.tipo,
-      destinatariosBrutos,
-      rolPorTelegramId,
-    );
-    destinatariosFiltradosCampo += destinatariosBrutos.length - destinatarios.length;
+    // Desde 2026-10-05 (decisión del dueño) las suscripciones son la ÚNICA
+    // regla: el código no filtra por rol_bot. Se edita en Configuración → Alertas.
+    const destinatarios = suscriptoresPorClave.get(clave)?.recibe ?? [];
     if (destinatarios.length === 0) {
       saltadasSinDestinatario += 1;
       continue;
@@ -807,13 +801,7 @@ async function correrTick(
     // a TODOS los suscritos con escalamiento=true para esta clave, no a un
     // único destinatario de la variable de entorno.
     const claveEscalamiento = claveAlertaCatalogo(MODULO_ALERTAS, alerta.tipo);
-    const destinatariosEscalamientoBrutos = suscriptoresPorClave.get(claveEscalamiento)?.escalamiento ?? [];
-    const destinatariosEscalamiento = destinatariosTelegramPermitidos(
-      alerta.tipo,
-      destinatariosEscalamientoBrutos,
-      rolPorTelegramId,
-    );
-    destinatariosFiltradosCampo += destinatariosEscalamientoBrutos.length - destinatariosEscalamiento.length;
+    const destinatariosEscalamiento = suscriptoresPorClave.get(claveEscalamiento)?.escalamiento ?? [];
     if (destinatariosEscalamiento.length > 0) {
       const mensajeBase = (alerta.datos?.mensaje as string | undefined) ?? 'Alerta del hato lechero (sin mensaje generado).';
       for (const telegramId of destinatariosEscalamiento) {
@@ -890,7 +878,6 @@ async function correrTick(
     enviadas, // # de alertas con al menos un envío exitoso
     mensajes_enviados: mensajesEnviados, // # de mensajes de Telegram individuales (broadcast, 096)
     saltadas_sin_destinatario: saltadasSinDestinatario,
-    destinatarios_filtrados_campo: destinatariosFiltradosCampo,
     escaladas,
     mensajes_escalamiento: mensajesEscalamiento,
     expiradas: expiradas + expiradasAtascadas,
