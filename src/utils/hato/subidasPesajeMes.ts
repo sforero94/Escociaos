@@ -30,6 +30,9 @@ export interface CapturaSubida {
   storageBucket: string;
   storageRutas: string[];
   storageOk: boolean;
+  /** `hato_capturas_foto.filas_escritas` (146): creadas + ACTUALIZADAS por el
+   * commit. NULL = la subida no llegó a escribir. */
+  filasEscritas?: number | null;
 }
 
 export interface FilaSubida {
@@ -144,6 +147,47 @@ export function subidasDelMes(
 /** Rutas reales en Storage. `{}` o null (el caso «Sin foto») no pide un borrado. */
 export function rutasFotoABorrar(captura: CapturaSubida): string[] {
   return captura.storageRutas.map((ruta) => ruta.trim()).filter((ruta) => ruta.length > 0);
+}
+
+/** Filas que la subida escribió por UPDATE sobre una fila ajena: el commit
+ * actualiza por id sin mover `created_at`, así que esas filas siguen ligadas a
+ * la subida que las insertó. 0 si no se sabe (`filas_escritas` NULL). */
+function filasActualizadasAjenas(subida: SubidaLigada): number {
+  const escritas = subida.captura.filasEscritas;
+  if (escritas == null || !Number.isFinite(escritas)) return 0;
+  return Math.max(0, escritas - subida.filaIds.length);
+}
+
+/**
+ * Motivo para NO descartar una subida, o `null` si se puede.
+ *
+ * La liga por `created_at` no ve un UPDATE. Si una subida actualizó filas que
+ * creó otra, ningún lado se puede descartar sin dañar datos: borrar la
+ * anterior se lleva litros que ya son de la posterior, y borrar la posterior
+ * deja esas filas con los valores de una subida descartada. Falla cerrado.
+ */
+export function motivoBloqueoDescarte(
+  ligadas: readonly SubidaLigada[],
+  capturaId: string,
+): string | null {
+  const propia = ligadas.find((s) => s.captura.id === capturaId);
+  if (!propia) return null;
+  const ajenas = filasActualizadasAjenas(propia);
+  if (ajenas > 0) {
+    return `Esta subida actualizó ${ajenas} pesajes que había creado otra subida. Descartarla no los devuelve a su valor anterior. Corrige esos litros desde la semana.`;
+  }
+  if (propia.filaIds.length === 0) return null;
+  const marca = Date.parse(propia.captura.creadoEn);
+  const posterior = ligadas.find(
+    (s) =>
+      s.captura.id !== capturaId &&
+      Date.parse(s.captura.creadoEn) > marca &&
+      filasActualizadasAjenas(s) > 0,
+  );
+  if (posterior) {
+    return 'Una subida posterior actualizó pesajes de esta subida. Descartarla borraría litros de esa subida posterior. Corrige esos litros desde la semana.';
+  }
+  return null;
 }
 
 export const MENSAJE_SIN_PERMISO_DESCARTE =
