@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { LotesConfig } from './LotesConfig';
 import { SublotesConfig } from './SublotesConfig';
@@ -6,14 +7,16 @@ import { UsuariosConfig } from './UsuariosConfig';
 import { TelegramConfig } from './TelegramConfig';
 import { GanadoConfig } from './GanadoConfig';
 import { AjustesHato } from './AjustesHato';
+import { AlertasConfig } from './AlertasConfig';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeMode } from '../../contexts/SafeModeContext';
-import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send, Beef, Milk } from 'lucide-react';
+import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send, Beef, Milk, BellRing } from 'lucide-react';
 
 export function ConfiguracionDashboard() {
   const { profile } = useAuth();
   const { isSafeModeEnabled, toggleSafeMode } = useSafeMode();
-  const [activeTab, setActiveTab] = useState('general');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'general');
 
   const isGerencia = profile?.rol === 'Gerencia';
 
@@ -56,6 +59,16 @@ export function ConfiguracionDashboard() {
               >
                 <Send className="w-4 h-4 mr-1.5" />
                 Telegram Bot
+              </TabsTrigger>
+            )}
+
+            {isGerencia && (
+              <TabsTrigger
+                value="alertas"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
+              >
+                <BellRing className="w-4 h-4 mr-1.5" />
+                Alertas
               </TabsTrigger>
             )}
 
@@ -154,6 +167,12 @@ export function ConfiguracionDashboard() {
           {isGerencia && (
             <TabsContent value="telegram" className="space-y-6">
               <TelegramConfig />
+            </TabsContent>
+          )}
+
+          {isGerencia && (
+            <TabsContent value="alertas" className="space-y-6">
+              <AlertasConfig />
             </TabsContent>
           )}
 

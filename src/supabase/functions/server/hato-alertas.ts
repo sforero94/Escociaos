@@ -1449,9 +1449,12 @@ export function construirMensajeCierreAlertaBroadcast(
 // callers (bot + AlertasView) write. Never a second notification stack.
 // ============================================================================
 
-/** The only hato types a `rol_bot='campo'` user (Fernando) may receive on
- * Telegram. Everything else is web-only for campo, even if a subscription
- * row is on. */
+/** The hato types that are *suggested* for a `rol_bot='campo'` user
+ * (Fernando) when Gerencia creates his Telegram user. Only a default: since
+ * 2026-10-05 (owner decision) nothing in code restricts who receives which
+ * alert -- `telegram_alertas_suscripciones` (edited from Configuración →
+ * Alertas) is the single source of truth, and the tick sends to exactly the
+ * subscribed users. */
 export const TIPOS_ALERTA_TELEGRAM_CAMPO: readonly TipoAlertaHato[] = [
   'secado_due',
   'tratamiento_paso',
@@ -1493,38 +1496,6 @@ export function tipoDesdeClaveCatalogo(clave: string): string {
 export function moduloDesdeClaveCatalogo(clave: string): string {
   const i = clave.indexOf('.');
   return i < 0 ? '' : clave.slice(0, i);
-}
-
-/**
- * Can this Telegram user receive this catalog key on Telegram?
- * - Non-hato keys: yes (this guardrail is hato-only; inventory stays open).
- * - Hato campo types (`secado_due`, `tratamiento_paso`): only `rol_bot='campo'`.
- *   Unknown / gerencia / admin fail closed — a missing role must not re-flood
- *   Martha/Santiago (issue #251). Fernando is `campo`, so he still passes.
- * - Hato gerencia types: everyone except `campo` (issue #217).
- */
-export function puedeRecibirAlertaTelegram(rolBot: string, claveAlerta: string): boolean {
-  if (moduloDesdeClaveCatalogo(claveAlerta) !== 'hato') return true;
-  const tipo = tipoDesdeClaveCatalogo(claveAlerta);
-  if (esTipoAlertaTelegramCampo(tipo)) return rolBot === 'campo';
-  return rolBot !== 'campo';
-}
-
-/**
- * Filters the broadcast recipient list AFTER subscriptions are resolved.
- * Campo types keep only `rol_bot='campo'` (missing role → drop, fail closed).
- * Gerencia types drop `campo` and keep everyone else, including an id whose
- * role was not joined (fail open for gerencia accounts).
- */
-export function destinatariosTelegramPermitidos(
-  tipo: TipoAlertaHato,
-  telegramIds: readonly string[],
-  rolPorTelegramId: ReadonlyMap<string, string>,
-): string[] {
-  if (esTipoAlertaTelegramCampo(tipo)) {
-    return telegramIds.filter((id) => rolPorTelegramId.get(id) === 'campo');
-  }
-  return telegramIds.filter((id) => rolPorTelegramId.get(id) !== 'campo');
 }
 
 export function estadoTrasRespuestaAlerta(respuesta: RespuestaAlertaHato): EstadoAlertaHato {

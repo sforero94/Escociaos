@@ -3,11 +3,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * Issue #217: a bad subscription must not Telegram-spam Fernando with
- * gerencia types. The filter lives in hatoAlertas.ts; both tick copies
- * must actually CALL it on the broadcast list (recibe AND escalamiento).
- * A comment is not enough — that is how the 068 climate gate was "fixed"
- * without changing the table.
+ * Since 2026-10-05 (owner decision) the subscriptions are the ONLY rule for
+ * who receives an alert: no rol_bot filter in code. Gerencia edits them from
+ * Configuración → Alertas. These guards pin that the old role filter
+ * (issues #217/#251) does not come back by accident in any copy.
  */
 
 const COPIAS = [
@@ -15,14 +14,13 @@ const COPIAS = [
   'supabase/functions/make-server-1ccce916/hato-alertas-tick.ts',
 ];
 
-describe('tick: guardrail Telegram campo (issue #217)', () => {
-  it('ambas copias del tick filtran destinatarios con destinatariosTelegramPermitidos', () => {
+describe('tick: las suscripciones son la única regla de destinatarios', () => {
+  it('ninguna copia del tick filtra destinatarios por rol', () => {
     for (const rel of COPIAS) {
       const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('destinatariosTelegramPermitidos');
-      expect(fuente, rel).toMatch(/rol_bot/);
-      const usos = fuente.split('destinatariosTelegramPermitidos(').length - 1;
-      expect(usos, `${rel} debe filtrar recibe y escalamiento`).toBeGreaterThanOrEqual(2);
+      expect(fuente, rel).not.toContain('destinatariosTelegramPermitidos');
+      expect(fuente, rel).toContain("suscriptoresPorClave.get(clave)?.recibe");
+      expect(fuente, rel).toContain("suscriptoresPorClave.get(claveEscalamiento)?.escalamiento");
     }
   });
 
@@ -110,17 +108,26 @@ const UI_QUIEN_RECIBE = [
   'src/components/configuracion/TelegramConfig.tsx',
 ];
 
-describe('UI: gerencia no enciende secado/tratamiento en Telegram (issue #251)', () => {
-  it('Quién recibe y TelegramConfig bloquean la casilla con el mismo guardrail', () => {
+describe('UI: Gerencia controla quién recibe sin reglas de rol en código', () => {
+  it('Quién recibe y TelegramConfig no bloquean casillas por rol', () => {
     for (const rel of UI_QUIEN_RECIBE) {
       const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('puedeRecibirAlertaTelegram');
-      expect(fuente, rel).toContain('motivoBloqueoAlertaTelegram');
-      expect(fuente, rel).toMatch(/disabled=\{!permitido/);
+      expect(fuente, rel).not.toContain('puedeRecibirAlertaTelegram');
+      expect(fuente, rel).not.toContain('motivoBloqueoAlertaTelegram');
+      expect(fuente, rel).not.toMatch(/disabled=\{!permitido/);
     }
   });
 
-  it('los dos caminos de guardado pasan por aplicarGuardrailSuscripcion', () => {
+  it('Quién recibe edita Recibe y Escala en la misma matriz', () => {
+    const fuente = readFileSync(
+      resolve(__dirname, '../..', 'src/components/hato/components/AlertasQuienRecibeTab.tsx'),
+      'utf8',
+    );
+    expect(fuente).toContain('alternarRecibe');
+    expect(fuente).toContain('alternarEscalamiento');
+  });
+
+  it('ningún camino de guardado reescribe lo que marcó Gerencia', () => {
     const routing = readFileSync(
       resolve(__dirname, '../..', 'src/components/hato/hooks/useAlertasRouting.ts'),
       'utf8',
@@ -129,8 +136,8 @@ describe('UI: gerencia no enciende secado/tratamiento en Telegram (issue #251)',
       resolve(__dirname, '../..', 'src/components/configuracion/TelegramConfig.tsx'),
       'utf8',
     );
-    expect(routing).toContain('aplicarGuardrailSuscripcion');
-    expect(config).toContain('aplicarGuardrailSuscripcion');
+    expect(routing).not.toContain('aplicarGuardrailSuscripcion');
+    expect(config).not.toContain('aplicarGuardrailSuscripcion');
   });
 
   it('la migración 152 deja las claves de campo solo en Fernando y no se reescribe a mano', () => {

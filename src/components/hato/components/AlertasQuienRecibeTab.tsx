@@ -1,10 +1,9 @@
 // ARCHIVO: components/hato/components/AlertasQuienRecibeTab.tsx
 // DESCRIPCIÓN: Matriz tipo × usuario sobre telegram_alertas_suscripciones
 // (issue #217). Filas = tipos del catálogo, columnas = usuarios Telegram,
-// casilla = recibe sí/no. Escalamiento no vive en esta superficie.
-// Un usuario `campo` no puede recibir tipos de gerencia — el checkbox se
-// apaga y el guardrail del tick vuelve a filtrar. Issue #251: gerencia no
-// puede encender Recibe/Escalamiento en secado_due / tratamiento_paso.
+// dos casillas: Recibe y Escala. Desde 2026-10-05 (decisión del dueño) no
+// hay ninguna regla de rol en código: lo que Gerencia marca acá es
+// exactamente lo que el tick manda.
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
@@ -15,10 +14,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { useAlertasRouting } from '../hooks/useAlertasRouting';
 import {
   agruparAlertasPorModulo,
+  alternarEscalamiento,
   alternarRecibe,
   construirEstadoDesdeSuscripciones,
-  motivoBloqueoAlertaTelegram,
-  puedeRecibirAlertaTelegram,
   type SuscripcionEstado,
 } from '@/utils/telegramAlertas';
 import type { TelegramUsuarioRow } from '@/utils/telegramUsuarios';
@@ -88,11 +86,13 @@ export function AlertasQuienRecibeTab({
     );
   }
 
-  const handleToggle = (usuario: TelegramUsuarioRow, clave: string) => {
-    if (!puedeRecibirAlertaTelegram(usuario.rol_bot, clave)) return;
+  const handleToggle = (usuario: TelegramUsuarioRow, clave: string, campo: 'recibe' | 'escalamiento') => {
     setEstados((prev) => ({
       ...prev,
-      [usuario.id]: alternarRecibe(prev[usuario.id] ?? {}, clave),
+      [usuario.id]:
+        campo === 'recibe'
+          ? alternarRecibe(prev[usuario.id] ?? {}, clave)
+          : alternarEscalamiento(prev[usuario.id] ?? {}, clave),
     }));
   };
 
@@ -113,9 +113,9 @@ export function AlertasQuienRecibeTab({
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-gray-600 max-w-2xl">
-          Una fila por tipo de alerta, una columna por usuario. La casilla es Recibe.
-          Fernando (campo) solo puede recibir Secado y Paso de tratamiento.
-          Gerencia no puede encender Recibe ni Escalamiento en esos tipos: los gestiona en esta pantalla.
+          Una fila por tipo de alerta, una columna por usuario. Recibe: le llega la alerta por Telegram.
+          Escala: le llega un aviso si nadie responde dentro de las horas de escalamiento del tipo.
+          Lo que marques aquí es exactamente lo que el sistema envía.
         </p>
         <Button size="sm" disabled={guardando} onClick={() => void handleGuardar()}>
           {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
@@ -151,22 +151,27 @@ export function AlertasQuienRecibeTab({
                   <TableCell sticky>{alerta.nombre}</TableCell>
                   {usuarios.map((usuario) => {
                     const actual = estados[usuario.id]?.[alerta.clave] ?? { recibe: false, escalamiento: false };
-                    const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, alerta.clave);
-                    const motivo = motivoBloqueoAlertaTelegram(usuario.rol_bot, alerta.clave);
                     return (
                       <TableCell key={usuario.id} className="text-center">
-                        <div className="flex justify-center">
-                          <Checkbox
-                            checked={permitido && actual.recibe}
-                            disabled={!permitido || guardando}
-                            onCheckedChange={() => handleToggle(usuario, alerta.clave)}
-                            aria-label={
-                              motivo
-                                ? `${alerta.nombre} para ${usuario.nombre_display}: ${motivo}`
-                                : `${alerta.nombre} para ${usuario.nombre_display}`
-                            }
-                            title={motivo ?? undefined}
-                          />
+                        <div className="flex justify-center gap-3">
+                          <label className="flex flex-col items-center gap-1 text-[11px] text-gray-500">
+                            <Checkbox
+                              checked={actual.recibe}
+                              disabled={guardando}
+                              onCheckedChange={() => handleToggle(usuario, alerta.clave, 'recibe')}
+                              aria-label={`${alerta.nombre}: ${usuario.nombre_display} recibe`}
+                            />
+                            Recibe
+                          </label>
+                          <label className="flex flex-col items-center gap-1 text-[11px] text-gray-500">
+                            <Checkbox
+                              checked={actual.escalamiento}
+                              disabled={guardando}
+                              onCheckedChange={() => handleToggle(usuario, alerta.clave, 'escalamiento')}
+                              aria-label={`${alerta.nombre}: ${usuario.nombre_display} recibe el escalamiento`}
+                            />
+                            Escala
+                          </label>
                         </div>
                       </TableCell>
                     );

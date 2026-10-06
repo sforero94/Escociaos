@@ -33,9 +33,6 @@ import {
   contarSuscripcionesUsuario,
   formatearResumenAlertas,
   estadoInicialSuscripciones,
-  aplicarGuardrailSuscripcion,
-  motivoBloqueoAlertaTelegram,
-  puedeRecibirAlertaTelegram,
   type AlertaCatalogoRow,
   type AlertaSuscripcionRow,
   type SuscripcionEstado,
@@ -302,10 +299,9 @@ export function TelegramConfig() {
       // `updated_by` (migración 096) no tiene trigger que lo llene -- a
       // diferencia del patrón `created_by` de 040/050/063/074, acá se
       // espera que quien escribe lo declare.
-      // Issues #217/#251: campo cannot persist gerencia hato types, and
-      // gerencia cannot persist campo types, even if a stale checkbox is on.
+      // Desde 2026-10-05 no hay regla de rol en código: se guarda lo marcado.
       const filasConAutor = filas.map((f) => ({
-        ...aplicarGuardrailSuscripcion(rolBot, f),
+        ...f,
         updated_by: profile?.id ?? null,
       }));
       const supabase = getSupabase() as any;
@@ -728,8 +724,6 @@ export function TelegramConfig() {
                         <div className="rounded-lg border border-secondary/30 divide-y divide-secondary/20">
                           {grupo.alertas.map((alerta) => {
                             const estado = alertasEstado[alerta.clave] ?? { recibe: false, escalamiento: false };
-                            const permitido = puedeRecibirAlertaTelegram(rolBot, alerta.clave);
-                            const motivo = motivoBloqueoAlertaTelegram(rolBot, alerta.clave);
                             return (
                               <div key={alerta.clave} className="flex items-start justify-between gap-3 p-2.5">
                                 <div className="min-w-0">
@@ -737,17 +731,11 @@ export function TelegramConfig() {
                                   {alerta.descripcion && (
                                     <p className="text-xs text-brand-brown/60 mt-0.5">{alerta.descripcion}</p>
                                   )}
-                                  {motivo && (
-                                    <p className="text-xs text-amber-700 mt-0.5">
-                                      {motivo}
-                                    </p>
-                                  )}
                                 </div>
                                 <div className="flex flex-shrink-0 gap-4">
                                   <label className="flex flex-col items-center gap-1 text-xs text-brand-brown/70">
                                     <Checkbox
-                                      checked={permitido && estado.recibe}
-                                      disabled={!permitido}
+                                      checked={estado.recibe}
                                       onCheckedChange={() =>
                                         setAlertasEstado((prev) => alternarRecibe(prev, alerta.clave))
                                       }
@@ -756,8 +744,7 @@ export function TelegramConfig() {
                                   </label>
                                   <label className="flex flex-col items-center gap-1 text-xs text-brand-brown/70">
                                     <Checkbox
-                                      checked={permitido && estado.escalamiento}
-                                      disabled={!permitido}
+                                      checked={estado.escalamiento}
                                       onCheckedChange={() =>
                                         setAlertasEstado((prev) => alternarEscalamiento(prev, alerta.clave))
                                       }

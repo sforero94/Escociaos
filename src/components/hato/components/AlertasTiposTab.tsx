@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useHatoAlertasConfig } from '../hooks/useHatoAlertasConfig';
 import { LABEL_TIPO_ALERTA_HATO, TIPOS_ALERTA_HATO } from '@/utils/hatoAlertasUi';
-import { etiquetaCanalAlerta, validarHorasEscalamiento } from '@/utils/hatoAlertasGestor';
+import { validarHorasEscalamiento } from '@/utils/hatoAlertasGestor';
 import type { TipoAlertaHato } from '@/utils/hatoAlertas';
 
 export function AlertasTiposTab({ canWrite }: { canWrite: boolean }) {
@@ -94,22 +94,18 @@ export function AlertasTiposTab({ canWrite }: { canWrite: boolean }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-600">
-        Un tipo pausado no se manda por Telegram. Las filas ya generadas siguen en Activas o Historial.
-        Campo = Secado y Paso de tratamiento. El resto es web, salvo que Gerencia lo reciba.
+        Un tipo pausado no se genera ni se manda por Telegram. Las filas ya generadas siguen en Activas o Historial.
+        Quién recibe cada tipo se decide en la matriz de arriba.
       </p>
       {TIPOS_ALERTA_HATO.map((tipo) => {
         const fila = porTipo.get(tipo);
         if (!fila) return null;
-        const canal = etiquetaCanalAlerta(tipo);
         const horas = horasDraft[tipo] ?? String(fila.horas_escalamiento);
         const ocupado = guardandoTipo === tipo;
         return (
           <div key={tipo} className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-900">{LABEL_TIPO_ALERTA_HATO[tipo]}</p>
-              <p className="text-xs text-gray-500">
-                Canal por defecto: {canal === 'campo' ? 'Telegram de campo' : 'Solo web'}
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 text-sm text-gray-700">
