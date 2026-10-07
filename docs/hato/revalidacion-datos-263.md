@@ -62,12 +62,15 @@ del bundle. No se hicieron escrituras de fechas.
 
 ## Mantenimiento y validación
 
-Actualizar las notas de cierre de ESCO-95/99/98/87 con esta revalidación, conservando
-el historial, la aceptación de 95 y los estados existentes. Vincular el PR del
-informe y releer las cuatro páginas para verificar el resultado.
+Se actualizaron y releyeron las cuatro notas de cierre de ESCO-95/99/98/87 con
+esta revalidación y el enlace al PR del informe. Se preservaron el texto previo,
+la aceptación de 95, los estados y las resoluciones existentes, y sus enlaces
+anteriores. El estado original de las páginas se guardó en un respaldo local
+privado antes de actualizar; se verificó que no habían cambiado entre lecturas.
 
 La [consulta de revalidación](revalidacion-datos-263.sql) es solo lectura. Comprueba
 conteos, ledger, checksum y valores esperados por UUID; no expone salarios.
-Después de crear el PR se valida visualmente el informe en Chromium. Es una
-validación del informe y de los datos consultados, sin afirmar una prueba de la
-aplicación desplegada ni una entrega Telegram real.
+Después de crear el PR, Chromium verificó las cuatro filas del informe y los
+resultados SQL esperados; se inspeccionaron las capturas de escritorio/móvil.
+Es una validación del informe y de los datos consultados, sin afirmar una prueba
+de la aplicación desplegada ni una entrega Telegram real.
