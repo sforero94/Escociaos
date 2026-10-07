@@ -290,6 +290,9 @@ export type TipoSX =
   | 'vendida' // estado, no evento (la venta se registra por otro flujo)
   | 'cero' // '0' -- significado no definido en el plan, agrupado como estado
   | 'gemelar' // 'gem+' = parto GEMELAR (confirmado por el dueño, 2026-07-22)
+  | 'etiqueta_hembra' // etiqueta impresa: sexo solamente, nunca destino ni parto nuevo
+  | 'etiqueta_macho'
+  | 'etiqueta_gemelar'
   | 'mv' // 'Mv' = "vacas de Martha" -- sin significado para el sistema (dueño, 2026-07-22)
   | 'desconocido' // código no reconocido (nombres de vaca, basura)
   | 'vacio'; // celda vacía -- no se checó/no aplica esta ronda, nunca "0"
@@ -344,6 +347,12 @@ export function parseSX(raw: unknown): ResultadoSX {
     });
     return { crudo, tipo: 'desconocido', raza, incierto, issues };
   }
+
+  // El PDF imprime sexo, no el código SX completo. Reconocer esa evidencia
+  // no autoriza a inventar destino, chapeta ni un nuevo evento de parto.
+  if (key === 'hembra') return { crudo, tipo: 'etiqueta_hembra', raza, incierto, issues };
+  if (key === 'macho') return { crudo, tipo: 'etiqueta_macho', raza, incierto, issues };
+  if (key === 'gemelar') return { crudo, tipo: 'etiqueta_gemelar', raza, incierto, issues };
 
   // 'ov'/'oc' (typo de teclado adyacente v/c) / 'o v' (ya sin espacios aquí)
   if (/^o[vc]$/.test(key)) {
@@ -1554,6 +1563,9 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
       });
       break;
     }
+    case 'etiqueta_hembra':
+    case 'etiqueta_macho':
+    case 'etiqueta_gemelar':
     case 'vacia':
     case 'cero':
     case 'mv':
@@ -1610,15 +1622,18 @@ export interface InputSexoCria {
  * nunca un valor por defecto. */
 function sexoDesdeTipoSX(tipo: TipoSX): SexoCria | null {
   switch (tipo) {
+    case 'etiqueta_macho':
     case 'ov': // O = macho, vendido
     case 'o_mas': // O = macho, murió
       return 'macho';
+    case 'etiqueta_hembra':
     case 'av': // A = hembra, vendida
     case 'a_n': // A = hembra, retenida (el número es la chapeta de la cría)
     case 'a_mas': // A = hembra, murió
       return 'hembra';
     case 'aborto':
     case 'gemelar':
+    case 'etiqueta_gemelar':
     case 'vacia':
     case 'vendida':
     case 'cero':
