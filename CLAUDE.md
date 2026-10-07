@@ -504,6 +504,8 @@ Sequential SQL migrations live in `src/sql/migrations/` (numbered from 001; the 
 >
 > **Cuidado con el conector de solo-lectura.** Hay dos MCP de Supabase configurados: el que solo pide `query` es **read-only** (`ERROR: 25006: cannot execute … in a read-only transaction`); el que exige `project_id` es el que escribe, vía `apply_migration`. Usá el primero para verificar y el segundo para aplicar.
 
+- **177**: `hato_confirmar_paso_tratamiento` — **Aplicada a producción 2026-10-07**, ledger `20261007132155` (#257, PR #307). RPC nueva `fn_hato_confirmar_paso_tratamiento(uuid, uuid, date, text)`, `SECURITY INVOKER`, `search_path=public, pg_temp`, EXECUTE solo `service_role`; `anon`/`authenticated` sin permiso. Md5 vivo `10ba388b86c82d8bec5aa73ac10af595`. Instalada antes del edge v269; conteos de tratamientos/pasos/alertas sin cambios (27/6/126). No reaplicar. [Registro de despliegue](docs/hato/despliegue-2026-10-07.md).
+
 ### Hato Lechero Module (`/hato-lechero`)
 
 Full contract lives in [`src/components/hato/CLAUDE.md`](src/components/hato/CLAUDE.md) — read it before touching anything in this module. Two rules that apply from **outside** that directory, so they stay here:
