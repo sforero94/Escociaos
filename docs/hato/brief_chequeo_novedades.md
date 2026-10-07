@@ -3,6 +3,11 @@
 **Written** 2026-09-15 · **Author** CPO · **Origin** `docs/hato/diagnostico-chequeo-2026-09-08.md`
 **Companion issues** #253, #254, #255 (mechanical fixes for three symptoms of this same round)
 
+**Implementation update, 2026-10-07:** #253 and #255 are published in PR #305/#306.
+Photo accumulation and replacement confirmation, plus informational printed-sex parsing, are
+specified in [chequeo-confirmacion-y-sexo.md](chequeo-confirmacion-y-sexo.md). The prerequisite
+and sequencing language below records the original September design, not unfinished work.
+
 ---
 
 ## 1. The problem

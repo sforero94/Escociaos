@@ -25,10 +25,14 @@ Bogotá y es atómica en la base de datos.
 
 ## Despliegue
 
-La migración 177 está **sin aplicar**. Aplicarla antes de redesplegar
-`make-server-1ccce916` con ambos árboles sincronizados. Instalarla no modifica
-registros existentes. La función es INVOKER, con search_path fijo y ejecución
-solo para service_role. El rollback retira la función, sin borrar hechos reales.
+La migración 177 está **aplicada desde el 2026-10-07**, ledger
+`20261007132155`, antes del release edge v269. La instalación no modificó
+registros existentes (27 tratamientos / 6 pasos / 126 alertas, sin cambios).
+La función es INVOKER, con search_path fijo y ejecución solo para service_role;
+anon/authenticated no pueden ejecutarla. No reaplicar por la cabecera histórica
+«NO APLICADA» del archivo. El rollback retira la función después de retirar sus
+llamantes, sin borrar hechos reales. Ver el [registro de publicación y deriva
+posterior](despliegue-2026-10-07.md) para el estado del edge.
 
 La validación local cubre pendientes, sin pendientes, nuevos siempre disponibles,
 cancelación, fechas, múltiples pasos, paginación y conflictos. El simulador usa
