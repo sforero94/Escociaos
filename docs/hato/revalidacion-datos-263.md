@@ -40,8 +40,13 @@ Este informe documenta la conservación; no declara arregladas esas discrepancia
 
 - ESCO-99: Mantenimiento registra que se borraron siete Drench de 0.5 duplicados
   del día 10 y conserva la referencia «snapshot en escocia-snapshots». Se verificó
-  el resultado actual contra la fuente de los días 10/11. El artefacto de aquel
-  snapshot no se ha recuperado en esta corrida; no se afirma haberlo validado.
+  el resultado actual y el patrón de actividades de la fuente de los días 10/11.
+  Seis columnas de cosecha tienen nombre; la séptima tiene el encabezado vacío.
+  No se adjudica esa columna automáticamente a la contratista del sistema: su
+  identidad no puede certificarse solo con esta hoja. El total actual de los siete
+  casos y la corrección anterior están documentados en Mantenimiento; no se propone
+  una nueva escritura. El artefacto de aquel snapshot no se ha recuperado en esta
+  corrida; no se afirma haberlo validado.
 - ESCO-98: no ejecutar el archivo completo 147. Su propia precondición aborta si
   la función ya exige la clave. El md5 coincide con el cuerpo corregido documentado.
 - ESCO-87: 153 figura en ledger `20260915183535`; 176 en `20261006180445`.
