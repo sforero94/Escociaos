@@ -120,14 +120,14 @@ Copias regeneradas con `python scripts/sync-esco-consultas.py`; prueba de parida
 byte a byte en ambos árboles. Las etiquetas del cliente provienen del motor
 canónico. Compilación del servidor con esbuild verifica todos los imports locales.
 
-Validación local: **240 pruebas relevantes y 4.088 pruebas de la suite completa
-(199 archivos) pasan**, `npm run typecheck` y build Vite pasan. Lint global:
+Validación local: **240 pruebas relevantes y 4.123 pruebas de la suite completa
+(202 archivos), incluyendo los cambios concurrentes de main pasan**, `npm run typecheck` y build Vite pasan. Lint global:
 0 errores, 921 advertencias existentes; archivos nuevos/modificados de este
 cambio sin errores de lint. Las guardas que lanzan Python requieren ejecución
 con subprocesos habilitados; en sandbox daban EPERM, al habilitarlos pasa la suite.
 
-Publicación del backend: versión **271**, estado ACTIVE, hash de paquete
-`7ecfd539cbac8319fb288c31d189a0ffce673643c8ffba5caf3d1fa5439dde7c`,
+Publicación del backend: versión **272**, estado ACTIVE, hash de paquete
+`ed115fab0b35188f598ac6a02e73c936127b681d53ab106843e4eb708060caa7`,
 health HTTP 200 `{ "status": "ok" }`. Bundle autocontenido de fuentes locales
 con esbuild y dependencias npm/jsr externas. `bundleOnly` comprobó compilación
 sin alterar la versión 269 original. El PATCH de cuerpo crudo produjo BOOT_ERROR
@@ -143,3 +143,13 @@ handler. No dar por cerrado #311 hasta resolver esta configuración y repetir el
 caso con el usuario en vivo. El frontend necesita el merge/publicación habitual
 para recibir las etiquetas de las nuevas consultas.
 #312 permanece como backlog sin código implementado aquí.
+
+## Estado de GitHub
+
+Issue #311 y #312 creados. Código publicado en la rama
+`feat/esco-consultas-alta-311`, commit `abadada1baa5226d990c5940c8883e1b8d09b718`.
+GitHub devolvió HTTP 500 al crear el PR y al publicar la corrección que conserva
+las entradas concurrentes de migraciones 177/178 en CLAUDE.md. La corrección
+está comprometida localmente; no se ha creado PR ni mezclado a main. No cerrar
+el issue hasta publicar la documentación final, resolver autenticación y validar
+la conversación real.
