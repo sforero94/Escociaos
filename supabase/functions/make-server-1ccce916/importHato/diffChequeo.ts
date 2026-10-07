@@ -49,7 +49,7 @@
 // `calculosHato.ts`.
 
 import type { AnimalEnChequeo } from '../calculos-hato.ts';
-import { detectarColisionesChapeta } from '../calculos-hato.ts';
+import { detectarColisionesChapeta, parseSX, parseUltimaCria, derivarSexoCria } from '../calculos-hato.ts';
 import { esNumeroProvisional } from './overridesChapeta.ts';
 import type { FilaChequeoNormalizada, ParseIssue, TipoEstado } from './tipos.ts';
 
@@ -82,6 +82,8 @@ export interface FilaChequeoVacaHistorico {
   fechaSecar: string | null;
   fechaProbableParto: string | null;
   estado: TipoEstado | null;
+  sxRaw?: string | null;
+  ultimaCriaRaw?: string | null;
 }
 
 /** La fila de `hato_chequeo_vacas` MÁS RECIENTE de un animal -- lo que el
@@ -98,6 +100,8 @@ export interface UltimoChequeoVacaActual {
   fechaSecar: string | null;
   fechaProbableParto: string | null;
   estado: TipoEstado | null;
+  sxRaw?: string | null;
+  ultimaCriaRaw?: string | null;
 }
 
 /** Reduce el historial completo de `hato_chequeo_vacas` de varios animales a
@@ -123,6 +127,8 @@ export function seleccionarUltimoChequeoPorAnimal(filas: FilaChequeoVacaHistoric
     fechaSecar: f.fechaSecar,
     fechaProbableParto: f.fechaProbableParto,
     estado: f.estado,
+    sxRaw: f.sxRaw,
+    ultimaCriaRaw: f.ultimaCriaRaw,
   }));
 }
 
@@ -271,6 +277,26 @@ function compararFila(
   return diferencias;
 }
 
+/** Solo contrastar la MISMA cría: una etiqueta de un parto nuevo no
+ * contradice el sexo del parto anterior. Ambos textos se leen con parseSX. */
+function advertenciaEtiquetaSexo(fila: FilaChequeoNormalizada, ultimo: UltimoChequeoVacaActual | undefined): ParseIssue[] {
+  const tipo = fila.sx?.tipo;
+  if (tipo !== 'etiqueta_hembra' && tipo !== 'etiqueta_macho' && tipo !== 'etiqueta_gemelar') return [];
+  const actual = parseUltimaCria(fila.raw.ultimaCria);
+  const anterior = parseUltimaCria(ultimo?.ultimaCriaRaw);
+  if (!actual.fecha || actual.issues.length || anterior.issues.length || actual.fecha !== anterior.fecha) return [];
+  const previo = parseSX(ultimo?.sxRaw);
+  const conocido = derivarSexoCria({ sxRaw: ultimo?.sxRaw });
+  const impreso = derivarSexoCria({ sxRaw: fila.raw.sx });
+  const gemelarPrevio = previo.tipo === 'gemelar' || previo.tipo === 'etiqueta_gemelar';
+  if ((conocido && impreso && conocido !== impreso) ||
+      (gemelarPrevio && tipo !== 'etiqueta_gemelar') ||
+      (conocido && tipo === 'etiqueta_gemelar')) {
+    return [{ crudo: fila.raw.sx ?? '', motivo: `Sexo cría impreso «${fila.raw.sx}» contradice el SX registrado «${ultimo?.sxRaw}» para la misma Última Cría (${actual.fecha}) — revisar.` }];
+  }
+  return [];
+}
+
 function filaNoReconocida(fila: FilaChequeoNormalizada, numeroEsProvisional: boolean, motivo: string): FilaDiffChequeo {
   return {
     fila: fila.fila,
@@ -406,6 +432,7 @@ export function construirDiffChequeo(
 
     const ultimo = ultimoPorAnimalId.get(animal.id);
     const diferencias = compararFila(fila, animal, ultimo);
+    const issuesSexo = advertenciaEtiquetaSexo(fila, ultimo);
 
     return {
       fila: fila.fila,
@@ -417,7 +444,7 @@ export function construirDiffChequeo(
       ultimoChequeoFecha: ultimo?.chequeoFecha ?? null,
       diferencias,
       motivoNoReconocido: null,
-      issues: fila.issues,
+      issues: [...fila.issues, ...issuesSexo],
       conflictoEstadoRegistrado: calcularConflictoEstadoRegistrado(
         fila.estadoRegistrado,
         animal.id,
