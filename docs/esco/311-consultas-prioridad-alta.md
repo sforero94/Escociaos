@@ -133,15 +133,14 @@ con esbuild y dependencias npm/jsr externas. `bundleOnly` comprobó compilación
 sin alterar la versión 269 original. El PATCH de cuerpo crudo produjo BOOT_ERROR
 (version 270); se corrigió usando DEPLOY_FUNCTION, que compila/empaqueta.
 
-**Pendiente de restauración de autenticación:** el conector de despliegue impone
-`verify_jwt=true` y no ofrece ese parámetro. Antes de esta sesión estaba en false
-(verificado dos veces en versión 269, también `supabase/config.toml`). La revisión
-automática rechazó restaurar false por requerir autorización explícita; se pidió
-al usuario. Mientras siga true, el webhook de Telegram puede ser rechazado antes
-de su comprobación interna de secreto. El chat conserva JWT+Gerencia dentro del
-handler. No dar por cerrado #311 hasta resolver esta configuración y repetir el
-caso con el usuario en vivo. El frontend necesita el merge/publicación habitual
-para recibir las etiquetas de las nuevas consultas.
+**Autenticación restaurada con autorización explícita del usuario:** se aplicó
+`verify_jwt=false`, el valor original de versión 269 y `supabase/config.toml`.
+GET_FUNCTION confirmó versión 272 ACTIVE, mismo hash de paquete y false;
+health respondió HTTP 200. Se elimina la verificación externa que podía bloquear
+Telegram; el webhook conserva su secreto y el chat valida JWT+Gerencia dentro
+del handler. Falta repetir la consulta real con el usuario para cerrar #311.
+El frontend necesita el merge/publicación habitual para recibir las etiquetas
+de las nuevas consultas.
 #312 permanece como backlog sin código implementado aquí.
 
 ## Estado de GitHub
@@ -151,5 +150,5 @@ Issue #311 y #312 creados. Código publicado en la rama
 GitHub devolvió HTTP 500 al crear el PR y al publicar la corrección que conserva
 las entradas concurrentes de migraciones 177/178 en CLAUDE.md. La corrección
 está comprometida localmente; no se ha creado PR ni mezclado a main. No cerrar
-el issue hasta publicar la documentación final, resolver autenticación y validar
+el issue hasta publicar la documentación final, validar
 la conversación real.

@@ -32,7 +32,7 @@ Diagnóstico local: docs/archive/incidents/2026-10-07-esco-partos-historial.md. 
 
 Validación final sobre main actualizado: 4.123 pruebas pasan (202 archivos); typecheck, build y empaquetado del servidor pasan. Backend versión 272 ACTIVE, health HTTP 200, hash ed115fab0b35188f598ac6a02e73c936127b681d53ab106843e4eb708060caa7.
 
-Pendiente crítico: restaurar verify_jwt=false, valor original de versión 269 y config.toml. El conector deploy impuso true y la revisión automática rechazó restaurarlo sin autorización explícita. Se pidió al usuario; Telegram puede quedar bloqueado en la verificación externa mientras siga true. No cerrar el issue hasta resolverlo y repetir la consulta real.
+Autenticación restaurada con autorización explícita del usuario: verify_jwt=false, como en versión 269 y config.toml. GET_FUNCTION confirma versión 272 ACTIVE y el mismo hash; health HTTP 200. El webhook conserva su secreto y el chat JWT+Gerencia internos. Falta repetir la consulta real antes de cerrar el issue.
 
 GitHub devuelve HTTP 500 al crear PR/push. La corrección de documentación que conserva entradas concurrentes 177/178 y el registro final de publicación están comprometidos/preparados localmente pero todavía no publicados. No se han implementado las medias ni mezclado a main.
 
