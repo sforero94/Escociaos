@@ -30,6 +30,7 @@ import type { ResultadoDiffChequeo } from '@/utils/importHato/diffChequeo';
 import type { FilaChequeoNormalizada, ManifiestoHoja, FilaTerneraNormalizada, FilaSubtablaNormalizada } from '@/utils/importHato/tipos';
 import type { FilaRechazadaCommit } from '@/utils/importHato/commitChequeo';
 import type { AnimalFueraDelRoster } from '@/utils/importHato/ocrChequeo';
+import { verificarReemplazoChequeo, ErrorConfirmacionReemplazoChequeo, type ReemplazoChequeo } from '@/utils/hato/reemplazoChequeo';
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
@@ -276,7 +277,7 @@ export function useSubirChequeoExcel() {
    * 409 sin escribir nada.
    */
   const comprometer = useCallback(
-    async (opciones?: { veterinario?: string; fecha?: string; filas?: FilaChequeoNormalizada[] }) => {
+    async (opciones?: { veterinario?: string; fecha?: string; filas?: FilaChequeoNormalizada[]; reemplazoConfirmado?: ReemplazoChequeo }) => {
       if (!resultado) throw new Error('No hay una vista previa cargada para aprobar.');
       const veterinario = opciones?.veterinario;
       const fechaChequeo = opciones?.fecha ?? resultado.chequeoFecha;
@@ -301,6 +302,7 @@ export function useSubirChequeoExcel() {
       setFilasRechazadas(null);
       setCommitResultado(null);
       try {
+        await verificarReemplazoChequeo(fechaChequeo, opciones?.reemplazoConfirmado);
         const token = await obtenerTokenSesion();
         const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/commit`, {
           method: 'POST',
@@ -337,6 +339,7 @@ export function useSubirChequeoExcel() {
         setCommitResultado(body as CommitChequeoRespuesta);
         return body as CommitChequeoRespuesta;
       } catch (err) {
+        if (err instanceof ErrorConfirmacionReemplazoChequeo) throw err;
         if (err instanceof ErrorCommitChequeoRechazado) {
           setErrorCommit(err.message);
           setFilasRechazadas(err.filasRechazadas);
