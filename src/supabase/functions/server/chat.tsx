@@ -1,3 +1,4 @@
+import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, type FilaEsco } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
 
@@ -145,15 +146,22 @@ function getAdminHeaders() {
   };
 }
 
-async function supabaseQuery(table: string, query: string): Promise<unknown[]> {
+async function supabaseQueryPage(table: string, query: string): Promise<unknown[]> {
   const { url, headers } = getAdminHeaders();
-  const res = await fetch(`${url}/rest/v1/${table}?${query}`, { headers });
+  const res = await fetch(`${url}/rest/v1/${table}?${query}`, { headers: { ...headers, Prefer: 'count=exact' } });
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     console.error(`[Esco] Query error on ${table}:`, res.status, errText);
     throw new Error(`Query failed on ${table} (${res.status}): ${errText.slice(0, 200)}`);
   }
-  return await res.json();
+  const rows = await res.json();
+  const total = Number(res.headers.get('content-range')?.split('/')[1]);
+  const offset = Number(/(?:^|&)offset=(\d+)/.exec(query)?.[1] ?? 0);
+  const requested = Number(/(?:^|&)limit=(\d+)/.exec(query)?.[1] ?? 200);
+  if (Number.isFinite(total) && rows.length < requested && offset + rows.length < total) {
+    throw new Error(`Consulta incompleta en ${table}: el servidor recortó la página.`);
+  }
+  return rows;
 }
 
 /**
@@ -164,17 +172,36 @@ async function supabaseQuery(table: string, query: string): Promise<unknown[]> {
  * consulta sin paginar devolvería un P&G incompleto que se ve normal.
  */
 async function supabaseQueryAll(table: string, query: string): Promise<unknown[]> {
-  const PAGINA = 1000;
-  const MAX_PAGINAS = 20;
+  const PAGINA = 200;
+  const MAX_PAGINAS = 100;
   const filas: unknown[] = [];
 
   for (let p = 0; p < MAX_PAGINAS; p += 1) {
-    const pagina = await supabaseQuery(table, `${query}&limit=${PAGINA}&offset=${p * PAGINA}`);
+    const clave = table === 'v_hato_estado_actual' ? 'animal_id' : table === 'v_hato_pajillas_stock' ? 'pajilla_id' : 'id';
+    const base = /(?:^|&)order=/.test(query) ? query : `${query}&order=${clave}.asc`;
+    const pagina = await supabaseQueryPage(table, `${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
     filas.push(...pagina);
     if (pagina.length < PAGINA) return filas;
   }
-  console.warn(`[Esco] supabaseQueryAll llegó al tope de páginas en ${table}`);
-  return filas;
+  throw new Error(`Consulta incompleta en ${table}: reduce el rango de fechas.`);
+}
+
+/** Las listas históricas se paginan; un limit heredado limita el universo explícitamente. */
+async function supabaseQuery(table: string, query: string): Promise<unknown[]> {
+  if (/(?:^|&)offset=/.test(query)) return supabaseQueryPage(table, query);
+  const limit = /(?:^|&)limit=(\d+)/.exec(query);
+  let base = query.replace(/&?limit=\d+/g, '');
+  if (!/(?:^|&)order=/.test(base)) base += table === 'v_hato_estado_actual' ? '&order=animal_id.asc' : table === 'v_hato_pajillas_stock' ? '&order=pajilla_id.asc' : '&order=id.asc';
+  if (!limit) return supabaseQueryAll(table, base);
+  const max = Number(limit[1]);
+  const rows: unknown[] = [];
+  for (let offset = 0; offset < max; offset += 200) {
+    const size = Math.min(200, max - offset);
+    const page = await supabaseQueryPage(table, `${base}&limit=${size}&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < size) break;
+  }
+  return rows;
 }
 
 async function supabaseInsert(table: string, data: Record<string, unknown>): Promise<unknown> {
@@ -233,6 +260,7 @@ async function authenticateUser(c: Context): Promise<{ userId: string } | Respon
 // ============================================================================
 
 const TOOLS: ToolDefinition[] = [
+  ...HERRAMIENTAS_CONSULTA,
   {
     name: 'get_labor_summary',
     description: 'Obtiene resumen de jornales y trabajo por lote/empleado en un rango de fechas. Incluye fraccion_jornal, costo, tarea y lote.',
@@ -692,6 +720,30 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
   try {
     let result: string;
     switch (name) {
+      case 'get_hato_partos':
+      case 'get_hato_eventos':
+      case 'get_hato_animales':
+      case 'get_hato_tratamientos':
+      case 'get_hato_chequeos':
+      case 'get_hato_salidas_finanzas':
+      case 'get_ganado_conciliacion':
+      case 'get_ganado_movimientos_detalle':
+      case 'get_cosecha_trazabilidad':
+      case 'get_produccion_calidad':
+      case 'get_aplicaciones_ejecucion':
+      case 'get_recomendaciones_ejecucion':
+      case 'get_carencia_cosecha':
+      case 'get_monitoreo_cobertura':
+      case 'get_inventario_conciliacion':
+      case 'get_producto_consumo':
+      case 'get_compra_detalle':
+      case 'get_finanzas_detalle':
+      case 'get_presupuesto_desviaciones':
+      case 'get_tarea_ejecucion':
+      case 'get_clima_cobertura':
+      case 'get_capturas_estado':
+        result = JSON.stringify(await ejecutarConsultaEsco(name, args, async (tabla, query) => await supabaseQuery(tabla, query) as FilaEsco[])); break;
+
       case 'get_labor_summary': result = await execLaborSummary(args); break;
       case 'get_employee_activity': result = await execEmployeeActivity(args); break;
       case 'get_monitoring_data': result = await execMonitoringData(args); break;
@@ -727,6 +779,17 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_weekly_reports': result = await execWeeklyReports(args); break;
       case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
+    }
+
+    // Herramientas legadas pueden limitar universo y detalle: nunca evidencia de ausencia global.
+    if (!HERRAMIENTAS_CONSULTA.some(t => t.name === name) && name.startsWith('get_')) {
+      const parsed = JSON.parse(result);
+      if (!parsed.error) parsed._evidencia = {
+        herramienta: name, rango: { desde: args.date_from ?? null, hasta: args.date_to ?? null },
+        consulta_completa: false,
+        limites: ['Consulta legada con límites de filas/detalle. Para listas completas o negar registros usa las herramientas de evidencia por período.'],
+      };
+      result = JSON.stringify(parsed);
     }
 
     // Add diagnostic info when no results found
@@ -3701,6 +3764,8 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
 - Inventario vivo de ganado de ceba (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → lote → potrero, desglose por etapa productiva (terneros/levante/ceba/repele/sin clasificar), cabezas/ha, ultimo peso con fecha, variacion 30 dias (excluye traslados internos), y movimientos recientes YA AGRUPADOS (un traslado o una compra/venta repartida en varios potreros es UN evento, no N filas sueltas). NO incluye el Hato Lechero. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico, por lote o por etapa usa get_ganado_inventory
+- EVIDENCIA (#311): Para partos OCURRIDOS nuevos/recientes o por mes llama get_hato_partos con el rango solicitado (si dice recientes sin rango, últimos 30 días hasta hoy en Bogotá, indicando el rango). Para servicios/secados/abortos/salidas usa get_hato_eventos. parida_reciente es un estado de ciclo sin umbral de antigüedad, NO una lista cronológica. Un parto sin ficha de cría sigue siendo parto. No niegues registros sin una consulta completa del período. Si falla una consulta, informa que no pudiste verificar; jamás conviertas error, falta de vínculo o falta de dato en cero. Recorre siguiente_offset para listas completas. Una respuesta con detalle_completo=false es solo una página. No inventes nombres ni variantes cuando no existen. Usa get_hato_tratamientos para tratamientos; get_ganado_conciliacion para dinero vs cabezas; get_cosecha_trazabilidad para jornadas. Crías sin sexo registrado no son terneras por defecto. Las coincidencias candidatas no son vínculos confirmados. Nunca ofrezcas seguimiento automático: no existe herramienta para programarlo. No calcules utilidad desde movimientos; usa el P&G oficial.
+- OTRAS CONSULTAS (#311): get_hato_animales genealogía/listado; get_hato_chequeos historia; get_hato_salidas_finanzas ventas; get_ganado_movimientos_detalle traslados; get_produccion_calidad exportación/nacional; get_aplicaciones_ejecucion plan vs real; get_recomendaciones_ejecucion candidatas; get_carencia_cosecha restricciones registradas; get_monitoreo_cobertura rondas; get_inventario_conciliacion diferencias; get_producto_consumo destinos; get_compra_detalle recepción por verificar; get_finanzas_detalle soporte/pendientes; get_presupuesto_desviaciones explicación; get_tarea_ejecucion jornales; get_clima_cobertura faltantes; get_capturas_estado revisión. Cada herramienta indica fuentes, rango, límites y completitud. Fecha actual Bogotá: ${new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())}.
 - Hato Lechero (vacas/terneras/novillas individuales, modulo distinto de ganado de ceba): get_hato_animal trae la ficha de UN animal por numero de chapeta o nombre (raza, genealogia madre+padre, estado reproductivo actual, eventos recientes, ultimo chequeo veterinario). get_hato_reproduccion trae el panorama del hato completo: conteo por las 4 categorias (terneras, novillas, hato en ordeño, horro = vacas YA secas; una proxima a secar sigue en el hato hasta el secado real), conteo por estado reproductivo, alertas activas (secado/rechequeo/servicio sin confirmar/parto proximo), listas de proximos partos y proximas a secar con dias restantes, y vacas vacias marcadas "problema". get_hato_produccion trae el volumen de leche: pesaje SEMANAL por vaca (litros/vaca — una vaca sin pesaje en el rango no aparece, nunca se reporta con 0) y produccion QUINCENAL vendida al camion del Pomar (litros totales, litros/vaca, conciliacion contra la confirmacion del Pomar). Numeros de chapeta 800-999 son de TRABAJO (colisiones sin resolver de la importacion historica), nunca una caravana fisica — get_hato_animal lo marca explicito. Para el DINERO de la venta de leche usa get_financial_summary o get_pyg_flujo_caja vista=hato.
 - P&G y flujo de caja (get_pyg_flujo_caja): estado de resultados por negocio (global, aguacate, ganado, hato) con Ingresos → Costos directos → Margen de contribucion → Gastos indirectos → Utilidad operativa, en trimestres acumulados o por cosecha (aguacate), mas indicadores unitarios (costo por kilo, $/litro, margen por cabeza) y flujo de caja mensual opcional. USA ESTE TOOL para toda pregunta de rentabilidad, utilidad, margen o "cuanto gano/perdio X"; usa get_financial_summary solo para listar o desglosar gastos e ingresos por categoria, proveedor o comprador.
   REGLAS CONTABLES que debes respetar al interpretar sus cifras, porque son la razon de que no coincidan con una simple resta de ingresos menos gastos:
@@ -3790,6 +3855,9 @@ export async function llmToolLoop(
   const maxRounds = 3;
   const toolInteractions: ToolInteraction[] = [];
   let toolIndex = 0;
+  const ultimaPregunta = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+  const consultaPartosObligatoria = requiereConsultaPartos(ultimaPregunta);
+  const llamadas = new Set<string>();
 
   for (let round = 0; round < maxRounds; round++) {
     const controller = new AbortController();
@@ -3804,7 +3872,7 @@ export async function llmToolLoop(
           model: MODEL,
           messages,
           tools,
-          tool_choice: round === 0 ? 'required' : 'auto',
+          tool_choice: round === 0 ? (consultaPartosObligatoria ? { type: 'function', function: { name: 'get_hato_partos' } } : 'required') : 'auto',
           temperature: 0.3,
           max_tokens: 10000,
         }),
@@ -3853,7 +3921,11 @@ export async function llmToolLoop(
         onEvent?.({ type: 'tool_start', tool: fnName, index, args: fnArgs });
         const iniciadaEn = Date.now();
 
-        const toolResult = await executeTool(fnName, fnArgs, userId);
+        const claveLlamada = `${fnName}:${JSON.stringify(fnArgs)}`;
+        const toolResult = llamadas.has(claveLlamada)
+          ? JSON.stringify({ error: 'Consulta idéntica ya realizada. Usa el resultado previo o cambia criterio con fundamento; no inventes variantes de nombres.' })
+          : await executeTool(fnName, fnArgs, userId);
+        llamadas.add(claveLlamada);
 
         onEvent?.({
           type: 'tool_done',
@@ -3868,7 +3940,7 @@ export async function llmToolLoop(
         toolInteractions.push({
           tool: fnName,
           args: fnArgs,
-          result_summary: toolResult.slice(0, 500),
+          result_summary: resumirContexto(toolResult),
         });
 
         messages.push({
@@ -3883,6 +3955,9 @@ export async function llmToolLoop(
     }
 
     // No tool calls — return the final text
+    if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
+      return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos. Precisa el rango de fechas o vuelve a intentar la consulta.', toolInteractions };
+    }
     return { text: msg.content || '', toolInteractions };
   }
 
@@ -3895,6 +3970,9 @@ export async function llmToolLoop(
   // contrato compatible-con-OpenAI que implementa OpenRouter. El modelo devolvia
   // contenido vacio y el `||` de abajo lo enmascaraba con un texto sin salida:
   // el usuario veia "No pude generar una respuesta." sin ninguna pista.
+  if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
+    return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos.', toolInteractions };
+  }
   const finalRes = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers,
@@ -4001,7 +4079,7 @@ export async function handleChatMessage(c: Context) {
   // long-term memorias to inject into the system prompt.
   const [history, memorias] = await Promise.all([
     supabaseQuery('chat_messages',
-      `select=role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.asc&limit=20`
+      `select=role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.desc,id.desc&limit=20`
     ) as Promise<Array<{ role: string; content: string; metadata?: { tool_interactions?: ToolInteraction[] } }>>,
     fetchActiveMemorias(userId),
   ]);
@@ -4010,12 +4088,12 @@ export async function handleChatMessage(c: Context) {
   const llmMessages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> = [
     { role: 'system', content: getSystemPrompt(memorias) },
   ];
-  for (const m of history) {
+  for (const m of history.reverse()) {
     if (m.role === 'assistant' && m.metadata?.tool_interactions?.length) {
       const ctx = m.metadata.tool_interactions
         .map((t: ToolInteraction) => `[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]`)
         .join('\n');
-      llmMessages.push({ role: 'system', content: `Datos consultados en la respuesta anterior:\n${ctx}` });
+      llmMessages.push({ role: 'system', content: `Datos consultados en la respuesta anterior (pueden estar recortados o desactualizados; vuelve a consultar para afirmar ausencia o cambiar de período):\n${ctx}` });
     }
     llmMessages.push({ role: m.role, content: m.content });
   }

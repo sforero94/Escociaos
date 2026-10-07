@@ -12,15 +12,17 @@
  */
 
 import { formatNumber } from '@/utils/format';
+import { ETIQUETAS_CONSULTA } from './escoConsultas';
 
 /**
- * Las 34 herramientas de Esco, en el lenguaje del dominio.
+ * Las herramientas de Esco, en el lenguaje del dominio.
  *
  * Cada etiqueta nombra LA FUENTE consultada, no la accion ("Gastos e ingresos", no
  * "Consultando gastos"): el encabezado de la traza ya dice que se esta consultando, y
  * repetir el verbo en cada fila la vuelve ruido.
  */
 export const ETIQUETAS_HERRAMIENTAS: Record<string, string> = {
+  ...ETIQUETAS_CONSULTA,
   // Labores
   get_labor_summary: 'Jornales y mano de obra',
   get_employee_activity: 'Actividad de empleados',
