@@ -464,6 +464,10 @@ export async function eventoHatoConversation(
         },
       });
       if (!continuar) return;
+      // El paso anterior ya tuvo su mensaje de éxito. La escritura del
+      // tratamiento NUEVO todavía no ocurrió: un fallo no debe decir que
+      // este segundo registro quedó guardado.
+      escrito = false;
     }
 
     // ── Paso 4: fecha ─────────────────────────────────────────────────
