@@ -216,8 +216,13 @@ function FilaDiffEditable({
   onReactivarAnimal,
 }: FilaProps) {
   const corregidos = new Set(camposCorregidos);
-  const issuesCorreccion = fila.issues.filter((i) => i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL));
-  const issuesParseo = fila.issues.filter(
+  // El diff puede añadir avisos del cotejo contra datos frescos (SX), que
+  // no existen en la fila normalizada que salió del archivo.
+  const issues = [...fila.issues, ...diff.issues.filter((issue) =>
+    !fila.issues.some((original) => original.crudo === issue.crudo && original.motivo === issue.motivo),
+  )];
+  const issuesCorreccion = issues.filter((i) => i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL));
+  const issuesParseo = issues.filter(
     (i) => !i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL) && !i.motivo.startsWith(PREFIJO_ISSUE_FILA_PROMOVIDA),
   );
   // Procedencia PERMANENTE de la fila (plan de novedades §4.4/§6.5): se
@@ -229,7 +234,7 @@ function FilaDiffEditable({
   const hayDetalle =
     diff.motivoNoReconocido !== null ||
     diff.diferencias.length > 0 ||
-    fila.issues.length > 0 ||
+    issues.length > 0 ||
     erroresPorCampo.size > 0 ||
     diff.clasificacion === 'nuevo' ||
     diff.conflictoEstadoRegistrado !== null;

@@ -276,7 +276,7 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
     const { filas: data, error } = await paginarSelect<Record<string, unknown>>((desde, hasta) =>
       supabase
         .from('hato_chequeo_vacas')
-        .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, ultima_cria_raw, created_at, hato_chequeos(fecha)')
+        .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, sx_raw, ultima_cria_raw, created_at, hato_chequeos(fecha)')
         .in('animal_id', animalIds)
         .range(desde, hasta),
     );
@@ -290,6 +290,8 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
       const fecha = Array.isArray(chequeoRow) ? chequeoRow[0]?.fecha : chequeoRow?.fecha;
       return {
         animalId: fila.animal_id as string,
+        sxRaw: fila.sx_raw as string | null,
+        ultimaCriaRaw: fila.ultima_cria_raw as string | null,
         chequeoFecha: fecha ?? '',
         createdAt: fila.created_at as string,
         pl: fila.pl as number | null,
