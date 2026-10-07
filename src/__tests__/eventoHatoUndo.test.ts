@@ -250,8 +250,10 @@ describe('contrato del tratamiento en el código', () => {
       expect(fuente).toContain('fn_hato_registrar_tratamiento');
       // La cabecera y su paso son dos filas en dos tablas: un insert suelto
       // que falle deja el tratamiento guardado y el recordatorio inexistente.
-      expect(fuente).not.toMatch(/from\("hato_tratamiento_pasos"\)/);
-      expect(fuente).not.toMatch(/from\("hato_tratamientos"\)/);
+      // La consulta de pendientes (#257) puede leer estas tablas. Las
+      // escrituras siguen siendo atómicas mediante sus RPC hermanas.
+      expect(fuente).not.toMatch(/from\("hato_tratamiento_pasos"\)\s*\.(insert|update|delete)\(/);
+      expect(fuente).not.toMatch(/from\("hato_tratamientos"\)\s*\.(insert|update|delete)\(/);
     });
 
     it(`${ruta} no mete el tratamiento en hato_eventos`, () => {

@@ -59,6 +59,8 @@ import {
   mensajeResolverUsuarioTelegram,
   resolverUsuarioTelegram,
 } from "../resolverUsuarioTelegram.ts";
+import { ofrecerPasosPendientes, type PasoTratamientoPendiente } from "../confirmarPasoTratamiento.ts";
+import { cerrarAlertaEnEnvios } from "../enviar.ts";
 import {
   avisoFechaLejana,
   fechaLegible,
@@ -398,6 +400,71 @@ export async function eventoHatoConversation(
     }
 
     const estadoActual = derivarEstadoReproductivo(vaca.fila, config, hoyBogota());
+
+    if (def.esTratamiento) {
+      const continuar = await ofrecerPasosPendientes({
+        hoy: hoyBogota(),
+        transporte: {
+          decir: async (texto, botones) => {
+            await ctx.reply(texto, botones ? { reply_markup: { inline_keyboard: botones } } : {});
+          },
+          esperar: async () => {
+            const entrada = await conversation.wait();
+            if (entrada.callbackQuery) await entrada.answerCallbackQuery();
+            return { texto: entrada.message?.text, callback: entrada.callbackQuery?.data };
+          },
+        },
+        cargar: () => conversation.external(async () => {
+          const sb = getSupabaseAdmin();
+          const pendientes: PasoTratamientoPendiente[] = [];
+          for (let desde = 0; ; desde += 500) {
+            const { data, error } = await sb.from("hato_tratamiento_pasos")
+              .select("id, descripcion, fecha_programada, hato_tratamientos!inner(nombre, fecha_inicio, animal_id, estado)")
+              .eq("hato_tratamientos.animal_id", vaca!.animal_id)
+              .eq("hato_tratamientos.estado", "activo")
+              .is("fecha_ejecutada", null)
+              .order("fecha_programada").order("id").range(desde, desde + 499);
+            if (error) throw new Error(error.message);
+            for (const fila of data ?? []) {
+              const cabecera = fila.hato_tratamientos as unknown as { nombre: string; fecha_inicio: string };
+              pendientes.push({ id: fila.id, descripcion: fila.descripcion,
+                fecha_programada: fila.fecha_programada, nombre: cabecera.nombre,
+                fecha_inicio: cabecera.fecha_inicio });
+            }
+            if ((data?.length ?? 0) < 500) return pendientes;
+          }
+        }),
+        confirmar: async (paso, fecha) => {
+          const resultado = await conversation.external(async () => {
+            const sb = getSupabaseAdmin();
+            const actor = await resolverUsuarioTelegram(sb, ctx.from?.id);
+            if (!actor.ok || !actor.usuarioId) throw new Error("Cuenta no vinculada.");
+            const { data, error } = await sb.rpc("fn_hato_confirmar_paso_tratamiento", {
+              p_animal_id: vaca!.animal_id, p_paso_id: paso.id,
+              p_fecha_ejecutada: fecha,
+              p_respondida_por: actor.nombreDisplay || `Telegram ${ctx.from!.id}`,
+            });
+            if (error) throw new Error(error.message);
+            return data as { alerta_ids: string[]; ya_confirmado: boolean };
+          });
+          escrito = true;
+          // El cierre en la base ya se confirmó. Fallos de edición de mensajes
+          // no deben convertirlo en un supuesto fallo de escritura.
+          await conversation.external(async () => {
+            try {
+              const sb = getSupabaseAdmin();
+              for (const id of resultado.alerta_ids) {
+                await cerrarAlertaEnEnvios(sb, id, null,
+                  `✅ Paso de tratamiento confirmado desde /tratamiento.\n🐄 ${etiquetaVaca(vaca!)}\n${paso.nombre}\nAplicado: ${fechaLegible(fecha)}`);
+              }
+            } catch (error) {
+              console.error("[tratamiento] Paso guardado; fallo al cerrar mensajes:", error);
+            }
+          });
+        },
+      });
+      if (!continuar) return;
+    }
 
     // ── Paso 4: fecha ─────────────────────────────────────────────────
     const hoy = hoyBogota();
