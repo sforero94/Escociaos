@@ -515,6 +515,8 @@ Full contract lives in [`src/components/hato/CLAUDE.md`](src/components/hato/CLA
 - **`src/utils/calculosHato.ts` and `src/utils/hatoAlertas.ts` are mirrored** into both edge-function trees, and `src/utils/importHato/*` is mirrored by `docs/hato/regenerar-copias-importhato.py`. Change the logic in **all** copies in the same commit, and **never hand-edit a generated copy to silence a parity failure — regenerate it.**
 - **`scripts/import-hato/load.ts` is backfill-only, forever.** Re-running it after any live chequeo exists would FK-fail or orphan live history. Chapeta corrections are in-place `UPDATE`s, never a re-Load.
 
+The October 6–7 changes (#253/#255/#257/#258/#263), verified migrations 177/178 and remaining blockers are indexed in [`docs/hato/sesion-2026-10-06-07.md`](docs/hato/sesion-2026-10-06-07.md). Applied migration headers can retain their original pending label; use the live ledger and the entries above, never reapply from a header alone. Deployment history and later observed drift are distinguished in [`docs/hato/despliegue-2026-10-07.md`](docs/hato/despliegue-2026-10-07.md).
+
 ### Monitoring Module (`/monitoreo`) — incidencia aggregation
 
 `monitoreos` is denormalized: **one row per pest observation per visit** — a monitor only inserts a row for a pest they chose to record, so there is NO explicit "0%, not found" row. Absence of a row means "not checked", not "not present". Rows link to a real round via `monitoreos.ronda_id` → `rondas_monitoreo` (a round can span several calendar dates depending on the lote — always group by `ronda_id`, never by `fecha_monitoreo`).

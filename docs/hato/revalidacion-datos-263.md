@@ -54,9 +54,10 @@ Este informe documenta la conservación; no declara arregladas esas discrepancia
   una fecha que se pueda transponer automáticamente. Los cuatro objetivos de 176
   mantienen 9 de marzo, 9 de abril, 9 de mayo y 9 de abril, respectivamente.
 
-## Guardrail publicado
+## Guardrail: verificación anterior al release
 
-La función edge está ACTIVE en versión **268**, con hash
+En la lectura previa al despliegue del 7 de octubre, la función edge estaba
+ACTIVE en versión **268**, con hash
 `07c0afa1235e75dd54c4a478051b6f2b4544314091ba272bdeed68f2538ab74f`, igual al registro
 de despliegue versionado para el commit `08830c31d2409189be421bd40d5b4c1ce1a34759`.
 Se inspeccionó el código de ese commit: el camino de servicio usa `leerFecha`,
@@ -64,6 +65,11 @@ ofrece ambas lecturas en palabras y exige que el usuario elija. La lectura direc
 del cuerpo desplegado fue rechazada por tamaño de respuesta; esta revalidación
 se apoya en metadata/hash y en el registro de despliegue, no en una descarga nueva
 del bundle. No se hicieron escrituras de fechas.
+
+El release posterior publicó v269 con ambos árboles sincronizados. Su evidencia
+y la deriva v271 observada después están en el [registro de despliegue](despliegue-2026-10-07.md).
+Esta sección conserva la medición inicial de #263; no presenta v268 como la
+versión vigente ni autoriza repetir las correcciones de datos.
 
 ## Mantenimiento y validación
 

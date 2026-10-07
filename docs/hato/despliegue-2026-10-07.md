@@ -12,6 +12,10 @@ Se mezclaron en orden #305, #306, #307, #308 y #309. Código publicado:
 | Migración 177 | Ledger `20261007132155`; md5 de función `10ba388b86c82d8bec5aa73ac10af595`. INVOKER, search_path fijo, EXECUTE solo service_role. Conteos 27 tratamientos / 6 pasos / 126 alertas sin cambios. |
 | Edge | `make-server-1ccce916` v269 ACTIVE, `verify_jwt=false`, hash `22ccd2772867190d442b6c826b8997a2ca78f0aed8edeeeb1886e1beb5d47e5a`. GET health devuelve `{"status":"ok"}`. |
 
+La tabla conserva la evidencia **al publicar el release original**, no afirma
+que aquella versión siga siendo la última. Las actualizaciones y la deriva
+observada después se registran abajo.
+
 ## Publicación y recuperación
 
 La migración se aplicó una vez, con guarda de ausencia de RPC/ledger 177 y clave
@@ -36,10 +40,33 @@ comprobar metadata y health después. La RPC 177 es aditiva y puede permanecer c
 el código viejo. Su DROP documentado es opcional tras retirar los llamantes;
 no deshace confirmaciones reales realizadas después del despliegue.
 
+## Actualizaciones posteriores
+
+El PR #310 registró este despliegue. El PR #313 se mezcló como
+`d2dd49dc8dfe92fdfc6e2d5583cc342e44e56579`; su CI de main
+[37640083110](https://github.com/sforero94/Escociaos/actions/runs/37640083110)
+pasó. La migración 178, ledger `20261007144321`, concilió PACHA #202 (antes
+#5202, Supata) y retiró la ficha espuria MOROCHA con dos filas completas
+respaldadas. Conservó UUID/genealogía y todos los otros campos de PACHA;
+180 fichas totales, 68 activas, cero descartadas. No cambió código de aplicación
+ni necesitó otra publicación del edge. [Evidencia y recuperación de datos](conciliacion-pacha-202.md).
+
+**Deriva observada después, 2026-10-07:** dos lecturas independientes de metadata
+muestran v271 ACTIVE, actualizada a las **15:02:50 UTC**, hash
+`7ecfd539cbac8319fb288c31d189a0ffce673643c8ffba5caf3d1fa5439dde7c`,
+`verify_jwt=true`. Un GET de `/health` devuelve **401**
+(`UNAUTHORIZED_NO_AUTH_HEADER`), frente al resultado OK del release v269.
+Estas lecturas no identifican al responsable ni verifican que el código v271
+contenga todos los cambios originales. No se adopta este hash como baseline,
+ni se revierten publicaciones o permisos sin establecer propiedad y alcance
+de aquel despliegue. El registro versionado conserva el release verificado.
+
 ## Límites pendientes
 
 No se afirma una prueba de Telegram real: falta el bot de pruebas configurado.
 El navegador validó componentes y un simulador local, sin modificar producción.
-La auditoría #258 sigue abierta: falta evidencia de MOROCHA #202 y de la lista y
-causa originales del descarte del 11 de agosto. Los 42 casos históricos de labores
+La auditoría #258 sigue abierta por la lista y causa originales del descarte
+del 11 de agosto. **PACHA/MOROCHA ya está conciliada por la 178**; no falta nueva
+evidencia de esa identidad. La deriva v271 necesita seguimiento con su responsable.
+Los 42 casos históricos de labores
 mantienen la aceptación anterior. Este despliegue no modifica esos registros.
