@@ -34,8 +34,6 @@ Validación final sobre main actualizado: 4.123 pruebas pasan (202 archivos); ty
 
 Autenticación restaurada con autorización explícita del usuario: verify_jwt=false, como en versión 269 y config.toml. GET_FUNCTION confirma versión 272 ACTIVE y el mismo hash; health HTTP 200. El webhook conserva su secreto y el chat JWT+Gerencia internos. Falta repetir la consulta real antes de cerrar el issue.
 
-GitHub devuelve HTTP 500 al crear PR/push. La corrección de documentación que conserva entradas concurrentes 177/178 y el registro final de publicación están comprometidos/preparados localmente pero todavía no publicados. No se han implementado las medias ni mezclado a main.
-
-## Publicación de este seguimiento
-GitHub devolvió HTTP 500 al actualizar este issue. Este archivo conserva el cuerpo final pendiente de publicar; el issue remoto todavía tiene el alcance original.
-
+GitHub volvió a aceptar operaciones: rama y documentación final publicadas;
+[PR #314](https://github.com/sforero94/Escociaos/pull/314) creado como borrador.
+No se han implementado las medias ni mezclado a main.

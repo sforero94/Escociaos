@@ -147,8 +147,7 @@ de las nuevas consultas.
 
 Issue #311 y #312 creados. Código publicado en la rama
 `feat/esco-consultas-alta-311`, commit `abadada1baa5226d990c5940c8883e1b8d09b718`.
-GitHub devolvió HTTP 500 al crear el PR y al publicar la corrección que conserva
-las entradas concurrentes de migraciones 177/178 en CLAUDE.md. La corrección
-está comprometida localmente; no se ha creado PR ni mezclado a main. No cerrar
-el issue hasta publicar la documentación final, validar
-la conversación real.
+Los errores HTTP 500 iniciales se resolvieron. Correcciones y documentación final
+publicadas en la rama; [PR #314](https://github.com/sforero94/Escociaos/pull/314)
+creado como borrador. No se ha mezclado a main. No cerrar el issue hasta validar
+la conversación real y publicar el frontend.
