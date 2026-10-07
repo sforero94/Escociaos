@@ -58,6 +58,8 @@ import { useEffect, useState } from 'react';
 import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera, PenLine } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
+import { ErrorConfirmacionReemplazoChequeo, type ReemplazoChequeo } from '@/utils/hato/reemplazoChequeo';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
@@ -138,12 +140,14 @@ export function SubirChequeoExcel({
   const [modo, setModo] = useState<'foto' | 'excel' | null>('foto');
   const [fotos, setFotos] = useState<File[]>([]);
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
+  const [reemplazo, setReemplazo] = useState<ReemplazoChequeo | null>(null);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
       setArchivo(null);
       setFotos([]);
       setAvisoFotos(null);
+      setReemplazo(null);
       setVeterinario('');
       setFilaParaFicha(null);
       setFilaParaReactivar(null);
@@ -173,7 +177,7 @@ export function SubirChequeoExcel({
             ? 'No hay filas aprobables: las Nuevas necesitan ficha y las No reconocidas necesitan resolverse.'
             : null;
 
-  const handleAprobar = async () => {
+  const handleAprobar = async (reemplazoConfirmado?: ReemplazoChequeo) => {
     if (bloqueoAprobacion) return;
     try {
       await comprometer({
@@ -182,8 +186,10 @@ export function SubirChequeoExcel({
         // filas CORREGIDAS -- nunca las del archivo.
         fecha: revision.fechaChequeoValida ?? undefined,
         filas: revision.filasAprobables,
+        reemplazoConfirmado,
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof ErrorConfirmacionReemplazoChequeo) setReemplazo(err.chequeo);
       // El error/las filas rechazadas ya quedan en el hook (`errorCommit`/
       // `filasRechazadas`), se muestran abajo.
     }
@@ -271,12 +277,6 @@ export function SubirChequeoExcel({
                   acceptArchivo=".xlsx,.xls"
                   label="Cargar chequeo"
                   labelOpcionArchivo="Subir archivo .xlsx"
-                  // #253 (plan de novedades §6.1/§8.2): sin esto, "Subir
-                  // archivo" solo deja elegir un archivo -- la hoja de
-                  // holgura (página 3) tiene que poder viajar en el MISMO
-                  // envío que las páginas 1-2, o se pierde igual aunque la
-                  // promoción de filas manuscritas ya esté lista.
-                  multipleArchivo
                 />
                 {modo === 'foto' && fotos.length > 0 && (
                   <span className="text-xs text-gray-500">
@@ -284,6 +284,13 @@ export function SubirChequeoExcel({
                   </span>
                 )}
               </div>
+            )}
+
+            {!resultado && modo === 'foto' && (
+              <p className="text-sm text-gray-600">
+                Agrega todas las páginas de la planilla antes de «Subir y revisar».
+                Usa «Cargar chequeo» para agregar otra foto sin cerrar esta ventana (máximo {MAX_FOTOS}).
+              </p>
             )}
 
             {!resultado && (
@@ -542,7 +549,7 @@ export function SubirChequeoExcel({
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleAprobar}
+                  onClick={() => handleAprobar()}
                   disabled={bloqueoAprobacion !== null || comprometiendo}
                   title={bloqueoAprobacion ?? undefined}
                 >
@@ -554,6 +561,25 @@ export function SubirChequeoExcel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={reemplazo !== null} onOpenChange={(abierto) => { if (!abierto) setReemplazo(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Reemplazar el chequeo existente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ya existe un chequeo del {reemplazo?.fecha} con {reemplazo?.filas} filas.
+              Se reemplazarán todas esas filas y sus eventos derivados por las {filasAprobables} filas que estás aprobando.
+              Si falta una página, cancela y agrega todas las fotos antes de continuar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Volver a revisar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (reemplazo) void handleAprobar(reemplazo); }}>
+              Reemplazar chequeo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Alta de la ficha de una fila `nuevo`, sin salir del flujo: MISMA alta
           que `AnimalesList` (`CrearAnimalDialog` + `useCrearHatoAnimal`), solo
