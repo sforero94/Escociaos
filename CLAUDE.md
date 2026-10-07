@@ -614,6 +614,8 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 
 #### Esco Chat Agent (`chat.tsx`)
 
+**Issue #311 — consultas de evidencia (2026-10-07).** Esco añade 22 herramientas de consulta (56 en total) con motor autocontenido en `src/utils/escoConsultas.ts`; `scripts/sync-esco-consultas.py` regenera las copias `esco-consultas.ts` y sincroniza `chat.tsx` en ambos árboles. Incluye partos/eventos por período, genealogía, tratamientos, chequeos, conciliaciones operativas y cobertura. Preguntas de partos ocurridos fuerzan `get_hato_partos`; consulta fallida/incompleta bloquea la negación fabricada. Lecturas paginadas con conteo, contexto estructurado y últimos 20 mensajes. Consultas legadas se marcan como cobertura no garantizada. No cambia modelo, captura ni motores contables. Matriz, límites y validación: `docs/esco/311-consultas-prioridad-alta.md`. Prioridades medias quedan en #312.
+
 The chat agent ("Esco") is a non-streaming tool-calling loop that queries farm data via PostgREST, aggregates results, and returns structured JSON to the LLM for natural language response.
 
 Key behaviors:
