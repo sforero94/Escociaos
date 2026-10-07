@@ -188,8 +188,10 @@ export function SubirChequeoExcel({
         filas: revision.filasAprobables,
         reemplazoConfirmado,
       });
+      setReemplazo(null);
     } catch (err) {
       if (err instanceof ErrorConfirmacionReemplazoChequeo) setReemplazo(err.chequeo);
+      else setReemplazo(null);
       // El error/las filas rechazadas ya quedan en el hook (`errorCommit`/
       // `filasRechazadas`), se muestran abajo.
     }
@@ -573,9 +575,14 @@ export function SubirChequeoExcel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Volver a revisar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (reemplazo) void handleAprobar(reemplazo); }}>
-              Reemplazar chequeo
+            <AlertDialogCancel disabled={comprometiendo}>Volver a revisar</AlertDialogCancel>
+            <AlertDialogAction disabled={comprometiendo} onClick={(event) => {
+              // Mantener abierto durante la nueva lectura: cerrar y reabrir
+              // al cambiar el conteo superpone el overlay saliente de Radix.
+              event.preventDefault();
+              if (reemplazo) void handleAprobar(reemplazo);
+            }}>
+              {comprometiendo ? 'Verificando...' : 'Reemplazar chequeo'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
