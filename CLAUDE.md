@@ -504,6 +504,10 @@ Sequential SQL migrations live in `src/sql/migrations/` (numbered from 001; the 
 >
 > **Cuidado con el conector de solo-lectura.** Hay dos MCP de Supabase configurados: el que solo pide `query` es **read-only** (`ERROR: 25006: cannot execute … in a read-only transaction`); el que exige `project_id` es el que escribe, vía `apply_migration`. Usá el primero para verificar y el segundo para aplicar.
 
+- **177**: `hato_confirmar_paso_tratamiento` — **Aplicada a producción 2026-10-07**, ledger `20261007132155` (#257, PR #307). RPC nueva `fn_hato_confirmar_paso_tratamiento(uuid, uuid, date, text)`, `SECURITY INVOKER`, `search_path=public, pg_temp`, EXECUTE solo `service_role`; `anon`/`authenticated` sin permiso. Md5 vivo `10ba388b86c82d8bec5aa73ac10af595`. Instalada antes del edge v269; conteos de tratamientos/pasos/alertas sin cambios (27/6/126). No reaplicar. [Registro de despliegue](docs/hato/despliegue-2026-10-07.md).
+
+- **178**: `conciliar_pacha_202` — **Aplicada a producción 2026-10-07**, ledger `20261007144321` (#258, PR #313). Santiago confirmó que #202 es PACHA, antes #5202 por su procedencia de Supata. Un UPDATE de número sobre el UUID original de PACHA y un DELETE de la ficha espuria MOROCHA sin referencias; dos filas completas recuperables en `respaldos.backup_178_pacha_morocha`, RLS y permisos cerrados. Ensayo y rollback exactos mediante `po_sonda`; verificación posterior: 180 fichas, 68 activas, cero descartadas; todos los otros campos de PACHA y 179 fichas ajenas intactos. No reaplicar. [Evidencia y rollback](docs/hato/conciliacion-pacha-202.md). La totalidad/causa del lote original del 11 de agosto sigue sin demostrar.
+
 ### Hato Lechero Module (`/hato-lechero`)
 
 Full contract lives in [`src/components/hato/CLAUDE.md`](src/components/hato/CLAUDE.md) — read it before touching anything in this module. Two rules that apply from **outside** that directory, so they stay here:
@@ -615,6 +619,7 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 #### Esco Chat Agent (`chat.tsx`)
 
 **Issue #311 — consultas de evidencia (2026-10-07).** Esco añade 22 herramientas de consulta (56 en total) con motor autocontenido en `src/utils/escoConsultas.ts`; `scripts/sync-esco-consultas.py` regenera las copias `esco-consultas.ts` y sincroniza `chat.tsx` en ambos árboles. Incluye partos/eventos por período, genealogía, tratamientos, chequeos, conciliaciones operativas y cobertura. Preguntas de partos ocurridos fuerzan `get_hato_partos`; consulta fallida/incompleta bloquea la negación fabricada. Lecturas paginadas con conteo, contexto estructurado y últimos 20 mensajes. Consultas legadas se marcan como cobertura no garantizada. No cambia modelo, captura ni motores contables. Matriz, límites y validación: `docs/esco/311-consultas-prioridad-alta.md`. Prioridades medias quedan en #312.
+
 
 The chat agent ("Esco") is a non-streaming tool-calling loop that queries farm data via PostgREST, aggregates results, and returns structured JSON to the LLM for natural language response.
 
