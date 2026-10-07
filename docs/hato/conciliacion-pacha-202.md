@@ -11,7 +11,8 @@ madre, UUID y demás campos se conservan.
 
 ## Estado
 
-**Preparada y ensayada localmente; pendiente de aplicación y verificación.**
+**Aplicada una vez y verificada en producción el 2026-10-07**, ledger
+`20261007144321`, `178_conciliar_pacha_202`.
 
 | Comprobación | Valor esperado |
 | --- | --- |
@@ -46,6 +47,21 @@ filas cambiadas, colisión, referencia nueva incluso con CASCADE, finanzas con
 SET NULL e historial sin FK; fallo tras renumerar deshace toda la transacción;
 reaplicación y rollback sobre cambios posteriores rechazados. Los dos respaldos
 quedan con RLS y sin SELECT para anon/authenticated.
+
+La sonda transaccional de producción `po_sonda` ensayó el SQL exacto y su rollback:
+180 fichas, 68 activas, cero descartadas y dos respaldos protegidos; el rollback
+restauró las dos filas originales exactamente. La sonda devolvió
+`deshecho=true`, sin error; una lectura independiente confirmó los originales,
+sin respaldo ni ledger 178 antes de la aplicación definitiva.
+
+Tras aplicar: PACHA activa #202, cero MOROCHA/#5202, dos filas de respaldo con
+RLS y sin permisos anon/authenticated ni acceso al esquema; todos los demás
+campos de PACHA, las 179 fichas ajenas y el conteo de correcciones intactos.
+La vista real `v_hato_estado_actual` devuelve solamente PACHA #202 para esta
+identidad. Chromium local comprueba `AnimalesList` y sus hooks/motor con la
+fila de esa vista: escritorio y móvil muestran PACHA #202 y enlazan al UUID
+canónico. Las capturas y resultados se guardan en el espacio local autorizado;
+esta prueba usa datos controlados, no una sesión autenticada de producción.
 
 Esta evidencia resuelve la identidad de #202. **No certifica la totalidad ni la
 causa original del lote de descartes del 11 de agosto.** #177/#178 ya corregidos,
