@@ -1,6 +1,6 @@
 # Plan técnico — novedades en el chequeo (promoción de filas manuscritas + hoja de holgura)
 
-**Written** 2026-09-15 · **Author** CTO · **Status** ready to build, no open product questions
+**Written** 2026-09-15 · **Author** CTO · **Status** historical technical plan; current module contract and October 7 supplements take precedence
 **Product input** [`docs/hato/brief_chequeo_novedades.md`](./brief_chequeo_novedades.md) (CPO)
 **Incident** [`docs/hato/diagnostico-chequeo-2026-09-08.md`](./diagnostico-chequeo-2026-09-08.md)
 **Module contract** [`src/components/hato/CLAUDE.md`](../../src/components/hato/CLAUDE.md) · **Phase-3b plan** [`docs/plan_chequeo_captura_foto.md`](../plan_chequeo_captura_foto.md)
@@ -33,8 +33,8 @@ Santiago answered the brief's four questions. Quoted here so no implementer re-o
 
 **Explicitly out of scope** — each has its own ticket or its own reason:
 
-- **#253** (several photos per submission; warn before a same-date commit replaces rows). Still open. See §8.2 — one line of it is folded into Phase 2 because it lives in the same file and Phase 1 is worth nothing without it; the rest stays under #253.
-- **#255** (the `Sexo cría` "Hembra/Macho" pre-print vs `parseSX`). Orthogonal; touches the same PDF file, so §8.3 says how to avoid a collision.
+- **#253**, completed in PR #305 (2026-10-07): accumulated photos and explicit confirmation before same-date replacement. Current behavior is documented in [chequeo-confirmacion-y-sexo.md](chequeo-confirmacion-y-sexo.md); the original sequencing note in §8.2 is superseded.
+- **#255**, completed in PR #306 (2026-10-07): the shared parser/diff recognizes printed sex labels without inventing birth/destination facts. It did not change the PDF layout; see §8.3.
 - Telegram date parsing (P3/D4), treatment-table hygiene (P6), the 2026-08-11 inventory-cleanup review (D6).
 - Widening the printed roster to novillas — **rejected by decision 3**, not deferred.
 - Any change to `fn_hato_commit_chequeo` (migration 065). Nothing in this plan needs it.
@@ -514,11 +514,10 @@ inherited, not re-implemented.
   sentence.
 - `resumen` line: report `filasConfirmadas` **and** `filasPromovidas` — the current
   "N de M vacas reconocidas" would otherwise under-report a sheet full of novelties.
-- **Fold in the one line of #253 that lives here** (see §8.2): pass `multipleArchivo` to the
-  `CapturaArchivo` in this dialog. `agregarFotos` already accumulates; the gallery picker is capped
-  at one image only because the prop defaults to `false`. `PesajeLecheCard.tsx` and
-  `SubirPesajeFoto.tsx` already pass it. Phase 1 delivers **zero** user-visible value until page 3
-  can travel in the same submission as pages 1–2.
+- **Current #253 behavior (PR #305):** `agregarFotos` accumulates up to six images in the
+  same dialog before submission, including page 3; the picker accepts one file at a time and
+  another selection preserves earlier photos. Excel remains a single workbook. The old instruction
+  to add `multipleArchivo` was superseded; do not reintroduce it from this historical plan.
 
 ### 6.2 New: `src/utils/hato/reactivacionAnimal.ts` (pure, tested)
 
@@ -686,40 +685,21 @@ EOF
 gh issue close 254 --reason "not planned"
 ```
 
-### 8.2 #253 — stays open, one line of it moves into Phase 2
+### 8.2 #253 — completed; original sequencing instructions superseded
 
-#253 is still OPEN and `SubirChequeoExcel.tsx` still does not pass `multipleArchivo`. The brief is
-right that it is a hard prerequisite: a novelty row lives at the foot of the **last** page, and a
-same-date commit **replaces** the previous rows, so page 3 must travel in the same submission as
-pages 1–2 or the whole thing is lost anyway.
+PR [#305](https://github.com/sforero94/Escociaos/pull/305) published photo accumulation and
+explicit same-date replacement confirmation on 2026-10-07. All pages belong in one submission;
+a second approval for the same date replaces earlier rows, not just adds a page. The gallery
+selects one image at a time and preserves previous selections; the UI guides the user to add
+all pages before review. Do not replay the original issue-comment commands or add the removed
+`multipleArchivo` prop. See [the current contract](chequeo-confirmacion-y-sexo.md).
 
-Fold only the `multipleArchivo` prop into Phase 2 — it is one line, in a file Phase 2 already
-rewrites, and Phase 1 ships zero value without it. The rest of #253 (warn before a same-date commit
-replaces N rows) stays under #253.
+### 8.3 #255 — completed in the parser/diff
 
-```bash
-gh issue comment 253 --body "$(cat <<'EOF'
-Nota de secuenciación (CTO, 2026-09-15).
-
-La mitad de este issue —pasar `multipleArchivo` al `CapturaArchivo` de `SubirChequeoExcel.tsx`, una
-línea— se incluye en la Fase 2 de `docs/hato/plan_chequeo_novedades_implementacion.md`, porque vive
-en el mismo archivo que esa fase reescribe y porque la promoción de filas manuscritas no entrega
-nada si la hoja 3 no puede viajar en el mismo envío que las hojas 1 y 2. `agregarFotos` ya acumula;
-el único tapón es que la prop tiene `false` por defecto (mismo hallazgo que ya se cerró en
-`PesajeLecheCard.tsx` y `SubirPesajeFoto.tsx` el 2026-08-11).
-
-Este issue SIGUE ABIERTO por su otra mitad: avisar antes de que un commit de la misma fecha
-reemplace las N filas del chequeo anterior.
-EOF
-)"
-```
-
-### 8.3 #255 — untouched, but flag the file collision
-
-#255 (`Sexo cría` pre-printing "Hembra/Macho" vs `parseSX`) touches
-`exportarPlanillaChequeoPDF.ts`, the same file as Phase 3. No interaction in either direction, but
-whoever picks up #255 should rebase onto Phase 3 rather than the other way round — Phase 3 changes
-the document's page structure, #255 changes one cell's text.
+PR [#306](https://github.com/sforero94/Escociaos/pull/306) recognizes Hembra/Macho/Gemelar as
+informational labels in the shared parser, warns only for a known contradiction about the same
+Última Cría, and preserves raw SX. The PDF layout was not changed. The old file-collision and
+rebasing advice is historical; [the current contract](chequeo-confirmacion-y-sexo.md) governs.
 
 ### 8.4 #259 — correct the root cause on the issue before anyone builds from it
 
@@ -907,4 +887,4 @@ Hand these verbatim. Each item names its files; mirrored files are marked.
 | A reactivation collides with an active caravana and fails with a raw Postgres error | Client-side pre-check **and** `23505` translation, both. Never a provisional 900-range fallback |
 | Mirrored copies drift | `importHatoParidadServidor.test.ts` (`--check`) for the generated set; `diff -q` in the PR checklist for the three hand-synced pairs |
 | A hardcoded page count breaks the day the herd grows | §7.1: the invariant is computed (`roster + 1`), and the literal 3 lives only in a fixture-bound assertion |
-| Phase 1 ships and nothing changes for Martha because page 3 cannot be uploaded with pages 1–2 | The `multipleArchivo` line is inside PR 3, not left to #253 |
+| Phase 1 ships and nothing changes for Martha because page 3 cannot be uploaded with pages 1–2 | Photo selections accumulate in one submission (PR #305); add all pages before review, up to six photos |

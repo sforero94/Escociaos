@@ -8,6 +8,7 @@ Esta carpeta contiene documentación vigente para operar, mantener y extender el
 - [`README_CARGA_CSV.md`](./README_CARGA_CSV.md) — importación masiva de monitoreos.
 - [`GUIA_CONFIGURACION_LOTES_SUBLOTES.md`](./GUIA_CONFIGURACION_LOTES_SUBLOTES.md) — gestión de lotes y sublotes.
 - [`plan_hato_lechero_module.md`](./plan_hato_lechero_module.md) — diseño activo del módulo Hato Lechero.
+- [`hato/sesion-2026-10-06-07.md`](./hato/sesion-2026-10-06-07.md) — índice de los cambios #253/#255/#257/#258/#263, migraciones 177/178 verificadas, evidencia y bloqueos pendientes; enlaza los contratos actuales de chequeo y tratamiento.
 - [`hato/s3-handoff.md`](./hato/s3-handoff.md) — arranque en frío de S3 (importación histórica), **ya completada 2026-07-22** — se conserva como registro; el estado vigente está en el plan §8. Junto a él en [`hato/`](./hato/): el contrato del pipeline, el barrido de las planillas, la matriz adversarial de QA sobre las 45 hojas, y [`s3-verificacion-independiente.md`](./hato/s3-verificacion-independiente.md) — la verificación del coordinador que corrigió varios conteos de los barridos previos y cerró 5 preguntas del dueño por medición.
 - [`PLAN_MEJORAS_MODULO_LABORES.md`](./PLAN_MEJORAS_MODULO_LABORES.md) — hoja de ruta del módulo de labores.
 - [`PLAN_REPORTE_HTML_GEMINI.md`](./PLAN_REPORTE_HTML_GEMINI.md) — propuesta pendiente para el Reporte Semanal.
