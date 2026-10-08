@@ -2329,3 +2329,19 @@ La auto-poda no aplica. Ojo: este vacio no es falta de hallazgos sino que todo l
 - Los agentes registrados por nombre (`subagent_type: data-integrity`, etc.) funcionan en la Routine; se les inyectó la memoria pidiéndoles leerla como primer paso obligatorio + un archivo de contexto de corrida en el scratchpad. Funcionó: ningún agente re-filó algo aceptado. [corrida: 2026-10-05-lunes]
 - Primer P1 desde el 21-sep: ESCO-140 (escritura fuera de banda en `hato_eventos`, sin rastro). Lección para todos: una escritura con `auth.uid()` NULL (service role / SQL editor / bot) no deja fila en ningún log de correcciones; la técnica `xmin` (memoria data-integrity) es la única forma de fecharla. [corrida: 2026-10-05-lunes]
 - Poda de memoria §8 no aplicada esta corrida (los archivos siguen creciendo: _compartida 165 KB). Aplicarla el próximo lunes. [corrida: 2026-10-05-lunes]
+
+## Corrida 2026-10-08-jueves — hechos transversales
+- Preflight: 4/4 toolkits Composio `active`; `supabase_bitis-coward` = `supabase_read_only_user`; `query_logs` responde; Vercel ve el proyecto. `ATTENDED=0`. Cero prompts. [corrida: 2026-10-08-jueves]
+- **`COMPOSIO_REMOTE_BASH_TOOL`: el hook lo DENEGO a un subagente (release-changelog) y lo PERMITIO al orquestador en la misma corrida.** No es un P1 (el tool no esta en la lista permitida de la constitucion), pero explica por que un agente no puede leer campos de cierre de Notion: el orquestador debe pasarle esos datos en el contexto de despacho. [corrida: 2026-10-08-jueves]
+- Ledger hasta la 178 (`20261007144321`); 172–178 con archivo en `main` y post-estado verificado contra filas vivas por tres agentes. 0 aplicadas sin fusionar. [corrida: 2026-10-08-jueves]
+- **Un PR grande que pasa la suite puede romper una herramienta de Esco en produccion**: #311 cambio el orden por defecto de `supabaseQuery` y una consulta a una tabla sin `id` (`clima_resumen_diario`) quedo rota (ESCO-149). La suite no lo ve porque no corre PostgREST. Vigilar cualquier cambio a helpers compartidos de `chat.tsx`. [corrida: 2026-10-08-jueves]
+- **VIGILANCIA PARA EL LUNES 2026-10-12**: (1) `hato_alertas` debe tener el `secado_due` de MAGNIFICA #103 tras el tick de 2026-10-09 12:30Z, y Fernando debe haberlo recibido (`hato_alertas_envios`); si no, ESCO-140 no tuvo efecto aunque este cerrado. (2) PR #316 fusionado y edge redesplegado por CLI con `verify_jwt=false`. (3) Tasa de `lluvia_confianza='reconstruido'`: 3 de 3 dias en la semana del 10-05; si sigue, pasarla a Infra como degradacion del feed en vivo de Ecowitt. [corrida: 2026-10-08-jueves]
+- La columna de orden de `hato_alertas_tick_runs` NO es `started_at`: mirar `information_schema.columns` antes de consultarla. [corrida: 2026-10-08-jueves]
+
+## Racha del jueves (regla de auto-poda) — actualizada 2026-10-08
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-09-24-jueves | 5 (+1 diferido) |
+| 2026-10-01-jueves | 1 |
+| **2026-10-08-jueves** | **4 (1 P1 + 2 P2 + 1 P3). Racha de ceros: 0** |
+La auto-poda no aplica. El P1 (ESCO-149) nacio 24 h antes de esta corrida; el lunes lo habria dejado correr 4 dias mas.

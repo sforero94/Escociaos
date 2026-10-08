@@ -596,3 +596,9 @@ mensual sigue siendo la unica legible.**
 - Baseline: HEAD `22b2265` · edge v266 = `f33a943`, sin deploy desde 09-25 · migraciones hasta 171, todas con archivo · Vercel prod = HEAD (sondeo de contenido en `ProduccionView-Cz7hKvtg.js`) · 4 PRs abiertos (#299–#302), todos verdes, merge limpio en secuencia. [corrida: 2026-10-05-lunes]
 - Cadencia mensual septiembre 2026: 35,7 commits/semana · 28,2 aterrizajes/semana · 83 PRs · fix share 75,3 % (55/18); agosto 68,9 % (82/37). Lag: edge 66 s / 7 min / mismo día; migración 171 a 35 s del merge (récord). Próxima medición mensual: 2026-11-02. [corrida: 2026-10-05-lunes]
 - La cabecera de la 171 sigue diciendo «ESCRITA, SIN APLICAR» (mismo patrón que la 170): leer el ledger, no la cabecera. [corrida: 2026-10-05-lunes]
+
+## Corrida 2026-10-08-jueves
+- Linea base: HEAD `bd565c5`; edge = `abadada` (hash `ed115fab…`); migraciones hasta 178, 0 aplicadas sin fusionar; Vercel prod = HEAD. [corrida: 2026-10-08-jueves]
+- ESCO-140 cerrada (Arreglado) por la 176. Verificar el lunes que el `secado_due` de MAGNIFICA salio tras el tick del 10-09. [corrida: 2026-10-08-jueves]
+- Deriva de "ESCRITA, SIN APLICAR": 175/176 es la octava vez (ESCO-147). [corrida: 2026-10-08-jueves]
+- El hook deniega `COMPOSIO_REMOTE_BASH_TOOL` a los subagentes: para leer campos de cierre de Notion, pedirlos al orquestador en el contexto de despacho. [corrida: 2026-10-08-jueves]

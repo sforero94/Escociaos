@@ -23,6 +23,36 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-08 — corrida jueves
+
+A busy window: **15 PRs merged** (#299–#315 except #311, which landed through #314) and
+**7 migrations applied** (172–178). Everything is live: the frontend is on `bd565c5`, the
+edge function `make-server-1ccce916` is v272 with the hash of `abadada` (drift 0), and
+every migration is in the ledger with its post-state checked against live rows.
+
+### Hato Lechero
+- Gerencia (Martha, Santiago) now receives the "parto próximo" and "servicio sin confirmación" alerts by Telegram; field accounts do not (172, #299).
+- COMETA #124 no longer shows a pregnancy derived from the wrong service; its current service is 2026-08-12 (173, #299).
+- The calves of ENIGMA and PACIENCIA have fichas #216 and #217, linked to their partos (174, #299).
+- Daily hato alerts now arrive at 07:30 Bogotá instead of 05:45, and Gerencia can change the send hour from Configuración → Alertas (175, 08830c3).
+- Four Telegram services with day and month swapped now carry their real dates (MAGNIFICA 03-09, FUERZA 04-09, FLACA 05-09, ESMERALDA 04-09) (176, #304, ESCO-140).
+- A chequeo upload with the same date as an existing one asks for confirmation before replacing it (#305).
+- The chequeo reader recognizes the printed calf sex and does not invent birth events (#306).
+- Telegram asks to confirm pending treatment steps before it records a new treatment (177, #307).
+- A pesaje upload whose rows another upload overwrote can no longer be discarded (#302).
+- PACHA is chapeta #202 again; the spurious MOROCHA ficha is gone (178, #313).
+
+### Esco
+- 22 new evidence tools: partos and events by period, genealogy, treatments, chequeos, operational reconciliations; Esco refuses to deny a fact when a query fails (#311/#314).
+- **Regression found this run:** the same change broke `get_climate_data` (ESCO-149, fix in PR #316, needs an edge redeploy).
+
+### Interno
+- Docs: ledger 171–178, the 2026-10-07 deploy record, the 11-Aug discard audit, the #263 labor revalidation, contract reconciliation (#300, #303, #308, #309, #310, #315).
+- The permission-hook bytecode is no longer tracked (#301).
+
+### Requiere despliegue manual
+- After PR #316 merges: `npx supabase functions deploy make-server-1ccce916` (CLI, not the connector — ESCO-148).
+
 ## 2026-10-05 — corrida lunes
 
 A quiet week. **One PR merged since the last entry** (#298, 2026-10-01 23:07 UTC), **one

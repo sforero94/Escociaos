@@ -795,3 +795,9 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - Flujo de ramas aprobado por el orquestador: `git branch -m` para el primer arreglo; `git worktree add -b <rama> <ruta-abs> origin/main` para cada arreglo adicional. Para correr la suite de un PR abierto: worktree detached de `origin/prN` (`git fetch origin pull/N/head:refs/remotes/origin/prN`). [corrida: 2026-10-05-lunes]
 - Baseline `main@22b2265` VERDE: vitest 192 / 3.977, tsc 0, lint 0 / 919. PR #299 head `29bb6f8`: 195 / 4.033, tsc 0, sin bugs de corrección. Tras aplicar 172, el primer broadcast manda 3 alertas (GALLEGA, INDIA, COMETA); ENIGMA la retira la fase 0b. [corrida: 2026-10-05-lunes]
 - `postgrest_logs` = 288/24 h, todas `Warp server error: Thread killed by timeout manager` (ruido conocido). BUG_REPORT: issue 3b sigue abierto (decision); cabecera desactualizada por 4.ª vez (32 reportes / semana 39). [corrida: 2026-10-05-lunes]
+
+## Corrida 2026-10-08-jueves
+- Linea base `main@bd565c5` VERDE: vitest 202 ficheros / 4.123 pruebas, tsc 0, lint 0 errores / 921 warnings (919 el lunes). [corrida: 2026-10-08-jueves]
+- Desde #311, `supabaseQuery`/`supabaseQueryAll` de `chat.tsx` agregan `order=id.asc` a toda consulta sin `order=` (excepciones: `v_hato_estado_actual`, `v_hato_pajillas_stock`). Tablas SIN `id`: `clima_resumen_diario`, `rondas_inventario_alcance`. Rompio `get_climate_data` (ESCO-149, PR #316, verificado por refutador). Toda consulta legada nueva de Esco sobre una tabla sin `id` necesita `order=` explicito. [corrida: 2026-10-08-jueves]
+- ESCO-146: `get_hato_tratamientos` filtra `activo` aun con rango. [corrida: 2026-10-08-jueves]
+- En este carril de logs, `toInt32OrZero(...)>=400` y `not in (...)` sobre `log_attributes['response.status_code']` dieron vacios falsos. Usar `group by toString(...)`. [corrida: 2026-10-08-jueves]
