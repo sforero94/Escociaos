@@ -1,24 +1,31 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Filter, Upload } from 'lucide-react';
+import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Filter, Upload, Download } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getSupabase } from '../../utils/supabase/client';
 import { ProductForm } from './ProductForm';
 import { ProductMovements } from './ProductMovements';
 import { InventorySubNav } from './InventorySubNav';
+import { ExportarInventarioDialog } from './ExportarInventarioDialog';
 import { useNavigate } from 'react-router-dom';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { toast } from 'sonner';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: string) => void;
+  /**
+   * Lista ya cargada. Si llega, la pantalla no consulta Supabase.
+   * La ruta real no la pasa. Sirve para revisar el export sin red.
+   */
+  productosIniciales?: Product[];
 }
 
 interface Product {
   id: string;
   nombre: string;
   categoria: string;
+  grupo: string | null;
   estado: string | null;
   cantidad_actual: number | null;
   unidad_medida: string;
@@ -28,14 +35,15 @@ interface Product {
   permitido_gerencia: boolean | null;
 }
 
-export function InventoryList({ onNavigate }: InventoryListProps) {
+export function InventoryList({ onNavigate, productosIniciales }: InventoryListProps) {
   const navigate = useNavigate();
   const { isSafeModeEnabled } = useSafeMode();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(productosIniciales ?? []);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('todas');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(productosIniciales === undefined);
+  const [exportarAbierto, setExportarAbierto] = useState(false);
   
   // Estados para ordenamiento
   const [sortColumn, setSortColumn] = useState<keyof Product | null>(null);
@@ -59,8 +67,9 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   const [selectedProductForMovements, setSelectedProductForMovements] = useState<Product | null>(null);
 
   useEffect(() => {
+    if (productosIniciales !== undefined) return;
     loadProducts();
-  }, []);
+  }, [productosIniciales]);
 
   useEffect(() => {
     filterProducts();
@@ -136,7 +145,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   };
 
   const getCategories = () => {
-    const categories = new Set(products.map((p) => p.categoria));
+    const categories = new Set(products.map((p) => p.categoria).filter((c) => c.trim().length > 0));
     return Array.from(categories).sort();
   };
 
@@ -254,6 +263,14 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <p className="text-brand-brown/70">{products.length} productos registrados</p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => setExportarAbierto(true)}
+            variant="outline"
+            className="border-primary text-primary hover:bg-primary/10 rounded-xl transition-all duration-200"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exportar
+          </Button>
           <Button
             onClick={() => navigate('/inventario/importar')}
             variant="outline"
@@ -519,6 +536,20 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           </p>
         </div>
       </div>
+
+      <ExportarInventarioDialog
+        open={exportarAbierto}
+        onOpenChange={setExportarAbierto}
+        ocultarNoPermitidos={isSafeModeEnabled}
+        productos={products.map((producto) => ({
+          nombre: producto.nombre,
+          categoria: producto.categoria,
+          grupo: producto.grupo,
+          cantidad_actual: producto.cantidad_actual,
+          unidad_medida: producto.unidad_medida,
+          permitido_gerencia: producto.permitido_gerencia,
+        }))}
+      />
 
       {/* Formulario de Productos */}
       {isProductFormOpen && (
