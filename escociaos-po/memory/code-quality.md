@@ -122,3 +122,8 @@ esta corrida** — filado como hallazgo contra la operacion.
 - Para un commit sobre origin/main sin cambiar de rama: plumbing (`GIT_INDEX_FILE=tmp git read-tree origin/main` → update-index → write-tree → commit-tree → push sha:refs/heads/…). Editar archivos con python, no con sed y `#` como delimitador. [corrida: 2026-10-05-lunes]
 - Commit a4f3ce6 (2026-09-16) re-agrega casi todo src/: `git log --since` por archivo engaña antes de esa fecha. [corrida: 2026-10-05-lunes]
 - npm audit runtime: el orquestador NO filó la propuesta de fixes no-major; Security la mantiene como ruido aceptado. Re-proponer sólo con un fix concreto en un PR propio. [corrida: 2026-10-05-lunes]
+
+## Corrida 2026-10-09-viernes
+- `calculosAplicaciones.ts` sale de la lista de motores sin test (PR #321, 23 pruebas). Quedan `calculosReporteAplicacion.ts`, `reportesFinancierosComun.ts`, `reporteSemanalService.ts`. [corrida: 2026-10-09-viernes]
+- `src/types/database.ts` se regenera con `mcp__Supabase_Escritura__generate_typescript_types` (solo lectura; salida JSON `{types}` de ~220k caracteres que llega como fichero). Es generado puro, sin exports a mano. Casts de cliente: 83 en main → 70 tras PR #323. Cast mantenido a proposito: `hato_pesajes_leche.created_at` nullable vs `useSubidasPesajeMes` que supone string. [corrida: 2026-10-09-viernes]
+- Linea base: lint 921 warnings en main (906 el 2026-09-07). [corrida: 2026-10-09-viernes]

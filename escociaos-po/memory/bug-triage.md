@@ -801,3 +801,9 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - Desde #311, `supabaseQuery`/`supabaseQueryAll` de `chat.tsx` agregan `order=id.asc` a toda consulta sin `order=` (excepciones: `v_hato_estado_actual`, `v_hato_pajillas_stock`). Tablas SIN `id`: `clima_resumen_diario`, `rondas_inventario_alcance`. Rompio `get_climate_data` (ESCO-149, PR #316, verificado por refutador). Toda consulta legada nueva de Esco sobre una tabla sin `id` necesita `order=` explicito. [corrida: 2026-10-08-jueves]
 - ESCO-146: `get_hato_tratamientos` filtra `activo` aun con rango. [corrida: 2026-10-08-jueves]
 - En este carril de logs, `toInt32OrZero(...)>=400` y `not in (...)` sobre `log_attributes['response.status_code']` dieron vacios falsos. Usar `group by toString(...)`. [corrida: 2026-10-08-jueves]
+
+## Corrida 2026-10-09-viernes
+- `scripts/sync-esco-consultas.py` copia `escoConsultas.ts` a los dos arboles edge Y copia `chat.tsx` de src a supabase. Antes de correrlo, `cmp` las dos `chat.tsx`, o mete cambios ajenos al diff. [corrida: 2026-10-09-viernes]
+- El helper `consulta()` de `escoConsultas.test.ts` aplica los filtros gte/lte, asi que una prueba de rango ahi ejercita la query real. [corrida: 2026-10-09-viernes]
+- Las pruebas del detector de deriva viven en `scripts/check-deploy-drift.test.mjs` (no en `src/__tests__/`); vitest las recoge con el glob por defecto. Tras PR #322 el detector falla con `verify_jwt !== false` (campo ausente = falla) y con GET anonimo a `/functions/v1/make-server-1ccce916/health` distinto de 200; frases estables `PRODUCCION ROTA: …`. [corrida: 2026-10-09-viernes]
+- v272 (2026-10-07 15:10:31Z) = codigo de abadada (#311), hash ed115fab…, verify_jwt=false. [corrida: 2026-10-09-viernes]
