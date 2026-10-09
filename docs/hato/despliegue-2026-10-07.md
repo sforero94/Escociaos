@@ -61,12 +61,24 @@ contenga todos los cambios originales. No se adopta este hash como baseline,
 ni se revierten publicaciones o permisos sin establecer propiedad y alcance
 de aquel despliegue. El registro versionado conserva el release verificado.
 
+**Recuperación, 2026-10-07 (ESCO-148):** **v272**, publicada a las
+**15:10:31 UTC**, restauró `verify_jwt=false` y `/health` volvió a 200. Es el
+código del commit `abadada` (#311, mezclado a las 15:06:12 UTC); la corrida del
+detector de las 19:02 UTC registró ese commit con hash
+`ed115fab0b35188f598ac6a02e73c936127b681d53ab106843e4eb708060caa7`
+(`scripts/deploy-drift-state/make-server-1ccce916.json`). Los logs muestran
+errores de arranque del worker a las 15:01 UTC y después 401 del gateway en
+`/clima/sync` y `/health` hasta v272: unos 16 minutos con producción caída y
+3 lecturas de clima perdidas. El detector de deriva no podía ver ninguno de los
+dos modos; desde ESCO-148 falla si `verify_jwt` no es `false` o si el GET
+anónimo a `/health` no devuelve 200.
+
 ## Límites pendientes
 
 No se afirma una prueba de Telegram real: falta el bot de pruebas configurado.
 El navegador validó componentes y un simulador local, sin modificar producción.
 La auditoría #258 sigue abierta por la lista y causa originales del descarte
 del 11 de agosto. **PACHA/MOROCHA ya está conciliada por la 178**; no falta nueva
-evidencia de esa identidad. La deriva v271 necesita seguimiento con su responsable.
+evidencia de esa identidad. La deriva v271 quedó cerrada por v272 (arriba).
 Los 42 casos históricos de labores
 mantienen la aceptación anterior. Este despliegue no modifica esos registros.

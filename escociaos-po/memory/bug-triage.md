@@ -801,3 +801,14 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - Desde #311, `supabaseQuery`/`supabaseQueryAll` de `chat.tsx` agregan `order=id.asc` a toda consulta sin `order=` (excepciones: `v_hato_estado_actual`, `v_hato_pajillas_stock`). Tablas SIN `id`: `clima_resumen_diario`, `rondas_inventario_alcance`. Rompio `get_climate_data` (ESCO-149, PR #316, verificado por refutador). Toda consulta legada nueva de Esco sobre una tabla sin `id` necesita `order=` explicito. [corrida: 2026-10-08-jueves]
 - ESCO-146: `get_hato_tratamientos` filtra `activo` aun con rango. [corrida: 2026-10-08-jueves]
 - En este carril de logs, `toInt32OrZero(...)>=400` y `not in (...)` sobre `log_attributes['response.status_code']` dieron vacios falsos. Usar `group by toString(...)`. [corrida: 2026-10-08-jueves]
+
+## Corrida 2026-10-09-viernes — ESCO-148
+- `scripts/check-deploy-drift.mjs` ya pide la metadata de la funcion a la Management API; el
+  objeto trae `verify_jwt`, pero el script lo descartaba. Ahora falla si `verify_jwt !== false`
+  (campo ausente = falla cerrado) o si el GET ANONIMO a
+  `https://<ref>.supabase.co/functions/v1/make-server-1ccce916/health` no da 200.
+  Frases estables: `PRODUCCION ROTA: verify_jwt activo` / `PRODUCCION ROTA: health anónimo caído`
+  (clasificadas por `resumenFalloParaTelegram`, nunca como secreto ni como deriva).
+- Los tests del detector viven en `scripts/check-deploy-drift.test.mjs`, NO en `src/__tests__/`;
+  vitest los recoge con su glob por defecto.
+- v272 (15:10:31Z del 2026-10-07) = codigo de `abadada` (#311), hash `ed115fab…`, verify_jwt=false.

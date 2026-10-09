@@ -13,6 +13,8 @@ Issue: #293
 | `secret inválido/expirado` y HTTP 401 o 403 | El personal access token de Actions no autentica | Rotar `SUPABASE_ACCESS_TOKEN` (abajo). No redesplegar |
 | `DERIVA DE DESPLIEGUE (reloj)` | Hay un commit en `main` posterior a `updated_at` de producción | `npx supabase functions deploy make-server-1ccce916` |
 | `DERIVA DE DESPLIEGUE (contenido)` | El reloj marca deriva y `ezbr_sha256` no cambió: se republicó el bundle viejo | Desplegar de nuevo y comprobar que el hash cambie |
+| `PRODUCCION ROTA: verify_jwt activo` | La Management API reporta `verify_jwt` distinto de `false`. El gateway rechaza con 401 los cron y el webhook (ESCO-148, v271 el 2026-10-07) | `npx supabase functions deploy make-server-1ccce916`. Nunca publicar con el conector |
+| `PRODUCCION ROTA: health anónimo caído` | El GET sin credenciales a `/functions/v1/make-server-1ccce916/health` no devolvió 200. 401 = `verify_jwt` activo; 5xx = el worker no arranca | Revisar los logs de la función y republicar con la CLI |
 | `AVISO` y el job en verde | Hash sticky (#272 / ESCO-126): el commit cambió, el hash no, y el reloj está bien | Nada. No es un fallo |
 
 Un 401 no reescribe `scripts/deploy-drift-state/`. El script sale antes de tocar ese fichero.
