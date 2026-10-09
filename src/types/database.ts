@@ -10,10 +10,195 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      acciones_corridas: {
+        Row: {
+          contexto_comite: string | null
+          costo_usd: number | null
+          disparo: string
+          duracion_ms: number | null
+          error: string | null
+          estado: string
+          fecha_referencia: string
+          generado_at: string
+          id: string
+          modelo: string | null
+          paquete: Json
+          rechazos: Json
+          salida_cruda: Json | null
+          tokens_completion: number | null
+          tokens_prompt: number | null
+        }
+        Insert: {
+          contexto_comite?: string | null
+          costo_usd?: number | null
+          disparo: string
+          duracion_ms?: number | null
+          error?: string | null
+          estado: string
+          fecha_referencia: string
+          generado_at?: string
+          id?: string
+          modelo?: string | null
+          paquete: Json
+          rechazos?: Json
+          salida_cruda?: Json | null
+          tokens_completion?: number | null
+          tokens_prompt?: number | null
+        }
+        Update: {
+          contexto_comite?: string | null
+          costo_usd?: number | null
+          disparo?: string
+          duracion_ms?: number | null
+          error?: string | null
+          estado?: string
+          fecha_referencia?: string
+          generado_at?: string
+          id?: string
+          modelo?: string | null
+          paquete?: Json
+          rechazos?: Json
+          salida_cruda?: Json | null
+          tokens_completion?: number | null
+          tokens_prompt?: number | null
+        }
+        Relationships: []
+      }
+      acciones_recomendadas: {
+        Row: {
+          caducada_at: string | null
+          clave: string
+          corrida_id: string
+          created_at: string
+          destino_etiqueta: string
+          destino_id: string
+          destino_ruta: string
+          hecho_ids: string[]
+          hechos_snapshot: Json
+          id: string
+          negocio: string
+          orden: number
+          origen: string
+          plantilla: string
+          ranuras: Json
+          updated_at: string
+          visibilidad: string
+        }
+        Insert: {
+          caducada_at?: string | null
+          clave: string
+          corrida_id: string
+          created_at?: string
+          destino_etiqueta: string
+          destino_id: string
+          destino_ruta: string
+          hecho_ids: string[]
+          hechos_snapshot: Json
+          id?: string
+          negocio: string
+          orden: number
+          origen: string
+          plantilla: string
+          ranuras?: Json
+          updated_at?: string
+          visibilidad?: string
+        }
+        Update: {
+          caducada_at?: string | null
+          clave?: string
+          corrida_id?: string
+          created_at?: string
+          destino_etiqueta?: string
+          destino_id?: string
+          destino_ruta?: string
+          hecho_ids?: string[]
+          hechos_snapshot?: Json
+          id?: string
+          negocio?: string
+          orden?: number
+          origen?: string
+          plantilla?: string
+          ranuras?: Json
+          updated_at?: string
+          visibilidad?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acciones_recomendadas_corrida_id_fkey"
+            columns: ["corrida_id"]
+            isOneToOne: false
+            referencedRelation: "acciones_corridas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      acciones_silencios: {
+        Row: {
+          clave: string
+          descartada_at: string
+          descartada_por: string | null
+          frase_al_descartar: string | null
+          motivo: string | null
+          negocio: string
+          vigente_hasta: string
+        }
+        Insert: {
+          clave: string
+          descartada_at?: string
+          descartada_por?: string | null
+          frase_al_descartar?: string | null
+          motivo?: string | null
+          negocio: string
+          vigente_hasta: string
+        }
+        Update: {
+          clave?: string
+          descartada_at?: string
+          descartada_por?: string | null
+          frase_al_descartar?: string | null
+          motivo?: string | null
+          negocio?: string
+          vigente_hasta?: string
+        }
+        Relationships: []
+      }
+      alertas_catalogo: {
+        Row: {
+          activo: boolean
+          clave: string
+          created_at: string
+          descripcion: string | null
+          modulo: string
+          nombre: string
+          orden: number
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          clave: string
+          created_at?: string
+          descripcion?: string | null
+          modulo: string
+          nombre: string
+          orden?: number
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          clave?: string
+          created_at?: string
+          descripcion?: string | null
+          modulo?: string
+          nombre?: string
+          orden?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       apiarios: {
         Row: {
           activo: boolean | null
@@ -628,11 +813,33 @@ export type Database = {
         }
         Relationships: []
       }
+      clima_candado_backfill: {
+        Row: {
+          dueno: string | null
+          id: number
+          tomado_en: string | null
+          vence_en: string | null
+        }
+        Insert: {
+          dueno?: string | null
+          id: number
+          tomado_en?: string | null
+          vence_en?: string | null
+        }
+        Update: {
+          dueno?: string | null
+          id?: number
+          tomado_en?: string | null
+          vence_en?: string | null
+        }
+        Relationships: []
+      }
       clima_lecturas: {
         Row: {
           created_at: string | null
           humedad_pct: number | null
           id: number
+          lluvia_diaria_actualizada_en: string | null
           lluvia_diaria_mm: number | null
           lluvia_evento_mm: number | null
           lluvia_tasa_mm_hr: number | null
@@ -649,6 +856,7 @@ export type Database = {
           created_at?: string | null
           humedad_pct?: number | null
           id?: never
+          lluvia_diaria_actualizada_en?: string | null
           lluvia_diaria_mm?: number | null
           lluvia_evento_mm?: number | null
           lluvia_tasa_mm_hr?: number | null
@@ -665,6 +873,7 @@ export type Database = {
           created_at?: string | null
           humedad_pct?: number | null
           id?: never
+          lluvia_diaria_actualizada_en?: string | null
           lluvia_diaria_mm?: number | null
           lluvia_evento_mm?: number | null
           lluvia_tasa_mm_hr?: number | null
@@ -676,6 +885,81 @@ export type Database = {
           uv_index?: number | null
           viento_dir?: number | null
           viento_kmh?: number | null
+        }
+        Relationships: []
+      }
+      clima_resumen_diario: {
+        Row: {
+          cobertura_hueco_max_min: number | null
+          created_at: string | null
+          fecha: string
+          horas_sol_duracion: number | null
+          humedad_pct_avg: number | null
+          humedad_pct_max: number | null
+          humedad_pct_min: number | null
+          lecturas_count: number
+          lluvia_confianza: string
+          lluvia_mm_evento: number | null
+          lluvia_total_mm: number | null
+          radiacion_wm2_avg: number | null
+          radiacion_wm2_max: number | null
+          rafaga_kmh_max: number | null
+          station_id: string
+          temp_c_avg: number | null
+          temp_c_max: number | null
+          temp_c_min: number | null
+          ultima_lectura_en: string | null
+          uv_index_max: number | null
+          viento_dir_predominante: number | null
+          viento_kmh_avg: number | null
+        }
+        Insert: {
+          cobertura_hueco_max_min?: number | null
+          created_at?: string | null
+          fecha: string
+          horas_sol_duracion?: number | null
+          humedad_pct_avg?: number | null
+          humedad_pct_max?: number | null
+          humedad_pct_min?: number | null
+          lecturas_count?: number
+          lluvia_confianza?: string
+          lluvia_mm_evento?: number | null
+          lluvia_total_mm?: number | null
+          radiacion_wm2_avg?: number | null
+          radiacion_wm2_max?: number | null
+          rafaga_kmh_max?: number | null
+          station_id: string
+          temp_c_avg?: number | null
+          temp_c_max?: number | null
+          temp_c_min?: number | null
+          ultima_lectura_en?: string | null
+          uv_index_max?: number | null
+          viento_dir_predominante?: number | null
+          viento_kmh_avg?: number | null
+        }
+        Update: {
+          cobertura_hueco_max_min?: number | null
+          created_at?: string | null
+          fecha?: string
+          horas_sol_duracion?: number | null
+          humedad_pct_avg?: number | null
+          humedad_pct_max?: number | null
+          humedad_pct_min?: number | null
+          lecturas_count?: number
+          lluvia_confianza?: string
+          lluvia_mm_evento?: number | null
+          lluvia_total_mm?: number | null
+          radiacion_wm2_avg?: number | null
+          radiacion_wm2_max?: number | null
+          rafaga_kmh_max?: number | null
+          station_id?: string
+          temp_c_avg?: number | null
+          temp_c_max?: number | null
+          temp_c_min?: number | null
+          ultima_lectura_en?: string | null
+          uv_index_max?: number | null
+          viento_dir_predominante?: number | null
+          viento_kmh_avg?: number | null
         }
         Relationships: []
       }
@@ -1020,6 +1304,39 @@ export type Database = {
         }
         Relationships: []
       }
+      esco_memorias: {
+        Row: {
+          archived_at: string | null
+          content: string
+          created_at: string
+          id: string
+          last_used_at: string | null
+          source_channel: string
+          source_message_id: string | null
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          source_channel: string
+          source_message_id?: string | null
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          source_channel?: string
+          source_message_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       fin_categorias_gastos: {
         Row: {
           activo: boolean | null
@@ -1027,6 +1344,7 @@ export type Database = {
           id: string
           nombre: string
           orden: number | null
+          tipo_costo: string
           updated_at: string | null
         }
         Insert: {
@@ -1035,6 +1353,7 @@ export type Database = {
           id?: string
           nombre: string
           orden?: number | null
+          tipo_costo?: string
           updated_at?: string | null
         }
         Update: {
@@ -1043,6 +1362,7 @@ export type Database = {
           id?: string
           nombre?: string
           orden?: number | null
+          tipo_costo?: string
           updated_at?: string | null
         }
         Relationships: []
@@ -1128,6 +1448,7 @@ export type Database = {
           created_at: string | null
           id: string
           nombre: string
+          tipo_costo: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1136,6 +1457,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           nombre: string
+          tipo_costo?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1144,6 +1466,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           nombre?: string
+          tipo_costo?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1272,6 +1595,7 @@ export type Database = {
       fin_ingresos: {
         Row: {
           alianza: string | null
+          cabezas: number | null
           cantidad: number | null
           categoria_id: string
           cliente: string | null
@@ -1295,6 +1619,7 @@ export type Database = {
         }
         Insert: {
           alianza?: string | null
+          cabezas?: number | null
           cantidad?: number | null
           categoria_id: string
           cliente?: string | null
@@ -1318,6 +1643,7 @@ export type Database = {
         }
         Update: {
           alianza?: string | null
+          cabezas?: number | null
           cantidad?: number | null
           categoria_id?: string
           cliente?: string | null
@@ -1428,6 +1754,114 @@ export type Database = {
         }
         Relationships: []
       }
+      fin_parametros: {
+        Row: {
+          anio: number | null
+          clave: string
+          created_at: string | null
+          id: string
+          negocio_id: string | null
+          notas: string | null
+          updated_at: string | null
+          updated_by: string | null
+          valor: number
+        }
+        Insert: {
+          anio?: number | null
+          clave: string
+          created_at?: string | null
+          id?: string
+          negocio_id?: string | null
+          notas?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          valor: number
+        }
+        Update: {
+          anio?: number | null
+          clave?: string
+          created_at?: string | null
+          id?: string
+          negocio_id?: string | null
+          notas?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fin_parametros_negocio_id_fkey"
+            columns: ["negocio_id"]
+            isOneToOne: false
+            referencedRelation: "fin_negocios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fin_presupuestos: {
+        Row: {
+          anio: number
+          categoria_id: string
+          concepto_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_principal: boolean
+          monto_anual: number
+          negocio_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          anio: number
+          categoria_id: string
+          concepto_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_principal?: boolean
+          monto_anual?: number
+          negocio_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          anio?: number
+          categoria_id?: string
+          concepto_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_principal?: boolean
+          monto_anual?: number
+          negocio_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fin_presupuestos_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "fin_categorias_gastos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fin_presupuestos_concepto_id_fkey"
+            columns: ["concepto_id"]
+            isOneToOne: false
+            referencedRelation: "fin_conceptos_gastos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fin_presupuestos_negocio_id_fkey"
+            columns: ["negocio_id"]
+            isOneToOne: false
+            referencedRelation: "fin_negocios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fin_proveedores: {
         Row: {
           activo: boolean | null
@@ -1497,11 +1931,15 @@ export type Database = {
           cliente_proveedor: string | null
           created_at: string | null
           created_by: string | null
+          destare_kg_cabeza: number | null
+          es_hato: boolean
           fecha: string
           finca: string | null
+          hato_animal_id: string | null
           id: string
           kilos_pagados: number | null
           observaciones: string | null
+          peso_total_kg: number | null
           precio_kilo: number | null
           tipo: string
           updated_at: string | null
@@ -1512,11 +1950,15 @@ export type Database = {
           cliente_proveedor?: string | null
           created_at?: string | null
           created_by?: string | null
+          destare_kg_cabeza?: number | null
+          es_hato?: boolean
           fecha: string
           finca?: string | null
+          hato_animal_id?: string | null
           id?: string
           kilos_pagados?: number | null
           observaciones?: string | null
+          peso_total_kg?: number | null
           precio_kilo?: number | null
           tipo: string
           updated_at?: string | null
@@ -1527,17 +1969,36 @@ export type Database = {
           cliente_proveedor?: string | null
           created_at?: string | null
           created_by?: string | null
+          destare_kg_cabeza?: number | null
+          es_hato?: boolean
           fecha?: string
           finca?: string | null
+          hato_animal_id?: string | null
           id?: string
           kilos_pagados?: number | null
           observaciones?: string | null
+          peso_total_kg?: number | null
           precio_kilo?: number | null
           tipo?: string
           updated_at?: string | null
           valor_total?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fin_transacciones_ganado_hato_animal_id_fkey"
+            columns: ["hato_animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fin_transacciones_ganado_hato_animal_id_fkey"
+            columns: ["hato_animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+        ]
       }
       focos: {
         Row: {
@@ -1650,6 +2111,1674 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      gan_fincas: {
+        Row: {
+          activa: boolean
+          created_at: string | null
+          hectareas: number
+          id: string
+          nombre: string
+          ubicacion_id: string | null
+        }
+        Insert: {
+          activa?: boolean
+          created_at?: string | null
+          hectareas?: number
+          id?: string
+          nombre: string
+          ubicacion_id?: string | null
+        }
+        Update: {
+          activa?: boolean
+          created_at?: string | null
+          hectareas?: number
+          id?: string
+          nombre?: string
+          ubicacion_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gan_fincas_ubicacion_id_fkey"
+            columns: ["ubicacion_id"]
+            isOneToOne: false
+            referencedRelation: "gan_ubicaciones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gan_inventario: {
+        Row: {
+          id: string
+          novillos: number
+          peso_promedio_kg: number | null
+          potrero_id: string
+          toros: number
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          novillos?: number
+          peso_promedio_kg?: number | null
+          potrero_id: string
+          toros?: number
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          novillos?: number
+          peso_promedio_kg?: number | null
+          potrero_id?: string
+          toros?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gan_inventario_potrero_id_fkey"
+            columns: ["potrero_id"]
+            isOneToOne: true
+            referencedRelation: "gan_potreros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gan_lotes: {
+        Row: {
+          activo: boolean
+          created_at: string | null
+          finca_id: string
+          id: string
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string | null
+          finca_id: string
+          id?: string
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string | null
+          finca_id?: string
+          id?: string
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gan_lotes_finca_id_fkey"
+            columns: ["finca_id"]
+            isOneToOne: false
+            referencedRelation: "gan_fincas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gan_movimientos: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          estado: string
+          fecha: string
+          grupo_id: string | null
+          id: string
+          notas: string | null
+          novillos_delta: number
+          peso_promedio_kg: number | null
+          potrero_destino_id: string | null
+          potrero_origen_id: string | null
+          tipo: string
+          toros_delta: number
+          transaccion_ganado_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          fecha: string
+          grupo_id?: string | null
+          id?: string
+          notas?: string | null
+          novillos_delta?: number
+          peso_promedio_kg?: number | null
+          potrero_destino_id?: string | null
+          potrero_origen_id?: string | null
+          tipo: string
+          toros_delta?: number
+          transaccion_ganado_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          fecha?: string
+          grupo_id?: string | null
+          id?: string
+          notas?: string | null
+          novillos_delta?: number
+          peso_promedio_kg?: number | null
+          potrero_destino_id?: string | null
+          potrero_origen_id?: string | null
+          tipo?: string
+          toros_delta?: number
+          transaccion_ganado_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gan_movimientos_potrero_destino_id_fkey"
+            columns: ["potrero_destino_id"]
+            isOneToOne: false
+            referencedRelation: "gan_potreros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gan_movimientos_potrero_origen_id_fkey"
+            columns: ["potrero_origen_id"]
+            isOneToOne: false
+            referencedRelation: "gan_potreros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gan_movimientos_transaccion_ganado_id_fkey"
+            columns: ["transaccion_ganado_id"]
+            isOneToOne: false
+            referencedRelation: "fin_transacciones_ganado"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gan_pesos_historico: {
+        Row: {
+          created_at: string | null
+          fecha: string
+          id: string
+          notas: string | null
+          peso_promedio_kg: number
+          potrero_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          fecha: string
+          id?: string
+          notas?: string | null
+          peso_promedio_kg: number
+          potrero_id: string
+        }
+        Update: {
+          created_at?: string | null
+          fecha?: string
+          id?: string
+          notas?: string | null
+          peso_promedio_kg?: number
+          potrero_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gan_pesos_historico_potrero_id_fkey"
+            columns: ["potrero_id"]
+            isOneToOne: false
+            referencedRelation: "gan_potreros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gan_potreros: {
+        Row: {
+          activo: boolean
+          created_at: string | null
+          etapa: string | null
+          finca_id: string
+          id: string
+          lote_id: string | null
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string | null
+          etapa?: string | null
+          finca_id: string
+          id?: string
+          lote_id?: string | null
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string | null
+          etapa?: string | null
+          finca_id?: string
+          id?: string
+          lote_id?: string | null
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gan_potreros_finca_id_fkey"
+            columns: ["finca_id"]
+            isOneToOne: false
+            referencedRelation: "gan_fincas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gan_potreros_lote_misma_finca"
+            columns: ["lote_id", "finca_id"]
+            isOneToOne: false
+            referencedRelation: "gan_lotes"
+            referencedColumns: ["id", "finca_id"]
+          },
+        ]
+      }
+      gan_ubicaciones: {
+        Row: {
+          created_at: string | null
+          id: string
+          nombre: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          nombre: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          nombre?: string
+        }
+        Relationships: []
+      }
+      globalgap_correcciones: {
+        Row: {
+          aplicacion_id: string | null
+          corregido_en: string
+          corregido_por: string | null
+          datos_anteriores: Json
+          datos_nuevos: Json | null
+          fila_id: string
+          id: string
+          motivo: string | null
+          operacion: string
+          tabla: string
+        }
+        Insert: {
+          aplicacion_id?: string | null
+          corregido_en?: string
+          corregido_por?: string | null
+          datos_anteriores: Json
+          datos_nuevos?: Json | null
+          fila_id: string
+          id?: string
+          motivo?: string | null
+          operacion: string
+          tabla: string
+        }
+        Update: {
+          aplicacion_id?: string | null
+          corregido_en?: string
+          corregido_por?: string | null
+          datos_anteriores?: Json
+          datos_nuevos?: Json | null
+          fila_id?: string
+          id?: string
+          motivo?: string | null
+          operacion?: string
+          tabla?: string
+        }
+        Relationships: []
+      }
+      hato_alertas: {
+        Row: {
+          animal_id: string | null
+          created_at: string | null
+          created_by: string | null
+          datos: Json | null
+          destinatario_telegram_id: string | null
+          escalada_at: string | null
+          estado: string
+          fecha_programada: string
+          id: string
+          intentos: number
+          paso_id: string | null
+          regla_clave: string
+          respondida_por: string | null
+          respuesta: string | null
+          tipo: string
+          updated_at: string | null
+        }
+        Insert: {
+          animal_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          datos?: Json | null
+          destinatario_telegram_id?: string | null
+          escalada_at?: string | null
+          estado?: string
+          fecha_programada: string
+          id?: string
+          intentos?: number
+          paso_id?: string | null
+          regla_clave: string
+          respondida_por?: string | null
+          respuesta?: string | null
+          tipo: string
+          updated_at?: string | null
+        }
+        Update: {
+          animal_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          datos?: Json | null
+          destinatario_telegram_id?: string | null
+          escalada_at?: string | null
+          estado?: string
+          fecha_programada?: string
+          id?: string
+          intentos?: number
+          paso_id?: string | null
+          regla_clave?: string
+          respondida_por?: string | null
+          respuesta?: string | null
+          tipo?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_alertas_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_alertas_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_alertas_paso_id_fkey"
+            columns: ["paso_id"]
+            isOneToOne: false
+            referencedRelation: "hato_tratamiento_pasos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_alertas_config: {
+        Row: {
+          activo: boolean
+          created_at: string | null
+          destinatario_telegram_id: string | null
+          horas_escalamiento: number
+          id: string
+          tipo: string
+          updated_at: string | null
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string | null
+          destinatario_telegram_id?: string | null
+          horas_escalamiento?: number
+          id?: string
+          tipo: string
+          updated_at?: string | null
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string | null
+          destinatario_telegram_id?: string | null
+          horas_escalamiento?: number
+          id?: string
+          tipo?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      hato_alertas_envios: {
+        Row: {
+          alerta_id: string
+          enviado_at: string
+          message_id: number | null
+          telegram_id: string
+        }
+        Insert: {
+          alerta_id: string
+          enviado_at?: string
+          message_id?: number | null
+          telegram_id: string
+        }
+        Update: {
+          alerta_id?: string
+          enviado_at?: string
+          message_id?: number | null
+          telegram_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_alertas_envios_alerta_id_fkey"
+            columns: ["alerta_id"]
+            isOneToOne: false
+            referencedRelation: "hato_alertas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_alertas_tick_runs: {
+        Row: {
+          animales_evaluados: number | null
+          animales_sin_raza: number | null
+          cobertura: Json | null
+          duracion_ms: number | null
+          ejecutado_at: string
+          enviadas: number | null
+          error: string | null
+          escaladas: number | null
+          estado: string
+          expiradas: number | null
+          expiradas_atascadas: number | null
+          fecha_referencia: string
+          generadas: number | null
+          id: string
+          mensajes_enviados: number | null
+          mensajes_escalamiento: number | null
+          pasos_tratamiento_evaluados: number | null
+          saltadas_sin_destinatario: number | null
+        }
+        Insert: {
+          animales_evaluados?: number | null
+          animales_sin_raza?: number | null
+          cobertura?: Json | null
+          duracion_ms?: number | null
+          ejecutado_at?: string
+          enviadas?: number | null
+          error?: string | null
+          escaladas?: number | null
+          estado: string
+          expiradas?: number | null
+          expiradas_atascadas?: number | null
+          fecha_referencia: string
+          generadas?: number | null
+          id?: string
+          mensajes_enviados?: number | null
+          mensajes_escalamiento?: number | null
+          pasos_tratamiento_evaluados?: number | null
+          saltadas_sin_destinatario?: number | null
+        }
+        Update: {
+          animales_evaluados?: number | null
+          animales_sin_raza?: number | null
+          cobertura?: Json | null
+          duracion_ms?: number | null
+          ejecutado_at?: string
+          enviadas?: number | null
+          error?: string | null
+          escaladas?: number | null
+          estado?: string
+          expiradas?: number | null
+          expiradas_atascadas?: number | null
+          fecha_referencia?: string
+          generadas?: number | null
+          id?: string
+          mensajes_enviados?: number | null
+          mensajes_escalamiento?: number | null
+          pasos_tratamiento_evaluados?: number | null
+          saltadas_sin_destinatario?: number | null
+        }
+        Relationships: []
+      }
+      hato_animales: {
+        Row: {
+          confianza: string
+          created_at: string | null
+          created_by: string | null
+          estado: string
+          etapa: string
+          etapa_forzada: boolean
+          fecha_estado: string | null
+          fecha_nacimiento: string | null
+          fecha_nacimiento_confianza: string
+          finca_id: string | null
+          id: string
+          import_meta: Json | null
+          madre_id: string | null
+          nombre: string | null
+          notas: string | null
+          numero: number | null
+          origen: string | null
+          padre_id: string | null
+          padre_toro_id: string | null
+          raza: string | null
+          sexo: string | null
+        }
+        Insert: {
+          confianza?: string
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          etapa: string
+          etapa_forzada?: boolean
+          fecha_estado?: string | null
+          fecha_nacimiento?: string | null
+          fecha_nacimiento_confianza?: string
+          finca_id?: string | null
+          id?: string
+          import_meta?: Json | null
+          madre_id?: string | null
+          nombre?: string | null
+          notas?: string | null
+          numero?: number | null
+          origen?: string | null
+          padre_id?: string | null
+          padre_toro_id?: string | null
+          raza?: string | null
+          sexo?: string | null
+        }
+        Update: {
+          confianza?: string
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          etapa?: string
+          etapa_forzada?: boolean
+          fecha_estado?: string | null
+          fecha_nacimiento?: string | null
+          fecha_nacimiento_confianza?: string
+          finca_id?: string | null
+          id?: string
+          import_meta?: Json | null
+          madre_id?: string | null
+          nombre?: string | null
+          notas?: string | null
+          numero?: number | null
+          origen?: string | null
+          padre_id?: string | null
+          padre_toro_id?: string | null
+          raza?: string | null
+          sexo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_animales_finca_id_fkey"
+            columns: ["finca_id"]
+            isOneToOne: false
+            referencedRelation: "gan_fincas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_animales_madre_id_fkey"
+            columns: ["madre_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_animales_madre_id_fkey"
+            columns: ["madre_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_animales_padre_id_fkey"
+            columns: ["padre_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_animales_padre_id_fkey"
+            columns: ["padre_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_animales_padre_toro_id_fkey"
+            columns: ["padre_toro_id"]
+            isOneToOne: false
+            referencedRelation: "hato_toros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_capturas_foto: {
+        Row: {
+          actualizado_en: string
+          anio: number | null
+          celdas_confirmadas: number | null
+          celdas_leidas_ocr: number | null
+          creado_en: string
+          created_by: string | null
+          desenlace: string
+          detalle: string | null
+          fecha: string | null
+          filas_escritas: number | null
+          fotos_recibidas: number
+          id: string
+          mes: number | null
+          modelo: string | null
+          origen: string
+          storage_bucket: string
+          storage_ok: boolean
+          storage_prefijo: string
+          storage_rutas: string[]
+          tipo: string
+        }
+        Insert: {
+          actualizado_en?: string
+          anio?: number | null
+          celdas_confirmadas?: number | null
+          celdas_leidas_ocr?: number | null
+          creado_en?: string
+          created_by?: string | null
+          desenlace?: string
+          detalle?: string | null
+          fecha?: string | null
+          filas_escritas?: number | null
+          fotos_recibidas?: number
+          id?: string
+          mes?: number | null
+          modelo?: string | null
+          origen?: string
+          storage_bucket: string
+          storage_ok?: boolean
+          storage_prefijo: string
+          storage_rutas?: string[]
+          tipo: string
+        }
+        Update: {
+          actualizado_en?: string
+          anio?: number | null
+          celdas_confirmadas?: number | null
+          celdas_leidas_ocr?: number | null
+          creado_en?: string
+          created_by?: string | null
+          desenlace?: string
+          detalle?: string | null
+          fecha?: string | null
+          filas_escritas?: number | null
+          fotos_recibidas?: number
+          id?: string
+          mes?: number | null
+          modelo?: string | null
+          origen?: string
+          storage_bucket?: string
+          storage_ok?: boolean
+          storage_prefijo?: string
+          storage_rutas?: string[]
+          tipo?: string
+        }
+        Relationships: []
+      }
+      hato_chequeo_vacas: {
+        Row: {
+          animal_id: string
+          chequeo_id: string
+          created_at: string | null
+          estado: string | null
+          estado_raw: string | null
+          fecha_probable_parto: string | null
+          fecha_secar: string | null
+          fecha_servicio: string | null
+          fecha_servicio_raw: string | null
+          id: string
+          meses_prenez: number | null
+          normalizacion_issues: Json | null
+          np_raw: string | null
+          num_partos: number | null
+          pl: number | null
+          pl_raw: string | null
+          pp_raw: string | null
+          secar_raw: string | null
+          sx_raw: string | null
+          tipo_servicio: string | null
+          toro: string | null
+          toro_raw: string | null
+          tp_raw: string | null
+          ttto_raw: string | null
+          ultima_cria_raw: string | null
+        }
+        Insert: {
+          animal_id: string
+          chequeo_id: string
+          created_at?: string | null
+          estado?: string | null
+          estado_raw?: string | null
+          fecha_probable_parto?: string | null
+          fecha_secar?: string | null
+          fecha_servicio?: string | null
+          fecha_servicio_raw?: string | null
+          id?: string
+          meses_prenez?: number | null
+          normalizacion_issues?: Json | null
+          np_raw?: string | null
+          num_partos?: number | null
+          pl?: number | null
+          pl_raw?: string | null
+          pp_raw?: string | null
+          secar_raw?: string | null
+          sx_raw?: string | null
+          tipo_servicio?: string | null
+          toro?: string | null
+          toro_raw?: string | null
+          tp_raw?: string | null
+          ttto_raw?: string | null
+          ultima_cria_raw?: string | null
+        }
+        Update: {
+          animal_id?: string
+          chequeo_id?: string
+          created_at?: string | null
+          estado?: string | null
+          estado_raw?: string | null
+          fecha_probable_parto?: string | null
+          fecha_secar?: string | null
+          fecha_servicio?: string | null
+          fecha_servicio_raw?: string | null
+          id?: string
+          meses_prenez?: number | null
+          normalizacion_issues?: Json | null
+          np_raw?: string | null
+          num_partos?: number | null
+          pl?: number | null
+          pl_raw?: string | null
+          pp_raw?: string | null
+          secar_raw?: string | null
+          sx_raw?: string | null
+          tipo_servicio?: string | null
+          toro?: string | null
+          toro_raw?: string | null
+          tp_raw?: string | null
+          ttto_raw?: string | null
+          ultima_cria_raw?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_chequeo_vacas_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_chequeo_vacas_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_chequeo_vacas_chequeo_id_fkey"
+            columns: ["chequeo_id"]
+            isOneToOne: false
+            referencedRelation: "hato_chequeos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_chequeos: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          estado: string
+          fecha: string
+          fuente: string
+          id: string
+          sheet_ref: string | null
+          veterinario: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          fecha: string
+          fuente?: string
+          id?: string
+          sheet_ref?: string | null
+          veterinario?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          fecha?: string
+          fuente?: string
+          id?: string
+          sheet_ref?: string | null
+          veterinario?: string | null
+        }
+        Relationships: []
+      }
+      hato_config: {
+        Row: {
+          clave: string
+          created_at: string | null
+          descripcion: string | null
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+          valor: Json
+        }
+        Insert: {
+          clave: string
+          created_at?: string | null
+          descripcion?: string | null
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          valor: Json
+        }
+        Update: {
+          clave?: string
+          created_at?: string | null
+          descripcion?: string | null
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          valor?: Json
+        }
+        Relationships: []
+      }
+      hato_correcciones: {
+        Row: {
+          animal_id: string | null
+          corregido_en: string
+          corregido_por: string | null
+          datos_anteriores: Json
+          datos_nuevos: Json | null
+          fila_id: string
+          id: string
+          motivo: string | null
+          operacion: string
+          tabla: string
+        }
+        Insert: {
+          animal_id?: string | null
+          corregido_en?: string
+          corregido_por?: string | null
+          datos_anteriores: Json
+          datos_nuevos?: Json | null
+          fila_id: string
+          id?: string
+          motivo?: string | null
+          operacion: string
+          tabla: string
+        }
+        Update: {
+          animal_id?: string | null
+          corregido_en?: string
+          corregido_por?: string | null
+          datos_anteriores?: Json
+          datos_nuevos?: Json | null
+          fila_id?: string
+          id?: string
+          motivo?: string | null
+          operacion?: string
+          tabla?: string
+        }
+        Relationships: []
+      }
+      hato_eventos: {
+        Row: {
+          alerta_id: string | null
+          animal_id: string
+          chequeo_vaca_id: string | null
+          created_at: string | null
+          created_by: string | null
+          cria_destino: string | null
+          cria_id: string | null
+          datos: Json | null
+          fecha: string
+          fecha_confianza: string
+          fin_ingreso_id: string | null
+          fuente: string | null
+          id: string
+          sx_raw: string | null
+          tipo: string
+          tipo_servicio: string | null
+          toro_id: string | null
+          transaccion_ganado_id: string | null
+        }
+        Insert: {
+          alerta_id?: string | null
+          animal_id: string
+          chequeo_vaca_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          cria_destino?: string | null
+          cria_id?: string | null
+          datos?: Json | null
+          fecha: string
+          fecha_confianza?: string
+          fin_ingreso_id?: string | null
+          fuente?: string | null
+          id?: string
+          sx_raw?: string | null
+          tipo: string
+          tipo_servicio?: string | null
+          toro_id?: string | null
+          transaccion_ganado_id?: string | null
+        }
+        Update: {
+          alerta_id?: string | null
+          animal_id?: string
+          chequeo_vaca_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          cria_destino?: string | null
+          cria_id?: string | null
+          datos?: Json | null
+          fecha?: string
+          fecha_confianza?: string
+          fin_ingreso_id?: string | null
+          fuente?: string | null
+          id?: string
+          sx_raw?: string | null
+          tipo?: string
+          tipo_servicio?: string | null
+          toro_id?: string | null
+          transaccion_ganado_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_eventos_alerta_id_fkey"
+            columns: ["alerta_id"]
+            isOneToOne: false
+            referencedRelation: "hato_alertas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_chequeo_vaca_id_fkey"
+            columns: ["chequeo_vaca_id"]
+            isOneToOne: false
+            referencedRelation: "hato_chequeo_vacas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_chequeo_vaca_id_fkey"
+            columns: ["chequeo_vaca_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["ultimo_chequeo_vaca_id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_cria_id_fkey"
+            columns: ["cria_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_cria_id_fkey"
+            columns: ["cria_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_fin_ingreso_id_fkey"
+            columns: ["fin_ingreso_id"]
+            isOneToOne: false
+            referencedRelation: "fin_ingresos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_fin_ingreso_id_fkey"
+            columns: ["fin_ingreso_id"]
+            isOneToOne: false
+            referencedRelation: "v_ingresos_completos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_toro_id_fkey"
+            columns: ["toro_id"]
+            isOneToOne: false
+            referencedRelation: "hato_toros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_eventos_transaccion_ganado_id_fkey"
+            columns: ["transaccion_ganado_id"]
+            isOneToOne: false
+            referencedRelation: "fin_transacciones_ganado"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_pajillas: {
+        Row: {
+          activa: boolean
+          cantidad_inicial: number
+          created_at: string | null
+          created_by: string | null
+          id: string
+          toro_id: string
+        }
+        Insert: {
+          activa?: boolean
+          cantidad_inicial: number
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          toro_id: string
+        }
+        Update: {
+          activa?: boolean
+          cantidad_inicial?: number
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          toro_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_pajillas_toro_id_fkey"
+            columns: ["toro_id"]
+            isOneToOne: false
+            referencedRelation: "hato_toros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_pajillas_uso: {
+        Row: {
+          animal_id: string | null
+          created_at: string | null
+          created_by: string | null
+          fecha_uso: string
+          id: string
+          pajilla_id: string
+        }
+        Insert: {
+          animal_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          fecha_uso: string
+          id?: string
+          pajilla_id: string
+        }
+        Update: {
+          animal_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          fecha_uso?: string
+          id?: string
+          pajilla_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_pajillas_uso_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_pajillas_uso_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_pajillas_uso_pajilla_id_fkey"
+            columns: ["pajilla_id"]
+            isOneToOne: false
+            referencedRelation: "hato_pajillas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_pajillas_uso_pajilla_id_fkey"
+            columns: ["pajilla_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_pajillas_stock"
+            referencedColumns: ["pajilla_id"]
+          },
+        ]
+      }
+      hato_pesajes_leche: {
+        Row: {
+          animal_id: string
+          created_at: string | null
+          created_by: string | null
+          fecha: string
+          fuente: string | null
+          id: string
+          litros_am: number | null
+          litros_pm: number | null
+          litros_total: number
+        }
+        Insert: {
+          animal_id: string
+          created_at?: string | null
+          created_by?: string | null
+          fecha: string
+          fuente?: string | null
+          id?: string
+          litros_am?: number | null
+          litros_pm?: number | null
+          litros_total: number
+        }
+        Update: {
+          animal_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          fecha?: string
+          fuente?: string | null
+          id?: string
+          litros_am?: number | null
+          litros_pm?: number | null
+          litros_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_pesajes_leche_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_pesajes_leche_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+        ]
+      }
+      hato_produccion_quincenal: {
+        Row: {
+          anio: number
+          created_at: string | null
+          created_by: string | null
+          fecha_fin: string | null
+          fecha_inicio: string | null
+          fin_ingreso_id: string
+          fuente: string | null
+          id: string
+          litros_pomar_confirmado: number | null
+          litros_total: number | null
+          mes: number
+          notas: string | null
+          num_vacas_ordeno: number | null
+          num_vacas_ordeno_origen: string | null
+          origen_dato: string
+          precio_bruto_litro: number | null
+          quincena: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          anio: number
+          created_at?: string | null
+          created_by?: string | null
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          fin_ingreso_id: string
+          fuente?: string | null
+          id?: string
+          litros_pomar_confirmado?: number | null
+          litros_total?: number | null
+          mes: number
+          notas?: string | null
+          num_vacas_ordeno?: number | null
+          num_vacas_ordeno_origen?: string | null
+          origen_dato?: string
+          precio_bruto_litro?: number | null
+          quincena: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          anio?: number
+          created_at?: string | null
+          created_by?: string | null
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          fin_ingreso_id?: string
+          fuente?: string | null
+          id?: string
+          litros_pomar_confirmado?: number | null
+          litros_total?: number | null
+          mes?: number
+          notas?: string | null
+          num_vacas_ordeno?: number | null
+          num_vacas_ordeno_origen?: string | null
+          origen_dato?: string
+          precio_bruto_litro?: number | null
+          quincena?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_produccion_quincenal_fin_ingreso_id_fkey"
+            columns: ["fin_ingreso_id"]
+            isOneToOne: false
+            referencedRelation: "fin_ingresos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_produccion_quincenal_fin_ingreso_id_fkey"
+            columns: ["fin_ingreso_id"]
+            isOneToOne: false
+            referencedRelation: "v_ingresos_completos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_protocolos: {
+        Row: {
+          activo: boolean
+          created_at: string | null
+          created_by: string | null
+          descripcion: string | null
+          id: string
+          nombre: string
+          pasos_default: Json | null
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string | null
+          created_by?: string | null
+          descripcion?: string | null
+          id?: string
+          nombre: string
+          pasos_default?: Json | null
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string | null
+          created_by?: string | null
+          descripcion?: string | null
+          id?: string
+          nombre?: string
+          pasos_default?: Json | null
+        }
+        Relationships: []
+      }
+      hato_toros: {
+        Row: {
+          activo: boolean
+          created_at: string | null
+          created_by: string | null
+          id: string
+          nombre: string
+          raza: string | null
+          tipo: string | null
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          nombre: string
+          raza?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          nombre?: string
+          raza?: string | null
+          tipo?: string | null
+        }
+        Relationships: []
+      }
+      hato_tratamiento_pasos: {
+        Row: {
+          created_at: string | null
+          descripcion: string | null
+          fecha_ejecutada: string | null
+          fecha_programada: string
+          id: string
+          offset_dias: number
+          paso_num: number
+          requiere_confirmacion: boolean
+          tratamiento_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          descripcion?: string | null
+          fecha_ejecutada?: string | null
+          fecha_programada: string
+          id?: string
+          offset_dias?: number
+          paso_num: number
+          requiere_confirmacion?: boolean
+          tratamiento_id: string
+        }
+        Update: {
+          created_at?: string | null
+          descripcion?: string | null
+          fecha_ejecutada?: string | null
+          fecha_programada?: string
+          id?: string
+          offset_dias?: number
+          paso_num?: number
+          requiere_confirmacion?: boolean
+          tratamiento_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_tratamiento_pasos_tratamiento_id_fkey"
+            columns: ["tratamiento_id"]
+            isOneToOne: false
+            referencedRelation: "hato_tratamientos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hato_tratamientos: {
+        Row: {
+          animal_id: string
+          chequeo_id: string | null
+          created_at: string | null
+          created_by: string | null
+          estado: string
+          fecha_inicio: string
+          fuente: string | null
+          id: string
+          nombre: string | null
+          nota: string | null
+          protocolo_id: string | null
+        }
+        Insert: {
+          animal_id: string
+          chequeo_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          fecha_inicio: string
+          fuente?: string | null
+          id?: string
+          nombre?: string | null
+          nota?: string | null
+          protocolo_id?: string | null
+        }
+        Update: {
+          animal_id?: string
+          chequeo_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          estado?: string
+          fecha_inicio?: string
+          fuente?: string | null
+          id?: string
+          nombre?: string | null
+          nota?: string | null
+          protocolo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_tratamientos_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "hato_animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_tratamientos_animal_id_fkey"
+            columns: ["animal_id"]
+            isOneToOne: false
+            referencedRelation: "v_hato_estado_actual"
+            referencedColumns: ["animal_id"]
+          },
+          {
+            foreignKeyName: "hato_tratamientos_chequeo_id_fkey"
+            columns: ["chequeo_id"]
+            isOneToOne: false
+            referencedRelation: "hato_chequeos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hato_tratamientos_protocolo_id_fkey"
+            columns: ["protocolo_id"]
+            isOneToOne: false
+            referencedRelation: "hato_protocolos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      informes_visita: {
+        Row: {
+          agronoma: string | null
+          archivo_nombre: string
+          archivo_path: string
+          created_at: string
+          created_by: string | null
+          especie: string | null
+          fecha_visita: string
+          fenologia: string | null
+          finca: string | null
+          id: string
+          materia_seca: string | null
+          proyeccion_cosecha: string | null
+          sin_texto: boolean
+          texto_busqueda: unknown
+          texto_extraido: string | null
+          updated_at: string
+        }
+        Insert: {
+          agronoma?: string | null
+          archivo_nombre: string
+          archivo_path: string
+          created_at?: string
+          created_by?: string | null
+          especie?: string | null
+          fecha_visita: string
+          fenologia?: string | null
+          finca?: string | null
+          id?: string
+          materia_seca?: string | null
+          proyeccion_cosecha?: string | null
+          sin_texto?: boolean
+          texto_busqueda?: unknown
+          texto_extraido?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agronoma?: string | null
+          archivo_nombre?: string
+          archivo_path?: string
+          created_at?: string
+          created_by?: string | null
+          especie?: string | null
+          fecha_visita?: string
+          fenologia?: string | null
+          finca?: string | null
+          id?: string
+          materia_seca?: string | null
+          proyeccion_cosecha?: string | null
+          sin_texto?: boolean
+          texto_busqueda?: unknown
+          texto_extraido?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "informes_visita_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      informes_visita_fotos: {
+        Row: {
+          created_at: string
+          id: string
+          informe_id: string
+          nombre_original: string | null
+          orden: number
+          pie_de_foto: string | null
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          informe_id: string
+          nombre_original?: string | null
+          orden?: number
+          pie_de_foto?: string | null
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          informe_id?: string
+          nombre_original?: string | null
+          orden?: number
+          pie_de_foto?: string | null
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "informes_visita_fotos_informe_id_fkey"
+            columns: ["informe_id"]
+            isOneToOne: false
+            referencedRelation: "informes_visita"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      informes_visita_snippets: {
+        Row: {
+          cita_word: string | null
+          created_at: string
+          created_by: string | null
+          foto_id: string | null
+          id: string
+          informe_id: string
+          insumo: string | null
+          origen: string
+          plaga: string | null
+          temas: string[]
+          texto: string
+          texto_busqueda: unknown
+          tipo: string | null
+          updated_at: string
+        }
+        Insert: {
+          cita_word?: string | null
+          created_at?: string
+          created_by?: string | null
+          foto_id?: string | null
+          id?: string
+          informe_id: string
+          insumo?: string | null
+          origen: string
+          plaga?: string | null
+          temas?: string[]
+          texto: string
+          texto_busqueda?: unknown
+          tipo?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cita_word?: string | null
+          created_at?: string
+          created_by?: string | null
+          foto_id?: string | null
+          id?: string
+          informe_id?: string
+          insumo?: string | null
+          origen?: string
+          plaga?: string | null
+          temas?: string[]
+          texto?: string
+          texto_busqueda?: unknown
+          tipo?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "informes_visita_snippets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "informes_visita_snippets_foto_id_fkey"
+            columns: ["foto_id"]
+            isOneToOne: false
+            referencedRelation: "informes_visita_fotos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "informes_visita_snippets_informe_id_fkey"
+            columns: ["informe_id"]
+            isOneToOne: false
+            referencedRelation: "informes_visita"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventario_causas_raiz: {
+        Row: {
+          activo: boolean
+          clave: string
+          etiqueta: string
+          exige_nota: boolean
+          mueve_inventario: boolean
+          orden: number
+          via: string
+        }
+        Insert: {
+          activo?: boolean
+          clave: string
+          etiqueta: string
+          exige_nota?: boolean
+          mueve_inventario: boolean
+          orden: number
+          via: string
+        }
+        Update: {
+          activo?: boolean
+          clave?: string
+          etiqueta?: string
+          exige_nota?: boolean
+          mueve_inventario?: boolean
+          orden?: number
+          via?: string
+        }
+        Relationships: []
+      }
+      inventario_parametros: {
+        Row: {
+          clave: string
+          updated_at: string
+          valor: Json
+        }
+        Insert: {
+          clave: string
+          updated_at?: string
+          valor: Json
+        }
+        Update: {
+          clave?: string
+          updated_at?: string
+          valor?: Json
+        }
+        Relationships: []
       }
       kv_store_1ccce916: {
         Row: {
@@ -1806,8 +3935,10 @@ export type Database = {
           created_at: string | null
           fecha_monitoreo: string
           id: string
+          lecturas: Json | null
           lote_id: string
           monitor: string | null
+          num_arboles: number | null
           observaciones: string | null
           ph: number | null
           ronda_id: string | null
@@ -1818,8 +3949,10 @@ export type Database = {
           created_at?: string | null
           fecha_monitoreo?: string
           id?: string
+          lecturas?: Json | null
           lote_id: string
           monitor?: string | null
+          num_arboles?: number | null
           observaciones?: string | null
           ph?: number | null
           ronda_id?: string | null
@@ -1830,8 +3963,10 @@ export type Database = {
           created_at?: string | null
           fecha_monitoreo?: string
           id?: string
+          lecturas?: Json | null
           lote_id?: string
           monitor?: string | null
+          num_arboles?: number | null
           observaciones?: string | null
           ph?: number | null
           ronda_id?: string | null
@@ -1864,6 +3999,7 @@ export type Database = {
           floracion_brotes: number | null
           floracion_cuaje: number | null
           floracion_flor_madura: number | null
+          floracion_sin_flor: number
           foto_url: string | null
           gravedad_numerica: number | null
           gravedad_texto: Database["public"]["Enums"]["gravedad_texto"] | null
@@ -1887,6 +4023,7 @@ export type Database = {
           floracion_brotes?: number | null
           floracion_cuaje?: number | null
           floracion_flor_madura?: number | null
+          floracion_sin_flor?: number
           foto_url?: string | null
           gravedad_numerica?: number | null
           gravedad_texto?: Database["public"]["Enums"]["gravedad_texto"] | null
@@ -1910,6 +4047,7 @@ export type Database = {
           floracion_brotes?: number | null
           floracion_cuaje?: number | null
           floracion_flor_madura?: number | null
+          floracion_sin_flor?: number
           foto_url?: string | null
           gravedad_numerica?: number | null
           gravedad_texto?: Database["public"]["Enums"]["gravedad_texto"] | null
@@ -2283,6 +4421,113 @@ export type Database = {
           },
         ]
       }
+      novedades_uso: {
+        Row: {
+          fuente_novedad: string | null
+          id: string
+          ocurrido_at: string
+          tipo: string
+          usuario_id: string
+        }
+        Insert: {
+          fuente_novedad?: string | null
+          id?: string
+          ocurrido_at?: string
+          tipo: string
+          usuario_id?: string
+        }
+        Update: {
+          fuente_novedad?: string | null
+          id?: string
+          ocurrido_at?: string
+          tipo?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      pest_seasonal_profile: {
+        Row: {
+          created_at: string
+          historical_tier: string
+          id: string
+          lote_id: string | null
+          n_years_observed: number
+          pest_id: string
+          source: string
+          week_of_year: number
+        }
+        Insert: {
+          created_at?: string
+          historical_tier: string
+          id?: string
+          lote_id?: string | null
+          n_years_observed: number
+          pest_id: string
+          source?: string
+          week_of_year: number
+        }
+        Update: {
+          created_at?: string
+          historical_tier?: string
+          id?: string
+          lote_id?: string | null
+          n_years_observed?: number
+          pest_id?: string
+          source?: string
+          week_of_year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pest_seasonal_profile_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pest_seasonal_profile_pest_id_fkey"
+            columns: ["pest_id"]
+            isOneToOne: false
+            referencedRelation: "plagas_enfermedades_catalogo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pest_umbral_economico: {
+        Row: {
+          grupo_key: string | null
+          id: string
+          pest_id: string
+          source_label: string
+          umbral_pct: number
+          updated_at: string | null
+        }
+        Insert: {
+          grupo_key?: string | null
+          id?: string
+          pest_id: string
+          source_label: string
+          umbral_pct: number
+          updated_at?: string | null
+        }
+        Update: {
+          grupo_key?: string | null
+          id?: string
+          pest_id?: string
+          source_label?: string
+          umbral_pct?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pest_umbral_economico_pest_id_fkey"
+            columns: ["pest_id"]
+            isOneToOne: true
+            referencedRelation: "plagas_enfermedades_catalogo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plagas_enfermedades_catalogo: {
         Row: {
           activo: boolean | null
@@ -2364,6 +4609,8 @@ export type Database = {
           cosecha_tipo: string
           created_at: string | null
           id: string
+          kg_exportacion: number | null
+          kg_nacional: number | null
           kg_por_arbol: number | null
           kg_totales: number
           lote_id: string
@@ -2377,6 +4624,8 @@ export type Database = {
           cosecha_tipo: string
           created_at?: string | null
           id?: string
+          kg_exportacion?: number | null
+          kg_nacional?: number | null
           kg_por_arbol?: number | null
           kg_totales: number
           lote_id: string
@@ -2390,6 +4639,8 @@ export type Database = {
           cosecha_tipo?: string
           created_at?: string | null
           id?: string
+          kg_exportacion?: number | null
+          kg_nacional?: number | null
           kg_por_arbol?: number | null
           kg_totales?: number
           lote_id?: string
@@ -2705,6 +4956,437 @@ export type Database = {
         }
         Relationships: []
       }
+      revisiones_periodicas: {
+        Row: {
+          activa: boolean
+          cadencia_dias: number | null
+          clave: string
+          created_at: string
+          descripcion: string | null
+          destino_id: string
+          dias_gracia: number
+          disparo: string
+          evento_reinicio: string | null
+          evento_selector: string | null
+          negocio: string
+          nombre: string
+          periodo: string | null
+          ultima_revision_at: string | null
+          ultima_revision_por: string | null
+          updated_at: string
+        }
+        Insert: {
+          activa?: boolean
+          cadencia_dias?: number | null
+          clave: string
+          created_at?: string
+          descripcion?: string | null
+          destino_id: string
+          dias_gracia?: number
+          disparo: string
+          evento_reinicio?: string | null
+          evento_selector?: string | null
+          negocio: string
+          nombre: string
+          periodo?: string | null
+          ultima_revision_at?: string | null
+          ultima_revision_por?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activa?: boolean
+          cadencia_dias?: number | null
+          clave?: string
+          created_at?: string
+          descripcion?: string | null
+          destino_id?: string
+          dias_gracia?: number
+          disparo?: string
+          evento_reinicio?: string | null
+          evento_selector?: string | null
+          negocio?: string
+          nombre?: string
+          periodo?: string | null
+          ultima_revision_at?: string | null
+          ultima_revision_por?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rondas_avisos: {
+        Row: {
+          clave: string
+          detalle: Json | null
+          enviado_en: string
+          ronda_id: string | null
+        }
+        Insert: {
+          clave: string
+          detalle?: Json | null
+          enviado_en?: string
+          ronda_id?: string | null
+        }
+        Update: {
+          clave?: string
+          detalle?: Json | null
+          enviado_en?: string
+          ronda_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rondas_avisos_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_inventario"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rondas_excepciones: {
+        Row: {
+          aplicacion_en: string | null
+          aplicacion_movimiento_id: string | null
+          aplicacion_por_telegram: string | null
+          aplicacion_por_usuario: string | null
+          cantidad_fisica: number
+          captura_en: string | null
+          captura_movimiento_id: string | null
+          captura_por_telegram: string | null
+          captura_por_usuario: string | null
+          causa_sugerida: string | null
+          created_at: string
+          decision_causa: string | null
+          decision_en: string | null
+          decision_nota: string | null
+          decision_por_telegram: string | null
+          decision_por_usuario: string | null
+          estado: Database["public"]["Enums"]["estado_excepcion_inventario"]
+          explicacion_citada: string | null
+          explicacion_david: string | null
+          explicacion_david_accion: string | null
+          explicacion_david_en: string | null
+          explicacion_david_telegram: string | null
+          explicacion_david_usuario: string | null
+          fisico_origen: string
+          id: string
+          interprete_confianza: string
+          observacion_uriel: string | null
+          producto_id: string
+          propuesta_causa: string | null
+          propuesta_delta: number | null
+          propuesta_en: string | null
+          propuesta_nota: string | null
+          propuesta_por_telegram: string | null
+          propuesta_por_usuario: string | null
+          reportada_en: string
+          reportada_por_telegram: string | null
+          reportada_por_usuario: string | null
+          ronda_id: string
+          teorico_conteo: number
+          transcrito_id: string | null
+          updated_at: string
+          via_propuesta: string
+        }
+        Insert: {
+          aplicacion_en?: string | null
+          aplicacion_movimiento_id?: string | null
+          aplicacion_por_telegram?: string | null
+          aplicacion_por_usuario?: string | null
+          cantidad_fisica: number
+          captura_en?: string | null
+          captura_movimiento_id?: string | null
+          captura_por_telegram?: string | null
+          captura_por_usuario?: string | null
+          causa_sugerida?: string | null
+          created_at?: string
+          decision_causa?: string | null
+          decision_en?: string | null
+          decision_nota?: string | null
+          decision_por_telegram?: string | null
+          decision_por_usuario?: string | null
+          estado?: Database["public"]["Enums"]["estado_excepcion_inventario"]
+          explicacion_citada?: string | null
+          explicacion_david?: string | null
+          explicacion_david_accion?: string | null
+          explicacion_david_en?: string | null
+          explicacion_david_telegram?: string | null
+          explicacion_david_usuario?: string | null
+          fisico_origen: string
+          id?: string
+          interprete_confianza: string
+          observacion_uriel?: string | null
+          producto_id: string
+          propuesta_causa?: string | null
+          propuesta_delta?: number | null
+          propuesta_en?: string | null
+          propuesta_nota?: string | null
+          propuesta_por_telegram?: string | null
+          propuesta_por_usuario?: string | null
+          reportada_en?: string
+          reportada_por_telegram?: string | null
+          reportada_por_usuario?: string | null
+          ronda_id: string
+          teorico_conteo: number
+          transcrito_id?: string | null
+          updated_at?: string
+          via_propuesta: string
+        }
+        Update: {
+          aplicacion_en?: string | null
+          aplicacion_movimiento_id?: string | null
+          aplicacion_por_telegram?: string | null
+          aplicacion_por_usuario?: string | null
+          cantidad_fisica?: number
+          captura_en?: string | null
+          captura_movimiento_id?: string | null
+          captura_por_telegram?: string | null
+          captura_por_usuario?: string | null
+          causa_sugerida?: string | null
+          created_at?: string
+          decision_causa?: string | null
+          decision_en?: string | null
+          decision_nota?: string | null
+          decision_por_telegram?: string | null
+          decision_por_usuario?: string | null
+          estado?: Database["public"]["Enums"]["estado_excepcion_inventario"]
+          explicacion_citada?: string | null
+          explicacion_david?: string | null
+          explicacion_david_accion?: string | null
+          explicacion_david_en?: string | null
+          explicacion_david_telegram?: string | null
+          explicacion_david_usuario?: string | null
+          fisico_origen?: string
+          id?: string
+          interprete_confianza?: string
+          observacion_uriel?: string | null
+          producto_id?: string
+          propuesta_causa?: string | null
+          propuesta_delta?: number | null
+          propuesta_en?: string | null
+          propuesta_nota?: string | null
+          propuesta_por_telegram?: string | null
+          propuesta_por_usuario?: string | null
+          reportada_en?: string
+          reportada_por_telegram?: string | null
+          reportada_por_usuario?: string | null
+          ronda_id?: string
+          teorico_conteo?: number
+          transcrito_id?: string | null
+          updated_at?: string
+          via_propuesta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rondas_excepciones_aplicacion_movimiento_id_fkey"
+            columns: ["aplicacion_movimiento_id"]
+            isOneToOne: false
+            referencedRelation: "movimientos_inventario"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_aplicacion_por_telegram_fkey"
+            columns: ["aplicacion_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_captura_movimiento_id_fkey"
+            columns: ["captura_movimiento_id"]
+            isOneToOne: false
+            referencedRelation: "movimientos_inventario"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_captura_por_telegram_fkey"
+            columns: ["captura_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_causa_sugerida_fkey"
+            columns: ["causa_sugerida"]
+            isOneToOne: false
+            referencedRelation: "inventario_causas_raiz"
+            referencedColumns: ["clave"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_decision_causa_fkey"
+            columns: ["decision_causa"]
+            isOneToOne: false
+            referencedRelation: "inventario_causas_raiz"
+            referencedColumns: ["clave"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_decision_por_telegram_fkey"
+            columns: ["decision_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_explicacion_david_telegram_fkey"
+            columns: ["explicacion_david_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_producto_id_fkey"
+            columns: ["producto_id"]
+            isOneToOne: false
+            referencedRelation: "productos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_propuesta_causa_fkey"
+            columns: ["propuesta_causa"]
+            isOneToOne: false
+            referencedRelation: "inventario_causas_raiz"
+            referencedColumns: ["clave"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_propuesta_por_telegram_fkey"
+            columns: ["propuesta_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_reportada_por_telegram_fkey"
+            columns: ["reportada_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_inventario"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_excepciones_transcrito_id_fkey"
+            columns: ["transcrito_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_transcritos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rondas_inventario: {
+        Row: {
+          abierta_en: string | null
+          abierta_por_telegram: string | null
+          abierta_por_usuario: string | null
+          alcance_declarado: string | null
+          alcance_nota: string | null
+          cerrada_en: string | null
+          cerrada_por_telegram: string | null
+          cerrada_por_usuario: string | null
+          created_at: string
+          es_linea_base: boolean
+          estado: Database["public"]["Enums"]["estado_ronda_inventario"]
+          id: string
+          observaciones_libres: Json
+          periodo: string
+          updated_at: string
+        }
+        Insert: {
+          abierta_en?: string | null
+          abierta_por_telegram?: string | null
+          abierta_por_usuario?: string | null
+          alcance_declarado?: string | null
+          alcance_nota?: string | null
+          cerrada_en?: string | null
+          cerrada_por_telegram?: string | null
+          cerrada_por_usuario?: string | null
+          created_at?: string
+          es_linea_base?: boolean
+          estado?: Database["public"]["Enums"]["estado_ronda_inventario"]
+          id?: string
+          observaciones_libres?: Json
+          periodo: string
+          updated_at?: string
+        }
+        Update: {
+          abierta_en?: string | null
+          abierta_por_telegram?: string | null
+          abierta_por_usuario?: string | null
+          alcance_declarado?: string | null
+          alcance_nota?: string | null
+          cerrada_en?: string | null
+          cerrada_por_telegram?: string | null
+          cerrada_por_usuario?: string | null
+          created_at?: string
+          es_linea_base?: boolean
+          estado?: Database["public"]["Enums"]["estado_ronda_inventario"]
+          id?: string
+          observaciones_libres?: Json
+          periodo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rondas_inventario_abierta_por_telegram_fkey"
+            columns: ["abierta_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_inventario_cerrada_por_telegram_fkey"
+            columns: ["cerrada_por_telegram"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rondas_inventario_alcance: {
+        Row: {
+          cantidad_teorica: number
+          nombre_producto: string
+          precio_unitario: number | null
+          producto_id: string
+          ronda_id: string
+          unidad: Database["public"]["Enums"]["unidad_medida"]
+        }
+        Insert: {
+          cantidad_teorica: number
+          nombre_producto: string
+          precio_unitario?: number | null
+          producto_id: string
+          ronda_id: string
+          unidad: Database["public"]["Enums"]["unidad_medida"]
+        }
+        Update: {
+          cantidad_teorica?: number
+          nombre_producto?: string
+          precio_unitario?: number | null
+          producto_id?: string
+          ronda_id?: string
+          unidad?: Database["public"]["Enums"]["unidad_medida"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rondas_inventario_alcance_producto_id_fkey"
+            columns: ["producto_id"]
+            isOneToOne: false
+            referencedRelation: "productos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_inventario_alcance_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_inventario"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rondas_monitoreo: {
         Row: {
           created_at: string | null
@@ -2731,6 +5413,101 @@ export type Database = {
           observaciones?: string | null
         }
         Relationships: []
+      }
+      rondas_reportes: {
+        Row: {
+          contenido: Json
+          emitido_en: string
+          incluye_valoracion: boolean
+          ronda_id: string
+          texto_telegram: string
+        }
+        Insert: {
+          contenido: Json
+          emitido_en?: string
+          incluye_valoracion: boolean
+          ronda_id: string
+          texto_telegram: string
+        }
+        Update: {
+          contenido?: Json
+          emitido_en?: string
+          incluye_valoracion?: boolean
+          ronda_id?: string
+          texto_telegram?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rondas_reportes_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: true
+            referencedRelation: "rondas_inventario"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rondas_transcritos: {
+        Row: {
+          actor_telegram_id: string | null
+          actor_usuario_id: string | null
+          confirmado_en: string | null
+          correcciones: Json
+          created_at: string
+          duracion_audio_seg: number | null
+          estado: string
+          id: string
+          intentos_preview: number
+          interpretacion: Json | null
+          preview: Json | null
+          ronda_id: string
+          transcrito: string
+        }
+        Insert: {
+          actor_telegram_id?: string | null
+          actor_usuario_id?: string | null
+          confirmado_en?: string | null
+          correcciones?: Json
+          created_at?: string
+          duracion_audio_seg?: number | null
+          estado?: string
+          id?: string
+          intentos_preview?: number
+          interpretacion?: Json | null
+          preview?: Json | null
+          ronda_id: string
+          transcrito: string
+        }
+        Update: {
+          actor_telegram_id?: string | null
+          actor_usuario_id?: string | null
+          confirmado_en?: string | null
+          correcciones?: Json
+          created_at?: string
+          duracion_audio_seg?: number | null
+          estado?: string
+          id?: string
+          intentos_preview?: number
+          interpretacion?: Json | null
+          preview?: Json | null
+          ronda_id?: string
+          transcrito?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rondas_transcritos_actor_telegram_id_fkey"
+            columns: ["actor_telegram_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rondas_transcritos_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_inventario"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sublotes: {
         Row: {
@@ -2920,6 +5697,48 @@ export type Database = {
           },
         ]
       }
+      telegram_alertas_suscripciones: {
+        Row: {
+          alerta_clave: string
+          escalamiento: boolean
+          recibe: boolean
+          telegram_usuario_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          alerta_clave: string
+          escalamiento?: boolean
+          recibe?: boolean
+          telegram_usuario_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          alerta_clave?: string
+          escalamiento?: boolean
+          recibe?: boolean
+          telegram_usuario_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_alertas_suscripciones_alerta_clave_fkey"
+            columns: ["alerta_clave"]
+            isOneToOne: false
+            referencedRelation: "alertas_catalogo"
+            referencedColumns: ["clave"]
+          },
+          {
+            foreignKeyName: "telegram_alertas_suscripciones_telegram_usuario_id_fkey"
+            columns: ["telegram_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_conversations: {
         Row: {
           key: string
@@ -3100,7 +5919,7 @@ export type Database = {
           email: string
           id: string
           last_login: string | null
-          modulos_acceso: string[] | null
+          modulos_acceso: string[]
           nombre_completo: string | null
           rol: Database["public"]["Enums"]["rol_usuario"]
         }
@@ -3110,7 +5929,7 @@ export type Database = {
           email: string
           id: string
           last_login?: string | null
-          modulos_acceso?: string[] | null
+          modulos_acceso?: string[]
           nombre_completo?: string | null
           rol: Database["public"]["Enums"]["rol_usuario"]
         }
@@ -3120,7 +5939,7 @@ export type Database = {
           email?: string
           id?: string
           last_login?: string | null
-          modulos_acceso?: string[] | null
+          modulos_acceso?: string[]
           nombre_completo?: string | null
           rol?: Database["public"]["Enums"]["rol_usuario"]
         }
@@ -3277,6 +6096,62 @@ export type Database = {
           },
         ]
       }
+      v_hato_estado_actual: {
+        Row: {
+          animal_id: string | null
+          estado: string | null
+          etapa: string | null
+          etapa_forzada: boolean | null
+          fecha_nacimiento: string | null
+          fecha_probable_parto: string | null
+          fecha_secar: string | null
+          meses_prenez: number | null
+          nombre: string | null
+          num_partos: number | null
+          numero: number | null
+          pl: number | null
+          raza: string | null
+          ultima_confirmacion_prenez_fecha: string | null
+          ultima_confirmacion_prenez_metodo: string | null
+          ultimo_aborto_fecha: string | null
+          ultimo_chequeo_fecha: string | null
+          ultimo_chequeo_vaca_id: string | null
+          ultimo_estado_chequeo: string | null
+          ultimo_evento_fecha: string | null
+          ultimo_parto_fecha: string | null
+          ultimo_secado_real_fecha: string | null
+          ultimo_servicio_fecha: string | null
+          ultimo_servicio_toro_id: string | null
+          ultimo_tipo_servicio: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_eventos_toro_id_fkey"
+            columns: ["ultimo_servicio_toro_id"]
+            isOneToOne: false
+            referencedRelation: "hato_toros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_hato_pajillas_stock: {
+        Row: {
+          cantidad_actual: number | null
+          cantidad_inicial: number | null
+          pajilla_id: string | null
+          toro_id: string | null
+          usos: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hato_pajillas_toro_id_fkey"
+            columns: ["toro_id"]
+            isOneToOne: false
+            referencedRelation: "hato_toros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_ingresos_completos: {
         Row: {
           categoria: string | null
@@ -3396,20 +6271,115 @@ export type Database = {
       }
     }
     Functions: {
-      actualizar_cantidad_producto: {
-        Args: { p_diferencia: number; p_producto_id: string }
-        Returns: undefined
-      }
-      aplicar_ajustes_verificacion: {
-        Args: { p_usuario: string; p_verificacion_id: number }
+      es_usuario_gerencia: { Args: never; Returns: boolean }
+      fn_alertas_horario_cambiar: {
+        Args: { p_hora: string; p_jobname: string }
         Returns: {
-          movimientos_creados: number
-          productos_actualizados: number
+          activo: boolean
+          hora_bogota: string
+          jobname: string
         }[]
       }
-      es_usuario_gerencia: { Args: never; Returns: boolean }
+      fn_alertas_horario_listar: {
+        Args: never
+        Returns: {
+          activo: boolean
+          hora_bogota: string
+          jobname: string
+        }[]
+      }
+      fn_cerrar_aplicacion: { Args: { payload: Json }; Returns: Json }
       fn_cleanup_compra_dependencies: {
         Args: { p_compra_id: string }
+        Returns: undefined
+      }
+      fn_clima_candado_soltar: { Args: { p_dueno: string }; Returns: boolean }
+      fn_clima_candado_tomar: {
+        Args: { p_dueno: string; p_segundos: number }
+        Returns: boolean
+      }
+      fn_clima_rollup_diario: { Args: { p_fecha?: string }; Returns: undefined }
+      fn_cosecha_aguacate: { Args: { p_fecha: string }; Returns: string }
+      fn_ganado_confirmar_pendiente_multi: {
+        Args: { p_filas: Json; p_movimiento_id: string }
+        Returns: number
+      }
+      fn_ganado_registrar_traslado_multi: {
+        Args: {
+          p_destinos: Json
+          p_fecha: string
+          p_notas?: string
+          p_origenes: Json
+          p_peso_promedio_kg?: number
+        }
+        Returns: number
+      }
+      fn_hato_commit_chequeo: {
+        Args: { p_created_by: string; payload: Json }
+        Returns: Json
+      }
+      fn_hato_confirmar_paso_tratamiento: {
+        Args: {
+          p_animal_id: string
+          p_fecha_ejecutada: string
+          p_paso_id: string
+          p_respondida_por: string
+        }
+        Returns: Json
+      }
+      fn_hato_eliminar_quincena_venta: {
+        Args: { p_quincena_id: string }
+        Returns: Json
+      }
+      fn_hato_guardar_quincena_venta: { Args: { payload: Json }; Returns: Json }
+      fn_hato_registrar_tratamiento: {
+        Args: {
+          p_animal_id: string
+          p_created_by?: string
+          p_descripcion_paso?: string
+          p_fecha_inicio: string
+          p_fecha_proximo_paso?: string
+          p_fuente?: string
+          p_nombre: string
+          p_nota?: string
+        }
+        Returns: string
+      }
+      fn_hato_registrar_venta_animales: {
+        Args: { payload: Json }
+        Returns: Json
+      }
+      fn_informes_visita_snippet_fts: {
+        Args: { p_temas: string[]; p_texto: string }
+        Returns: unknown
+      }
+      fn_novedades_autores: {
+        Args: { p_ids: string[] }
+        Returns: {
+          id: string
+          nombre: string
+        }[]
+      }
+      fn_ronda_abrir: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_actor_correo: {
+        Args: { p_telegram: string; p_usuario: string }
+        Returns: string
+      }
+      fn_ronda_actor_nombre: {
+        Args: { p_telegram: string; p_usuario: string }
+        Returns: string
+      }
+      fn_ronda_aplicar_ajuste: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_cerrar: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_confirmar_hallazgos: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_decidir_ajuste: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_deshacer_confirmacion: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_emitir_reporte: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_explicacion_david: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_proponer_ajuste: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_resolver_con_captura: { Args: { payload: Json }; Returns: Json }
+      fn_ronda_validar_actor: {
+        Args: { p_modulo: string; p_telegram: string; p_usuario: string }
         Returns: undefined
       }
       get_user_role: {
@@ -3439,26 +6409,8 @@ export type Database = {
           total_jornales: number
         }[]
       }
-      registrar_compra: {
-        Args: {
-          p_fecha: string
-          p_items: Json
-          p_numero_factura: string
-          p_proveedor: string
-          p_total: number
-          p_user_id?: string
-        }
-        Returns: Json
-      }
-      registrar_salida_inventario: {
-        Args: {
-          p_cantidad: number
-          p_notas?: string
-          p_producto_id: number
-          p_referencia_id?: number
-          p_tipo_referencia?: string
-          p_user_id?: string
-        }
+      po_sonda: {
+        Args: { p_consulta: string; p_preparacion?: string[] }
         Returns: Json
       }
     }
@@ -3501,6 +6453,16 @@ export type Database = {
         | "lluvia fuerte"
       estado_aplicacion: "Calculada" | "En ejecución" | "Cerrada"
       estado_empleado: "Activo" | "Inactivo"
+      estado_excepcion_inventario:
+        | "reportada"
+        | "explicacion_precargada"
+        | "explicada"
+        | "cerrada_sin_ajuste"
+        | "resuelta_con_captura"
+        | "ajuste_propuesto"
+        | "ajuste_aprobado"
+        | "ajuste_desestimado"
+        | "ajuste_aplicado"
       estado_fisico: "Líquido" | "Sólido"
       estado_producto:
         | "OK"
@@ -3508,6 +6470,7 @@ export type Database = {
         | "Vencido"
         | "Perdido"
         | "Próximo a vencer (3 meses)"
+      estado_ronda_inventario: "programada" | "en_curso" | "cerrada" | "omitida"
       estado_tarea:
         | "Banco"
         | "Programada"
@@ -3562,12 +6525,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3591,11 +6554,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3616,11 +6579,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3641,11 +6604,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3658,11 +6621,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3715,6 +6678,17 @@ export const Constants = {
       ],
       estado_aplicacion: ["Calculada", "En ejecución", "Cerrada"],
       estado_empleado: ["Activo", "Inactivo"],
+      estado_excepcion_inventario: [
+        "reportada",
+        "explicacion_precargada",
+        "explicada",
+        "cerrada_sin_ajuste",
+        "resuelta_con_captura",
+        "ajuste_propuesto",
+        "ajuste_aprobado",
+        "ajuste_desestimado",
+        "ajuste_aplicado",
+      ],
       estado_fisico: ["Líquido", "Sólido"],
       estado_producto: [
         "OK",
@@ -3723,6 +6697,7 @@ export const Constants = {
         "Perdido",
         "Próximo a vencer (3 meses)",
       ],
+      estado_ronda_inventario: ["programada", "en_curso", "cerrada", "omitida"],
       estado_tarea: [
         "Banco",
         "Programada",

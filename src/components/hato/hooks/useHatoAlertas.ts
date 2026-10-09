@@ -21,6 +21,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
+import type { Json } from '@/types/database';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import {
@@ -79,9 +80,7 @@ export function useHatoAlertas() {
     setLoading(true);
     setError(null);
     try {
-      // `src/types/database.ts` no incluye las tablas hato_* -- mismo
-      // workaround documentado en `useHatoAnimales.ts`/`useGanadoInventario.ts`.
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { data: alertaRows, error: alertasError } = await supabase
         .from('hato_alertas')
         .select('*')
@@ -131,7 +130,7 @@ export function useHatoAlertas() {
 
   const actualizarEstadoAlerta = useCallback(
     async (id: string, cambios: { estado: EstadoAlertaHato; respondidaPor?: string | null }) => {
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: updateError } = await supabase
         .from('hato_alertas')
         .update({
@@ -153,7 +152,7 @@ export function useHatoAlertas() {
   const actualizarEstadoAlertas = useCallback(
     async (ids: string[], cambios: { estado: EstadoAlertaHato; respondidaPor?: string | null }) => {
       if (ids.length === 0) return;
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: updateError } = await supabase
         .from('hato_alertas')
         .update({
@@ -172,7 +171,7 @@ export function useHatoAlertas() {
       alerta: { id: string; tipo: TipoAlertaHato; animal_id: string | null; paso_id: string | null },
       respuesta: RespuestaAlertaHato,
     ) => {
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const efecto = efectoDominioRespuestaAlerta(alerta, respuesta);
       const hoy = obtenerFechaHoy();
       if (efecto.kind === 'secado_real') {
@@ -200,7 +199,7 @@ export function useHatoAlertas() {
    */
   const responderAlerta = useCallback(
     async (id: string, respuesta: RespuestaAlertaHato, respondidaPor: string | null) => {
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { data: actualizada, error: updateError } = await supabase
         .from('hato_alertas')
         .update({
@@ -226,12 +225,13 @@ export function useHatoAlertas() {
     async (alerta: HatoAlertaRow, input: InputEditarAlerta) => {
       const validacion = validarEdicionAlerta(input);
       if (!validacion.ok) throw new Error(validacion.error);
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: updateError } = await supabase
         .from('hato_alertas')
         .update({
           fecha_programada: validacion.fecha_programada,
-          datos: datosConNotaGestor(alerta.datos, validacion.nota),
+          // El objeto sale del propio `datos` jsonb de la fila: es JSON.
+          datos: datosConNotaGestor(alerta.datos, validacion.nota) as Json,
         })
         .eq('id', alerta.id);
       if (updateError) throw updateError;
@@ -247,7 +247,7 @@ export function useHatoAlertas() {
         idUnico: crypto.randomUUID(),
       });
       if (!validacion.ok) throw new Error(validacion.error);
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: insertError } = await supabase.from('hato_alertas').insert({
         ...validacion.fila,
         created_by: createdBy,
