@@ -1,11 +1,11 @@
 import { getSupabase } from '@/utils/supabase/client';
-import { projectId } from '@/utils/supabase/info.tsx';
+import { getSupabaseConfig } from '@/utils/supabase/config';
 import { extraerCabecera } from './cabecera';
 import { parsearRespuestaSnippets } from './snippets';
 import { asegurarTemasSnippet } from './temas';
 import type { InformeVisitaCabecera, SnippetPropuesto } from '@/types/informesVisita';
 
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 /** Twin inside make-server-1ccce916. The standalone slug was retired (ESCO-105). */
 export const RUTA_PROPONER_SNIPPETS =
@@ -47,7 +47,7 @@ export async function pedirSnippetsAlModelo(opts: {
   }
 
   const res = await fetch(
-    `${EDGE_FUNCTION_BASE}${RUTA_PROPONER_SNIPPETS}`,
+    `${edgeFunctionBase()}${RUTA_PROPONER_SNIPPETS}`,
     {
       method: 'POST',
       headers: {

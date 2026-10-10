@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Cloud, Droplets, Wind, CloudRain, Sun, CloudOff } from 'lucide-react';
 import { useClimaData } from '@/hooks/useClimaData';
 import { getSupabase } from '@/utils/supabase/client';
-import { projectId } from '@/utils/supabase/info.tsx';
+import { getSupabaseConfig } from '@/utils/supabase/config';
 import { aggregateRadiation } from '@/utils/calculosRadiacion';
 import { fechaAISODate, obtenerFechaHoy } from '@/utils/fechas';
 import { formatNumber } from '@/utils/format';
@@ -26,7 +26,7 @@ interface DiaPronostico {
   rain_probability_pct: number;
 }
 
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 function solarUltimos7Dias(resumenesDiarios: {
   fecha: string;
@@ -92,7 +92,7 @@ export function ClimaCard() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
 
-        const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/clima/forecast?days=3`, {
+        const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/clima/forecast?days=3`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
         if (!res.ok) return;

@@ -16,10 +16,10 @@
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { projectId } from '@/utils/supabase/info.tsx';
+import { getSupabaseConfig } from '@/utils/supabase/config';
 import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 export type CampoLiquidacionOcr =
   | 'proveedor'
@@ -81,7 +81,7 @@ export function useOcrLiquidacionPomar() {
       const formData = new FormData();
       archivos.forEach((f) => formData.append('archivos', f));
 
-      const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/produccion/quincena/foto`, {
+      const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/produccion/quincena/foto`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: formData,

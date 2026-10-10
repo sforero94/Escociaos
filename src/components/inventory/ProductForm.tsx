@@ -249,8 +249,8 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     if (formData.precio_unitario !== '' && formData.precio_unitario < 0) {
       return 'El precio no puede ser negativo';
     }
-    if (formData.cantidad_actual !== '' && formData.cantidad_actual < 0) {
-      return 'La cantidad actual no puede ser negativa';
+    if (formData.cantidad_actual !== '' && (!Number.isFinite(formData.cantidad_actual) || formData.cantidad_actual < 0 || formData.cantidad_actual > 9999999999.99)) {
+      return 'La cantidad actual debe ser finita y estar entre 0 y 9.999.999.999,99';
     }
 
     return null;

@@ -3,7 +3,7 @@ import { Upload, Download, AlertCircle, CheckCircle2, XCircle, FileText } from '
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
-import { projectId } from '../../utils/supabase/info';
+import { getSupabaseConfig } from '../../utils/supabase/config';
 import { getSupabase } from '../../utils/supabase/client';
 
 interface ImportResult {
@@ -217,7 +217,7 @@ export function ImportarProductosCSV() {
       }
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/inventario/importar-productos`,
+        `${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/inventario/importar-productos`,
         {
           method: 'POST',
           headers: {

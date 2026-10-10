@@ -569,25 +569,25 @@ export async function esUsuarioTelegramGerencia(
 ): Promise<boolean> {
   const { data: tgUser, error: errorTg } = await supabase
     .from('telegram_usuarios')
-    .select('usuario_id')
+    .select('id,usuario_id,activo')
     .eq('id', telegramUsuarioId)
     .maybeSingle();
   if (errorTg) {
     console.error('[ronda] esUsuarioTelegramGerencia (telegram_usuarios) error:', errorTg.message);
     return false;
   }
-  if (!tgUser?.usuario_id) return false;
+  if (tgUser?.id !== telegramUsuarioId || tgUser.activo !== true || !tgUser.usuario_id) return false;
 
   const { data: usuario, error: errorUsuario } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', tgUser.usuario_id)
     .maybeSingle();
   if (errorUsuario) {
     console.error('[ronda] esUsuarioTelegramGerencia (usuarios) error:', errorUsuario.message);
     return false;
   }
-  return usuario?.rol === 'Gerencia';
+  return usuario?.id === tgUser.usuario_id && usuario.activo === true && usuario.rol === 'Gerencia';
 }
 
 /** `/explicar` (B-1): excepciones que todavía no pasaron por David —

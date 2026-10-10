@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // hato-produccion-quincena-foto.ts — S4 de
 // `docs/plan_hato_ronda_agosto_2026.md` (D-8): `POST
 // /make-server-1ccce916/hato/produccion/quincena/foto`.
@@ -119,13 +120,13 @@ async function verificarAcceso(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_PERMITIDOS])) {
     return respuestaError(
       c,
       403,

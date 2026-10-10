@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { Fragment, ReactNode } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Ban, Loader2, Send } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, profile, signOut } = useAuth();
+  const { isAuthenticated, isLoading, user, session, profile, signOut, refreshProfile } = useAuth();
 
   // Mostrar loader mientras carga
   if (isLoading) {
@@ -28,10 +28,27 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
     return fallback ? <>{fallback}</> : null;
   }
 
+  // A failed/missing/slow lookup is unverified, not evidence of deactivation.
+  if (!user || session?.user.id !== user.id || profile?.id !== user.id ||
+      (profile.activo !== true && profile.activo !== false) || (profile.activo !== false && !profile.rol)) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <h2 className="text-xl font-semibold text-foreground mb-2">No pudimos verificar tu acceso</h2>
+          <p className="text-brand-brown/70 mb-6">
+            Falta confirmar el perfil y el estado de tu cuenta. Reintenta la verificación o consulta con Gerencia.
+          </p>
+          <Button onClick={refreshProfile}>Reintentar verificación</Button>
+          <Button variant="outline" onClick={signOut}>Cerrar sesión</Button>
+        </div>
+      </div>
+    );
+  }
+
   // Cuenta desactivada: el interruptor de Configuración ya cerró Finanzas
   // (es_usuario_gerencia exige activo). get_user_role() alineado en la 137
   // cierra el resto de RLS; esta pantalla evita una app a medias.
-  if (profile?.activo === false) {
+  if (profile.activo === false) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center max-w-md">
@@ -71,5 +88,5 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   }
 
   // Usuario autenticado, mostrar contenido
-  return <>{children}</>;
+  return <Fragment key={user.id}>{children}</Fragment>;
 }

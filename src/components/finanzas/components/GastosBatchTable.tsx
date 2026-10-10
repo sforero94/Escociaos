@@ -1,3 +1,4 @@
+import { prepararArchivoFactura, validarArchivoFactura } from '@/utils/archivoFactura';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Save, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -133,6 +134,10 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   };
 
   const handleChange = (index: number, field: string, value: string | File | null) => {
+    if (field === 'factura_file' && value) {
+      const error = validarArchivoFactura(value as File);
+      if (error) { toast.error(error); return; }
+    }
     setRows((prev) => {
       const updated = [...prev];
       if (field === 'factura_file') {
@@ -169,8 +174,15 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
     let valid = true;
 
     rows.forEach((row, i) => {
-      if (!isRowTouched(row)) return;
       const rowErrors: Record<string, string> = {};
+      if (row.factura_file) {
+        const error = validarArchivoFactura(row.factura_file);
+        if (error) { rowErrors.factura_file = error; valid = false; }
+      }
+      if (!isRowTouched(row)) {
+        if (Object.keys(rowErrors).length) newErrors[i] = rowErrors;
+        return;
+      }
       for (const field of REQUIRED_FIELDS) {
         if (field === 'valor') {
           if (!row.valor || Number(row.valor) <= 0) {
@@ -192,6 +204,10 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   };
 
   const persistirGastos = async () => {
+    if (!validate()) {
+      toast.error('Corrige los campos marcados en rojo antes de guardar');
+      return;
+    }
     try {
       setSaving(true);
       const supabase = getSupabase();
@@ -202,12 +218,10 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
       for (let i = 0; i < rowsToSave.length; i++) {
         const file = rowsToSave[i].factura_file;
         if (file) {
-          const timestamp = Date.now();
-          const ext = file.name.split('.').pop();
-          const path = `facturas_compra/${timestamp}-${Math.random().toString(36).substring(7)}.${ext}`;
+          const { path, contentType } = prepararArchivoFactura(file, 'compra');
           const { data, error } = await supabase.storage
             .from('facturas')
-            .upload(path, file, { cacheControl: '3600', upsert: false });
+            .upload(path, file, { cacheControl: '3600', upsert: false, contentType });
           if (error) throw new Error(`Error subiendo factura fila ${i + 1}: ${error.message}`);
           facturaUrls[i] = data.path;
         }

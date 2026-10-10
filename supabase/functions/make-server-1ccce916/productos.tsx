@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 import { Context } from "npm:hono";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -17,7 +18,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // verify_jwt=false, que no se puede activar porque el webhook de Telegram y
 // los pg_cron dependen de que siga en false).
 // ---------------------------------------------------------------------------
-const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']);
+const ROLES_PERMITIDOS = ['Administrador', 'Gerencia'];
 
 function respuestaError(c: Context, status: 401 | 403 | 500, body: Record<string, unknown>) {
   return c.json({ success: false, ...body }, status);
@@ -40,13 +41,13 @@ async function verificarAcceso(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, { error: `No se pudo verificar el rol del usuario: ${usuarioError.message}` });
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol as string)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, ROLES_PERMITIDOS)) {
     return respuestaError(c, 403, {
       error: 'Acceso restringido a Administrador o Gerencia (mismo permiso de escritura que la RLS de productos).',
     });
@@ -75,8 +76,12 @@ export async function toggleProductoActivo(c: Context): Promise<Response> {
     const body = await c.req.json();
     const { productoId, activo } = body ?? {};
 
-    if (!productoId) {
+    if (typeof productoId !== 'string' || !productoId.trim()) {
       return c.json({ success: false, error: 'El ID del producto es requerido' }, 400);
+    }
+
+    if (typeof activo !== 'boolean') {
+      return c.json({ success: false, error: 'Activo debe ser booleano' }, 400);
     }
 
     // Actualizar el estado activo del producto
@@ -87,9 +92,9 @@ export async function toggleProductoActivo(c: Context): Promise<Response> {
       .select()
       .single();
 
-    if (error) {
+    if (error || !producto || producto.id !== productoId || producto.activo !== activo) {
       console.error('Error al actualizar estado del producto:', error);
-      return c.json({ success: false, error: error.message }, 500);
+      return c.json({ success: false, error: error?.message ?? 'No se confirmó el producto solicitado con el estado requerido' }, 500);
     }
 
     return c.json({

@@ -1,16 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  FORM_AUTOSAVE_PREFIX,
-  CURRENT_VERSION,
-  RETENTION_DAYS,
-  type StoredFormData,
-} from './useFormPersistence';
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { draftStorageKey, readOwnedDraft, removeOwnedDraft, writeOwnedDraft } from '@/utils/draftStorage';
 
-interface UseFormDraftOptions {
-  debounceMs?: number;
-  enabled?: boolean;
-}
-
+interface UseFormDraftOptions { debounceMs?: number; enabled?: boolean; }
 interface UseFormDraftReturn<T> {
   hasDraft: boolean;
   draftData: T | null;
@@ -20,146 +12,54 @@ interface UseFormDraftReturn<T> {
 }
 
 /**
- * Snapshot-based draft persistence for forms with fragmented state.
- *
- * Unlike useFormPersistence (which replaces useState), this hook *observes*
- * the current form state and auto-saves a snapshot to localStorage.
- * Restoration is manual — the form reads `draftData` and applies it.
- *
- * @example
- * const draft = useFormDraft('my-form-v1', { fecha, nombre, valor });
- * // Show banner when draft.hasDraft is true
- * // On restore: read draft.draftData and call your setters
- * // On submit success: call draft.clearDraft()
+ * Observes caller-owned state; restore remains manual. Forms must remount on
+ * account changes: this hook cannot reset fragmented caller state safely, so
+ * autosave fails closed for the remainder of an instance after owner changes.
  */
-export function useFormDraft<T>(
-  key: string,
-  currentData: T,
-  options?: UseFormDraftOptions
-): UseFormDraftReturn<T> {
+export function useFormDraft<T>(key: string, currentData: T, options?: UseFormDraftOptions): UseFormDraftReturn<T> {
   const { debounceMs = 1000, enabled = true } = options ?? {};
-  const storageKey = `${FORM_AUTOSAVE_PREFIX}${key}`;
+  const { user } = useAuth();
+  const ownerId = user?.id ?? null;
+  const storageKey = enabled ? draftStorageKey(ownerId, key) : null;
+  const [mountedOwner] = useState(ownerId);
+  const quarantined = useRef(false);
+  const load = () => ({ storageKey, draft: readOwnedDraft<T>(storageKey, ownerId), baseline: JSON.stringify(currentData), suppressReset: false });
+  const [snapshot, setSnapshot] = useState(load);
+  if (snapshot.storageKey !== storageKey) setSnapshot(load());
+  const current = snapshot.storageKey === storageKey ? snapshot : load();
+  const serialized = JSON.stringify(currentData);
+  if (snapshot.storageKey === storageKey && snapshot.suppressReset) {
+    setSnapshot({ ...snapshot, baseline: serialized, suppressReset: false });
+  }
+  const dataRef = useRef(serialized);
+  const liveScope = useRef(storageKey);
+  useLayoutEffect(() => {
+    liveScope.current = storageKey;
+    dataRef.current = serialized;
+    if (mountedOwner !== ownerId) quarantined.current = true;
+  }, [storageKey, serialized, mountedOwner, ownerId]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancel = () => { if (timer.current !== null) clearTimeout(timer.current); timer.current = null; };
 
-  const [hasDraft, setHasDraft] = useState(false);
-  const [draftData, setDraftData] = useState<T | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isInitialMountRef = useRef(true);
-
-  // Read draft from localStorage on mount
   useEffect(() => {
-    if (!enabled) return;
-
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed: StoredFormData<T> = JSON.parse(raw);
-        if (parsed.version === CURRENT_VERSION) {
-          const age = Date.now() - new Date(parsed.timestamp).getTime();
-          if (age < RETENTION_DAYS * 24 * 60 * 60 * 1000) {
-            setDraftData(parsed.data);
-            setHasDraft(true);
-            return;
-          }
-        }
-        localStorage.removeItem(storageKey);
-      }
-    } catch {
-      localStorage.removeItem(storageKey);
-    }
-  }, [storageKey, enabled]);
-
-  // Stable ref to currentData for the debounce callback
-  const currentDataRef = useRef(currentData);
-  currentDataRef.current = currentData;
-
-  // Debounce-save currentData to localStorage
-  // Skip while hasDraft is true (avoids overwriting the saved draft before user restores)
-  useEffect(() => {
-    if (!enabled || hasDraft) return;
-
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
-
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-
-    debounceTimerRef.current = setTimeout(() => {
-      try {
-        const toSave: StoredFormData<T> = {
-          data: currentDataRef.current,
-          timestamp: new Date().toISOString(),
-          version: CURRENT_VERSION,
-        };
-        localStorage.setItem(storageKey, JSON.stringify(toSave));
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-          clearOldFormData();
-          try {
-            const toSave: StoredFormData<T> = {
-              data: currentDataRef.current,
-              timestamp: new Date().toISOString(),
-              version: CURRENT_VERSION,
-            };
-            localStorage.setItem(storageKey, JSON.stringify(toSave));
-          } catch {
-            // give up
-          }
-        }
-      }
+    if (!storageKey || !ownerId || quarantined.current || snapshot.storageKey !== storageKey || snapshot.draft || serialized === snapshot.baseline) return;
+    // Capture this render's data, never a ref that may later belong to another owner.
+    timer.current = setTimeout(() => {
+      if (liveScope.current === storageKey && !quarantined.current) writeOwnedDraft(storageKey, ownerId, currentData);
     }, debounceMs);
-
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-     
-  }, [currentData, storageKey, debounceMs, enabled, hasDraft]);
+    return () => { if (timer.current !== null) clearTimeout(timer.current); };
+  }, [storageKey, ownerId, snapshot, serialized, currentData, debounceMs]);
 
   const acceptDraft = useCallback(() => {
-    setHasDraft(false);
-    setDraftData(null);
-  }, []);
-
-  const discardDraft = useCallback(() => {
-    try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
-    setHasDraft(false);
-    setDraftData(null);
+    cancel();
+    setSnapshot({ storageKey, draft: null, baseline: dataRef.current, suppressReset: false });
   }, [storageKey]);
-
   const clearDraft = useCallback(() => {
-    try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
-    setHasDraft(false);
-    setDraftData(null);
+    cancel();
+    removeOwnedDraft(storageKey);
+    // Baseline suppresses the reset render without blocking the next real edit.
+    setSnapshot({ storageKey, draft: null, baseline: dataRef.current, suppressReset: true });
   }, [storageKey]);
-
-  return useMemo(() => ({
-    hasDraft,
-    draftData,
-    acceptDraft,
-    discardDraft,
-    clearDraft,
-  }), [hasDraft, draftData, acceptDraft, discardDraft, clearDraft]);
-}
-
-function clearOldFormData() {
-  try {
-    const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
-    Object.keys(localStorage).forEach((k) => {
-      if (k.startsWith(FORM_AUTOSAVE_PREFIX)) {
-        try {
-          const raw = localStorage.getItem(k);
-          if (raw) {
-            const parsed: StoredFormData<unknown> = JSON.parse(raw);
-            if (new Date(parsed.timestamp).getTime() < cutoff) {
-              localStorage.removeItem(k);
-            }
-          }
-        } catch {
-          localStorage.removeItem(k);
-        }
-      }
-    });
-  } catch {
-    // ignore
-  }
+  return useMemo(() => ({ hasDraft: !!current.draft, draftData: current.draft?.data ?? null,
+    acceptDraft, discardDraft: clearDraft, clearDraft }), [current.draft, acceptDraft, clearDraft]);
 }

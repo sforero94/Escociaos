@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 import { Context } from 'npm:hono';
 
@@ -16,7 +17,7 @@ import { Context } from 'npm:hono';
 // verify_jwt=false, que no se puede activar porque el webhook de Telegram y
 // los pg_cron dependen de que siga en false).
 // ---------------------------------------------------------------------------
-const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']);
+const ROLES_PERMITIDOS = ['Administrador', 'Gerencia'];
 
 function respuestaError(c: Context, status: 400 | 401 | 403 | 500, body: Record<string, unknown>) {
   return c.json({ success: false, ...body }, status);
@@ -39,13 +40,13 @@ async function verificarAcceso(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, { error: `No se pudo verificar el rol del usuario: ${usuarioError.message}` });
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol as string)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, ROLES_PERMITIDOS)) {
     return respuestaError(c, 403, {
       error: 'Acceso restringido a Administrador o Gerencia (mismo permiso de escritura que la RLS de productos).',
     });
@@ -75,7 +76,7 @@ export async function handleImportarProductos(c: Context): Promise<Response> {
     const body = await c.req.json();
     const { csvData } = body ?? {};
 
-    if (!csvData) {
+    if (typeof csvData !== 'string' || !csvData.trim()) {
       return respuestaError(c, 400, { error: 'No se proporcionó datos CSV' });
     }
 
@@ -188,6 +189,15 @@ function parseNumber(value: string): number | null {
   return isNaN(num) ? null : num;
 }
 
+// Saldo inicial: aceptar el token decimal completo (incluida notación científica),
+// con coma decimal cuando el CSV la encierra en comillas. Vacío conserva el default.
+function parseCantidadInicial(value: string | undefined): number | null {
+  const token = value?.trim() ?? '';
+  if (!token) return null;
+  if (!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$/.test(token)) return NaN;
+  return Number(token.replace(',', '.'));
+}
+
 // Validar fila
 function validarFila(fila: any, numeroFila: number): { valido: boolean; errores: string[] } {
   const errores: string[] = [];
@@ -252,6 +262,10 @@ export async function procesarCSV(csvData: string) {
   );
 
   try {
+    if (typeof csvData !== 'string' || !csvData.trim()) {
+      return { success: false, message: 'No se proporcionó datos CSV', importados: 0 };
+    }
+
     // Remover BOM UTF-8 si existe
     let cleanData = csvData;
     if (cleanData.charCodeAt(0) === 0xFEFF) {
@@ -344,6 +358,11 @@ export async function procesarCSV(csvData: string) {
         erroresFila.push(`Fila ${i + 2}: Estado físico inválido "${fila.estado_fisico}". Debe ser uno de: ${ESTADOS_FISICOS_VALIDOS.join(', ')}`);
       }
       
+      const cantidadInicial = parseCantidadInicial(fila.cantidad_actual);
+      if (cantidadInicial !== null && (!Number.isFinite(cantidadInicial) || cantidadInicial < 0 || cantidadInicial > 9999999999.99)) {
+        erroresFila.push(`Fila ${i + 2}: Cantidad actual debe ser un número completo entre 0 y 9999999999.99`);
+      }
+
       if (erroresFila.length > 0) {
         erroresValidacion.push(...erroresFila);
         continue;
@@ -448,8 +467,7 @@ export async function procesarCSV(csvData: string) {
       const precio_unitario = parseNumber(fila.precio_unitario);
       if (precio_unitario !== null) producto.precio_unitario = precio_unitario;
 
-      const cantidad_actual = parseNumber(fila.cantidad_actual);
-      if (cantidad_actual !== null) producto.cantidad_actual = cantidad_actual;
+      if (cantidadInicial !== null) producto.cantidad_actual = cantidadInicial;
 
       const stock_minimo = parseNumber(fila.stock_minimo);
       if (stock_minimo !== null) producto.stock_minimo = stock_minimo;

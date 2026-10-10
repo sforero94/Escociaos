@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // POST /make-server-1ccce916/informes-visita/snippets/proponer
 //
 // El navegador extrae el .docx. Este endpoint llama a Gemini (OpenRouter)
@@ -41,13 +42,13 @@ async function verificarAcceso(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_PERMITIDOS])) {
     return respuestaError(
       c,
       403,

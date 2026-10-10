@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
 import { ProveedorDialog } from '../../shared/ProveedorDialog';
 import { FacturaUploader } from '../../shared/FacturaUploader';
@@ -24,7 +24,6 @@ import {
   DialogBody,
   DialogTitle,
 } from '../../ui/dialog';
-import { Badge } from '../../ui/badge';
 import { Loader2 } from 'lucide-react';
 import type {
   Gasto,
@@ -38,12 +37,13 @@ import type {
 } from '../../../types/finanzas';
 import { toast } from 'sonner';
 import {
-  obtenerFechaHoy,
   esFechaFuturaSospechosa,
   mensajeConfirmacionFechaFutura,
   ETIQUETA_CONFIRMAR_FECHA_FUTURA,
   ETIQUETA_CORREGIR_FECHA_FUTURA,
 } from '@/utils/fechas';
+import { crearGastoDraft, type GastoDraft } from '@/utils/gastoDraft';
+import { actualizarGastoSeguro, validarValorGasto } from '@/utils/actualizarGastoSeguro';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface GastoFormProps {
@@ -54,24 +54,19 @@ interface GastoFormProps {
   onCancel: () => void;
 }
 
-export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: GastoFormProps) {
-  // Form state
-  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<GastoFormData>({
+export function GastoForm(props: GastoFormProps) {
+  return <GastoFormState key={props.gasto?.id ?? 'new'} {...props} />;
+}
+
+function GastoFormState({ open, onOpenChange, gasto, onSuccess, onCancel }: GastoFormProps) {
+  // Initial source and its revision are captured together. Parent refreshes do
+  // not rebase typed/restored values onto a newer server version.
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<GastoDraft<GastoFormData>>({
     key: gasto?.id ? `gasto-edit-${gasto.id}` : 'gasto-new-v1',
-    initialState: {
-      fecha: obtenerFechaHoy(),
-      negocio_id: '',
-      region_id: '',
-      categoria_id: '',
-      concepto_id: '',
-      nombre: '',
-      proveedor_id: '',
-      valor: 0,
-      medio_pago_id: '',
-      observaciones: '',
-      url_factura: '',
-    },
+    initialState: crearGastoDraft(gasto),
   });
+  const [conflict, setConflict] = useState('');
+  const resetForm = () => { clearFormData(); setConflict(''); };
 
   // Catalog data
   const [negocios, setNegocios] = useState<Negocio[]>([]);
@@ -87,57 +82,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
   const [showProveedorDialog, setShowProveedorDialog] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Load catalogs on mount
-  useEffect(() => {
-    if (open) {
-      loadCatalogs();
-    }
-  }, [open]);
-
-  // Load form data when gasto changes
-  useEffect(() => {
-    if (gasto) {
-      setFormData({
-        fecha: gasto.fecha,
-        negocio_id: gasto.negocio_id,
-        region_id: gasto.region_id,
-        categoria_id: gasto.categoria_id,
-        concepto_id: gasto.concepto_id,
-        nombre: gasto.nombre,
-        proveedor_id: gasto.proveedor_id || '',
-        valor: gasto.valor,
-        medio_pago_id: gasto.medio_pago_id,
-        observaciones: gasto.observaciones || '',
-        url_factura: gasto.url_factura || '',
-      });
-    } else {
-      // Reset form for new gasto
-      setFormData({
-        fecha: obtenerFechaHoy(),
-        negocio_id: '',
-        region_id: '',
-        categoria_id: '',
-        concepto_id: '',
-        nombre: '',
-        proveedor_id: '',
-        valor: 0,
-        medio_pago_id: '',
-        observaciones: '',
-        url_factura: '',
-      });
-    }
-  }, [gasto]);
-
-  // Load conceptos when categoria changes
-  useEffect(() => {
-    if (formData.categoria_id) {
-      loadConceptos(formData.categoria_id);
-    } else {
-      setConceptos([]);
-    }
-  }, [formData.categoria_id]);
-
-  const loadCatalogs = async () => {
+  const loadCatalogs = useCallback(async () => {
     try {
       setLoading(true);
       const supabase = getSupabase();
@@ -166,9 +111,9 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadConceptos = async (categoriaId: string) => {
+  const loadConceptos = useCallback(async (categoriaId: string) => {
     try {
       const { data, error } = await getSupabase()
         .from('fin_conceptos_gastos')
@@ -179,10 +124,16 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
 
       if (error) throw error;
       setConceptos(data || []);
-    } catch (error) {
+    } catch {
       setConceptos([]);
     }
-  };
+  }, []);
+
+  useEffect(() => { if (open) void loadCatalogs(); }, [open, loadCatalogs]);
+  useEffect(() => {
+    if (formData.categoria_id) void loadConceptos(formData.categoria_id);
+    else setConceptos([]);
+  }, [formData.categoria_id, loadConceptos]);
 
   const handleInputChange = (field: keyof GastoFormData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -202,28 +153,25 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     setFormData(prev => ({ ...prev, proveedor_id: proveedorId }));
   };
 
+  const [pendingSnapshot, setPendingSnapshot] = useState<GastoDraft<GastoFormData> | null>(null);
   const [mostrarConfirmacionFechaFutura, setMostrarConfirmacionFechaFutura] = useState(false);
 
-  const guardarGasto = async () => {
+  const guardarGasto = async (snapshot = formData) => {
     try {
       setSaving(true);
 
+      validarValorGasto(snapshot.valor);
+      // Pick known columns: draft metadata and unexpected restored keys stay local.
       const gastoData = {
-        ...formData,
-        valor: Number(formData.valor),
-        proveedor_id: formData.proveedor_id || null,
-        observaciones: formData.observaciones || null,
-        url_factura: formData.url_factura || null,
+        fecha: snapshot.fecha, negocio_id: snapshot.negocio_id, region_id: snapshot.region_id,
+        categoria_id: snapshot.categoria_id, concepto_id: snapshot.concepto_id, nombre: snapshot.nombre,
+        valor: snapshot.valor, medio_pago_id: snapshot.medio_pago_id,
+        proveedor_id: snapshot.proveedor_id || null,
+        observaciones: snapshot.observaciones || null, url_factura: snapshot.url_factura || null,
       };
 
       if (gasto?.id) {
-        // Update - don't change estado when editing
-        const { error } = await getSupabase()
-          .from('fin_gastos')
-          .update(gastoData)
-          .eq('id', gasto.id);
-
-        if (error) throw error;
+        await actualizarGastoSeguro(getSupabase(), gasto.id, snapshot.__gastoOriginal, gastoData, snapshot.valor);
       } else {
         // Create - manually created expenses are automatically confirmed
         const { error } = await getSupabase()
@@ -238,8 +186,10 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
 
       clearFormData();
       onSuccess();
-    } catch (error: any) {
-      toast.error('Error al guardar gasto: ' + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'No se pudo confirmar el guardado del gasto.';
+      setConflict(message);
+      toast.error('Error al guardar gasto: ' + message);
     } finally {
       setSaving(false);
     }
@@ -255,7 +205,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     if (!formData.region_id) newErrors.region_id = 'Debe seleccionar una región';
     if (!formData.categoria_id) newErrors.categoria_id = 'Debe seleccionar una categoría';
     if (!formData.concepto_id) newErrors.concepto_id = 'Debe seleccionar un concepto';
-    if (formData.valor <= 0) newErrors.valor = 'El valor debe ser mayor a cero';
+    if (!Number.isFinite(formData.valor) || formData.valor <= 0) newErrors.valor = 'El valor debe ser un número finito mayor a cero';
     if (!formData.medio_pago_id) newErrors.medio_pago_id = 'Debe seleccionar un medio de pago';
 
     if (Object.keys(newErrors).length > 0) {
@@ -269,6 +219,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     // (filtro `ytd`, tope hoy) hasta que la fecha real lo alcance, sin ningún
     // aviso. Se pide confirmación explícita antes de guardar.
     if (esFechaFuturaSospechosa(formData.fecha)) {
+      setPendingSnapshot(formData);
       setMostrarConfirmacionFechaFutura(true);
       return;
     }
@@ -289,7 +240,8 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={resetForm} />
+          {conflict && <p role="alert" className="text-red-700 mb-3">{conflict}</p>}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
@@ -499,7 +451,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
             <Button
               type="button"
               variant="outline"
-              onClick={() => { clearFormData(); onCancel(); }}
+              onClick={() => { resetForm(); onCancel(); }}
               disabled={saving}
             >
               Cancelar
@@ -530,12 +482,13 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
       open={mostrarConfirmacionFechaFutura}
       onOpenChange={setMostrarConfirmacionFechaFutura}
       title="¿Fecha en el futuro?"
-      description={mensajeConfirmacionFechaFutura('gasto', [formData.fecha])}
+      description={mensajeConfirmacionFechaFutura('gasto', [pendingSnapshot?.fecha ?? formData.fecha])}
       confirmLabel={ETIQUETA_CONFIRMAR_FECHA_FUTURA}
       cancelLabel={ETIQUETA_CORREGIR_FECHA_FUTURA}
       onConfirm={() => {
         setMostrarConfirmacionFechaFutura(false);
-        guardarGasto();
+        if (pendingSnapshot) void guardarGasto(pendingSnapshot);
+        setPendingSnapshot(null);
       }}
     />
     </>

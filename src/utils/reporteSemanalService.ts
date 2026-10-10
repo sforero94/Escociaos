@@ -3,7 +3,7 @@
 // Flujo: Frontend → Edge Function (Gemini) → HTML → PDF → Supabase Storage
 
 import { getSupabase, getCurrentUser } from './supabase/client';
-import { projectId, publicAnonKey } from './supabase/info.tsx';
+import { getSupabaseConfig } from './supabase/config';
 import type {
   DatosReporteSemanal,
   GenerateReportResponse,
@@ -15,7 +15,7 @@ import type {
 // ============================================================================
 
 // URL base del Edge Function (matches pattern used by all other working endpoints)
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 // ============================================================================
 // LLAMADA AL EDGE FUNCTION
@@ -44,7 +44,7 @@ export async function generarHTMLReporte(
 
   try {
     const response = await fetch(
-      `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
+      `${edgeFunctionBase()}/make-server-1ccce916/reportes/generar-semanal`,
       {
         method: 'POST',
         headers: {
@@ -424,12 +424,12 @@ export async function generarReporteRapido(
   onProgress?.('Generando reporte con IA...');
 
   const response = await fetch(
-    `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal-rapido`,
+    `${edgeFunctionBase()}/make-server-1ccce916/reportes/generar-semanal-rapido`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
+        'Authorization': `Bearer ${getSupabaseConfig().anonKey}`,
       },
       body: JSON.stringify(semana ? { semana } : {}),
     }
