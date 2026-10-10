@@ -6,8 +6,24 @@ const userId = '10000000-0000-4000-8000-000000000001';
 const perfil = () => new Response(JSON.stringify([{ id: userId, activo: true, rol: 'Gerencia' }]));
 const respuestaModelo = (message: Record<string, unknown>) => new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
 const llamada = (name: string, args: Record<string, unknown>) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe('Integración del loop de Esco con consulta obligatoria de partos', () => {
+  it('keeps the LLM deadline active after headers while the response body stalls', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Deno', { env: { get: () => 'fixture-key' } });
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, opts: RequestInit) => {
+      signal = opts.signal as AbortSignal;
+      return new Response(new ReadableStream({ start(controller) {
+        signal!.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), { once: true });
+      } }));
+    }));
+    const result = llmToolLoop([{ role: 'user', content: 'Consulta sintética' }], userId);
+    const rejection = expect(result).rejects.toThrow('Timeout en la llamada al LLM');
+    await vi.advanceTimersByTimeAsync(55_000);
+    await rejection;
+    expect(signal?.aborted).toBe(true);
+  });
   it('aborts when a role is revoked between tool calls, before another data read or model answer', async () => {
     vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://example.test' : 'fixture-key' } });
     let profileReads = 0; let modelCalls = 0; let domainReads = 0;

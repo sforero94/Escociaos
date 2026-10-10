@@ -16,6 +16,7 @@ INACTIVE = '10000000-0000-4000-8000-000000000003'
 VIEWER = '10000000-0000-4000-8000-000000000004'
 P1 = '20000000-0000-4000-8000-000000000001'
 P2 = '20000000-0000-4000-8000-000000000002'
+SUPPLIER = '30000000-0000-4000-8000-000000000001'
 ENV = os.environ.copy()
 for key in ('DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'):
     ENV.pop(key, None)
@@ -67,7 +68,7 @@ def proof_rejected(purchase, actor=ACTOR, role='authenticated', label='proof rea
 
 def line(product=P1, quantity=2.345, unit_cost=10.456, total_cost=24.519):
     return {'producto_id': product, 'fecha_compra': '2026-01-02', 'proveedor': 'Synthetic supplier',
-            'numero_factura': 'SYNTHETIC', 'cantidad': quantity, 'unidad': 'Kilos',
+            'proveedor_id': SUPPLIER, 'numero_factura': 'SYNTHETIC', 'cantidad': quantity, 'unidad': 'Kilos',
             'costo_unitario': unit_cost, 'costo_total': total_cost,
             'url_factura': 'synthetic://retained-invoice'}
 
@@ -123,7 +124,8 @@ CREATE TABLE public.productos(id uuid PRIMARY KEY,nombre text,unidad_medida publ
  cantidad_actual numeric(12,2),precio_unitario numeric(12,2),activo boolean,updated_at timestamptz DEFAULT now());
 INSERT INTO public.productos VALUES ('{P1}','Synthetic one','Kilos',10,2,false,now()),
  ('{P2}','Synthetic two','Kilos',10,2,true,now());
-CREATE TABLE public.fin_proveedores(id uuid PRIMARY KEY);
+CREATE TABLE public.fin_proveedores(id uuid PRIMARY KEY,nombre text NOT NULL,activo boolean);
+INSERT INTO public.fin_proveedores VALUES ('{SUPPLIER}','Synthetic supplier',true);
 CREATE TABLE public.compras(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),fecha_compra date NOT NULL,
  proveedor text NOT NULL,numero_factura text,producto_id uuid NOT NULL REFERENCES public.productos,
  cantidad numeric(12,2) NOT NULL CHECK(cantidad>0),unidad public.unidad_medida NOT NULL,
@@ -162,6 +164,11 @@ def tests():
     verify(sql('SHOW server_version;').startswith('17.6'), 'pinned PostgreSQL17.6')
     sql(FIXTURE)
     sql((ROOT / 'src/sql/security-candidates/purchase-integrity.sql').read_text())
+    for field, value in [('proveedor_id', None), ('proveedor', 'Stale supplier'), ('numero_factura', ' '), ('unidad', 'Litros')]:
+        failed_atomically('fn_purchase_post', {'lines': [line(), {**line(P2), field: value}]}, label=f'all-line fresh reference validation {field}')
+    sql(f"UPDATE public.fin_proveedores SET activo=false WHERE id='{SUPPLIER}';")
+    failed_atomically('fn_purchase_post', {'lines': [line()]}, label='inactive supplier rejected without stock or ledger writes')
+    sql(f"UPDATE public.fin_proveedores SET activo=true WHERE id='{SUPPLIER}';")
     payload = {'lines': [line()]}
     for actor in (None, INACTIVE, VIEWER, '10000000-0000-4000-8000-999999999999'):
         failed_atomically('fn_purchase_post', payload, actor=actor, label=f'creation unauthorized actor {actor}')

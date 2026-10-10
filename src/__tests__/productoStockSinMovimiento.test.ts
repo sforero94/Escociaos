@@ -31,7 +31,8 @@
 // `productos` (NuevoMovimientoModal.tsx:133 -> :150).
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import * as ts from 'typescript';
 import { join } from 'node:path';
 import { prepararDatosProducto } from '@/components/inventory/ProductForm';
 
@@ -95,23 +96,106 @@ describe('prepararDatosProducto — el saldo de inventario no viaja en un UPDATE
 // `movimientos_inventario` en el mismo archivo rompe el contrato.
 // ============================================================================
 
-/** Archivos TS autorizados a mover el saldo, cada uno con su movimiento al lado. */
+/** Keep the original entry points even when the mutation moves behind a utility/RPC. */
 const ESCRITORES_AUTORIZADOS = [
-  'src/components/inventory/NuevoMovimientoModal.tsx',
-  'src/components/inventory/NewPurchase.tsx',
-  'src/components/inventory/PurchaseHistory.tsx',
+  { entry: 'src/components/inventory/NuevoMovimientoModal.tsx', helper: 'src/utils/manualStockMovement.ts', call: 'postManualMovement', sql: 'manual-stock-movement.sql', rpc: 'fn_manual_stock_movement' },
+  { entry: 'src/components/inventory/NewPurchase.tsx', helper: 'src/utils/purchaseIntegrity.ts', call: 'postPurchase', sql: 'purchase-integrity.sql', rpc: 'fn_purchase_post' },
+  { entry: 'src/components/inventory/PurchaseHistory.tsx', helper: 'src/utils/purchaseIntegrity.ts', call: 'reversePurchase', sql: 'purchase-integrity.sql', rpc: 'fn_purchase_reverse' },
+];
+const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf-8');
+function sourceFiles(directory: string): string[] {
+  return readdirSync(join(process.cwd(), directory), { withFileTypes: true }).flatMap(entry => {
+    const path = `${directory}/${entry.name}`;
+    return entry.isDirectory() ? entry.name === '__tests__' ? [] : sourceFiles(path) : /\.tsx?$/.test(path) ? [path] : [];
+  });
+}
+function productWrites(path: string) {
+  const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+  const writes: Array<{ method: string; payload: string }> = [];
+  const walk = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'from'
+      && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === 'productos') {
+      let next: ts.Node = node;
+      while (ts.isPropertyAccessExpression(next.parent) && ts.isCallExpression(next.parent.parent)) {
+        const property = next.parent, call = property.parent as ts.CallExpression;
+        if (['insert','update','delete','upsert'].includes(property.name.text)) writes.push({ method: property.name.text, payload: call.arguments[0]?.getText(source) ?? '' });
+        next = call;
+      }
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(source); return writes;
+}
+function routine(source: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = source.match(new RegExp('CREATE(?: OR REPLACE)? FUNCTION (?:public\\.)?' + escaped + '\\([\\s\\S]*?AS (\\$[a-z_]*\\$)([\\s\\S]*?)\\1\\s*;', 'i'));
+  expect(match, `missing SQL writer ${name}`).not.toBeNull(); return match![2];
+}
+
+// Existing catalogue creation/import opening balances are explicit exceptions,
+// not retrospective proof of a stock movement. Metadata updates cannot carry stock.
+const CATALOGUE_WRITERS = [
+  'src/components/inventory/ProductForm.tsx',
+  'src/supabase/functions/server/importar-productos.tsx',
+  'src/supabase/functions/server/productos.tsx',
+  'supabase/functions/make-server-1ccce916/importar-productos.tsx',
+  'supabase/functions/make-server-1ccce916/productos.tsx',
 ];
 
-describe('guard: todo escritor de productos.cantidad_actual inserta su movimiento', () => {
-  it.each(ESCRITORES_AUTORIZADOS)('%s inserta en movimientos_inventario', (archivo) => {
-    const fuente = readFileSync(join(process.cwd(), archivo), 'utf-8');
+describe('guard: every stock writer remains registered across browser, helper and SQL layers', () => {
+  it.each(ESCRITORES_AUTORIZADOS)('$entry delegates to $rpc which updates stock and checks its exact movement', writer => {
+    expect(read(writer.entry)).toMatch(new RegExp('await ' + writer.call + '\\('));
+    expect(productWrites(writer.entry)).toEqual([]);
+    expect(read(writer.helper)).toMatch(new RegExp('(?:rpc\\(client,\\s*|client\\.rpc\\()[\'"]' + writer.rpc + '[\'"]'));
+    const body = routine(read(`src/sql/security-candidates/${writer.sql}`), writer.rpc);
+    expect(body).toMatch(/UPDATE\s+(?:public\.)?productos\s+SET\s+cantidad_actual\s*=/i);
+    expect(body).toMatch(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(/i);
+    expect(body).toMatch(/RETURNING (?:\*|to_jsonb\(movimientos_inventario\)) INTO (?:mov|v_row)/);
+    expect(body).toMatch(/IF NOT FOUND[\s\S]*?RAISE EXCEPTION/);
+    if (writer.rpc === 'fn_manual_stock_movement') {
+      expect(body).toContain('to_jsonb(durable) IS DISTINCT FROM to_jsonb(expected)');
+      expect(body).toContain('to_jsonb(durable_mov) IS DISTINCT FROM to_jsonb(mov)');
+    } else {
+      expect(body).toContain('to_jsonb(mov) @> expected');
+      expect(body).toContain('to_jsonb(movimientos_inventario)=to_jsonb(mov)');
+    }
+  });
 
-    expect(/cantidad_actual\s*:/.test(fuente), `${archivo} ya no escribe el saldo`).toBe(true);
-    expect(
-      fuente.includes("from('movimientos_inventario')"),
-      `${archivo} escribe productos.cantidad_actual pero ya no toca movimientos_inventario. ` +
-        'Un saldo que cambia sin movimiento es stock sin trazabilidad.',
-    ).toBe(true);
+  it('discovers every direct product mutator and refuses unregistered stock payloads, including spread objects', () => {
+    const paths = [...sourceFiles('src'), ...sourceFiles('supabase')];
+    const writers = paths.filter(path => productWrites(path).length > 0).sort();
+    expect(writers).toEqual([...CATALOGUE_WRITERS].sort());
+    for (const path of writers) {
+      const writes = productWrites(path);
+      if (path.endsWith('/ProductForm.tsx')) {
+        expect(writes).toEqual([{ method: 'update', payload: 'dataToSave' }, { method: 'insert', payload: '[dataToSave]' }]);
+        expect(read(path)).toContain('prepararDatosProducto(formData, Boolean(productId))');
+        // Runtime tests above prove the update helper removes hidden/spread stock.
+      } else if (path.endsWith('/importar-productos.tsx')) {
+        expect(writes).toEqual([{ method: 'insert', payload: 'producto' }]);
+        expect(read(path)).toContain('parseCantidadInicial(fila.cantidad_actual)');
+        expect(read(path)).toContain('producto.cantidad_actual = cantidadInicial');
+      } else {
+        expect(writes).toEqual([{ method: 'update', payload: '{ activo }' }]);
+      }
+    }
+  });
+
+  it('discovers every proposed SQL balance writer so adding a candidate cannot evade the movement registry', () => {
+    const names: string[] = [];
+    for (const entry of readdirSync(join(process.cwd(), 'src/sql/security-candidates'))) {
+      if (!entry.endsWith('.sql')) continue;
+      const sql = read(`src/sql/security-candidates/${entry}`);
+      for (const match of sql.matchAll(/CREATE(?: OR REPLACE)? FUNCTION ([\w.]+)\([\s\S]*?AS (\$[a-z_]*\$)([\s\S]*?)\2\s*;/gi)) {
+        if (/UPDATE\s+(?:public\.)?productos\s+SET[\s\S]*?cantidad_actual\s*=/i.test(match[3])) names.push(match[1]);
+      }
+    }
+    expect(names.sort()).toEqual(['public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_purchase_post','public.fn_purchase_reverse'].sort());
+    const body = routine(read('src/sql/security-candidates/application-closure.sql'), 'fn_cerrar_aplicacion');
+    expect(body).toMatch(/UPDATE productos\s+SET cantidad_actual = v_saldo_nuevo/);
+    expect(body).toContain('INSERT INTO movimientos_inventario');
+    expect(body).toContain('v_row @> v_expected');
+    expect(body).toContain("'table','movimientos_inventario'");
   });
 
   it('el RPC fn_cerrar_aplicacion (migración 106) actualiza productos e inserta su movimiento en la misma transacción', () => {

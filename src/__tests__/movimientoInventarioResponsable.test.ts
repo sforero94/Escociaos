@@ -25,105 +25,141 @@
 // en dos formatos sin que nada falle.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import * as ts from 'typescript';
 import { join } from 'node:path';
 
-/** Los tres escritores TS de `movimientos_inventario`. El cuarto escritor es el RPC
- * `fn_cerrar_aplicacion` (migración 106), cubierto en su propio caso más abajo. */
-const ESCRITORES_TS = [
-  'src/components/inventory/NuevoMovimientoModal.tsx',
-  'src/components/inventory/NewPurchase.tsx',
-  'src/components/inventory/PurchaseHistory.tsx',
+/** Original browser entry points now delegate to these prospective SQL writers.
+ * Removing an entry is not acceptable when its write moves to another layer. */
+const ESCRITORES = [
+  { entry: 'src/components/inventory/NuevoMovimientoModal.tsx', helper: 'src/utils/manualStockMovement.ts', call: 'postManualMovement', sql: 'manual-stock-movement.sql', rpc: 'fn_manual_stock_movement', email: 'profile.email' },
+  { entry: 'src/components/inventory/NewPurchase.tsx', helper: 'src/utils/purchaseIntegrity.ts', call: 'postPurchase', sql: 'purchase-integrity.sql', rpc: 'fn_purchase_post', email: 'actor_email' },
+  { entry: 'src/components/inventory/PurchaseHistory.tsx', helper: 'src/utils/purchaseIntegrity.ts', call: 'reversePurchase', sql: 'purchase-integrity.sql', rpc: 'fn_purchase_reverse', email: 'actor_email' },
 ];
-
-/**
- * Devuelve el cuerpo `{ … }` de cada `.from('movimientos_inventario').insert({ … })`
- * del archivo, recortado por balanceo de llaves. Mirar el archivo entero no sirve:
- * `responsable` puede aparecer en un tipo o en un comentario y el guard quedaría verde
- * con el INSERT igual de mudo.
- */
-function payloadsDeInsert(fuente: string): string[] {
-  const payloads: string[] = [];
-  const marcador = "from('movimientos_inventario')";
-  let desde = 0;
-
-  for (;;) {
-    const iTabla = fuente.indexOf(marcador, desde);
-    if (iTabla === -1) break;
-    desde = iTabla + marcador.length;
-
-    const iInsert = fuente.indexOf('.insert(', iTabla);
-    if (iInsert === -1) continue;
-    // Solo cuenta si el `.insert(` pertenece a esta misma cadena: si entre medias
-    // aparece otro `from(`, este `from` no era un INSERT.
-    if (fuente.slice(iTabla + marcador.length, iInsert).includes('.from(')) continue;
-
-    const iLlave = fuente.indexOf('{', iInsert);
-    if (iLlave === -1) continue;
-
-    let profundidad = 0;
-    let fin = -1;
-    for (let i = iLlave; i < fuente.length; i++) {
-      if (fuente[i] === '{') profundidad++;
-      else if (fuente[i] === '}') {
-        profundidad--;
-        if (profundidad === 0) {
-          fin = i;
-          break;
-        }
+const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf-8');
+function routine(source: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = source.match(new RegExp('CREATE(?: OR REPLACE)? FUNCTION (?:public\\.)?' + escaped + '\\([\\s\\S]*?AS (\\$[a-z_]*\\$)([\\s\\S]*?)\\1\\s*;', 'i'));
+  expect(match, `missing SQL writer ${name}`).not.toBeNull();
+  return match![2];
+}
+// Split SQL column/value lists without confusing nested calls or quoted commas.
+function sqlList(source: string): string[] {
+  let depth = 0, quote = false, start = 0;
+  const parts: string[] = [];
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (char === "'") {
+      if (quote && source[i + 1] === "'") { i++; continue; }
+      quote = !quote;
+    } else if (!quote) {
+      if (char === '(') depth++;
+      if (char === ')') depth--;
+      if (char === ',' && depth === 0) { parts.push(source.slice(start, i).trim()); start = i + 1; }
+    }
+  }
+  parts.push(source.slice(start).trim());
+  return parts;
+}
+function movementInserts(body: string) {
+  return [...body.matchAll(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(([^)]*)\)\s*VALUES\s*\(([\s\S]*?)\)\s*RETURNING/gi)].map(match => ({ columns: sqlList(match[1]), values: sqlList(match[2]) }));
+}
+function sourceFiles(directory: string): string[] {
+  return readdirSync(join(process.cwd(), directory), { withFileTypes: true }).flatMap(entry => {
+    const path = `${directory}/${entry.name}`;
+    return entry.isDirectory() ? entry.name === '__tests__' ? [] : sourceFiles(path) : /\.tsx?$/.test(path) ? [path] : [];
+  });
+}
+function directMovementInserts(path: string): number {
+  const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+  let count = 0;
+  const walk = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'from'
+      && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === 'movimientos_inventario') {
+      let next: ts.Node = node;
+      while (ts.isPropertyAccessExpression(next.parent) && ts.isCallExpression(next.parent.parent)) {
+        const property = next.parent;
+        if (property.name.text === 'insert') count++;
+        next = property.parent;
       }
     }
-    if (fin === -1) continue;
-
-    payloads.push(fuente.slice(iLlave, fin + 1));
-  }
-
-  return payloads;
+    ts.forEachChild(node, walk);
+  };
+  walk(source);
+  return count;
 }
 
-describe('guard: todo INSERT en movimientos_inventario estampa `responsable`', () => {
-  it.each(ESCRITORES_TS)('%s', (archivo) => {
-    const fuente = readFileSync(join(process.cwd(), archivo), 'utf-8');
-    const payloads = payloadsDeInsert(fuente);
-
-    expect(
-      payloads.length,
-      `${archivo} ya no inserta en movimientos_inventario; si el escritor se movió, ` +
-        'actualizá ESCRITORES_TS en vez de borrar el caso.',
-    ).toBeGreaterThan(0);
-
-    for (const payload of payloads) {
-      expect(
-        /(^|[\s,{])responsable\s*[,:]/.test(payload),
-        `${archivo} inserta en movimientos_inventario sin la clave \`responsable\`. ` +
-          'La tabla no tiene trigger de atribución, así que la fila queda sin persona ' +
-          'responsable para siempre y el libro que audita GlobalGAP no puede decir ' +
-          'quién movió el stock. Tomalo de la sesión: `user?.email ?? null`.',
-      ).toBe(true);
+describe('guard: inventory writer registry follows transactional RPCs and trusted EMAIL attribution', () => {
+  it.each(ESCRITORES)('$entry delegates to $rpc and that exact SQL INSERT stamps the authenticated profile email', writer => {
+    const entry = read(writer.entry), helper = read(writer.helper), sql = read(`src/sql/security-candidates/${writer.sql}`);
+    expect(entry).toMatch(new RegExp('await ' + writer.call + '\\('));
+    expect(helper).toMatch(new RegExp('(?:rpc\\(client,\\s*|client\\.rpc\\()[\'"]' + writer.rpc + '[\'"]'));
+    expect(helper).toContain('client.auth.getUser()');
+    const body = routine(sql, writer.rpc), inserts = movementInserts(body);
+    expect(inserts).toHaveLength(1);
+    for (const insert of inserts) {
+      expect(insert.columns).toHaveLength(insert.values.length);
+      const index = insert.columns.indexOf('responsable');
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(insert.values[index]).toBe(writer.email);
     }
+    if (writer.email === 'actor_email') {
+      expect(body).toContain('actor := purchase_integrity.authorize()');
+      expect(body).toMatch(/SELECT email INTO STRICT actor_email FROM public\.usuarios WHERE id=actor/);
+      const auth = routine(sql, 'purchase_integrity.authorize');
+      expect(auth).toContain('auth.uid()'); expect(auth).toMatch(/FROM public\.usuarios WHERE id=actor FOR SHARE/);
+      expect(auth).toContain('profile.activo IS DISTINCT FROM true');
+      expect(body).toContain("'responsable',actor_email");
+      expect(body).toContain('to_jsonb(mov) @> expected');
+    } else {
+      expect(body).toContain('actor uuid:=auth.uid()');
+      expect(body).toMatch(/FROM public\.usuarios WHERE id=actor FOR SHARE/);
+      expect(body).toContain('profile.activo IS DISTINCT FROM true');
+      expect(body).toContain('mov.responsable IS DISTINCT FROM profile.email');
+    }
+    expect(body).not.toMatch(/p_payload\s*->>\s*'responsable'/);
   });
 
-  it('el valor sale de la sesión y es un EMAIL, no un nombre libre', () => {
-    for (const archivo of ESCRITORES_TS) {
-      const fuente = readFileSync(join(process.cwd(), archivo), 'utf-8');
-
-      expect(
-        /user\?\.email/.test(fuente),
-        `${archivo} escribe movimientos_inventario.responsable pero no lo deriva de ` +
-          '`user?.email`. Las 157 filas atribuidas en producción guardan email y el RPC ' +
-          '`fn_cerrar_aplicacion` deriva `auth.jwt() ->> \'email\'`: un segundo formato ' +
-          'parte la columna en dos sin que nada falle.',
-      ).toBe(true);
-    }
+  it('discovers every new direct TS movement INSERT instead of silently ignoring an unregistered writer', () => {
+    const writers = [...sourceFiles('src'), ...sourceFiles('supabase')].filter(path => directMovementInserts(path) > 0);
+    // The three browser writers moved to reviewed RPC candidates. Any new direct
+    // writer needs explicit review and authenticated email attribution coverage.
+    expect(writers).toEqual([]);
   });
 
-  it('el RPC fn_cerrar_aplicacion (migración 106) deriva responsable del JWT', () => {
-    const fuente = readFileSync(
-      join(process.cwd(), 'src/sql/migrations/106_cierre_aplicacion_transaccional.sql'),
-      'utf-8',
-    );
+  it('discovers every proposed SQL movement INSERT and refuses top-level or unregistered writers', () => {
+    const writers: string[] = [];
+    for (const file of readdirSync(join(process.cwd(), 'src/sql/security-candidates'))) {
+      if (!file.endsWith('.sql')) continue;
+      const sql = read(`src/sql/security-candidates/${file}`);
+      const allInserts = [...sql.matchAll(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(/gi)].length;
+      let registeredInserts = 0;
+      for (const match of sql.matchAll(/CREATE(?: OR REPLACE)? FUNCTION ([\w.]+)\([\s\S]*?AS (\$[a-z_]*\$)([\s\S]*?)\2\s*;/gi)) {
+        const count = [...match[3].matchAll(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(/gi)].length;
+        if (count > 0) writers.push(match[1]);
+        registeredInserts += count;
+      }
+      expect(registeredInserts, `${file} has a movement INSERT outside the reviewed functions`).toBe(allInserts);
+    }
+    expect(writers.sort()).toEqual(['public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_purchase_post','public.fn_purchase_reverse'].sort());
+  });
 
-    expect(fuente.includes("auth.jwt() ->> 'email'")).toBe(true);
-    expect(/INSERT INTO movimientos_inventario[\s\S]{0,400}?responsable/i.test(fuente)).toBe(true);
+  it('the prospective application closure RPC uses active-profile EMAIL and checks the exact returned movement', () => {
+    const sql = read('src/sql/security-candidates/application-closure.sql');
+    const body = routine(sql, 'fn_cerrar_aplicacion'), auth = routine(sql, 'application_closure.authorize');
+    expect(auth).toMatch(/FROM public\.usuarios WHERE id=auth\.uid\(\) FOR SHARE/);
+    expect(auth).toContain('profile.activo IS DISTINCT FROM true'); expect(auth).toContain('RETURN profile.email');
+    expect(body).toContain('v_email := application_closure.authorize()');
+    const insert = movementInserts(body);
+    expect(insert).toHaveLength(1);
+    expect(insert[0].values[insert[0].columns.indexOf('responsable')]).toBe('v_email');
+    expect(body).toContain("'responsable',v_email"); expect(body).toContain('v_row @> v_expected');
+    expect(body).toContain("'table','movimientos_inventario'");
+  });
+
+  it('the historical migration106 writer retains its JWT EMAIL attribution contract', () => {
+    const source = read('src/sql/migrations/106_cierre_aplicacion_transaccional.sql');
+    expect(source).toContain("auth.jwt() ->> 'email'");
+    expect(/INSERT INTO movimientos_inventario[\s\S]{0,400}?responsable/i.test(source)).toBe(true);
   });
 });

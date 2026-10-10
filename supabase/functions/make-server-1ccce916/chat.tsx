@@ -3847,6 +3847,7 @@ export async function llmToolLoop(
     const timeoutId = setTimeout(() => controller.abort(), 55_000);
 
     let response: Response;
+    let result: Awaited<ReturnType<Response['json']>>;
     try {
       response = await fetch(OPENROUTER_URL, {
         method: 'POST',
@@ -3861,22 +3862,23 @@ export async function llmToolLoop(
         }),
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.error('OpenRouter error:', response.status, errText.slice(0, 500));
+        throw new Error(`Error OpenRouter: ${response.status}`);
+      }
+      // Keep the deadline active while receiving/parsing the response body.
+      result = await response.json();
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('Timeout en la llamada al LLM');
       }
       throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error('OpenRouter error:', response.status, errText.slice(0, 500));
-      throw new Error(`Error OpenRouter: ${response.status}`);
-    }
-
-    const result = await response.json();
     const choice = result.choices?.[0];
     if (!choice) throw new Error('Sin respuesta del LLM');
 

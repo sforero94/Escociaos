@@ -142,13 +142,24 @@ BEGIN
     IF EXISTS(SELECT 1 FROM jsonb_each(line) field WHERE field.key NOT IN ('cantidad','costo_unitario','costo_total')
       AND jsonb_typeof(field.value) NOT IN ('string','null')) THEN RAISE EXCEPTION 'Text fields must be strings or null'; END IF;
     IF nullif(line->>'producto_id','') IS NULL OR nullif(line->>'fecha_compra','') IS NULL
-      OR nullif(btrim(line->>'proveedor'),'') IS NULL OR nullif(line->>'unidad','') IS NULL THEN
+      OR nullif(btrim(line->>'proveedor'),'') IS NULL OR nullif(line->>'proveedor_id','') IS NULL
+      OR nullif(btrim(line->>'numero_factura'),'') IS NULL OR nullif(line->>'unidad','') IS NULL THEN
       RAISE EXCEPTION 'Missing purchase fields';
     END IF;
-    PERFORM (line->>'producto_id')::uuid, (line->>'fecha_compra')::date, (line->>'unidad')::public.unidad_medida;
+    PERFORM (line->>'producto_id')::uuid, (line->>'proveedor_id')::uuid, (line->>'fecha_compra')::date, (line->>'unidad')::public.unidad_medida;
     PERFORM purchase_integrity.positive_money(line->'cantidad'), purchase_integrity.positive_money(line->'costo_unitario'),
       purchase_integrity.positive_money(line->'costo_total');
   END LOOP;
+  -- Lock current supplier identity through posting; cached browser labels are
+  -- not authoritative and a concurrent deactivation must not race this check.
+  PERFORM id FROM public.fin_proveedores WHERE id IN
+    (SELECT (value->>'proveedor_id')::uuid FROM jsonb_array_elements(p_payload->'lines')) ORDER BY id FOR SHARE;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_payload->'lines') input(line)
+    LEFT JOIN public.fin_proveedores supplier ON supplier.id=(input.line->>'proveedor_id')::uuid
+    WHERE supplier.id IS NULL OR supplier.activo IS DISTINCT FROM true
+      OR supplier.nombre IS DISTINCT FROM input.line->>'proveedor') THEN
+    RAISE EXCEPTION 'Supplier changed; review current purchase references';
+  END IF;
   SELECT count(DISTINCT (value->>'producto_id')::uuid) INTO wanted FROM jsonb_array_elements(p_payload->'lines');
   PERFORM id FROM public.productos WHERE id IN
     (SELECT (value->>'producto_id')::uuid FROM jsonb_array_elements(p_payload->'lines')) ORDER BY id FOR UPDATE;
@@ -161,6 +172,9 @@ BEGIN
     unit_cost := purchase_integrity.positive_money(line->'costo_unitario');
     total_cost := purchase_integrity.positive_money(line->'costo_total');
     SELECT * INTO STRICT prod FROM public.productos WHERE id=(line->>'producto_id')::uuid;
+    IF prod.unidad_medida::text IS DISTINCT FROM line->>'unidad' THEN
+      RAISE EXCEPTION 'Product unit changed; review purchase quantities';
+    END IF;
     target_product := prod.id;
     old_stock := coalesce(prod.cantidad_actual,0);
     IF old_stock::text IN ('NaN','Infinity','-Infinity') OR old_stock < 0 THEN RAISE EXCEPTION 'Invalid current stock'; END IF;

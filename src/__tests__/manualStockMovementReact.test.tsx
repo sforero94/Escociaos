@@ -74,7 +74,7 @@ describe('mounted manual movement actual SDK and draft hook',()=>{
   props={...props,isOpen:false};act(()=>tree.update(<NuevoMovimientoModal {...props}/>));
   props={...props,isOpen:true};act(()=>tree.update(<NuevoMovimientoModal {...props}/>));await select();
   act(()=>tree.root.findAllByType('input').find(i=>i.props.type==='number')!.props.onChange({target:{value:'3'}}));
-  await act(async()=>vi.advanceTimersByTime(2000));
+  await act(async()=>{vi.advanceTimersByTime(2000);});
   expect(props.onSuccess).not.toHaveBeenCalled();expect(props.onClose).toHaveBeenCalledTimes(1);
   expect(tree.root.findAllByType('input').find(i=>i.props.type==='number')!.props.value).toBe('3');
  });
