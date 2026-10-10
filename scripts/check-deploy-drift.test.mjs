@@ -10,6 +10,12 @@ import {
   resumenFalloParaTelegram,
   FRASE_SECRETO_INVALIDO,
   datosDelDespliegue,
+  evaluarVerifyJwt,
+  evaluarHealth,
+  urlHealth,
+  comprobarHealth,
+  FRASE_VERIFY_JWT,
+  FRASE_HEALTH,
 } from './check-deploy-drift.mjs';
 
 // El caso real: `updated_at` de la Management API llega en epoch MILISEGUNDOS.
@@ -341,5 +347,142 @@ describe('rutaEstadoDriftPorHash', () => {
     expect(rutaEstadoDriftPorHash('make-server-1ccce916')).not.toBe(
       rutaEstadoDriftPorHash('otra-funcion'),
     );
+  });
+});
+
+// ESCO-148: el 2026-10-07 una publicacion manual (conector, no la CLI) dejo
+// `verify_jwt=true` (v271, 15:02:50Z) y antes un boot fallido. ~16 min de
+// produccion caida, 3 lecturas de clima perdidas, y el detector no podia ver
+// ninguno de los dos modos porque solo miraba reloj y hash.
+describe('evaluarVerifyJwt (ESCO-148)', () => {
+  it('falla con verify_jwt=true (el estado de v271)', () => {
+    const r = evaluarVerifyJwt(true);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain(FRASE_VERIFY_JWT);
+    expect(r.motivo).toContain('npx supabase functions deploy');
+  });
+
+  it('pasa solo con false literal', () => {
+    expect(evaluarVerifyJwt(false).ok).toBe(true);
+  });
+
+  it('falla cerrado si la API no trae el campo', () => {
+    expect(evaluarVerifyJwt(undefined).ok).toBe(false);
+    expect(evaluarVerifyJwt(null).ok).toBe(false);
+    expect(evaluarVerifyJwt('false').ok).toBe(false);
+  });
+
+  it('nunca se confunde con un secreto invalido', () => {
+    expect(evaluarVerifyJwt(true).motivo).not.toContain(FRASE_SECRETO_INVALIDO);
+  });
+});
+
+describe('datosDelDespliegue trae verify_jwt (ESCO-148)', () => {
+  const fetchOriginal = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+  });
+
+  it('devuelve el verify_jwt de la metadata que ya pide', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          slug: 'make-server-1ccce916',
+          updated_at: Date.UTC(2026, 9, 7, 15, 2, 50),
+          verify_jwt: true,
+          ezbr_sha256: '7ecfd539cbac8319fb288c31d189a0ffce673643c8ffba5caf3d1fa5439dde7c',
+        },
+      ],
+    });
+    const d = await datosDelDespliegue({ proyecto: 'p', funcion: 'make-server-1ccce916', token: 't' });
+    expect(d.verifyJwt).toBe(true);
+    expect(evaluarVerifyJwt(d.verifyJwt).ok).toBe(false);
+  });
+});
+
+describe('evaluarHealth (ESCO-148)', () => {
+  it('200 es ok', () => {
+    expect(evaluarHealth({ status: 200 }).ok).toBe(true);
+  });
+
+  it('401 (gateway con verify_jwt=true) falla', () => {
+    const r = evaluarHealth({ status: 401 });
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain(FRASE_HEALTH);
+    expect(r.motivo).toContain('401');
+    expect(r.motivo).not.toContain(FRASE_SECRETO_INVALIDO);
+  });
+
+  it('5xx (worker que no arranca) falla', () => {
+    expect(evaluarHealth({ status: 503 }).ok).toBe(false);
+  });
+
+  it('un error de red falla, no se trata como ok', () => {
+    const r = evaluarHealth({ error: 'fetch failed' });
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain('fetch failed');
+  });
+});
+
+describe('comprobarHealth (ESCO-148)', () => {
+  const fetchOriginal = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+  });
+
+  it('apunta a la ruta real de index.ts', () => {
+    expect(urlHealth({ proyecto: 'ywhtjwawnkeqlwxbvgup', funcion: 'make-server-1ccce916' })).toBe(
+      'https://ywhtjwawnkeqlwxbvgup.supabase.co/functions/v1/make-server-1ccce916/health',
+    );
+    const index = readFileSync(
+      fileURLToPath(
+        new URL('../supabase/functions/make-server-1ccce916/index.ts', import.meta.url),
+      ),
+      'utf8',
+    );
+    expect(index).toContain('app.get("/make-server-1ccce916/health"');
+  });
+
+  it('hace el GET SIN encabezado Authorization ni apikey (anonimo)', async () => {
+    let opciones;
+    globalThis.fetch = async (_url, o) => {
+      opciones = o;
+      return { status: 200 };
+    };
+    const r = await comprobarHealth({ proyecto: 'p', funcion: 'make-server-1ccce916' });
+    expect(r.ok).toBe(true);
+    const headers = opciones?.headers ?? {};
+    expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain('authorization');
+    expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain('apikey');
+  });
+
+  it('un fetch que lanza se reporta como fallo de health', async () => {
+    globalThis.fetch = async () => {
+      throw new Error('fetch failed');
+    };
+    const r = await comprobarHealth({ proyecto: 'p', funcion: 'make-server-1ccce916' });
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain(FRASE_HEALTH);
+  });
+});
+
+describe('resumenFalloParaTelegram con los modos de ESCO-148', () => {
+  it('nombra verify_jwt y no lo llama deriva ni secreto', () => {
+    const t = resumenFalloParaTelegram(`ERROR: ${evaluarVerifyJwt(true).motivo}`);
+    expect(t).toMatch(/verify_jwt/);
+    expect(t).not.toMatch(/secret inválido/);
+  });
+
+  it('nombra el health caido', () => {
+    const t = resumenFalloParaTelegram(`ERROR: ${evaluarHealth({ status: 503 }).motivo}`);
+    expect(t).toMatch(/health/);
+    expect(t).toMatch(/caído|caido/);
+  });
+
+  it('un 401 de la Management API sigue siendo secreto aunque health tambien falle', () => {
+    const log = `${mensajeErrorManagementApi(401, 'Unauthorized', 'u')}`;
+    expect(resumenFalloParaTelegram(log)).toMatch(/secret inválido/);
   });
 });

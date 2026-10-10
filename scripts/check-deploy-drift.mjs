@@ -14,7 +14,8 @@
 // Uso:
 //   SUPABASE_ACCESS_TOKEN=sbp_... node scripts/check-deploy-drift.mjs
 //
-// Salida: 0 = sin deriva. 1 = hay deriva, o no se pudo comprobar.
+// Salida: 0 = sin deriva. 1 = hay deriva, produccion rota (verify_jwt != false
+// o GET /health anonimo != 200, ESCO-148), o no se pudo comprobar.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -191,6 +192,18 @@ export function resumenFalloParaTelegram(log) {
       'No es deriva de reloj ni de hash.'
     );
   }
+  if (texto.includes(FRASE_VERIFY_JWT)) {
+    return (
+      'producción rota: verify_jwt quedó activo en la edge function. ' +
+      'Publicar solo con la CLI (npx supabase functions deploy). No es un fallo de autenticación del detector.'
+    );
+  }
+  if (texto.includes(FRASE_HEALTH)) {
+    return (
+      'producción rota: el GET anónimo a /health está caído. ' +
+      'No es un fallo de autenticación del detector.'
+    );
+  }
   if (texto.includes('DERIVA DE DESPLIEGUE')) {
     return (
       'deriva de despliegue: hay código en main que no está en producción ' +
@@ -201,6 +214,72 @@ export function resumenFalloParaTelegram(log) {
     'el chequeo falló por otra causa. No es un 401/403 ni deriva clasificada. ' +
     'Revisar el log de la corrida.'
   );
+}
+
+/**
+ * Frases estables de los dos modos de fallo de ESCO-148. El 2026-10-07 una
+ * publicacion manual por el conector (no por la CLI) rompio produccion ~16 min:
+ * primero un worker que no arrancaba y despues `verify_jwt=true` (v271), con
+ * el gateway devolviendo 401 a los cron de clima y a /health. Reloj y hash no
+ * ven ninguno de los dos. No contienen `DERIVA DE DESPLIEGUE` ni la frase de
+ * secreto, para que el aviso de Telegram no los confunda.
+ */
+export const FRASE_VERIFY_JWT = 'PRODUCCION ROTA: verify_jwt activo';
+export const FRASE_HEALTH = 'PRODUCCION ROTA: health anónimo caído';
+
+/**
+ * La funcion corre con `verify_jwt=false` (supabase/config.toml): el webhook
+ * de Telegram y los pg_cron llegan sin JWT y la puerta vive dentro de cada
+ * handler. Solo `false` literal pasa; un campo ausente falla cerrado.
+ * @param {unknown} valor
+ * @returns {{ ok: boolean, motivo: string }}
+ */
+export function evaluarVerifyJwt(valor) {
+  if (valor === false) return { ok: true, motivo: 'verify_jwt=false' };
+  return {
+    ok: false,
+    motivo:
+      `${FRASE_VERIFY_JWT} (la Management API reporta verify_jwt=${JSON.stringify(valor)}). ` +
+      `El gateway rechaza con 401 los cron de clima/hato y el webhook de Telegram. ` +
+      `Publicar con:  npx supabase functions deploy make-server-1ccce916 ` +
+      `(lee verify_jwt=false de supabase/config.toml)`,
+  };
+}
+
+/**
+ * @param {{ proyecto: string, funcion: string }} opciones
+ */
+export function urlHealth({ proyecto, funcion }) {
+  return `https://${proyecto}.supabase.co/functions/v1/${funcion}/health`;
+}
+
+/**
+ * @param {{ status?: number, error?: string }} resultado
+ * @returns {{ ok: boolean, motivo: string }}
+ */
+export function evaluarHealth({ status, error }) {
+  if (error === undefined && status === 200) return { ok: true, motivo: 'GET /health anonimo = 200' };
+  const causa = error !== undefined ? `error de red: ${error}` : `HTTP ${status}`;
+  return {
+    ok: false,
+    motivo:
+      `${FRASE_HEALTH} (GET /health sin credenciales: ${causa}; se espera 200). ` +
+      `401 = verify_jwt activo en el gateway; 5xx = el worker no arranca`,
+  };
+}
+
+/**
+ * GET anonimo a /health: sin Authorization ni apikey, igual que un pg_cron.
+ * @param {{ proyecto: string, funcion: string }} opciones
+ * @returns {Promise<{ ok: boolean, motivo: string }>}
+ */
+export async function comprobarHealth({ proyecto, funcion }) {
+  try {
+    const respuesta = await fetch(urlHealth({ proyecto, funcion }), { method: 'GET', headers: {} });
+    return evaluarHealth({ status: respuesta.status });
+  } catch (e) {
+    return evaluarHealth({ error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /**
@@ -265,10 +344,11 @@ export function fechaUltimoCommit(ruta) {
 }
 
 /**
- * Un solo llamado a la Management API trae las dos señales: `updated_at`
- * (reloj) y `ezbr_sha256` (contenido realmente publicado).
+ * Un solo llamado a la Management API trae las tres señales: `updated_at`
+ * (reloj), `ezbr_sha256` (contenido realmente publicado) y `verify_jwt`
+ * (ESCO-148).
  * @param {{ proyecto: string, funcion: string, token: string }} opciones
- * @returns {Promise<{ updatedAt: number|string, hash: string }>}
+ * @returns {Promise<{ updatedAt: number|string, hash: string, verifyJwt: unknown }>}
  */
 export async function datosDelDespliegue({ proyecto, funcion, token }) {
   const url = `https://api.supabase.com/v1/projects/${proyecto}/functions`;
@@ -292,7 +372,11 @@ export async function datosDelDespliegue({ proyecto, funcion, token }) {
       `la edge function "${funcion}" no trajo ezbr_sha256 en la respuesta de la Management API`,
     );
   }
-  return { updatedAt: encontrada.updated_at, hash: encontrada.ezbr_sha256 };
+  return {
+    updatedAt: encontrada.updated_at,
+    hash: encontrada.ezbr_sha256,
+    verifyJwt: encontrada.verify_jwt,
+  };
 }
 
 async function main() {
@@ -312,7 +396,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { updatedAt, hash } = await datosDelDespliegue({ proyecto, funcion, token });
+  const { updatedAt, hash, verifyJwt } = await datosDelDespliegue({ proyecto, funcion, token });
   const commitISO = fechaUltimoCommit(ruta);
   const commitSha = execFileSync('git', ['log', '-1', '--format=%H', '--', ruta], {
     encoding: 'utf8',
@@ -338,11 +422,21 @@ async function main() {
   console.log(`hash publicado: ${hash}`);
   console.log(`chequeo hash  : ${motivo}`);
 
+  // ESCO-148: produccion puede estar rota aunque reloj y hash esten al dia.
+  const jwt = evaluarVerifyJwt(verifyJwt);
+  const health = await comprobarHealth({ proyecto, funcion });
+  console.log(`verify_jwt    : ${JSON.stringify(verifyJwt)}`);
+  console.log(`health anonimo: ${health.motivo}`);
+  if (!jwt.ok) console.error(`\n${jwt.motivo}.`);
+  if (!health.ok) console.error(`\n${health.motivo}.`);
+  const produccionRota = !jwt.ok || !health.ok;
+
   if (!hayDeriva && !hayDerivaPorHash) {
     if (aviso) {
       console.warn(`\n${motivo}.`);
     }
-    console.log('\nOK: sin deriva de reloj y sin deriva de contenido.');
+    if (produccionRota) process.exit(1);
+    console.log('\nOK: sin deriva de reloj, sin deriva de contenido, verify_jwt=false y health 200.');
     return;
   }
 

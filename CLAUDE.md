@@ -959,6 +959,7 @@ After modifying any Supabase edge function source in `src/supabase/functions/ser
 2. **Sync source**: keep `src/supabase/functions/server/` and `supabase/functions/make-server-1ccce916/` in sync — changes to one must be applied to the other.
 3. **Verify**: after deploy, confirm the function is live by checking logs or hitting the health endpoint.
 4. Forgetting to redeploy is a common source of "it works locally but not in production" issues.
+5. **Publish only with `npx supabase functions deploy make-server-1ccce916`**, which reads `verify_jwt = false` from `supabase/config.toml`. Never use a connector's bundle/publish path: on 2026-10-07 it set `verify_jwt=true` and broke production for ~16 min (ESCO-148). The drift detector now fails if `verify_jwt` is not `false` or an anonymous `GET /health` is not 200.
 
 The daily check `.github/workflows/deteccion-deriva-despliegue.yml` compares production `make-server-1ccce916` with `main`. A Management API **401/403** is an invalid or expired repository secret `SUPABASE_ACCESS_TOKEN`. It is not clock drift and it is not hash drift. Sticky `ezbr_sha256` behavior from #272 stays: an unchanged hash with a green clock is a warning, not exit 1. On failure, the job sends Telegram when repository secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` exist. If either is missing, the alert step prints a warning (ESCO-78) and does not fail silently. Rotation steps: [`docs/runbook_detector_deriva.md`](docs/runbook_detector_deriva.md).
 
