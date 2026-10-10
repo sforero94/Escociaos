@@ -95,6 +95,15 @@ describe('Conciliaciones operativas: FK y datos ausentes', () => {
     const cancelado = await ejecutarConsultaEsco('get_hato_tratamientos', { estado: 'cancelado' }, q, '2026-10-07');
     expect(resumen(cancelado).pasos_vencidos).toBe(0);
   });
+  it('ESCO-146: con rango y sin estado devuelve también los tratamientos completados del período', async () => {
+    const q = consulta({ hato_tratamientos: [{ id: 'a', estado: 'activo', fecha_inicio: '2026-09-10' }, { id: 'c', estado: 'completado', fecha_inicio: '2026-09-15' }, { id: 'v', estado: 'completado', fecha_inicio: '2026-07-01' }] });
+    const conRango = await ejecutarConsultaEsco('get_hato_tratamientos', rango, q, '2026-10-07');
+    expect(detalle(conRango).map(t => t.id).sort()).toEqual(['a', 'c']);
+    const sinRango = await ejecutarConsultaEsco('get_hato_tratamientos', {}, q, '2026-10-07');
+    expect(detalle(sinRango).map(t => t.id)).toEqual(['a']);
+    const conEstado = await ejecutarConsultaEsco('get_hato_tratamientos', { ...rango, estado: 'activo' }, q, '2026-10-07');
+    expect(detalle(conEstado).map(t => t.id)).toEqual(['a']);
+  });
   it('ceba agrega movimientos confirmados aunque estén fuera del período y señala pendientes', async () => {
     const r = await ejecutarConsultaEsco('get_ganado_conciliacion', rango, consulta({ fin_transacciones_ganado: [{ id: 't', fecha: '2026-09-02', es_hato: false, tipo: 'compra', cantidad_cabezas: 20 }], gan_movimientos: [{ id: 'm1', fecha: '2026-08-31', transaccion_ganado_id: 't', tipo: 'compra', estado: 'confirmado', novillos_delta: 8, toros_delta: 2 }, { id: 'm2', fecha: '2026-09-02', transaccion_ganado_id: 't', tipo: 'compra', estado: 'pendiente', novillos_delta: 10, toros_delta: 0 }] }));
     expect(detalle(r)[0]).toMatchObject({ cabezas_fisicas_confirmadas: 10, diferencia_cabezas: 10, estado_conciliacion: 'pendiente_confirmacion' });

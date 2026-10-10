@@ -2504,7 +2504,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
     // el resto del modulo: un dia `cobertura_parcial` con lluvia medida NO es un
     // dia sin dato (migracion 122), solo lo es el de 0 mm.
     const desdeRaw = await supabaseQuery('clima_resumen_diario',
-      `select=fecha,lluvia_total_mm,lluvia_confianza&lluvia_confianza=in.(contador_congelado,cobertura_parcial)&fecha=gt.${e(ultimaLluviaFecha)}&limit=3000`,
+      `select=fecha,lluvia_total_mm,lluvia_confianza&lluvia_confianza=in.(contador_congelado,cobertura_parcial)&fecha=gt.${e(ultimaLluviaFecha)}&order=fecha.asc,station_id.asc&limit=3000`,
     ) as Array<{ fecha: string; lluvia_total_mm: number | null; lluvia_confianza: string | null }>;
     diasSinDatoDesdeEntonces = (desdeRaw ?? []).filter((d) => lluviaConfiable(d) === null).length;
   }

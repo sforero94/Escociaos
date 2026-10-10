@@ -812,3 +812,9 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - Los tests del detector viven en `scripts/check-deploy-drift.test.mjs`, NO en `src/__tests__/`;
   vitest los recoge con su glob por defecto.
 - v272 (15:10:31Z del 2026-10-07) = codigo de `abadada` (#311), hash `ed115fab…`, verify_jwt=false.
+
+## Corrida 2026-10-09-viernes
+- `scripts/sync-esco-consultas.py` copia `escoConsultas.ts` a los dos arboles edge Y copia `chat.tsx` de src a supabase. Antes de correrlo, `cmp` las dos `chat.tsx`, o mete cambios ajenos al diff. [corrida: 2026-10-09-viernes]
+- El helper `consulta()` de `escoConsultas.test.ts` aplica los filtros gte/lte, asi que una prueba de rango ahi ejercita la query real. [corrida: 2026-10-09-viernes]
+- Las pruebas del detector de deriva viven en `scripts/check-deploy-drift.test.mjs` (no en `src/__tests__/`); vitest las recoge con el glob por defecto. Tras PR #322 el detector falla con `verify_jwt !== false` (campo ausente = falla) y con GET anonimo a `/functions/v1/make-server-1ccce916/health` distinto de 200; frases estables `PRODUCCION ROTA: …`. [corrida: 2026-10-09-viernes]
+- v272 (2026-10-07 15:10:31Z) = codigo de abadada (#311), hash ed115fab…, verify_jwt=false. [corrida: 2026-10-09-viernes]

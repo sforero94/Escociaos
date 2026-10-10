@@ -21,7 +21,7 @@ const definiciones: Array<[string, string, boolean, Record<string, unknown>?, st
   ['get_hato_partos', 'PARTOS OCURRIDOS en todo el hato por período: madre, cría vinculada o candidata por madre/fecha, nacimiento, destino y confianza. Usar SIEMPRE para partos nuevos/recientes o de un mes. No usar panorama reproductivo para negar partos.', true],
   ['get_hato_eventos', 'Historial de eventos del hato por período, incluyendo madres inactivas. Filtrar tipo (parto, servicio, secado, aborto, venta, muerte). No confundir con fechas probables futuras.', true, { tipo: { type: 'string' } }],
   ['get_hato_animales', 'Listado de animales con madre, padre y crías; filtrar nombre, chapeta, estado o fechas de nacimiento. Incluye inactivos salvo filtro explícito. Para tabla madre-cría de PARTOS usar get_hato_partos.', false, { estado: { type: 'string' } }],
-  ['get_hato_tratamientos', 'Tratamientos prescritos y pasos programados/ejecutados/pendientes/vencidos. El rango filtra fecha de inicio del tratamiento, no fecha de cada paso; omitir rango para todos los tratamientos activos.', false, { estado: { type: 'string' } }],
+  ['get_hato_tratamientos', 'Tratamientos prescritos y pasos programados/ejecutados/pendientes/vencidos. El rango filtra fecha de inicio del tratamiento, no fecha de cada paso; con rango y sin estado incluye todos los estados (activo, completado, cancelado); omitir rango para todos los tratamientos activos.', false, { estado: { type: 'string' } }],
   ['get_hato_chequeos', 'Historial de chequeos veterinarios y filas por animal/fecha, con datos normalizados, observaciones crudas e issues. No inferir evolución a partir del último chequeo solamente.', true],
   ['get_hato_salidas_finanzas', 'Ventas y salidas del hato enlazadas por IDs a ingresos/transacciones y estado del animal. Distingue venta de madre y venta de cría sin ficha; no contar macho_vendido como venta de la madre.', true],
   ['get_ganado_conciliacion', 'Transacciones de CEBA cruzadas con movimientos físicos confirmados/pendientes/descartados y existencias actuales. Cabezas compradas/vendidas vs movimientos vinculados; inventario actual no es saldo histórico.', true, { transaccion_id: { type: 'string' } }],
@@ -165,7 +165,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
   if (nombre === 'get_hato_tratamientos') {
     const [as, tratamientos] = await Promise.all([animals(), read('hato_tratamientos', 'id,animal_id,chequeo_id,protocolo_id,nombre,fecha_inicio,estado,nota,fuente', 'fecha_inicio')]);
     const am = mapa(as);
-    const ts = tratamientos.filter(t => seleccionAnimal(am.get(texto(t.animal_id)) ?? {}) && (args.estado ? t.estado === args.estado : t.estado === 'activo'));
+    const ts = tratamientos.filter(t => seleccionAnimal(am.get(texto(t.animal_id)) ?? {}) && (args.estado ? t.estado === args.estado : (desde || hasta) ? true : t.estado === 'activo'));
     const protocolos = mapa(await related('hato_protocolos', 'id,nombre,descripcion', 'id', ts.map(t => t.protocolo_id)));
     const pasos = await related('hato_tratamiento_pasos', 'id,tratamiento_id,paso_num,descripcion,fecha_programada,fecha_ejecutada,requiere_confirmacion', 'tratamiento_id', ts.map(t => t.id));
     const activos = new Set(ts.filter(t => t.estado === 'activo').map(t => t.id));

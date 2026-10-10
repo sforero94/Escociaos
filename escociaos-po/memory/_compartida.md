@@ -2315,12 +2315,13 @@ La auto-poda no aplica. El hallazgo es de las 05:50Z de hoy: el lunes no lo habr
 - Ledger hasta la 171 (`20261001230824`); 164–171 con archivo en `main`.
 - ESCO-137: `max(clima_lecturas.timestamp)` seguia en 2026-10-01 05:50:01Z a las 11:25Z del 10-02 (>29 h). Umbral P1 de la ficha: 2026-10-03 05:50Z. El lunes debe comprobarlo.
 
-## Racha del viernes (regla de auto-poda del drenaje) — actualizada 2026-10-02
+## Racha del viernes (regla de auto-poda del drenaje) — actualizada 2026-10-09
 | Corrida | Conjunto elegible | Racha de vacios |
 |---|---|---|
 | 2026-09-18-viernes | VACIO (vaciado manual de Santiago) | 1 |
 | 2026-09-25-viernes | 1 elegible (ESCO-127) | 0 |
-| **2026-10-02-viernes** | **VACIO (las 4 abiertas exigen decision de Santiago)** | **1** |
+| 2026-10-02-viernes | VACIO (las 4 abiertas exigen decision de Santiago) | 1 |
+| **2026-10-09-viernes** | **5 elegibles, 5 PRs (#319–#323)** | **0** |
 La auto-poda no aplica. Ojo: este vacio no es falta de hallazgos sino que todo lo abierto es `decision`/`datos`; el cuello son las decisiones, no el drenaje.
 
 ## Corrida 2026-10-05-lunes (primer lunes, roster de 8)
@@ -2345,3 +2346,11 @@ La auto-poda no aplica. Ojo: este vacio no es falta de hallazgos sino que todo l
 | 2026-10-01-jueves | 1 |
 | **2026-10-08-jueves** | **4 (1 P1 + 2 P2 + 1 P3). Racha de ceros: 0** |
 La auto-poda no aplica. El P1 (ESCO-149) nacio 24 h antes de esta corrida; el lunes lo habria dejado correr 4 dias mas.
+
+## Corrida 2026-10-09-viernes — hechos transversales
+- Preflight verde, `ATTENDED=0`, cero prompts. `COMPOSIO_REMOTE_BASH_TOOL` permitido al orquestador para el `jq` sobre Notion. [corrida: 2026-10-09-viernes]
+- 5 elegibles = tope 5: un agente por ficha en su worktree + uno hecho por el orquestador (docs de 2 lineas). Los 4 agentes volvieron en 4–9 min. [corrida: 2026-10-09-viernes]
+- **`mcp__Supabase_Escritura__generate_typescript_types` funciona y es solo lectura**: asi se regenero `database.ts` (PR #323). [corrida: 2026-10-09-viernes]
+- **Estacion de clima caida otra vez desde 2026-10-09 00:45Z**: `clima-sync-wu` da 200 con `"No data available"`. Diagnostico rapido: `net._http_response` (contenido) distingue estacion caida de sync roto; `cron.job_run_details` siempre dice `succeeded`. **Lunes 2026-10-12: si sigue, filar (reabre el patron de ESCO-137).** [corrida: 2026-10-09-viernes]
+- **Para el lunes (code-quality)**: 5 posibles defectos en `calculosAplicaciones.ts` que fijo PR #321 como 'COMPORTAMIENTO ACTUAL, posible defecto' (ceil de ruido flotante, coma decimal en presentacion, Bulto 0 kg = Infinity, `sin_stock` nunca asignado, litros+kilos sumados en fertilizacion). Triaje: son reglas de calculo GlobalGAP, probablemente `decision`. [corrida: 2026-10-09-viernes]
+- Linea base 2026-10-09: suite ~203 ficheros / ~4.136 tests en `main`; lint 0 errores / 921 warnings; casts `as any` de cliente 83 en `main`. [corrida: 2026-10-09-viernes]
