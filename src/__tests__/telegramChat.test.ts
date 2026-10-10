@@ -65,13 +65,13 @@ describe('Telegram Message History', () => {
 // ============================================================================
 
 describe('Handler de texto libre con persistencia', () => {
-  it('handler resuelve userId con resolverUsuarioTelegram, no con ctx.telegramUser.usuario_id', () => {
+  it('handler resuelve userId con cuentaActivaTelegram, no con ctx.telegramUser.usuario_id', () => {
     const handlerSection = botSource.slice(
       botSource.indexOf('bot.on("message:text"'),
       botSource.indexOf('bot.api.setMyCommands') || botSource.length
     );
-    expect(handlerSection).toContain('resolverUsuarioTelegram');
-    expect(handlerSection).toContain('exigirUsuarioIdVinculado');
+    expect(handlerSection).toContain('cuentaActivaTelegram');
+    expect(handlerSection).toContain('vigente.usuarioId');
     expect(handlerSection).not.toMatch(/ctx\.telegramUser\?\.usuario_id|ctx\.telegramUser\.usuario_id/);
   });
 
@@ -285,7 +285,7 @@ describe('Bot.ts tiene funciones de chart', () => {
     expect(botSource).toContain('function buildQuickChartUrl');
   });
 
-  it('handler debe usar replyWithPhoto para enviar charts', () => {
-    expect(botSource).toContain('replyWithPhoto');
+  it('handler envía charts al destino privado autorizado', () => {
+    expect(botSource).toContain('ctx.api.sendPhoto(destino, url,');
   });
 });

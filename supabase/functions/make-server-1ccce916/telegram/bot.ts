@@ -1,3 +1,5 @@
+import { esConsultaGrupoEsco } from './politicaGrupoEsco.ts';
+import { confirmarMemoriaTelegram } from '../memory-confirmation.ts';
 // telegram/bot.ts — Grammy bot setup with webhook handler for Escocia OS
 //
 // Uses grammy conversations for multi-step flows and the Esco AI engine
@@ -13,6 +15,8 @@ import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { Context as HonoContext } from "npm:hono";
 
 import type { BotContext, TelegramUsuario } from "./types.ts";
+import { cuentaActivaTelegram, autorizarDeshacerHato } from "./cuentaActivaTelegram.ts";
+import { vincularCuentaTelegram } from "./vincularCuentaTelegram.ts";
 import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
@@ -184,6 +188,18 @@ function getBot(): Bot<BotContext> {
     },
   });
 
+  // Group Esco never uses a shared chat session or emits private answers publicly.
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type === "private") return next();
+    if (!ctx.from || (ctx.chat?.type !== "group" && ctx.chat?.type !== "supergroup")) return;
+    if (!ctx.message?.text || ctx.message.text.startsWith("/")) {
+      await ctx.reply("Para registrar datos o usar botones, abre el chat privado con Esco.");
+      return;
+    }
+    if (!esConsultaGrupoEsco(ctx.message, ctx.me)) return;
+    await responderConsultaEsco(ctx, true);
+  });
+
   // --- Session middleware (persisted in `telegram_sessions` table) -----------
 
   const supabaseForStorage = getSupabaseAdmin();
@@ -226,6 +242,17 @@ function getBot(): Bot<BotContext> {
     }
 
     ctx.telegramUser = (user as TelegramUsuario) ?? null;
+    // Registered workers may remain unlinked; preserve that existing lane.
+    // A linked application account must be freshly active before any session
+    // conversation resumes or service-role workflow writes become reachable.
+    if (user?.usuario_id !== null && user?.usuario_id !== undefined) {
+      const { data: linkedProfile, error: linkedError } = await supabase
+        .from("usuarios").select("id,activo").eq("id", user.usuario_id).maybeSingle();
+      if (linkedError || linkedProfile?.id !== user.usuario_id || linkedProfile?.activo !== true) {
+        await ctx.reply("No pude verificar que tu cuenta vinculada esté activa. Habla con Gerencia.");
+        return;
+      }
+    }
     await next();
   });
 
@@ -338,56 +365,16 @@ function getBot(): Bot<BotContext> {
 
     // Deep-link vinculacion: /start <code>
     if (payload) {
-      const supabase = getSupabaseAdmin();
-      const { data: pendingUser, error } = await supabase
-        .from("telegram_usuarios")
-        .select("*")
-        .eq("codigo_vinculacion", payload)
-        .is("telegram_id", null)
-        .single();
-
-      if (error || !pendingUser) {
+      const linkedUser = await vincularCuentaTelegram(
+        getSupabaseAdmin(), payload, ctx.from?.id, ctx.from?.username,
+      );
+      if (!linkedUser) {
         await ctx.reply(
-          "Código inválido o ya utilizado. Pide un nuevo código a tu administrador.",
+          "No pudimos confirmar la vinculación. El código puede estar vencido, revocado o ya utilizado. Pide un nuevo código a Gerencia.",
         );
         return;
       }
-
-      // Check expiration
-      const expiry = new Date(pendingUser.codigo_expira_at);
-      if (expiry < new Date()) {
-        await ctx.reply(
-          "Este código ha expirado. Pide un nuevo código a tu administrador.",
-        );
-        return;
-      }
-
-      // Link the telegram account
-      const { error: updateError } = await supabase
-        .from("telegram_usuarios")
-        .update({
-          telegram_id: ctx.from!.id,
-          telegram_username: ctx.from!.username ?? null,
-          codigo_vinculacion: null,
-          codigo_expira_at: null,
-          activo: true,
-        })
-        .eq("id", pendingUser.id);
-
-      if (updateError) {
-        console.error("[Telegram] Vinculacion error:", updateError);
-        await ctx.reply("Error al vincular tu cuenta. Intenta de nuevo.");
-        return;
-      }
-
-      // Reload user into context
-      const { data: linkedUser } = await supabase
-        .from("telegram_usuarios")
-        .select("*")
-        .eq("id", pendingUser.id)
-        .single();
-
-      ctx.telegramUser = linkedUser as TelegramUsuario;
+      ctx.telegramUser = linkedUser;
 
       await ctx.reply(
         `¡Cuenta vinculada exitosamente! Bienvenido/a, ${linkedUser.nombre_display}.`,
@@ -1069,7 +1056,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx)) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
     const excepcionId = ctx.match?.[1];
     const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
     if (!excepcionId || !letraDecision) return;
@@ -1092,7 +1079,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D):c([1-7])$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx)) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
     const excepcionId = ctx.match?.[1];
     const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
     const indice = Number(ctx.match?.[3]);
@@ -1129,7 +1116,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D):c([1-7]):ok$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx)) || !ctx.telegramUser) return;
     const excepcionId = ctx.match?.[1];
     const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
     const indice = Number(ctx.match?.[3]);
@@ -1216,7 +1203,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):forzar$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx)) || !ctx.telegramUser) return;
     const excepcionId = ctx.match?.[1];
     if (!excepcionId) return;
     const sb = getSupabaseAdmin();
@@ -1317,73 +1304,19 @@ function getBot(): Bot<BotContext> {
     await ctx.answerCallbackQuery();
     const token = ctx.match?.[1];
     if (!token) return;
-    const resueltoMem = exigirUsuarioIdVinculado(
-      await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
-    );
-    if (!resueltoMem.ok) {
-      await ctx.reply(mensajeResolverUsuarioTelegram(resueltoMem.motivo));
+    const cuentaMem = await cuentaActivaTelegram(getSupabaseAdmin(), ctx.from?.id, "consultas");
+    if (!cuentaMem || cuentaMem.rol !== "Gerencia") {
+      await ctx.reply("No pude verificar tu acceso actual a Esco.");
       return;
     }
-    const usuarioIdMem = resueltoMem.usuarioId;
-    const sb = getSupabaseAdmin();
-    // Reach into Esco directly via the in-process executor by calling the
-    // edge function endpoint? No — the proposal cache is in-memory inside
-    // chat.tsx. Sending another LLM message with the right tool call is the
-    // cleanest way; but for the contract we just need commit_memory_save to
-    // run. Since the cache is in-process and bot + chat live in the same
-    // edge function, we import the executor's behaviour by issuing a synthetic
-    // tool call through llmToolLoop with a forced tool_choice. Simpler: just
-    // call the dispatch directly via a fetch-less internal route.
-    //
-    // For Phase 3D, we keep it pragmatic: persist directly using the service
-    // role. The proposal token expires in 30 min and the service role bypass
-    // is acceptable here because the user just tapped ✅ on Telegram.
-    const conversationId = await getOrCreateTelegramConversation(usuarioIdMem);
-    // Rehydrate: find the most recent assistant message whose metadata.tool_interactions
-    // contains a propose_memory_save with this token
-    const { data: assistantMsgs } = await sb
-      .from("chat_messages")
-      .select("metadata")
-      .eq("conversation_id", conversationId)
-      .eq("role", "assistant")
-      .order("created_at", { ascending: false })
-      .limit(5);
-    type Interaction = { tool: string; args?: Record<string, unknown>; result_summary?: string };
-    let content: string | null = null;
-    for (const m of assistantMsgs ?? []) {
-      const meta = m.metadata as { tool_interactions?: Interaction[] } | null;
-      const hit = meta?.tool_interactions?.find((t) =>
-        t.tool === "propose_memory_save" && typeof t.result_summary === "string" && t.result_summary.includes(token)
-      );
-      if (hit?.result_summary) {
-        try {
-          const parsed = JSON.parse(hit.result_summary);
-          content = typeof parsed.content === "string" ? parsed.content : null;
-        } catch {
-          // result_summary is truncated to 500 chars in chat.tsx; if it cuts off
-          // mid-JSON, fall back to the original args.content
-          content = (hit.args?.content as string) ?? null;
-        }
-        break;
-      }
+    try {
+      const result = await confirmarMemoriaTelegram(getSupabaseAdmin(), ctx.from?.id, token);
+      // Plain text avoids Markdown fallback changing the confirmed payload.
+      await ctx.editMessageText(`✅ Guardado: ${result.content.slice(0, 200)}`);
+    } catch (error) {
+      console.error('[Telegram] Memory confirmation failed:', error instanceof Error ? error.message : 'unknown');
+      await ctx.reply('No pude confirmar la memoria. Puede estar expirada o tu acceso pudo cambiar. Intenta de nuevo.');
     }
-    if (!content) {
-      await ctx.editMessageText("No pude recuperar la memoria propuesta. Intenta de nuevo.");
-      return;
-    }
-    const { error } = await sb.from("esco_memorias").insert({
-      user_id: usuarioIdMem,
-      content: content.slice(0, 1000),
-      source_channel: "telegram",
-    });
-    if (error) {
-      console.error("[Telegram] Memory save error:", error.message);
-      await ctx.editMessageText(`No pude guardar la memoria: ${error.message}`);
-      return;
-    }
-    await ctx.editMessageText(`✅ Guardado: _${content.slice(0, 200)}_`, { parse_mode: "Markdown" }).catch(
-      () => ctx.editMessageText(`✅ Guardado: ${content.slice(0, 200)}`),
-    );
   });
 
   bot.callbackQuery(/^mem_cancel:(.+)$/, async (ctx) => {
@@ -1434,6 +1367,11 @@ function getBot(): Bot<BotContext> {
     const eventoId = parsed.eventoId;
 
     const sb = getSupabaseAdmin();
+    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
+      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
+      return;
+    }
+
     const { data: evento } = await sb
       .from("hato_eventos")
       .select("id, fuente, animal_id, fecha, created_at, datos, tipo, tipo_servicio, cria_id")
@@ -1545,6 +1483,12 @@ function getBot(): Bot<BotContext> {
       usos,
     });
 
+
+    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
+      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
+      return;
+    }
+
     // El uso de pajilla se borra PRIMERO: si fallara después del evento, el
     // inventario quedaría descontado por un servicio que ya no existe.
     if (usoId) {
@@ -1608,6 +1552,11 @@ function getBot(): Bot<BotContext> {
     }
 
     const sb = getSupabaseAdmin();
+    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
+      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
+      return;
+    }
+
     const { data: tratamiento } = await sb
       .from("hato_tratamientos")
       .select("id, fuente, hato_tratamiento_pasos(fecha_ejecutada)")
@@ -1628,6 +1577,12 @@ function getBot(): Bot<BotContext> {
       await ctx.answerCallbackQuery({
         text: "Ya marcaron un paso como hecho. Corrígelo desde la ficha de la vaca.",
       });
+      return;
+    }
+
+
+    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
+      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
       return;
     }
 
@@ -2100,19 +2055,14 @@ function getBot(): Bot<BotContext> {
       if (t.tool !== "propose_memory_save") continue;
       try {
         const parsed = t.result_summary ? JSON.parse(t.result_summary) : null;
-        if (parsed?._memory_proposal && typeof parsed.token === "string") {
-          return {
-            token: parsed.token,
-            content: typeof parsed.content === "string"
-              ? parsed.content
-              : (t.args?.content as string) ?? "",
-          };
+        if (parsed?._memory_proposal === true && typeof parsed.token === "string"
+          && /^mem_[0-9a-z]{1,10}_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(parsed.token)
+          && typeof parsed.content === "string" && parsed.content.length > 0 && parsed.content.length <= 500
+          && parsed.content.trim() === parsed.content) {
+          return { token: parsed.token, content: parsed.content };
         }
       } catch {
-        // result_summary truncated mid-JSON; fall back to args
-        if (typeof t.args?.content === "string") {
-          return { token: "unknown", content: t.args.content };
-        }
+        // A missing durable result cannot prove which exact payload was registered.
       }
     }
     return null;
@@ -2487,30 +2437,40 @@ function getBot(): Bot<BotContext> {
   // FREE-TEXT FALLBACK — Esco AI engine with conversation persistence
   // ==========================================================================
 
-  bot.on("message:text", async (ctx) => {
-    if (!ctx.telegramUser) return;
+  async function responderConsultaEsco(ctx: BotContext, grupo = false) {
 
-    if (!ctx.telegramUser.modulos_permitidos?.includes("consultas")) {
+    const cuenta = await cuentaActivaTelegram(getSupabaseAdmin(), ctx.from?.id, "consultas");
+    if (!cuenta || cuenta.rol !== "Gerencia") {
       await ctx.reply(
         "No tienes acceso a consultas. Usa los comandos del menú.",
       );
       return;
     }
 
-    const userMessage = ctx.message.text;
+    const userMessage = ctx.message?.text;
     if (!userMessage?.trim()) return;
 
-    await ctx.replyWithChatAction("typing");
-
-    try {
-      const resueltoEsco = exigirUsuarioIdVinculado(
-        await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
-      );
-      if (!resueltoEsco.ok) {
-        await ctx.reply(mensajeResolverUsuarioTelegram(resueltoEsco.motivo));
+    const destino = grupo ? ctx.from!.id : ctx.chat!.id;
+    const reply = (text: string, options?: Parameters<typeof ctx.api.sendMessage>[2]) =>
+      ctx.api.sendMessage(destino, text, options);
+    if (grupo) {
+      try {
+        await reply("Recibí tu consulta del grupo. La respuesta se mostrará solo aquí.");
+      } catch {
+        await ctx.reply("Abre primero el chat privado con Esco y envía /start. Luego repite tu consulta.");
         return;
       }
-      const userId = resueltoEsco.usuarioId;
+      await ctx.reply("Te responderé en el chat privado con Esco.");
+    }
+    await ctx.api.sendChatAction(destino, "typing");
+
+    try {
+      const vigente = await cuentaActivaTelegram(getSupabaseAdmin(), ctx.from?.id, "consultas");
+      if (!vigente || vigente.rol !== "Gerencia" || vigente.usuarioId !== cuenta.usuarioId) {
+        await reply("No pude verificar tu acceso actual a Esco.");
+        return;
+      }
+      const userId = vigente.usuarioId;
 
       // Persist conversation
       const conversationId = await getOrCreateTelegramConversation(userId);
@@ -2529,19 +2489,16 @@ function getBot(): Bot<BotContext> {
 
       // If Esco proposed saving a memory, render inline confirmation buttons
       // before the regular response. The token roundtrips through callback_data
-      // back to commit_memory_save when the user taps ✅.
+      // back to the human-only confirmation RPC when the user taps ✅.
       const memoryProposal = findMemoryProposal(toolInteractions);
       if (memoryProposal) {
         const kb = new InlineKeyboard()
           .text("✅ Guardar", `mem_save:${memoryProposal.token}`)
           .text("❌ Cancelar", `mem_cancel:${memoryProposal.token}`);
-        const preview = memoryProposal.content.length > 200
-          ? memoryProposal.content.slice(0, 200) + "…"
-          : memoryProposal.content;
-        await ctx.reply(`📌 ¿Guardo esto para futuras conversaciones?\n\n_${preview}_`, {
-          parse_mode: "Markdown",
-          reply_markup: kb,
-        }).catch(() => ctx.reply(`📌 ¿Guardo esto para futuras conversaciones?\n\n${preview}`, { reply_markup: kb }));
+        // Show the entire <=500-character registered payload before approval.
+        const preview = memoryProposal.content;
+        // Plain text preserves every character, including Markdown syntax.
+        await reply(`📌 ¿Guardo esto para futuras conversaciones?\n\n${preview}`, { reply_markup: kb });
       }
 
       // Extract charts and send as images, text as messages
@@ -2551,15 +2508,13 @@ function getBot(): Bot<BotContext> {
       for (const part of textParts) {
         const formatted = formatForTelegram(part);
         if (formatted.length <= 4096) {
-          await ctx
-            .reply(formatted, { parse_mode: "Markdown" })
-            .catch(() => ctx.reply(formatted));
+          await reply(formatted, { parse_mode: "Markdown" })
+            .catch(() => reply(formatted));
         } else {
           const chunks = splitMessage(formatted, 4096);
           for (const chunk of chunks) {
-            await ctx
-              .reply(chunk, { parse_mode: "Markdown" })
-              .catch(() => ctx.reply(chunk));
+            await reply(chunk, { parse_mode: "Markdown" })
+              .catch(() => reply(chunk));
           }
         }
       }
@@ -2568,7 +2523,7 @@ function getBot(): Bot<BotContext> {
       for (const chart of charts) {
         try {
           const url = buildQuickChartUrl(chart);
-          await ctx.replyWithPhoto(url, {
+          await ctx.api.sendPhoto(destino, url, {
             caption: chart.title,
           });
         } catch (chartErr) {
@@ -2578,11 +2533,13 @@ function getBot(): Bot<BotContext> {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
       console.error("[Telegram] Esco AI error:", msg);
-      await ctx.reply(
+      await reply(
         "Hubo un error al procesar tu consulta. Intenta de nuevo.",
       );
     }
-  });
+  }
+
+  bot.on("message:text", (ctx) => responderConsultaEsco(ctx));
 
   // Set the "/" command menu (fire-and-forget, errors are non-fatal)
   bot.api.setMyCommands([

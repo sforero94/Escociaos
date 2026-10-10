@@ -17,6 +17,9 @@ describe('invoice metadata contract (not file byte validation)', () => {
     expect(validarArchivoFactura({ type: 'image/png', size: MAX_FACTURA_BYTES })).toBeNull();
     expect(validarArchivoFactura({ type: 'image/png', size: MAX_FACTURA_BYTES + 1 })).toContain('5MB');
   });
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])('rejects malformed byte length %s', size => {
+    expect(validarArchivoFactura({ type: 'image/png', size })).toBeTruthy();
+  });
   it.each(['image/svg+xml', 'image/webp', 'text/html', '', 'toString', '__proto__'])('rejects %s', type => {
     expect(validarArchivoFactura({ type, size: 1 })).toBeTruthy();
   });

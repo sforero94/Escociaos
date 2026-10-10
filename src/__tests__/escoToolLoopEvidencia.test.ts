@@ -1,16 +1,34 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 // Import dinámico para ejecutar Deno bajo Vitest sin incluirlo en tsc del navegador.
 const chatModulePath = '../supabase/functions/server/chat.tsx';
-const { llmToolLoop } = await import(chatModulePath) as { llmToolLoop: (messages: Array<{ role: string; content: string }>) => Promise<{ text: string; toolInteractions: Array<{ tool: string; result_summary: string }> }> };
+const { llmToolLoop } = await import(chatModulePath) as { llmToolLoop: (messages: Array<{ role: string; content: string }>, userId?: string) => Promise<{ text: string; toolInteractions: Array<{ tool: string; result_summary: string }> }> };
+const userId = '10000000-0000-4000-8000-000000000001';
+const perfil = () => new Response(JSON.stringify([{ id: userId, activo: true, rol: 'Gerencia' }]));
 const respuestaModelo = (message: Record<string, unknown>) => new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
 const llamada = (name: string, args: Record<string, unknown>) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
 afterEach(() => vi.unstubAllGlobals());
 describe('Integración del loop de Esco con consulta obligatoria de partos', () => {
+  it('aborts when a role is revoked between tool calls, before another data read or model answer', async () => {
+    vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://example.test' : 'fixture-key' } });
+    let profileReads = 0; let modelCalls = 0; let domainReads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/rest/v1/usuarios?')) {
+        profileReads++;
+        return profileReads === 1 ? perfil() : new Response(JSON.stringify([{ id: userId, activo: true, rol: 'Monitor' }]));
+      }
+      if (url.includes('/rest/v1/')) { domainReads++; return new Response('[]'); }
+      modelCalls++;
+      return respuestaModelo(llamada(modelCalls === 1 ? 'get_lot_info' : 'get_inventory_status', {}));
+    }));
+    await expect(llmToolLoop([{ role: 'user', content: 'Consulta sintética' }], userId)).rejects.toThrow('Acceso actual');
+    expect(profileReads).toBe(2); expect(modelCalls).toBe(2); expect(domainReads).toBe(1);
+  });
   it('enruta la pregunta original al historial completo y persiste evidencia verificable', async () => {
     vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://example.test' : 'fixture-key' } });
     let ronda = 0;
     const bodies: Record<string, unknown>[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, opts: RequestInit) => {
+      if (url.includes('/rest/v1/usuarios?')) return perfil();
       if (url.includes('/rest/v1/')) {
         const u = new URL(url);
         if (u.pathname.endsWith('/hato_eventos')) {
@@ -23,7 +41,7 @@ describe('Integración del loop de Esco con consulta obligatoria de partos', () 
       bodies.push(JSON.parse(String(opts.body)));
       return ronda++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' })) : respuestaModelo({ role: 'assistant', content: 'MADRE A tuvo un parto el 20 de septiembre.' });
     }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hay en septiembre y octubre?' }]);
+    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hay en septiembre y octubre?' }], userId);
     expect(bodies[0].tool_choice).toEqual({ type: 'function', function: { name: 'get_hato_partos' } });
     expect(r.text).toContain('MADRE A');
     expect(JSON.parse(r.toolInteractions[0].result_summary)._evidencia.consulta_completa).toBe(true);
@@ -33,10 +51,11 @@ describe('Integración del loop de Esco con consulta obligatoria de partos', () 
     vi.stubGlobal('Deno', { env: { get: () => 'fixture-key' } });
     let ronda = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/rest/v1/usuarios?')) return perfil();
       if (url.includes('/rest/v1/')) return new Response('fallo de consulta', { status: 503 });
       return ronda++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' })) : respuestaModelo({ role: 'assistant', content: 'No hay partos registrados.' });
     }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué nuevos partos tenemos?' }]);
+    const r = await llmToolLoop([{ role: 'user', content: '¿Qué nuevos partos tenemos?' }], userId);
     expect(r.text).toContain('No pude verificar');
     expect(r.text).not.toBe('No hay partos registrados.');
   });
@@ -44,10 +63,11 @@ describe('Integración del loop de Esco con consulta obligatoria de partos', () 
     vi.stubGlobal('Deno', { env: { get: () => 'fixture-key' } });
     let ronda = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/rest/v1/usuarios?')) return perfil();
       if (url.includes('/rest/v1/')) return new Response(JSON.stringify([{ id: 'e' }]), { headers: { 'content-range': '0-0/300' } });
       return ronda++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' })) : respuestaModelo({ role: 'assistant', content: 'Solo hubo un parto.' });
     }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo?' }]);
+    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo?' }], userId);
     expect(r.text).toContain('No pude verificar');
     expect(JSON.parse(r.toolInteractions[0].result_summary).error).toContain('recortó');
   });

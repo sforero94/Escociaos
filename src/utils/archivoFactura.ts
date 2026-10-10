@@ -12,6 +12,7 @@ const formatos: Record<string, { extension: string; contentType: string }> = {
 
 export function validarArchivoFactura(file: Pick<File, 'type' | 'size'>): string | null {
   if (!Object.prototype.hasOwnProperty.call(formatos, file.type)) return 'Solo se permiten archivos de imagen (JPG, PNG, GIF) o PDF';
+  if (!Number.isFinite(file.size) || file.size < 0) return 'El tamaño del archivo no es válido';
   if (file.size > MAX_FACTURA_BYTES) return 'El archivo es muy grande. El tamaño máximo es 5MB';
   return null;
 }

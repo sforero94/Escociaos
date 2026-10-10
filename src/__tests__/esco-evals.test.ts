@@ -519,11 +519,11 @@ describe('Phase 3C — memory tools registered', () => {
     expect(tool?.properties).toContain('reason');
   });
 
-  it('TOOLS array includes commit_memory_save with token + final_content', () => {
+  it('TOOLS array retains a disabled commit_memory_save without final-content override', () => {
     const tool = getTool('commit_memory_save');
     expect(tool, 'tool must be registered').toBeDefined();
     expect(tool?.required).toContain('token');
-    expect(tool?.properties).toContain('final_content');
+    expect(tool?.properties).not.toContain('final_content');
   });
 
   it('TOOLS array includes forget_memory accepting memory_id or match_text', () => {
@@ -534,37 +534,35 @@ describe('Phase 3C — memory tools registered', () => {
   });
 
   it('dispatch switch routes the three memory tools to their executors', () => {
-    expect(chatSource).toContain("case 'propose_memory_save': result = await execProposeMemorySave(args); break;");
+    expect(chatSource).toContain("case 'propose_memory_save': result = await execProposeMemorySave(args, userId); break;");
     expect(chatSource).toContain("case 'commit_memory_save': result = await execCommitMemorySave(args, userId); break;");
     expect(chatSource).toContain("case 'forget_memory': result = await execForgetMemory(args, userId); break;");
   });
 });
 
-describe('Phase 3C — propose_memory_save returns a confirmation envelope, not a DB insert', () => {
+describe('Phase 3C — propose_memory_save registers an owner-bound durable proposal without saving a memory', () => {
   it('execProposeMemorySave does NOT insert into esco_memorias', () => {
     const body = getExecFunctionBody('execProposeMemorySave') ?? '';
     expect(body).not.toMatch(/supabaseInsert\(.*esco_memorias/);
   });
 
-  it('execProposeMemorySave returns a payload flagged as a proposal', () => {
-    // The executor delegates to makeMemoryProposal (which sets _memory_proposal: true).
-    // We verify the delegation rather than re-asserting the literal in the body.
+  it('execProposeMemorySave delegates trusted owner and content to durable registration', () => {
     const body = getExecFunctionBody('execProposeMemorySave') ?? '';
-    expect(body).toMatch(/makeMemoryProposal/);
-    expect(body).toMatch(/token/);
+    expect(body).toContain('registrarPropuestaMemoria(client, userId');
+    expect(body).not.toContain('memoryProposalCache');
   });
 });
 
-describe('Phase 3C — commit_memory_save persists to esco_memorias', () => {
-  it('execCommitMemorySave inserts into esco_memorias with user_id', () => {
+describe('Phase 3C — only a human callback can confirm memory', () => {
+  it('execCommitMemorySave explicitly refuses model self-confirmation', () => {
     const body = getExecFunctionBody('execCommitMemorySave') ?? '';
-    expect(body).toMatch(/supabaseInsert\(\s*['"]esco_memorias['"]/);
-    expect(body).toContain('user_id');
+    expect(body).toContain('saved: false');
+    expect(body).toContain('botón de Telegram');
   });
 
-  it('execCommitMemorySave validates the token from the proposal payload', () => {
+  it('execCommitMemorySave has no memory write or confirmation RPC path', () => {
     const body = getExecFunctionBody('execCommitMemorySave') ?? '';
-    expect(body).toMatch(/token/);
+    expect(body).not.toMatch(/supabaseInsert|\.rpc\(|confirmarMemoriaTelegram|final_content/);
   });
 });
 
