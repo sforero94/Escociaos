@@ -72,6 +72,16 @@ const PATRON_UTC_HOY =
  * les correría un día hacia atrás en UTC-5. */
 const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[] = [
   {
+    archivo: 'src/utils/purchaseIntegrity.ts',
+    ocurrencias: 1,
+    razon: 'Valida una fecha recibida AAAA-MM-DD con ida y vuelta desde medianoche UTC; no calcula hoy.',
+  },
+  {
+    archivo: 'src/utils/manualStockMovement.ts',
+    ocurrencias: 1,
+    razon: 'Valida la fecha explícita del intento mediante ida y vuelta UTC; hoy se obtiene con obtenerFechaHoy().',
+  },
+  {
     archivo: 'src/components/hato/components/EventoTimeline.tsx',
     ocurrencias: 1,
     razon:

@@ -351,6 +351,54 @@ def tests():
     sql(f"UPDATE public.usuarios SET rol='Administrador' WHERE id='{ACTOR}';")
 
 
+def resolve_attempt(key, operation, payload, actor=ACTOR, role='authenticated', ok=True):
+    result=sql(f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; "
+        f"SELECT public.fn_purchase_resolve('{key}','{operation}',{literal(json.dumps(payload))}::jsonb); COMMIT;",ok)
+    return json.loads(result) if ok else result
+
+
+def resolution_tests():
+    payload={'lines':[line(P2,1,2,2)]}
+    key=str(uuid.uuid4())
+    receipt=call('fn_purchase_post',payload,key)
+    verify(resolve_attempt(key,'post',payload)=={'state':'committed','request_key':key,'operation':'post','receipt':receipt}, 'resolution recovers exact committed receipt')
+    before=state()
+    resolve_attempt(key,'post',{'lines':[line(P2,1,3,3)]},ok=False)
+    verify(state()==before,'resolution refuses payload conflict without writes')
+    cancelled=str(uuid.uuid4())
+    expected={'state':'cancelled','request_key':cancelled,'operation':'post'}
+    verify(resolve_attempt(cancelled,'post',payload)==expected,'unposted attempt sealed as cancelled')
+    failed_atomically('fn_purchase_post',payload,cancelled,label='delayed original post cannot bypass resolved cancellation')
+    before=state()
+    verify(resolve_attempt(cancelled,'post',payload)==expected and state()==before,'cancellation resolution replay is stable')
+    for actor,role in [(INACTIVE,'authenticated'),(VIEWER,'authenticated'),(None,'authenticated'),(ACTOR,'anon'),(ACTOR,'service_role')]:
+        before=state()
+        resolve_attempt(str(uuid.uuid4()),'post',payload,actor,role,False)
+        verify(state()==before,f'resolution rejects unauthorized {actor}/{role}')
+    for event in ('INSERT','UPDATE'):
+        suppress('purchase_integrity.requests',event)
+        before=state()
+        resolve_attempt(str(uuid.uuid4()),'post',payload,ok=False)
+        verify(state()==before,f'cancelled request {event} suppression rolls back')
+        unsuppress('purchase_integrity.requests')
+    reverse_payload={'purchase_id':receipt['purchases'][0]['purchase_id'],'expected':receipt['purchases'][0]['expected']}
+    reverse_key=str(uuid.uuid4())
+    verify(resolve_attempt(reverse_key,'reverse',reverse_payload)['state']=='cancelled','unposted reversal sealed separately')
+    failed_atomically('fn_purchase_reverse',reverse_payload,reverse_key,label='late original reversal cannot delete preserved purchase')
+    concurrent_key=str(uuid.uuid4())
+    source=f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT public.fn_purchase_post('{concurrent_key}',{literal(json.dumps(payload))}::jsonb); SELECT pg_sleep(1); COMMIT;"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        posting=executor.submit(sql,source)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            if sql("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='PgSleep');")=='t': break
+            time.sleep(.05)
+        else: raise AssertionError('Resolution race did not observe open posting transaction')
+        resolved=executor.submit(resolve_attempt,concurrent_key,'post',payload)
+        committed=json.loads(posting.result().splitlines()[0])
+        verify(resolved.result()['receipt']==committed,'resolution waits for in-flight posting and returns its committed receipt')
+
+
 def main():
     global CONTAINER
     docker(['info','--format','{{.ServerVersion}}'])
@@ -373,6 +421,7 @@ def main():
         else:
             raise AssertionError('Synthetic PostgreSQL startup failed')
         tests()
+        resolution_tests()
         completed=True
     finally:
         docker(['rm','-f','-v',CONTAINER])

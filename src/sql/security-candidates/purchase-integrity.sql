@@ -85,6 +85,9 @@ BEGIN
     IF r.operation IS DISTINCT FROM op OR r.payload IS DISTINCT FROM body OR r.result IS NULL THEN
       RAISE EXCEPTION 'Request key payload conflict or incomplete request';
     END IF;
+    IF r.result = '{"cancelled":true}'::jsonb THEN
+      RAISE EXCEPTION 'Request cancelled: review before starting another attempt';
+    END IF;
     RETURN r.result;
   END IF;
   INSERT INTO purchase_integrity.requests VALUES (actor,key,op,body,NULL) RETURNING * INTO r;
@@ -328,11 +331,40 @@ BEGIN
 END $$;
 
 -- Defense for stale callers: the previous routine must NEVER delete expenses.
+-- Missing requests are durably cancelled under the posting advisory lock so a
+-- delayed caller cannot post after local retry evidence has been cleared.
+CREATE FUNCTION public.fn_purchase_resolve(p_request_key uuid, p_operation text, p_payload jsonb) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+<<resolve_attempt>>
+DECLARE actor uuid; request purchase_integrity.requests%ROWTYPE;
+BEGIN
+  actor := purchase_integrity.authorize();
+  IF p_request_key IS NULL OR p_operation NOT IN ('post','reverse') OR p_operation IS NULL
+    OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'Exact request identity required';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(actor::text || ':' || p_request_key::text, 0));
+  SELECT * INTO request FROM purchase_integrity.requests
+    WHERE requests.actor=resolve_attempt.actor AND request_key=p_request_key FOR UPDATE;
+  IF FOUND THEN
+    IF request.operation IS DISTINCT FROM p_operation OR request.payload IS DISTINCT FROM p_payload OR request.result IS NULL THEN
+      RAISE EXCEPTION 'Request payload conflict or unconfirmed outcome';
+    END IF;
+    IF request.result <> '{"cancelled":true}'::jsonb THEN
+      RETURN jsonb_build_object('state','committed','request_key',p_request_key,'operation',p_operation,'receipt',request.result);
+    END IF;
+  ELSE
+    PERFORM purchase_integrity.begin_request(actor,p_request_key,p_operation,p_payload);
+    PERFORM purchase_integrity.finish_request(actor,p_request_key,p_operation,p_payload,'{"cancelled":true}'::jsonb);
+  END IF;
+  RETURN jsonb_build_object('state','cancelled','request_key',p_request_key,'operation',p_operation);
+END $$;
+
 CREATE OR REPLACE FUNCTION public.fn_cleanup_compra_dependencies(p_compra_id uuid) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 BEGIN RAISE EXCEPTION 'Deprecated cleanup: preserve all expenses for management review' USING ERRCODE='42501'; END $$;
 REVOKE ALL ON FUNCTION public.fn_cleanup_compra_dependencies(uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA purchase_integrity FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION public.fn_purchase_post(uuid,jsonb),public.fn_purchase_reverse(uuid,jsonb),public.fn_purchase_proof(uuid) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_purchase_post(uuid,jsonb),public.fn_purchase_reverse(uuid,jsonb),public.fn_purchase_proof(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_purchase_post(uuid,jsonb),public.fn_purchase_reverse(uuid,jsonb),public.fn_purchase_proof(uuid),public.fn_purchase_resolve(uuid,text,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_purchase_post(uuid,jsonb),public.fn_purchase_reverse(uuid,jsonb),public.fn_purchase_proof(uuid),public.fn_purchase_resolve(uuid,text,jsonb) TO authenticated;
 COMMIT;
