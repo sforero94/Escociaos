@@ -104,6 +104,10 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
     setCargando(true);
     setError(null);
     try {
+      // Cast conservado a propósito (ESCO-143): con los tipos regenerados,
+      // `hato_pesajes_leche.created_at` es `string | null` y `FilaCruda`/
+      // `FilaSubida` lo asumen `string`. Cerrarlo cambia cómo `distanciaMs`
+      // trata un NULL, o sea comportamiento — queda para un cambio aparte.
       const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
       const meses = mesesAlrededor(anio, mes);
       const { data: capturasData, error: errorCapturas } = await supabase
@@ -199,7 +203,7 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
       setDescartando(true);
       setError(null);
       try {
-        const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const supabase = getSupabase();
         const { captura, filaIds } = subida;
         const rutas = rutasFotoABorrar(captura);
         if (rutas.length > 0) {

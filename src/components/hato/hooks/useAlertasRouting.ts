@@ -26,7 +26,7 @@ export function useAlertasRouting() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const [cat, users, subs] = await Promise.all([
         supabase.from('alertas_catalogo').select('*').eq('activo', true).order('orden', { ascending: true }),
         supabase.from('telegram_usuarios').select('*').eq('activo', true).order('nombre_display', { ascending: true }),
@@ -62,7 +62,7 @@ export function useAlertasRouting() {
   const guardarSuscripciones = useCallback(
     async (usuario: TelegramUsuarioRow, estado: SuscripcionEstado, updatedBy: string | null) => {
       if (catalogo.length === 0) return;
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: upsertError } = await supabase
         .from('telegram_alertas_suscripciones')
         .upsert(filasDeUsuario(usuario, estado, updatedBy), { onConflict: 'telegram_usuario_id,alerta_clave' });
@@ -79,7 +79,7 @@ export function useAlertasRouting() {
         filasDeUsuario(usuario, estados[usuario.id] ?? {}, updatedBy),
       );
       if (filas.length === 0) return;
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: upsertError } = await supabase
         .from('telegram_alertas_suscripciones')
         .upsert(filas, { onConflict: 'telegram_usuario_id,alerta_clave' });

@@ -190,12 +190,15 @@ export interface RondaMonitoreo {
   created_at?: string;
 }
 
-// Lectura individual de CE por árbol
-export interface LecturaCE {
+// Lectura individual de CE por árbol.
+// `type` y no `interface`: se guarda en la columna jsonb
+// `mon_conductividad.lecturas`, y solo un alias de tipo es asignable a `Json`
+// (una interface no tiene firma de índice implícita).
+export type LecturaCE = {
   arbol: number;
   alta: number | null;
   baja: number | null;
-}
+};
 
 // Conductividad Eléctrica
 export interface MonitoreoConductividad {

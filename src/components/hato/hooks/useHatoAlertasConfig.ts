@@ -25,7 +25,7 @@ export function useHatoAlertasConfig() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { data, error: queryError } = await supabase
         .from('hato_alertas_config')
         .select('id, tipo, horas_escalamiento, activo')
@@ -49,7 +49,7 @@ export function useHatoAlertasConfig() {
         const errorHoras = validarHorasEscalamiento(cambios.horas_escalamiento);
         if (errorHoras) throw new Error(errorHoras);
       }
-      const supabase = getSupabase() as any;
+      const supabase = getSupabase();
       const { error: updateError } = await supabase
         .from('hato_alertas_config')
         .update(cambios)
