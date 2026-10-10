@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { buildPurchasePayload, postPurchase, resolvePendingPurchase, hasPendingPurchaseAttempt, matchesPurchasePayload, type PurchaseProtocolClient } from '@/utils/purchaseIntegrity';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 // Vendor interface
@@ -94,6 +95,11 @@ interface DatosCompra {
 export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const mountedOwner = useRef(user?.id);
+  const saving = useRef(false);
+  const currentOwner = useRef(user?.id);
+  useLayoutEffect(() => { currentOwner.current = user?.id; }, [user?.id]);
+  useEffect(() => () => { currentOwner.current = undefined; }, []);
   const { showSuccess, showError, showWarning, showInfo, ToastContainer } = useToast();
 
   // Estados principales
@@ -110,6 +116,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   const [productosCompra, setProductosCompra] = useState<ProductoCompra[]>([]);
   const [mostrandoExito, setMostrandoExito] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [pendingPost, setPendingPost] = useState(() => !!user?.id && hasPendingPurchaseAttempt(user.id, 'post'));
   const [showProveedorDialog, setShowProveedorDialog] = useState(false);
 
   const draft = useFormDraft('compra-new-v1', { datosCompra, productosCompra }, { debounceMs: 1500 });
@@ -341,102 +348,66 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
     return true;
   };
 
+  const confirmarExito = (owner: string) => {
+    if (currentOwner.current !== owner) return;
+    setPendingPost(false);
+    showSuccess('✅ Compra confirmada exitosamente');
+    showInfo('📊 Inventario actualizado automáticamente');
+    draft.clearDraft();
+    setMostrandoExito(true);
+    setTimeout(() => { if (currentOwner.current === owner) navigate('/inventario/movimientos'); }, 2000);
+    onSuccess?.();
+  };
+
+  const verificarIntentoPendiente = async () => {
+    if (saving.current) return;
+    saving.current = true;
+    setGuardando(true);
+    try {
+      const owner = user?.id;
+      if (!owner || mountedOwner.current !== owner) throw new Error('La sesión cambió. Vuelva a abrir la compra con su cuenta.');
+      const outcome = await resolvePendingPurchase(getSupabase() as unknown as PurchaseProtocolClient, owner, 'post', '', () => currentOwner.current === owner);
+      if (currentOwner.current !== owner) return;
+      if (outcome.state === 'committed') {
+        let matches = false;
+        try { matches = matchesPurchasePayload(buildPurchasePayload(datosCompra, productosCompra, productosDisponibles, proveedores), outcome.payload); } catch { /* Later edits do not prevent confirming the original attempt. */ }
+        if (matches) confirmarExito(owner);
+        else {
+          setPendingPost(false);
+          showWarning('La compra original está confirmada. Los cambios posteriores no se enviaron; revise los datos antes de volver a guardar.');
+        }
+      }
+      else {
+        setPendingPost(false);
+        showInfo('El intento anterior no registró la compra. Revise los datos antes de volver a guardar.');
+      }
+    } catch (error: unknown) {
+      if (currentOwner.current === user?.id) showError(error instanceof Error ? error.message : 'No se pudo verificar el intento pendiente.');
+    } finally {
+      saving.current = false;
+      setGuardando(false);
+    }
+  };
+
   const guardarCompra = async () => {
-    if (!validarFormulario()) return;
+    if (saving.current || !validarFormulario()) return;
+    saving.current = true;
 
     setGuardando(true);
     showInfo('💾 Guardando compra...');
 
     try {
-      // Para cada producto, registrar la compra
-      for (const item of productosCompra) {
-        // Fetch live quantity from DB to avoid stale in-memory state across loop iterations
-        const { data: productoLive, error: fetchError } = await getSupabase()
-          .from('productos')
-          .select('cantidad_actual, activo')
-          .eq('id', item.producto_id)
-          .single();
+      const owner = user?.id;
+      if (!owner || mountedOwner.current !== owner) throw new Error('La sesión cambió. Vuelva a abrir la compra con su cuenta.');
+      const payload = buildPurchasePayload(datosCompra, productosCompra, productosDisponibles, proveedores);
+      await postPurchase(getSupabase() as unknown as PurchaseProtocolClient, owner, payload, () => currentOwner.current === owner);
 
-        if (fetchError || !productoLive) {
-          throw new Error(`No se pudo obtener el producto con id ${item.producto_id}`);
-        }
-
-        const cantidadAnterior = productoLive.cantidad_actual || 0;
-        const cantidadNueva = cantidadAnterior + item.cantidad_total;
-
-        // Get vendor name for backward compatibility
-        const proveedorNombre = proveedores.find(p => p.id === datosCompra.proveedor_id)?.nombre || '';
-
-        // 1. Insertar en tabla compras
-        const { error: compraError } = await getSupabase().from('compras').insert({
-            fecha_compra: datosCompra.fecha,
-            proveedor: proveedorNombre,
-            proveedor_id: datosCompra.proveedor_id,
-            numero_factura: datosCompra.numero_factura,
-            producto_id: item.producto_id,
-            cantidad: item.cantidad_total,
-            unidad: item.presentacion_unidad,
-            numero_lote_producto: item.numero_lote || null,
-            fecha_vencimiento: item.fecha_vencimiento || null,
-            costo_unitario: item.precio_unitario_real,
-            costo_total: item.costo_total,
-            url_factura: datosCompra.url_factura || null,
-            usuario_registro: user?.email || null,
-          } as any);
-
-        if (compraError) throw compraError;
-
-        // 2. Actualizar cantidad en productos
-        const { error: updateError } = await getSupabase()
-          .from('productos')
-          .update({
-            cantidad_actual: cantidadNueva,
-            precio_unitario: item.precio_unitario_real,
-            // REGLA DE NEGOCIO: Si el producto está inactivo y ahora tiene cantidad > 0, activarlo automáticamente
-            activo: cantidadNueva > 0 ? true : productoLive.activo,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', item.producto_id);
-
-        if (updateError) throw updateError;
-
-        // 3. Crear movimiento de inventario
-        const { error: movimientoError } = await getSupabase()
-          .from('movimientos_inventario')
-          .insert({
-              fecha_movimiento: datosCompra.fecha,
-              producto_id: item.producto_id,
-              tipo_movimiento: 'Entrada' as const,
-              cantidad: item.cantidad_total,
-              unidad: item.presentacion_unidad,
-              factura: datosCompra.numero_factura,
-              saldo_anterior: cantidadAnterior,
-              saldo_nuevo: cantidadNueva,
-              valor_movimiento: item.costo_total,
-              responsable: user?.email || null,
-              observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${proveedorNombre} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad} a ${formatearPesos(item.precio_por_bulto)}/bulto`,
-              provisional: false,
-            } as any);
-
-        if (movimientoError) throw movimientoError;
-      }
-
-      showSuccess(`✅ Compra registrada exitosamente: ${productosCompra.length} producto(s)`);
-      showInfo('📊 Inventario actualizado automáticamente');
-      draft.clearDraft();
-
-      setMostrandoExito(true);
-      setTimeout(() => {
-        navigate('/inventario/movimientos');
-      }, 2000);
-
-      // Llamar a la función de éxito si está definida
-      if (onSuccess) {
-        onSuccess();
-      }
+      confirmarExito(owner);
     } catch (err: any) {
-      showError(`❌ Error al guardar: ${err.message || 'Intente nuevamente'}`);
+      if (user?.id && currentOwner.current === user.id) setPendingPost(hasPendingPurchaseAttempt(user.id, 'post'));
+      if (currentOwner.current === user?.id) showError(`❌ Error al guardar: ${err.message || 'Intente nuevamente'}`);
     } finally {
+      saving.current = false;
       setGuardando(false);
     }
   };
@@ -653,6 +624,11 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
               >
                 Cancelar
               </Button>
+              {pendingPost && user?.id === mountedOwner.current && (
+                <Button type="button" variant="outline" disabled={guardando} onClick={verificarIntentoPendiente}>
+                  Verificar intento pendiente
+                </Button>
+              )}
               <Button
                 type="button"
                 onClick={guardarCompra}

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { InventorySubNav } from './InventorySubNav';
 import type { Database } from '@/types/database';
+import { reversePurchase, resolvePendingPurchase, pendingPurchaseReversals, type PurchaseProtocolClient } from '@/utils/purchaseIntegrity';
 import {
   ShoppingCart,
   Calendar,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { formatearFecha, formatearFechaHora, obtenerFechaHoy } from '../../utils/fechas';
+import { formatearFecha, formatearFechaHora } from '../../utils/fechas';
 import { toast } from 'sonner';
 
 interface Purchase {
@@ -47,139 +48,15 @@ interface Purchase {
   };
 }
 
-/**
- * Ejecuta la eliminación de una compra revirtiendo el stock del producto.
- *
- * `movimientos_inventario` es un log de eventos, no un dato que se corrige a mano:
- * la compra sí ocurrió, así que su movimiento `Entrada` original NUNCA se borra
- * (y no puede filtrarse por `compra_id` -- esa columna no existe en esta tabla).
- * En su lugar se inserta un movimiento `Salida Otros` compensatorio (mismo criterio
- * que la migración 108 para `gan_movimientos`: no se borra la historia, se compensa).
- *
- * Ese movimiento compensatorio se escribe ANTES de tocar `productos.cantidad_actual`
- * y, si falla, la función lanza y aborta -- el stock queda intacto en vez de moverse
- * sin dejar rastro. No es atómico (llamado desde el navegador, sin RPC), pero el
- * orden garantiza que nunca se pierde la trazabilidad silenciosamente.
- *
- * `precio_unitario` se revierte junto con la cantidad, en el MISMO update, porque
- * `NewPurchase.tsx` los escribe juntos: revertir sólo la cantidad dejaba pegado al
- * producto el precio de la compra borrada, para siempre y sin rastro en el ledger.
- * Eso mueve una cifra financiera en silencio -- `productos.precio_unitario` alimenta
- * el costo de insumos de costo/kg por lote (`calculosCostoKg.ts`) y el KPI de valor
- * de inventario. Se restaura el precio de la compra más reciente que SOBREVIVE al
- * borrado; si no queda ninguna, `NULL` (sin dato), nunca el precio borrado -- el
- * sistema distingue "sin dato" de cero, y el precio viejo es una afirmación falsa.
- *
- * Exportada (en vez de quedar inline en `handleDeletePurchase`) para poder probar esta
- * secuencia sin renderizar el componente -- este repo no tiene @testing-library/react.
- */
+/** Transactional reversal; requires the reviewed SQL protocol before deployment. */
 export async function eliminarCompraConReversion(
   supabase: SupabaseClient<Database>,
   purchase: Purchase,
-  responsable: string | null,
+  ownerId: string | null,
+  currentOwner: () => boolean = () => true,
 ): Promise<void> {
-  // 1. Leer el stock actual del producto
-  const { data: currentProduct, error: productFetchError } = await supabase
-    .from('productos')
-    .select('cantidad_actual')
-    .eq('id', purchase.producto_id)
-    .single();
-
-  if (productFetchError) throw new Error('Error al obtener producto: ' + productFetchError.message);
-
-  const saldoAnterior = currentProduct.cantidad_actual ?? 0;
-  const nuevaCantidad = saldoAnterior - purchase.cantidad;
-
-  if (nuevaCantidad < 0) {
-    throw new Error('No se puede eliminar la compra porque resultaría en inventario negativo');
-  }
-
-  // 2. Averiguar a qué precio hay que volver: el de la compra más reciente del mismo
-  // producto que sobrevive a este borrado. Se lee ANTES de escribir nada, así un fallo
-  // de lectura aborta con el inventario y el ledger todavía intactos.
-  const { data: compraAnterior, error: compraAnteriorError } = await supabase
-    .from('compras')
-    .select('costo_unitario')
-    .eq('producto_id', purchase.producto_id)
-    .neq('id', purchase.id)
-    .order('fecha_compra', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (compraAnteriorError) {
-    throw new Error('Error al obtener la compra anterior del producto: ' + compraAnteriorError.message);
-  }
-
-  // Sin compra anterior no hay precio conocido: `null` es "sin dato". Conservar el de
-  // la compra que se está borrando sería afirmar un precio que ya no respalda ningún
-  // documento.
-  const precioARestaurar = compraAnterior?.costo_unitario ?? null;
-
-  // 3. Dejar el rastro en el ledger ANTES de tocar el stock -- si esto falla, se
-  // aborta acá y el inventario queda intacto.
-  const { error: movementAjusteError } = await supabase
-    .from('movimientos_inventario')
-    .insert({
-      fecha_movimiento: obtenerFechaHoy(),
-      producto_id: purchase.producto_id,
-      tipo_movimiento: 'Salida Otros',
-      cantidad: purchase.cantidad,
-      unidad: purchase.unidad as Database['public']['Enums']['unidad_medida'],
-      factura: null,
-      saldo_anterior: saldoAnterior,
-      saldo_nuevo: nuevaCantidad,
-      valor_movimiento: purchase.costo_total,
-      responsable,
-      observaciones: `Ajuste por eliminación de compra - Factura: ${purchase.numero_factura || 'N/A'} - Proveedor: ${purchase.proveedor} - Fecha original: ${purchase.fecha_compra}`,
-      provisional: false,
-    });
-
-  if (movementAjusteError) {
-    throw new Error('Error al registrar el movimiento de ajuste de inventario: ' + movementAjusteError.message);
-  }
-
-  // 4. Revertir el stock Y el precio del producto -- solo después de que el ledger
-  // quedó escrito, y los dos en el mismo update en que la compra los escribió.
-  const { error: inventoryError } = await supabase
-    .from('productos')
-    .update({
-      cantidad_actual: nuevaCantidad,
-      precio_unitario: precioARestaurar,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', purchase.producto_id);
-
-  if (inventoryError) throw new Error('Error al actualizar inventario: ' + inventoryError.message);
-
-  // 5. Eliminar gasto pendiente asociado (si existe)
-  // Uses SECURITY DEFINER RPC to bypass fin_gastos RLS (Administrador can't delete directly)
-  const { error: gastoError } = await supabase
-    .rpc('fn_cleanup_compra_dependencies', { p_compra_id: purchase.id });
-
-  if (gastoError) {
-    console.error('Failed to cleanup compra dependencies:', gastoError);
-    // Non-blocking: FK is ON DELETE SET NULL as safety net
-  }
-
-  // 6. Eliminar factura de Storage (si existe)
-  if (purchase.link_factura) {
-    const { error: storageError } = await supabase.storage
-      .from('facturas')
-      .remove([purchase.link_factura]);
-
-    if (storageError) {
-      // No lanzar error, continuar con la eliminación
-    }
-  }
-
-  // 7. Eliminar la compra
-  const { error: deleteError } = await supabase
-    .from('compras')
-    .delete()
-    .eq('id', purchase.id);
-
-  if (deleteError) throw new Error('Error al eliminar compra: ' + deleteError.message);
+  if (!ownerId) throw new Error('Debe iniciar sesión para eliminar la compra');
+  await reversePurchase(supabase as unknown as PurchaseProtocolClient, ownerId, purchase, currentOwner);
 }
 
 /**
@@ -378,6 +255,11 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
  */
 export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }) {
   const { user } = useAuth();
+  const currentOwner = useRef(user?.id);
+  const selectionOwner = useRef(user?.id);
+  const reversing = useRef(false);
+  useLayoutEffect(() => { currentOwner.current = user?.id; setPurchaseToDelete(null); setSelectedPurchase(null); setPurchases([]); setFilteredPurchases([]); }, [user?.id]);
+  useEffect(() => () => { currentOwner.current = undefined; }, []);
   const { isSafeModeEnabled } = useSafeMode();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
@@ -386,16 +268,20 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
   const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pendingReversals, setPendingReversals] = useState<string[]>([]);
 
   useEffect(() => {
+    setPendingReversals(user?.id ? pendingPurchaseReversals(user.id) : []);
     loadPurchases();
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     filterPurchases();
   }, [searchQuery, purchases, isSafeModeEnabled]);
 
   const loadPurchases = async () => {
+    const owner = user?.id;
+    if (!owner) { setLoading(false); return; }
     try {
       setLoading(true);
       const supabase = getSupabase();
@@ -410,11 +296,11 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
       if (error) throw error;
 
-      setPurchases((data || []) as unknown as Purchase[]);
+      if (currentOwner.current === owner) setPurchases((data || []) as unknown as Purchase[]);
     } catch (error) {
       console.error('Failed to load purchase history:', error);
     } finally {
-      setLoading(false);
+      if (currentOwner.current === owner) setLoading(false);
     }
   };
 
@@ -453,20 +339,50 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
   };
 
   const handleDeletePurchase = async () => {
-    if (!purchaseToDelete) return;
+    if (reversing.current || !purchaseToDelete) return;
+    reversing.current = true;
 
     try {
       setDeleting(true);
-      await eliminarCompraConReversion(getSupabase(), purchaseToDelete, user?.email || null);
+      const owner = user?.id;
+      if (!owner || selectionOwner.current !== owner) throw new Error('La sesión cambió. Vuelva a abrir la compra con su cuenta.');
+      await eliminarCompraConReversion(getSupabase(), purchaseToDelete, owner, () => currentOwner.current === owner);
 
       // Recargar lista de compras
       await loadPurchases();
+      if (currentOwner.current !== owner) return;
       setPurchaseToDelete(null);
+      setPendingReversals(pendingPurchaseReversals(owner));
 
       toast.success('Compra eliminada exitosamente');
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'Error al eliminar la compra. Intenta de nuevo.');
+      if (user?.id && currentOwner.current === user.id) setPendingReversals(pendingPurchaseReversals(user.id));
+      if (currentOwner.current === user?.id) toast.error(error instanceof Error ? error.message : 'Error al eliminar la compra. Intenta de nuevo.');
     } finally {
+      reversing.current = false;
+      setDeleting(false);
+    }
+  };
+
+  const verificarReversionPendiente = async (id: string) => {
+    if (reversing.current) return;
+    reversing.current = true;
+    setDeleting(true);
+    try {
+      const owner = user?.id;
+      if (!owner || currentOwner.current !== owner) throw new Error('La sesión cambió. Vuelva a abrir el historial con su cuenta.');
+      const outcome = await resolvePendingPurchase(getSupabase() as unknown as PurchaseProtocolClient, owner, 'reverse', id, () => currentOwner.current === owner);
+      if (currentOwner.current !== owner) return;
+      setPendingReversals(pendingPurchaseReversals(owner));
+      setPurchaseToDelete(null);
+      await loadPurchases();
+      if (currentOwner.current !== owner) return;
+      if (outcome.state === 'committed') toast.success('Eliminación de compra confirmada. Los gastos y la factura se conservaron.');
+      else toast.success('El intento anterior no eliminó la compra. Revise la compra antes de intentar nuevamente.');
+    } catch (error: unknown) {
+      if (currentOwner.current === user?.id) toast.error(error instanceof Error ? error.message : 'No se pudo verificar el intento pendiente.');
+    } finally {
+      reversing.current = false;
       setDeleting(false);
     }
   };
@@ -497,6 +413,17 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
           </p>
         </div>
       </div>
+
+      {pendingReversals.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+          <p>Hay eliminaciones de compras pendientes de verificar.</p>
+          {pendingReversals.map(id => (
+            <Button key={id} variant="outline" disabled={deleting} onClick={() => verificarReversionPendiente(id)}>
+              Verificar intento pendiente
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* Búsqueda */}
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
@@ -616,7 +543,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                           <Eye className="w-4 h-4" />
                         </Button>
                         <Button
-                          onClick={() => setPurchaseToDelete(purchase)}
+                          onClick={() => { selectionOwner.current = user?.id; setPurchaseToDelete(purchase); }}
                           variant="ghost"
                           className="text-red-600 hover:bg-red-50 rounded-xl"
                           title="Eliminar compra"
@@ -657,7 +584,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                       <Eye className="w-4 h-4" />
                     </Button>
                     <Button
-                      onClick={() => setPurchaseToDelete(purchase)}
+                      onClick={() => { selectionOwner.current = user?.id; setPurchaseToDelete(purchase); }}
                       variant="ghost"
                       className="text-red-600 hover:bg-red-50 rounded-xl -mr-2"
                       title="Eliminar compra"
@@ -782,8 +709,8 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                     <p className="font-medium">Esta acción:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
                       <li>Restará {purchaseToDelete.cantidad} {purchaseToDelete.unidad} del inventario</li>
-                      <li>Eliminará el gasto pendiente asociado (si existe)</li>
-                      <li>Eliminará la factura adjunta (si existe)</li>
+                      <li>Conservará todos los gastos asociados para revisión de Gerencia</li>
+                      <li>Conservará la factura adjunta (si existe)</li>
                       <li>No se puede deshacer</li>
                     </ul>
                   </div>
