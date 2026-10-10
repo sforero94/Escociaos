@@ -19,12 +19,12 @@
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { projectId } from '@/utils/supabase/info.tsx';
+import { getSupabaseConfig } from '@/utils/supabase/config';
 import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 import type { CeldaDiffPesaje, SemanaPesaje } from '@/utils/importHato/ocrPesaje';
 import { construirDiffPesajeManual, type AnimalPesajeManual } from '@/utils/hato/pesajeManual';
 
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 export interface FilaNoLeidaPesaje {
   pagina: number;
@@ -135,7 +135,7 @@ export function useSubirPesajeFoto() {
       formData.append('anio', String(anio));
       formData.append('mes', String(mes));
 
-      const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/pesaje/foto`, {
+      const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/pesaje/foto`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -181,7 +181,7 @@ export function useSubirPesajeFoto() {
     setCommitResultado(null);
     try {
       const token = await obtenerTokenSesion();
-      const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/pesaje/commit`, {
+      const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/pesaje/commit`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ anio, mes, celdas, capturaId: resultado?.capturaId ?? null }),

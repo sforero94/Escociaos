@@ -1,18 +1,15 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
+import { getSupabaseConfig } from './config';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Singleton Supabase client instance
 let supabaseInstance: SupabaseClient<Database> | null = null;
 
 export function getSupabase() {
   if (!supabaseInstance) {
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Missing Supabase environment variables. Please check your .env.local file.');
-    }
-    supabaseInstance = createClient<Database>(supabaseUrl, supabaseAnonKey);
+    const config = getSupabaseConfig();
+    supabaseInstance = createClient<Database>(config.url, config.anonKey);
   }
   return supabaseInstance;
 }
@@ -48,17 +45,17 @@ export async function getUserProfile(userId: string) {
       return null;
     }
     
-    if (!data) {
+    if (!data || data.id !== userId || typeof data.activo !== 'boolean' || typeof data.rol !== 'string') {
       console.log('ℹ️ No se encontró perfil en tabla usuarios (esto es normal si no se ha creado)');
       return null;
     }
     
-    console.log('✅ Perfil obtenido exitosamente:', data);
+    console.log('✅ Perfil confirmado');
     return {
       id: data.id,
       nombre: data.nombre_completo || 'Usuario',
       email: data.email,
-      rol: data.rol || 'Administrador',
+      rol: data.rol || '',
       modulos: (data as any).modulos_acceso ?? [],
       created_at: data.created_at,
       activo: data.activo,

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { crearCompletarGastoDraft } from '@/utils/gastoDraft';
+import { actualizarGastoSeguro } from '@/utils/actualizarGastoSeguro';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
 import {
@@ -26,7 +27,11 @@ interface CompletarGastoDialogProps {
   onError: (message: string) => void;
 }
 
-export function CompletarGastoDialog({
+export function CompletarGastoDialog(props: CompletarGastoDialogProps) {
+  return <CompletarGastoDialogState key={props.gasto?.id ?? 'new'} {...props} />;
+}
+
+function CompletarGastoDialogState({
   open,
   onOpenChange,
   gasto,
@@ -36,16 +41,10 @@ export function CompletarGastoDialog({
   // Form state
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence({
     key: gasto?.id ? `completar-gasto-${gasto.id}` : 'completar-gasto-tmp',
-    initialState: {
-      negocio_id: '',
-      region_id: '',
-      categoria_id: '',
-      concepto_id: '',
-      proveedor_id: '',
-      medio_pago_id: '',
-      observaciones: '',
-    },
+    initialState: crearCompletarGastoDraft(gasto),
   });
+  const [conflict, setConflict] = useState('');
+  const resetForm = () => { clearFormData(); setConflict(''); };
 
   // Catalog data
   const [negocios, setNegocios] = useState<Negocio[]>([]);
@@ -59,38 +58,7 @@ export function CompletarGastoDialog({
   const [loading, setLoading] = useState(false);
   const [loadingCatalogs, setLoadingCatalogs] = useState(true);
 
-  // Initialize form when gasto changes - pre-load existing data
-  useEffect(() => {
-    if (gasto) {
-      setFormData({
-        negocio_id: gasto.negocio_id || '',
-        region_id: gasto.region_id || '',
-        categoria_id: gasto.categoria_id || '',
-        concepto_id: gasto.concepto_id || '',
-        proveedor_id: gasto.proveedor_id || '',
-        medio_pago_id: gasto.medio_pago_id || '',
-        observaciones: gasto.observaciones || '',
-      });
-    }
-  }, [gasto]);
-
-  // Load catalogs
-  useEffect(() => {
-    if (open) {
-      loadCatalogs();
-    }
-  }, [open]);
-
-  // Load conceptos when categoria changes
-  useEffect(() => {
-    if (formData.categoria_id) {
-      loadConceptos(formData.categoria_id);
-    } else {
-      setConceptos([]);
-    }
-  }, [formData.categoria_id]);
-
-  const loadCatalogs = async () => {
+  const loadCatalogs = useCallback(async () => {
     try {
       setLoadingCatalogs(true);
       const supabase = getSupabase();
@@ -115,14 +83,14 @@ export function CompletarGastoDialog({
       if (proveedoresResult.data) setProveedores(proveedoresResult.data);
       if (mediosPagoResult.data) setMediosPago(mediosPagoResult.data);
 
-    } catch (error: any) {
+    } catch {
       onError('Error al cargar los catálogos');
     } finally {
       setLoadingCatalogs(false);
     }
-  };
+  }, [onError]);
 
-  const loadConceptos = async (categoriaId: string) => {
+  const loadConceptos = useCallback(async (categoriaId: string) => {
     try {
       const supabase = getSupabase();
       const { data, error } = await supabase
@@ -134,10 +102,16 @@ export function CompletarGastoDialog({
 
       if (error) throw error;
       setConceptos(data || []);
-    } catch (error: any) {
+    } catch {
       setConceptos([]);
     }
-  };
+  }, []);
+
+  useEffect(() => { if (open) void loadCatalogs(); }, [open, loadCatalogs]);
+  useEffect(() => {
+    if (formData.categoria_id) void loadConceptos(formData.categoria_id);
+    else setConceptos([]);
+  }, [formData.categoria_id, loadConceptos]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -158,32 +132,21 @@ export function CompletarGastoDialog({
     setLoading(true);
 
     try {
-      const supabase = getSupabase();
-
-      // Update the gasto with the completed information
-      const { error } = await supabase
-        .from('fin_gastos')
-        .update({
-          negocio_id: formData.negocio_id,
-          region_id: formData.region_id,
-          categoria_id: formData.categoria_id,
-          concepto_id: formData.concepto_id,
-          proveedor_id: formData.proveedor_id || null,
-          medio_pago_id: formData.medio_pago_id,
-          observaciones: formData.observaciones,
-          estado: 'Confirmado',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', gasto.id);
-
-      if (error) throw error;
+      await actualizarGastoSeguro(getSupabase(), gasto.id, formData.__gastoOriginal, {
+        negocio_id: formData.negocio_id, region_id: formData.region_id,
+        categoria_id: formData.categoria_id, concepto_id: formData.concepto_id,
+        proveedor_id: formData.proveedor_id || null, medio_pago_id: formData.medio_pago_id,
+        observaciones: formData.observaciones, estado: 'Confirmado',
+      }, formData.__gastoOriginal?.valor ?? NaN);
 
       clearFormData();
       onSuccess();
       onOpenChange(false);
 
-    } catch (error: any) {
-      onError(`Error al completar el gasto: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'No se pudo confirmar la actualización del gasto.';
+      setConflict(message);
+      onError(`Error al completar el gasto: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -212,13 +175,14 @@ export function CompletarGastoDialog({
       <Button
         type="button"
         variant="outline"
-        onClick={() => { clearFormData(); onOpenChange(false); }}
+        onClick={() => { resetForm(); onOpenChange(false); }}
         disabled={loading}
       >
         Cancelar
       </Button>
       <Button
         type="submit"
+        form="completar-gasto-form"
         disabled={loading || !formData.negocio_id || !formData.region_id || !formData.categoria_id || !formData.concepto_id || !formData.proveedor_id || !formData.medio_pago_id}
         className="bg-green-600 hover:bg-green-700"
       >
@@ -248,8 +212,9 @@ export function CompletarGastoDialog({
           <DialogDescription>Complete la información del gasto generado automáticamente desde una compra</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
-          <form onSubmit={handleSubmit} className="contents">
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={resetForm} />
+          {conflict && <p role="alert" className="text-red-700 mb-3">{conflict}</p>}
+          <form id="completar-gasto-form" onSubmit={handleSubmit} className="contents">
             <div className="space-y-6">
               {/* Gasto Information Summary */}
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">

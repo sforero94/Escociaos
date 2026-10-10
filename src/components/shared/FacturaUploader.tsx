@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { FACTURA_ACCEPT, prepararArchivoFactura, validarArchivoFactura } from '@/utils/archivoFactura';
+import { useState, useRef, useLayoutEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -41,58 +42,48 @@ export function FacturaUploader({
   disabled = false,
 }: FacturaUploaderProps) {
   const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ path: string; url: string } | null>(null);
+  const generation = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const folder = tipo === 'compra' ? 'facturas_compra' : 'facturas_venta';
-
-  // Load preview for existing files
-  useEffect(() => {
-    const loadPreview = async () => {
-      if (currentUrl && isImage(currentUrl)) {
+  // Invalidate every request on path changes, including A → B → A and unmount.
+  useLayoutEffect(() => {
+    const request = ++generation.current;
+    setPreview(null);
+    setUploading(false);
+    if (currentUrl && isImage(currentUrl)) {
+      const path = currentUrl;
+      void (async () => {
         try {
-          const supabase = getSupabase();
-          const { data } = await supabase.storage
-            .from('facturas')
-            .createSignedUrl(currentUrl, 60 * 60); // 1 hour
-
-          if (data?.signedUrl) {
-            setPreviewUrl(data.signedUrl);
+          const { data, error } = await getSupabase().storage
+            .from('facturas').createSignedUrl(path, 60 * 60);
+          if (request === generation.current && !error && data?.signedUrl) {
+            setPreview({ path, url: data.signedUrl });
           }
-        } catch (error) {
-          console.error('Failed to load invoice preview:', error);
+        } catch {
+          // A failed preview must never restore an older object's URL.
         }
-      }
-    };
-
-    loadPreview();
+      })();
+    }
+    return () => { ++generation.current; };
   }, [currentUrl]);
 
   const handleFileSelect = async (event: { target: { files: FileList | null; value: string } }) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Solo se permiten archivos de imagen (JPG, PNG, GIF) o PDF');
+    event.target.value = '';
+    const validationError = validarArchivoFactura(file);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
-
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      toast.error('El archivo es muy grande. El tamaño máximo es 5MB');
-      return;
-    }
+    const request = generation.current;
 
     try {
       setUploading(true);
 
-      // Create a unique filename with timestamp
-      const timestamp = Date.now();
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${folder}/${timestamp}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const { path: fileName, contentType } = prepararArchivoFactura(file, tipo);
 
       // Upload to Supabase Storage (private bucket)
       const supabase = getSupabase();
@@ -101,6 +92,7 @@ export function FacturaUploader({
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false,
+          contentType,
         });
 
       if (error) throw error;
@@ -109,27 +101,16 @@ export function FacturaUploader({
       // We'll generate signed URLs on-demand when viewing
       const storagePath = data.path;
 
-      // For preview, generate a temporary signed URL for images
-      if (file.type.startsWith('image/')) {
-        const { data: signedUrlData } = await supabase.storage
-          .from('facturas')
-          .createSignedUrl(storagePath, 60 * 60); // 1 hour expiry for preview
-
-        if (signedUrlData) {
-          setPreviewUrl(signedUrlData.signedUrl);
-        }
-      } else {
-        setPreviewUrl(null);
-      }
+      if (request !== generation.current) return;
 
       // Call success callback with storage path (not URL)
       onUploadSuccess(storagePath);
 
       toast.success('Factura subida exitosamente');
-    } catch (error: any) {
-      toast.error('Error al subir la factura: ' + error.message);
+    } catch (error: unknown) {
+      if (request === generation.current) toast.error('Error al subir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     } finally {
-      setUploading(false);
+      if (request === generation.current) setUploading(false);
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -138,7 +119,8 @@ export function FacturaUploader({
   };
 
   const handleRemove = () => {
-    setPreviewUrl(null);
+    ++generation.current;
+    setPreview(null);
     onRemove();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -147,6 +129,8 @@ export function FacturaUploader({
 
   const handleViewFile = async () => {
     if (!currentUrl) return;
+    const request = generation.current;
+    const path = currentUrl;
 
     try {
       const supabase = getSupabase();
@@ -154,14 +138,14 @@ export function FacturaUploader({
       // Generate a signed URL valid for 1 hour
       const { data, error } = await supabase.storage
         .from('facturas')
-        .createSignedUrl(currentUrl, 60 * 60); // 1 hour
+        .createSignedUrl(path, 60 * 60); // 1 hour
 
       if (error) throw error;
-      if (data?.signedUrl) {
+      if (request === generation.current && data?.signedUrl) {
         window.open(data.signedUrl, '_blank');
       }
-    } catch (error: any) {
-      toast.error('Error al abrir la factura: ' + error.message);
+    } catch (error: unknown) {
+      if (request === generation.current) toast.error('Error al abrir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     }
   };
 
@@ -174,10 +158,10 @@ export function FacturaUploader({
       {hasFile ? (
         <div className="border rounded-lg p-4 space-y-3">
           {/* Preview for images */}
-          {currentUrl && isImage(currentUrl) && previewUrl && (
+          {currentUrl && isImage(currentUrl) && preview?.path === currentUrl && (
             <div className="flex justify-center">
               <img
-                src={previewUrl}
+                src={preview.url}
                 alt="Preview de factura"
                 className="max-h-48 rounded border object-contain"
               />
@@ -226,7 +210,7 @@ export function FacturaUploader({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/jpg,image/png,image/gif,application/pdf"
+            accept={FACTURA_ACCEPT}
             onChange={handleFileSelect}
             disabled={disabled || uploading}
             className="hidden"

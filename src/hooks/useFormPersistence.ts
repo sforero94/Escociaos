@@ -1,221 +1,66 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { draftStorageKey, readOwnedDraft, removeOwnedDraft, parseOwnedDraft, writeOwnedDraft } from '@/utils/draftStorage';
+export { FORM_AUTOSAVE_PREFIX, CURRENT_VERSION, RETENTION_DAYS, type StoredFormData } from '@/utils/draftStorage';
 
 interface UseFormPersistenceOptions<T> {
-  key: string; // Unique storage key for this form
-  initialState: T; // Default state when no saved data exists
-  debounceMs?: number; // Debounce delay (default: 1000ms)
-  enabled?: boolean; // Allow disabling persistence (default: true)
+  key: string;
+  initialState: T;
+  debounceMs?: number;
+  enabled?: boolean;
 }
 
-export interface StoredFormData<T> {
-  data: T;
-  timestamp: string;
-  version: number;
-}
-
-export const FORM_AUTOSAVE_PREFIX = 'form_autosave_';
-export const CURRENT_VERSION = 1;
-export const RETENTION_DAYS = 7;
-
-/**
- * Custom hook for auto-saving form state to localStorage
- *
- * Features:
- * - Debounced auto-save while typing
- * - Automatic restoration on mount
- * - Unique storage keys per form
- * - Manual clear method
- * - Version tracking for schema migration
- * - 7-day retention with automatic cleanup
- *
- * @example
- * const [formData, setFormData, clearFormData] = useFormPersistence({
- *   key: 'calculadora-aplicaciones-v1',
- *   initialState: { paso_actual: 1, configuracion: null }
- * });
- */
-export function useFormPersistence<T>({
-  key,
-  initialState,
-  debounceMs = 1000,
-  enabled = true
-}: UseFormPersistenceOptions<T>): [T, (value: T | ((prev: T) => T)) => void, () => void, boolean] {
-
-  // Storage key with prefix for namespacing
-  const storageKey = `form_autosave_${key}`;
-
-  // Track whether data was restored from localStorage
-  const wasRestoredRef = useRef(false);
-
-  // Initialize state from localStorage or use initial state
-  const [state, setStateInternal] = useState<T>(() => {
-    if (!enabled) return initialState;
-
-    try {
-      const savedData = localStorage.getItem(storageKey);
-      if (savedData) {
-        const parsed: StoredFormData<T> = JSON.parse(savedData);
-
-        // Check version compatibility
-        if (parsed.version !== CURRENT_VERSION) {
-          console.warn(`⚠️ Form version mismatch for ${key}, clearing old data`);
-          localStorage.removeItem(storageKey);
-          return initialState;
-        }
-
-        console.log(`📂 Restored form state for: ${key}`);
-        wasRestoredRef.current = true;
-        return parsed.data;
-      }
-    } catch (error) {
-      console.warn(`⚠️ Failed to restore form state for: ${key}`, error);
-      // Clear corrupted data
-      try {
-        localStorage.removeItem(storageKey);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-    }
-
-    return initialState;
-  });
-
-  // Debounce timer ref
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Track if this is the initial mount (don't save on first render)
-  const isInitialMountRef = useRef(true);
-
-  // Clear old form data (keep only last N days) — declared before effects that reference it
-  const clearOldFormData = () => {
-    try {
-      const cutoffTime = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-      Object.keys(localStorage).forEach(k => {
-        if (k.startsWith('form_autosave_')) {
-          try {
-            const item = localStorage.getItem(k);
-            if (item) {
-              const parsed: StoredFormData<unknown> = JSON.parse(item);
-              const savedTime = new Date(parsed.timestamp).getTime();
-
-              if (savedTime < cutoffTime) {
-                localStorage.removeItem(k);
-              }
-            }
-          } catch (e) {
-            localStorage.removeItem(k);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Failed to clear old form data', error);
-    }
+/** Account-owned autosave. Clearing resets without writing the empty form back. */
+export function useFormPersistence<T>({ key, initialState, debounceMs = 1000, enabled = true }: UseFormPersistenceOptions<T>):
+  [T, (value: T | ((prev: T) => T)) => void, () => void, boolean] {
+  const { user } = useAuth();
+  const ownerId = user?.id ?? null;
+  const storageKey = enabled ? draftStorageKey(ownerId, key) : null;
+  const load = () => {
+    const draft = readOwnedDraft<T>(storageKey, ownerId);
+    return { storageKey, data: draft ? draft.data : initialState, restored: !!draft, dirty: false };
   };
+  const [snapshot, setSnapshot] = useState(load);
+  // Reset during render so neither UI nor effects expose the previous account's state.
+  if (snapshot.storageKey !== storageKey) setSnapshot(load());
+  const current = snapshot.storageKey === storageKey ? snapshot : load();
+  const liveScope = useRef(storageKey);
+  useLayoutEffect(() => { liveScope.current = storageKey; }, [storageKey]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancel = () => { if (timer.current !== null) clearTimeout(timer.current); timer.current = null; };
 
-  // Save to localStorage with debouncing
   useEffect(() => {
-    if (!enabled) return;
-
-    // Skip saving on initial mount (we just loaded the data)
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
-
-    // Clear existing timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Set new timer
-    debounceTimerRef.current = setTimeout(() => {
-      try {
-        const dataToSave: StoredFormData<T> = {
-          data: state,
-          timestamp: new Date().toISOString(),
-          version: CURRENT_VERSION
-        };
-
-        localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-        console.log(`💾 Auto-saved form state for: ${key}`);
-      } catch (error) {
-        // Handle quota exceeded or other errors
-        console.error(`❌ Failed to save form state for: ${key}`, error);
-
-        // If quota exceeded, try to clear old form data
-        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-          clearOldFormData();
-
-          // Try saving again after cleanup
-          try {
-            const dataToSave: StoredFormData<T> = {
-              data: state,
-              timestamp: new Date().toISOString(),
-              version: CURRENT_VERSION
-            };
-            localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-            console.log(`💾 Auto-saved form state for: ${key} (after cleanup)`);
-          } catch (retryError) {
-            console.error(`❌ Failed to save after cleanup for: ${key}`, retryError);
-          }
-        }
-      }
+    if (!storageKey || !ownerId || snapshot.storageKey !== storageKey || !snapshot.dirty) return;
+    timer.current = setTimeout(() => {
+      if (liveScope.current === storageKey) writeOwnedDraft(storageKey, ownerId, snapshot.data);
     }, debounceMs);
+    return () => { if (timer.current !== null) clearTimeout(timer.current); };
+  }, [storageKey, ownerId, snapshot, debounceMs]);
 
-    // Cleanup
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [state, storageKey, debounceMs, enabled, key]);
-
-  // Listen for storage events from other tabs
   useEffect(() => {
-    if (!enabled) return;
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === storageKey && e.newValue) {
-        try {
-          const parsed: StoredFormData<T> = JSON.parse(e.newValue);
-
-          // Check version compatibility
-          if (parsed.version === CURRENT_VERSION) {
-            setStateInternal(parsed.data);
-            console.log(`🔄 Form state updated from another tab: ${key}`);
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to sync form state from another tab: ${key}`, error);
-        }
-      }
+    if (!storageKey || !ownerId) return;
+    const sync = (event: StorageEvent) => {
+      if (event.key !== storageKey || (event.storageArea && event.storageArea !== localStorage)) return;
+      const draft = parseOwnedDraft<T>(event.newValue, ownerId);
+      if (!draft && event.newValue !== null) return;
+      cancel();
+      setSnapshot({ storageKey, data: draft ? draft.data : initialState, restored: !!draft, dirty: false });
     };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, [storageKey, ownerId, initialState]);
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [storageKey, key, enabled]);
-
-  // Wrapper for setState to match React.useState signature
   const setState = (value: T | ((prev: T) => T)) => {
-    if (typeof value === 'function') {
-      setStateInternal(prev => (value as (prev: T) => T)(prev));
-    } else {
-      setStateInternal(value);
-    }
+    setSnapshot(prev => {
+      const data = prev.storageKey === storageKey ? prev.data : initialState;
+      return { storageKey, data: typeof value === 'function' ? (value as (prev: T) => T)(data) : value,
+        restored: prev.storageKey === storageKey && prev.restored, dirty: true };
+    });
   };
-
-  // Clear saved data
   const clearFormData = () => {
-    try {
-      localStorage.removeItem(storageKey);
-      console.log(`🗑️ Cleared form state for: ${key}`);
-      wasRestoredRef.current = false;
-      setStateInternal(initialState);
-    } catch (error) {
-      console.error(`❌ Failed to clear form state for: ${key}`, error);
-    }
+    cancel();
+    removeOwnedDraft(storageKey);
+    setSnapshot({ storageKey, data: initialState, restored: false, dirty: false });
   };
-
-
-  return [state, setState, clearFormData, wasRestoredRef.current];
+  return [current.data, setState, clearFormData, current.restored];
 }

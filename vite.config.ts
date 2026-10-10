@@ -87,6 +87,8 @@
       open: true,
     },
     test: {
+      // Deno SDK specifier resolves to the same installed SDK in local tests only.
+      alias: { 'jsr:@supabase/supabase-js@2': path.resolve(__dirname, 'node_modules/@supabase/supabase-js/dist/module/index.js') },
       // `archive/` (issue #266): tests del motor "Acciones recomendadas"
       // retirado -- sus imports apuntan a rutas que ya no existen bajo
       // `src/`. Preservados tal cual para restaurar, nunca corridos por la
