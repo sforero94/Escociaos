@@ -45,7 +45,10 @@ export async function getUserProfile(userId: string) {
       return null;
     }
     
-    if (!data || data.id !== userId || typeof data.activo !== 'boolean' || typeof data.rol !== 'string') {
+    if (!data || data.id !== userId || typeof data.activo !== 'boolean'
+      || !['Gerencia', 'Administrador', 'Monitor', 'Verificador'].includes(data.rol)
+      || (data.modulos_acceso != null && (!Array.isArray(data.modulos_acceso)
+        || data.modulos_acceso.some((modulo: unknown) => typeof modulo !== 'string')))) {
       console.log('ℹ️ No se encontró perfil en tabla usuarios (esto es normal si no se ha creado)');
       return null;
     }
@@ -55,8 +58,8 @@ export async function getUserProfile(userId: string) {
       id: data.id,
       nombre: data.nombre_completo || 'Usuario',
       email: data.email,
-      rol: data.rol || '',
-      modulos: (data as any).modulos_acceso ?? [],
+      rol: data.rol,
+      modulos: data.modulos_acceso ?? [],
       created_at: data.created_at,
       activo: data.activo,
     };

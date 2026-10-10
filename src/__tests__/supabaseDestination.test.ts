@@ -24,6 +24,20 @@ describe('one configured Supabase destination', () => {
     expect(result.error).toBeNull(); expect(requests).toHaveLength(1);
     expect(new URL(requests[0]).origin).toBe('https://isolated.example.test');
   });
+  it('refuses malformed role/module profiles without granting a default role', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://isolated.example.test'); vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-public-key');
+    const id = '10000000-0000-4000-8000-000000000001';
+    let row: Record<string, unknown> = { id, activo: true, rol: 'Gerencia', modulos_acceso: [] };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([row]), { headers: { 'content-type': 'application/json' } })));
+    const { getUserProfile } = await import('@/utils/supabase/client');
+    for (const extra of [{ rol: '' }, { rol: null }, { rol: 'Invented' }, { activo: 'true' },
+      { modulos_acceso: 'finanzas' }, { modulos_acceso: [false] }, { id: 'foreign' }]) {
+      row = { id, activo: true, rol: 'Gerencia', modulos_acceso: [], ...extra };
+      expect(await getUserProfile(id)).toBeNull();
+    }
+    row = { id, activo: false, rol: 'Monitor', modulos_acceso: null };
+    expect(await getUserProfile(id)).toMatchObject({ id, activo: false, rol: 'Monitor', modulos: [] });
+  });
   it('all eleven live edge consumers use configured destination without generated project imports', () => {
     for (const path of ['src/utils/chatService.ts', 'src/utils/reporteSemanalService.ts', 'src/utils/informesVisita/clienteProponer.ts',
       'src/components/configuracion/UsuariosConfig.tsx', 'src/components/dashboard/ClimaCard.tsx',

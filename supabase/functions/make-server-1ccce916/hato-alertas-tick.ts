@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // hato-alertas-tick.ts — endpoint del motor de alertas del Hato Lechero
 // (S6, plan §7.3): `POST /make-server-1ccce916/hato/alertas/tick`.
 //
@@ -177,12 +178,12 @@ async function verificarAuth(
       return respuestaError(c, 401, 'Token inválido o expirado.');
     }
     const { data: usuario, error: usuarioError } = await consultarConReintento(() =>
-      supabase.from('usuarios').select('rol').eq('id', userData.user.id).maybeSingle(),
+      supabase.from('usuarios').select('id,rol,activo').eq('id', userData.user.id).maybeSingle(),
     );
     if (usuarioError) {
       return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
     }
-    if (!usuario || !ROLES_DISPARO_MANUAL.has(usuario.rol as string)) {
+    if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_DISPARO_MANUAL])) {
       return respuestaError(c, 403, 'El disparo manual está restringido a Gerencia.');
     }
     return { disparo: 'manual' };

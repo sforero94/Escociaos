@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { parseOpenWeatherForecast } from './external-tools.ts';
@@ -224,13 +225,13 @@ async function verificarAccesoClima(c: Context): Promise<{ disparo: 'cron' | 'ma
 
     const { data: usuario, error: usuarioError } = await supabase
       .from('usuarios')
-      .select('rol')
+      .select('id,rol,activo')
       .eq('id', userData.user.id)
       .maybeSingle();
     if (usuarioError) {
       return c.json({ error: `No se pudo verificar el rol del usuario: ${usuarioError.message}` }, 500);
     }
-    if (!usuario || !ROLES_DISPARO_MANUAL.has(usuario.rol as string)) {
+    if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_DISPARO_MANUAL])) {
       return c.json({ error: 'El disparo manual de clima está restringido a Gerencia.' }, 403);
     }
     return { disparo: 'manual' };
