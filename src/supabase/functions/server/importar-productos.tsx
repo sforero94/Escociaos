@@ -1,6 +1,6 @@
 import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
-import { parseCsvProducts, CsvValidationError, validateCsvReceipt, validateCsvStatus } from './csv-product-import.ts';
+import { parseCsvProducts, CsvValidationError, validateCsvReceipt, validateCsvStatus, validateCsvRegistration } from './csv-product-import.ts';
 import { Context } from 'npm:hono';
 
 // ---------------------------------------------------------------------------
@@ -56,11 +56,12 @@ async function verificarAcceso(
 }
 
 // Only the verified human JWT reaches the write RPC. The service client above
-// performs identity/profile reads; there is no service-role table-write fallback.
+// performs identity/profile reads and registers trusted parser evidence only; there is no service-role table-write fallback.
 export async function handleImportarProductos(c: Context): Promise<Response> {
   const url = Deno.env.get('SUPABASE_URL')!;
   const apiKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const acceso = await verificarAcceso(c, createClient(url, apiKey));
+  const trusted = createClient(url, apiKey);
+  const acceso = await verificarAcceso(c, trusted);
   if (acceso instanceof Response) return acceso;
   try {
     const body = await c.req.json();
@@ -69,6 +70,12 @@ export async function handleImportarProductos(c: Context): Promise<Response> {
     const payload = parseCsvProducts(body.csvData);
     if (typeof body.requestKey !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.requestKey)
       || !['import','resolve'].includes(body.action)) return respuestaError(c,400,{error:'Identidad de importación inválida'});
+    if (body.action === 'import') {
+      const registration = await trusted.rpc('fn_csv_product_import_register',
+        {p_actor:acceso.userId,p_request_key:body.requestKey,p_payload:payload});
+      if (registration.error) return respuestaError(c,500,{error:registration.error.message});
+      await validateCsvRegistration(registration.data,acceso.userId,body.requestKey,payload);
+    }
     const human = createClient(url,apiKey,{
       global:{headers:{Authorization:`Bearer ${acceso.token}`}},
       auth:{persistSession:false,autoRefreshToken:false},

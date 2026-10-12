@@ -1,6 +1,6 @@
 import { beforeEach,afterEach,describe,it,expect,vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { parseCsvProducts, csvDecimal, CsvValidationError,validateCsvReceipt,validateCsvStatus,CSV_PERCENT,CSV_NUMERIC10,CSV_NUMERIC12,CSV_INTEGER } from '../supabase/functions/server/csv-product-import';
+import { parseCsvProducts, csvDecimal, CsvValidationError,validateCsvReceipt,validateCsvStatus,validateCsvRegistration,CSV_PERCENT,CSV_NUMERIC10,CSV_NUMERIC12,CSV_INTEGER } from '../supabase/functions/server/csv-product-import';
 import { importCsvProducts,pendingCsvImport,type CsvImportClient } from '../utils/csvProductImport';
 import { owner,other,product,movement,memory,storage,testLocks,sdkHarness } from './purchaseProtocolFixtures';
 const raw='nombre,categoria,grupo,unidad_medida,cantidad_actual\nSynthetic,Fertilizante,Agroinsumos,Kilos,2.345';
@@ -60,4 +60,17 @@ describe('actual browser SDK durable CSV protocol',()=>{
  it('status proof binds cancellation to owner, key, raw hash and parser version',async()=>{const p=parseCsvProducts(raw);const b={csvData:raw,requestKey:other};const proof=status(b,false,null);expect(await validateCsvStatus(proof,owner,other,p)).toBeNull();for(const patch of [{actor:other},{requestKey:owner},{parserVersion:2},{csvSha256:'0'.repeat(64)},{result:{}},{extra:true}])await expect(validateCsvStatus({...proof,...patch},owner,other,p)).rejects.toThrow();});
  it('stored attempts refuse a changed parser version without replacing evidence',async()=>{const {client}=await setup(()=>null);await expect(importCsvProducts(client,url,owner,raw)).rejects.toThrow();const saved=JSON.parse(memory.get(slot)!);memory.set(slot,JSON.stringify({...saved,version:2}));await expect(importCsvProducts(client,url,owner,raw)).rejects.toThrow();expect(JSON.parse(memory.get(slot)!).version).toBe(2);expect(calls).toHaveLength(1);});
  it('receipt verification refuses actor, key, field, stock, ledger, digest and count mutation',async()=>{const p=parseCsvProducts(raw);const b={csvData:raw,requestKey:other};const r=csvResult(b);for(const patch of [{actor:other},{requestKey:owner},{csvSha256:'0'.repeat(64)},{total:2},{products:[{...r.products[0],opening_quantity:3}]},{products:[{...r.products[0],movement_id:null}]},{products:[{...r.products[0],product:{...r.products[0].product,nombre:'Changed'}}]}])await expect(validateCsvReceipt({...r,...patch},owner,other,p)).rejects.toThrow();});
+});
+
+ describe('trusted CSV parser registration acknowledgement',()=>{
+ it('accepts reordered canonical objects and refuses every changed proof field',async()=>{
+  const payload=parseCsvProducts(raw);
+  const proof={actor:owner,requestKey:other,parserVersion:1,csvSha256:createHash('sha256').update(raw).digest('hex'),payload};
+  const reordered={...payload,products:payload.products.map(p=>Object.fromEntries(Object.entries(p).reverse()))};
+  await expect(validateCsvRegistration({...proof,payload:reordered},owner,other,payload)).resolves.toBeUndefined();
+  for(const value of [null,[],{}, {...proof,actor:other},{...proof,requestKey:owner},{...proof,parserVersion:2},
+   {...proof,csvSha256:'0'.repeat(64)},{...proof,extra:true},{...proof,payload:{...payload,raw_csv:'changed'}},
+   {...proof,payload:{...payload,products:[{...payload.products[0],cantidad_actual:8}]}}])
+   await expect(validateCsvRegistration(value,owner,other,payload)).rejects.toThrow('no verificable');
+ });
 });

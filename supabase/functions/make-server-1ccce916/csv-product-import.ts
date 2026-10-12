@@ -148,3 +148,15 @@ export async function validateCsvReceipt(data: unknown, actor: string, key: stri
   });
   return r;
 }
+
+// Acknowledgement of the service-only parser registration must bind every
+// canonical field, not merely echo the actor-claimed raw file digest.
+export async function validateCsvRegistration(data:unknown,actor:string,key:string,payload:CsvPayload):Promise<void> {
+  const canonical=(value:unknown)=>JSON.stringify(value,(_key,item:unknown)=>item && typeof item==='object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))) : item);
+  if(!data || typeof data!=='object' || Array.isArray(data))throw new Error('Registro del archivo no verificable');
+  const r=data as Record<string,unknown>;
+  if(Object.keys(r).sort().join('|')!=='actor|csvSha256|parserVersion|payload|requestKey' || r.actor!==actor || r.requestKey!==key
+    || r.parserVersion!==CSV_PARSER_VERSION || r.csvSha256!==await csvHash(payload.raw_csv) || canonical(r.payload)!==canonical(payload))
+    throw new Error('Registro del archivo no verificable. Conserve el intento pendiente.');
+}

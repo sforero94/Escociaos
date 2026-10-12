@@ -11,16 +11,114 @@ OTHER=m.OTHER
 
 def body(products=None,raw='synthetic CSV'):
  return dict(raw_csv=raw,parser_version=1,products=products or [dict(nombre='Synthetic '+uuid.uuid4().hex,categoria='Fertilizante',grupo='Agroinsumos',unidad_medida='Kilos',activo=True,cantidad_actual=2.35)])
-def call(p,key=None,actor=OWNER,role='authenticated',ok=True,name='fn_csv_product_import'):
- out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.{name}('{key or uuid.uuid4()}',{m.literal(json.dumps(p))}::jsonb);COMMIT;",ok)
+def register(p,key,actor=OWNER,role='service_role',ok=True):
+ out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SELECT public.fn_csv_product_import_register('{actor}','{key}',{m.literal(json.dumps(p))}::jsonb);COMMIT;",ok)
+ return json.loads(out) if ok else out
+
+def call(p,key=None,actor=OWNER,role='authenticated',ok=True,name='fn_csv_product_import',registered=True):
+ key=key or str(uuid.uuid4())
+ if registered and ok and role=='authenticated' and name=='fn_csv_product_import':register(p,key,actor)
+ out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.{name}('{key}',{m.literal(json.dumps(p))}::jsonb);COMMIT;",ok)
  return json.loads(out) if ok else out
 
 def status_proof(p,key,committed,result,actor=OWNER):
  return dict(actor=actor,requestKey=key,parserVersion=1,csvSha256=hashlib.sha256(p['raw_csv'].encode()).hexdigest(),committed=committed,result=result)
 def state():
- return m.sql("SELECT jsonb_build_array((SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.productos t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.movimientos_inventario t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY actor,request_key) FROM csv_product_import.requests t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY actor,request_key,ordinal) FROM csv_product_import.openings t));")
+ return m.sql("SELECT jsonb_build_array((SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.productos t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.movimientos_inventario t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY actor,request_key) FROM csv_product_import.requests t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY actor,request_key,ordinal) FROM csv_product_import.openings t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY actor,request_key) FROM csv_product_import.parsed t));")
 def rejects(p,label,key=None,actor=OWNER,role='authenticated',name='fn_csv_product_import'):
- before=state();call(p,key,actor,role,False,name);m.verify(state()==before,label)
+ key=key or str(uuid.uuid4())
+ if name=='fn_csv_product_import' and role=='authenticated' and actor:
+  before_registration=state()
+  try:register(p,key,actor)
+  except AssertionError as error:
+   if any(x in str(error) for x in ('syntax error','column reference','is not assigned yet')):raise
+   assert state()==before_registration,'rejected registration changed state'
+ before=state();call(p,key,actor,role,False,name,registered=False);m.verify(state()==before,label)
+def provenance_checks():
+ p=body();key=str(uuid.uuid4());before=state()
+ call(p,key,ok=False,registered=False)
+ m.verify(state()==before,'direct human unregistered raw/products cannot mutate')
+ for role in ('anon','authenticated'):
+  before=state();register(p,key,role=role,ok=False)
+  m.verify(state()==before,role+' cannot register client-claimed parsed proof or actor')
+ registered=register(p,key)
+ m.verify(registered==dict(actor=OWNER,requestKey=key,parserVersion=1,csvSha256=hashlib.sha256(p['raw_csv'].encode()).hexdigest(),payload=p),'service registration binds exact raw/parser/products/verified actor')
+ m.verify(register(p,key)==registered,'trusted parser registration idempotent exact replay')
+ for patch,label in [(dict(raw_csv='forged raw'),'raw'),(dict(products=[dict(p['products'][0],cantidad_actual=8)]),'products'),(dict(parser_version=2),'version')]:
+  before=state();call(dict(p,**patch),key,ok=False,registered=False)
+  register(dict(p,**patch),key,ok=False)
+  m.verify(state()==before,'direct human/service conflicting '+label+' refuses registered proof replacement')
+ result=call(p,key,registered=False)
+ m.verify(result['actor']==OWNER,'human domain RPC consumes exact trusted registered payload')
+ m.sql(f"UPDATE csv_product_import.parsed SET csv_sha256=repeat('0',64) WHERE request_key='{key}';")
+ before=state();call(p,key,ok=False,registered=False);call(p,key,ok=False,name='fn_csv_product_import_status')
+ m.verify(state()==before,'corrupted parser proof refuses committed replay/status')
+ m.sql(f"UPDATE csv_product_import.parsed SET csv_sha256='{registered['csvSha256']}' WHERE request_key='{key}';")
+ p=body();key=str(uuid.uuid4());call(p,key,name='fn_csv_product_import_status')
+ before=state();register(p,key,ok=False)
+ m.verify(state()==before,'cancellation before registration fences delayed trusted parser')
+ for table,timing,code in [('csv_product_import.parsed','BEFORE','RETURN NULL;'),('csv_product_import.parsed','BEFORE',"NEW.csv_sha256=repeat('0',64);RETURN NEW;"),('csv_product_import.parsed','AFTER','DELETE FROM csv_product_import.parsed WHERE actor=NEW.actor AND request_key=NEW.request_key;RETURN NEW;')]:
+  p=body();key=str(uuid.uuid4())
+  m.sql(f"CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN {code} END$$;CREATE TRIGGER fault {timing} INSERT ON {table} FOR EACH ROW EXECUTE FUNCTION public.fault();")
+  before=state();register(p,key,ok=False);m.verify(state()==before,'registration '+timing+' exact readback rolls back suppression/corruption/deletion')
+  m.sql(f'DROP TRIGGER fault ON {table};DROP FUNCTION public.fault();')
+ for code,label in [("UPDATE csv_product_import.parsed SET created_at=created_at-interval '1 day' WHERE request_key='{key}';RETURN NEW;",'metadata corruption'),
+  ("UPDATE csv_product_import.parsed SET payload=jsonb_set(payload,'{raw_csv}','\"forged\"'::jsonb) WHERE request_key='{key}';RETURN NEW;",'payload corruption'),
+  ("DELETE FROM csv_product_import.parsed WHERE request_key='{key}';RETURN NEW;",'deletion')]:
+  p=body();key=str(uuid.uuid4());register(p,key)
+  code=code.replace('{key}',key)
+  m.sql(f"CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN {code} END$$;CREATE TRIGGER fault AFTER INSERT ON csv_product_import.requests FOR EACH ROW EXECUTE FUNCTION public.fault();")
+  before=state();call(p,key,ok=False,registered=False)
+  m.verify(state()==before,'post final parser proof CAS rejects '+label)
+  m.sql('DROP TRIGGER fault ON csv_product_import.requests;DROP FUNCTION public.fault();')
+ p=body();key=str(uuid.uuid4());register(p,key)
+ m.sql(f"UPDATE usuarios SET activo=false WHERE id='{OWNER}';")
+ before=state();register(p,key,ok=False);call(p,key,ok=False,registered=False)
+ m.verify(state()==before,'registered proof cannot bypass profile revocation on register or human post')
+ m.sql(f"UPDATE usuarios SET activo=true WHERE id='{OWNER}';")
+
+
+def registration_order_checks():
+ import concurrent.futures,time
+ # Wait for the real registration INSERT trigger to sleep: it already holds
+ # the actor/key lock, so these exercise lock ordering rather than scheduler luck.
+ for follower in ('fn_csv_product_import','fn_csv_product_import_status'):
+  p=body();key=str(uuid.uuid4())
+  m.sql("CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN PERFORM pg_sleep(1);RETURN NEW;END$$;CREATE TRIGGER fault BEFORE INSERT ON csv_product_import.parsed FOR EACH ROW EXECUTE FUNCTION public.fault();")
+  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+   registration=pool.submit(register,p,key)
+   deadline=time.monotonic()+10
+   while m.sql("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='PgSleep' AND query LIKE '%fn_csv_product_import_register%');")!='t':
+    if registration.done():registration.result();raise AssertionError('registration lock wait was not observed')
+    if time.monotonic()>deadline:raise AssertionError('registration lock observation timeout')
+    time.sleep(.01)
+   following=pool.submit(call,p,key,name=follower,registered=False)
+   proof=registration.result();result=following.result()
+  m.sql('DROP TRIGGER fault ON csv_product_import.parsed;DROP FUNCTION public.fault();')
+  m.verify(proof['payload']==p and ((follower=='fn_csv_product_import' and result['success']) or
+   (follower=='fn_csv_product_import_status' and result==status_proof(p,key,False,None))),
+   'registration lock serializes delayed '+follower)
+  if follower=='fn_csv_product_import_status':
+   before=state();register(p,key,ok=False);call(p,key,ok=False,registered=False)
+   m.verify(state()==before,'status after registration fences delayed registration replay and post')
+ # Status takes the same lock first and must durably prevent later registration.
+ p=body();key=str(uuid.uuid4())
+ m.sql("CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN PERFORM pg_sleep(1);RETURN NEW;END$$;CREATE TRIGGER fault BEFORE INSERT ON csv_product_import.requests FOR EACH ROW EXECUTE FUNCTION public.fault();")
+ with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+  cancellation=pool.submit(call,p,key,name='fn_csv_product_import_status')
+  deadline=time.monotonic()+10
+  while m.sql("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='PgSleep' AND query LIKE '%fn_csv_product_import_status%');")!='t':
+   if cancellation.done():cancellation.result();raise AssertionError('status lock wait was not observed')
+   if time.monotonic()>deadline:raise AssertionError('status lock observation timeout')
+   time.sleep(.01)
+  late_registration=pool.submit(register,p,key,ok=False)
+  result=cancellation.result();error=late_registration.result()
+ m.sql('DROP TRIGGER fault ON csv_product_import.requests;DROP FUNCTION public.fault();')
+ m.verify(result==status_proof(p,key,False,None) and 'Canceled or changed CSV request' in error and
+  m.sql(f"SELECT count(*) FROM csv_product_import.parsed WHERE request_key='{key}';")=='0',
+  'status lock first refuses concurrently delayed service registration')
+
+
 def run():
  m.docker(['image','inspect',m.IMAGE])
  try:
@@ -119,7 +217,9 @@ def run():
      results.append(None)
   status_result=results[1]
   m.verify((status_result['committed'] and results[0]==status_result['result']) or (not status_result['committed'] and results[0] is None),'posting/status race committed receipt or durable canceled refusal')
-  for table in ['csv_product_import.requests','csv_product_import.openings']:
+  provenance_checks()
+  registration_order_checks()
+  for table in ['csv_product_import.requests','csv_product_import.openings','csv_product_import.parsed']:
    m.sql(f'BEGIN;SET LOCAL ROLE authenticated;SELECT * FROM {table};ROLLBACK;',False);m.verify(True,'protected evidence table denied '+table)
   print('CSV PG checks:',m.CHECKS,flush=True)
  finally:

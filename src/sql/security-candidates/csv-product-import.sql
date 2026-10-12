@@ -86,6 +86,12 @@ CREATE TABLE csv_product_import.requests (
  canceled boolean NOT NULL, result jsonb, created_at timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY(actor,request_key), CHECK ((canceled AND result IS NULL) OR (NOT canceled AND result IS NOT NULL))
 );
+CREATE TABLE csv_product_import.parsed (
+ actor uuid NOT NULL, request_key uuid NOT NULL, payload jsonb NOT NULL,
+ parser_version integer NOT NULL, csv_sha256 text NOT NULL CHECK(csv_sha256 ~ '^[0-9a-f]{64}$'),
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(actor,request_key)
+);
+ALTER TABLE csv_product_import.parsed ENABLE ROW LEVEL SECURITY;
 CREATE TABLE csv_product_import.openings (
  actor uuid NOT NULL, request_key uuid NOT NULL, ordinal int NOT NULL,
  product_id uuid NOT NULL UNIQUE, movement_id uuid UNIQUE,
@@ -166,17 +172,55 @@ DECLARE v jsonb; product public.productos; names text[]='{}'; BEGIN
   SELECT * INTO product FROM jsonb_populate_record(NULL::public.productos, '{"nombre": null, "categoria": null, "grupo": null, "registro_ica": null, "blanco_biologico": null, "ingrediente_activo_1": null, "concentracion_ia_1": null, "ingrediente_activo_2": null, "concentracion_ia_2": null, "ingrediente_activo_3": null, "concentracion_ia_3": null, "periodo_reingreso_horas": null, "periodo_carencia_dias": null, "tipo_aplicacion": null, "estado_fisico": null, "permitido_gerencia": false, "nitrogeno": null, "fosforo": null, "potasio": null, "calcio": null, "magnesio": null, "azufre": null, "hierro": null, "manganeso": null, "zinc": null, "cobre": null, "boro": null, "molibdeno": null, "carbono_organico": null, "silicio": null, "sodio": null, "epp_alto_nivel": false, "riesgo_acuatico": false, "riesgo_vida_silvestre": false, "riesgo_polinizador": false, "riesgo_transeunte": false, "link_ficha_tecnica": null, "link_hoja_seguridad": null, "unidad_medida": null, "presentacion_kg_l": null, "precio_por_presentacion": null, "precio_unitario": null, "cantidad_actual": 0, "estado": "OK", "stock_minimo": 0, "activo": true}'::jsonb || v);
  END LOOP;
 END $$;
+-- This proof is trusted only because registration EXECUTE is service-only.
+-- The edge passes actor from verified Auth.getUser and runs the real parser;
+-- a human may not register its own client-claimed raw/product association.
+CREATE FUNCTION csv_product_import.registered(a uuid,k uuid,p jsonb) RETURNS csv_product_import.parsed
+ LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE r csv_product_import.parsed; BEGIN
+ SELECT * INTO r FROM csv_product_import.parsed WHERE actor=a AND request_key=k FOR SHARE;
+ IF NOT FOUND OR r.actor IS DISTINCT FROM a OR r.request_key IS DISTINCT FROM k OR r.payload IS DISTINCT FROM p
+  OR r.parser_version IS DISTINCT FROM (p->>'parser_version')::integer
+  OR r.csv_sha256 IS DISTINCT FROM encode(sha256(convert_to(p->>'raw_csv','UTF8')),'hex') THEN
+  RAISE EXCEPTION 'Exact trusted server parsed registration required'; END IF;
+ RETURN r;
+END $$;
+CREATE FUNCTION public.fn_csv_product_import_register(p_actor uuid,p_request_key uuid,p_payload jsonb) RETURNS jsonb
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE u public.usuarios; r csv_product_import.parsed; prior csv_product_import.requests; expected jsonb;
+BEGIN
+ IF p_actor IS NULL OR p_request_key IS NULL THEN RAISE EXCEPTION 'Verified human actor and request key required'; END IF;
+ SELECT * INTO u FROM public.usuarios WHERE id=p_actor FOR SHARE;
+ IF NOT FOUND OR u.activo IS DISTINCT FROM true OR u.rol::text NOT IN ('Administrador','Gerencia') OR u.email IS NULL OR btrim(u.email)='' THEN
+  RAISE EXCEPTION 'Active permitted verified actor required'; END IF;
+ PERFORM csv_product_import.validate(p_payload);
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_actor::text||':'||p_request_key::text,0));
+ SELECT * INTO prior FROM csv_product_import.requests WHERE actor=p_actor AND request_key=p_request_key;
+ IF FOUND AND (prior.canceled OR prior.payload IS DISTINCT FROM p_payload) THEN RAISE EXCEPTION 'Canceled or changed CSV request'; END IF;
+ SELECT * INTO r FROM csv_product_import.parsed WHERE actor=p_actor AND request_key=p_request_key;
+ IF NOT FOUND THEN
+  IF prior.actor IS NOT NULL THEN RAISE EXCEPTION 'Committed request lacks trusted parser proof'; END IF;
+  expected:=jsonb_build_object('actor',p_actor,'request_key',p_request_key,'payload',p_payload,'parser_version',p_payload->'parser_version',
+   'csv_sha256',encode(sha256(convert_to(p_payload->>'raw_csv','UTF8')),'hex'),'created_at',now());
+  INSERT INTO csv_product_import.parsed SELECT * FROM jsonb_populate_record(NULL::csv_product_import.parsed,expected);
+  SELECT * INTO r FROM csv_product_import.parsed WHERE actor=p_actor AND request_key=p_request_key;
+  IF NOT FOUND OR to_jsonb(r) IS DISTINCT FROM expected THEN RAISE EXCEPTION 'Trusted parser registration did not persist exactly'; END IF;
+ END IF;
+ r:=csv_product_import.registered(p_actor,p_request_key,p_payload);
+ RETURN jsonb_build_object('actor',p_actor,'requestKey',p_request_key,'parserVersion',r.parser_version,'csvSha256',r.csv_sha256,'payload',r.payload);
+END $$;
 CREATE FUNCTION public.fn_csv_product_import(p_request_key uuid,p_payload jsonb) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE u public.usuarios; a uuid; existing csv_product_import.requests;
  v jsonb; expected public.productos; actual public.productos;
  expected_move public.movimientos_inventario; actual_move public.movimientos_inventario;
- ordinal int=0; proof jsonb; proofs jsonb='[]'; receipts jsonb='[]'; result jsonb; actual_request csv_product_import.requests;
+ registered csv_product_import.parsed; ordinal int=0; proof jsonb; proofs jsonb='[]'; receipts jsonb='[]'; result jsonb; actual_request csv_product_import.requests;
 BEGIN
  u=csv_product_import.authorize();a=u.id;
  IF p_request_key IS NULL THEN RAISE EXCEPTION 'Request key required'; END IF;
  PERFORM csv_product_import.validate(p_payload);
  PERFORM pg_advisory_xact_lock(hashtextextended(a::text||':'||p_request_key::text,0));
+ registered:=csv_product_import.registered(a,p_request_key,p_payload);
  SELECT * INTO existing FROM csv_product_import.requests WHERE actor=a AND request_key=p_request_key;
  IF FOUND THEN
   IF existing.payload IS DISTINCT FROM p_payload OR existing.canceled THEN RAISE EXCEPTION 'Canceled or changed CSV request'; END IF;
@@ -228,18 +272,24 @@ BEGIN
  SELECT * INTO actual_request FROM csv_product_import.requests WHERE actor=a AND request_key=p_request_key;
  IF NOT FOUND OR actual_request.actor<>a OR actual_request.request_key<>p_request_key OR actual_request.payload IS DISTINCT FROM p_payload
   OR actual_request.canceled IS DISTINCT FROM false OR actual_request.result IS DISTINCT FROM result OR actual_request.created_at IS DISTINCT FROM now() THEN RAISE EXCEPTION 'CSV receipt did not persist exactly'; END IF;
+ IF to_jsonb(csv_product_import.registered(a,p_request_key,p_payload)) IS DISTINCT FROM to_jsonb(registered) THEN
+  RAISE EXCEPTION 'Trusted parser registration changed during import'; END IF;
  RETURN result;
 END $$;
 CREATE FUNCTION public.fn_csv_product_import_status(p_request_key uuid,p_payload jsonb) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE u public.usuarios; r csv_product_import.requests; BEGIN
+DECLARE u public.usuarios; r csv_product_import.requests; registered csv_product_import.parsed; BEGIN
  u=csv_product_import.authorize();
  IF p_request_key IS NULL THEN RAISE EXCEPTION 'Request key required'; END IF;
  PERFORM csv_product_import.validate(p_payload);
  PERFORM pg_advisory_xact_lock(hashtextextended(u.id::text||':'||p_request_key::text,0));
+ IF EXISTS(SELECT 1 FROM csv_product_import.parsed WHERE actor=u.id AND request_key=p_request_key) THEN
+  registered:=csv_product_import.registered(u.id,p_request_key,p_payload);
+ END IF;
  SELECT * INTO r FROM csv_product_import.requests WHERE actor=u.id AND request_key=p_request_key;
  IF FOUND THEN
   IF r.payload IS DISTINCT FROM p_payload THEN RAISE EXCEPTION 'Changed CSV request'; END IF;
+  IF NOT r.canceled THEN PERFORM csv_product_import.registered(u.id,p_request_key,p_payload); END IF;
   RETURN jsonb_build_object('actor',u.id,'requestKey',p_request_key,'parserVersion',1,
     'csvSha256',encode(sha256(convert_to(p_payload->>'raw_csv','UTF8')),'hex'),'committed',NOT r.canceled,'result',r.result);
  END IF;
@@ -248,10 +298,13 @@ DECLARE u public.usuarios; r csv_product_import.requests; BEGIN
  IF NOT FOUND OR r.actor<>u.id OR r.request_key<>p_request_key OR r.payload IS DISTINCT FROM p_payload OR r.canceled IS DISTINCT FROM true OR r.result IS NOT NULL OR r.created_at IS DISTINCT FROM now() THEN
   RAISE EXCEPTION 'CSV cancellation fence did not persist exactly';
  END IF;
+ IF registered.actor IS NOT NULL AND to_jsonb(csv_product_import.registered(u.id,p_request_key,p_payload)) IS DISTINCT FROM to_jsonb(registered) THEN RAISE EXCEPTION 'Parser proof changed during cancellation'; END IF;
  RETURN jsonb_build_object('actor',u.id,'requestKey',p_request_key,'parserVersion',1,
    'csvSha256',encode(sha256(convert_to(p_payload->>'raw_csv','UTF8')),'hex'),'committed',false,'result',NULL);
 END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA csv_product_import FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.fn_csv_product_import(uuid,jsonb),public.fn_csv_product_import_status(uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.fn_csv_product_import_register(uuid,uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_csv_product_import_register(uuid,uuid,jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fn_csv_product_import(uuid,jsonb),public.fn_csv_product_import_status(uuid,jsonb) TO authenticated;
 COMMIT;

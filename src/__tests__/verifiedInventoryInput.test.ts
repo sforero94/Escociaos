@@ -38,6 +38,8 @@ let calls: Array<{ url: URL; method: string; body: Record<string, unknown> | und
 let profileFailure: boolean;
 let csvRpcReply: unknown;
 let csvRpcFailure: boolean;
+let registrationReply: unknown;
+let registrationFailure: boolean;
 function csvReceipt(body:Record<string,unknown>){
   const p=body.p_payload as {raw_csv:string;products:Array<Record<string,unknown>>};
   return {success:true,actor,requestKey:body.p_request_key,parserVersion:1,csvSha256:createHash('sha256').update(p.raw_csv).digest('hex'),
@@ -61,6 +63,8 @@ beforeEach(() => {
   profileFailure = false;
   csvRpcReply = undefined;
   csvRpcFailure = false;
+  registrationReply = undefined;
+  registrationFailure = false;
   calls = [];
   vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://supabase.invalid' : 'service-test-key' } });
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -73,6 +77,14 @@ beforeEach(() => {
     });
     if (url.pathname === '/auth/v1/user') return reply({ id: actor });
     if (url.pathname === '/rest/v1/usuarios') return reply(profileFailure ? { message: 'offline' } : profile, profileFailure ? 503 : 200);
+    if (url.pathname === '/rest/v1/rpc/fn_csv_product_import_register') {
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer service-test-key');
+      expect(body!.p_actor).toBe(actor);
+      if(registrationFailure)return reply({message:'synthetic registration unavailable'},503);
+      const p=body!.p_payload as {raw_csv:string};
+      return reply(registrationReply ?? {actor,requestKey:body!.p_request_key,parserVersion:1,
+        csvSha256:createHash('sha256').update(p.raw_csv).digest('hex'),payload:p});
+    }
     if (url.pathname.startsWith('/rest/v1/rpc/fn_csv_product_import')) {
       expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer valid-human-jwt');
       if(csvRpcFailure)return reply({message:'synthetic RPC unavailable'},503);
@@ -148,6 +160,28 @@ for (const [index, label] of ['source', 'deployment'].entries()) {
       const response = await loaded[index].csv.handleImportarProductos(context({ csvData: `${headers}\n${row('5')}` }));
       expect((await response.json()).success).toBe(true);
     });
+    it('registers exact trusted parsed payload with verified actor before human posting',async()=>{
+      const response=await loaded[index].csv.handleImportarProductos(context({csvData:`${headers}\n${row('5')}`,actor:otherId,p_actor:otherId}));
+      expect(response.status).toBe(200);
+      const posts=calls.filter(c=>c.method==='POST');
+      expect(posts.map(c=>c.url.pathname)).toEqual(['/rest/v1/rpc/fn_csv_product_import_register','/rest/v1/rpc/fn_csv_product_import']);
+      expect(posts[0].body).toEqual({...posts[1].body,p_actor:actor});
+    });
+    it('refuses registration errors and forged acknowledgements before human mutation',async()=>{
+      const body={csvData:`${headers}\n${row('5')}`};
+      registrationFailure=true;
+      expect((await loaded[index].csv.handleImportarProductos(context(body))).status).toBe(500);
+      registrationFailure=false;
+      const posted=calls.find(c=>c.method==='POST')!.body!;
+      const payload=posted.p_payload as {raw_csv:string;products:Array<Record<string,unknown>>};
+      const proof={actor,requestKey:otherId,parserVersion:1,csvSha256:createHash('sha256').update(payload.raw_csv).digest('hex'),payload};
+      for(const patch of [{actor:otherId},{requestKey:actor},{parserVersion:2},{csvSha256:'0'.repeat(64)},
+        {payload:{...payload,raw_csv:'forged'}},{payload:{...payload,products:[{...payload.products[0],cantidad_actual:8}]}},{extra:true}]){
+        registrationReply={...proof,...patch};
+        expect((await loaded[index].csv.handleImportarProductos(context(body))).status).toBe(500);
+      }
+      expect(calls.filter(c=>c.method==='POST').every(c=>c.url.pathname==='/rest/v1/rpc/fn_csv_product_import_register')).toBe(true);
+    });
     it('routes resolution through the human JWT status RPC and validates bound cancellation proofs',async()=>{
       const body={csvData:`${headers}\n${row('5')}`,requestKey:otherId,action:'resolve'};
       let response=await loaded[index].csv.handleImportarProductos(context(body));
@@ -170,7 +204,7 @@ for (const [index, label] of ['source', 'deployment'].entries()) {
       for(const patch of [{actor:otherId},{requestKey:actor},{parserVersion:2},{csvSha256:'0'.repeat(64)},{products:[{...r.products[0],movement_id:null}]}]){
         csvRpcReply={...r,...patch};expect((await loaded[index].csv.handleImportarProductos(context(body))).status).toBe(500);
       }
-      expect(calls.filter(c=>c.method!=='GET').every(c=>c.url.pathname==='/rest/v1/rpc/fn_csv_product_import')).toBe(true);
+      expect(calls.filter(c=>c.method!=='GET').every(c=>['/rest/v1/rpc/fn_csv_product_import_register','/rest/v1/rpc/fn_csv_product_import'].includes(c.url.pathname))).toBe(true);
     });
     it('rejects invalid request identity, strict flags and numeric business bounds before any RPC',async()=>{
       for(const patch of [{requestKey:null},{requestKey:'invalid'},{action:'write'},{action:undefined}])
