@@ -11,6 +11,12 @@ import {
   type FilaResumenDia,
 } from './clima-actualizar.ts';
 import { conReintento, esStatusReintentable } from './reintento.ts';
+import {
+  CLAVE_ALERTA_SILENCIO,
+  construirMensajeSilencio,
+  evaluarSilencioEstacion,
+} from './clima-silencio.ts';
+import { enviarMensajeTelegram } from './telegram/enviar.ts';
 
 // ============================================================================
 // Ecowitt Cloud API Types
@@ -249,6 +255,89 @@ async function verificarAccesoClima(c: Context): Promise<{ disparo: 'cron' | 'ma
 // Handler: Ecowitt real-time sync (called by pg_cron every 5 min)
 // ============================================================================
 
+// ============================================================================
+// Alerta «estación sin datos» (ESCO-152, migración 180)
+// ============================================================================
+// Corre al final de CADA llamada a `/clima/sync` (cada 5 min, cron 030/105),
+// haya o no sincronizado. NUNCA lanza y NUNCA cambia la respuesta del sync.
+// Lógica pura en `clima-silencio.ts`; acá sólo el I/O.
+
+async function vigilarSilencioEstacion(): Promise<void> {
+  const log = '[clima-silencio]';
+  try {
+    const cfg = getSupabaseConfig();
+    if (!cfg) return;
+    const sb = createClient(cfg.supabaseUrl, cfg.serviceKey);
+
+    const { data: ultima, error: errUltima } = await sb
+      .from('clima_lecturas')
+      .select('timestamp')
+      .neq('station_id', 'wunderground-historico')
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (errUltima) {
+      console.error(`${log} no se pudo leer la última lectura: ${errUltima.message}`);
+      return;
+    }
+
+    const ahora = new Date();
+    const ultimaIso = (ultima?.timestamp as string | undefined) ?? null;
+    const evaluacion = evaluarSilencioEstacion(ultimaIso, ahora);
+    if (!evaluacion.enSilencio || !evaluacion.clave) return;
+
+    // Reclamar el aviso ANTES de enviar: la PK de clima_avisos es la que hace
+    // que el mismo apagón mande un solo mensaje aunque el sync corra cada 5 min.
+    const { data: reclamado, error: errReclamo } = await sb
+      .from('clima_avisos')
+      .upsert(
+        { clave: evaluacion.clave, detalle: { ultima_lectura: ultimaIso, horas_sin_datos: evaluacion.horasSinDatos } },
+        { onConflict: 'clave', ignoreDuplicates: true },
+      )
+      .select('clave');
+    if (errReclamo) {
+      console.error(`${log} no se pudo reclamar el aviso: ${errReclamo.message}`);
+      return;
+    }
+    if (!reclamado || reclamado.length === 0) return; // ya avisado en este apagón
+
+    const { data: subs, error: errSubs } = await sb
+      .from('telegram_alertas_suscripciones')
+      .select('recibe, telegram_usuarios!inner(telegram_id, activo)')
+      .eq('alerta_clave', CLAVE_ALERTA_SILENCIO)
+      .eq('recibe', true)
+      .eq('telegram_usuarios.activo', true);
+    if (errSubs) {
+      console.error(`${log} no se pudieron leer los suscriptores: ${errSubs.message}`);
+    }
+
+    const destinatarios: string[] = [];
+    for (const fila of (subs ?? []) as Array<{ telegram_usuarios: { telegram_id: number | null } | { telegram_id: number | null }[] | null }>) {
+      const u = Array.isArray(fila.telegram_usuarios) ? fila.telegram_usuarios[0] : fila.telegram_usuarios;
+      if (u && u.telegram_id !== null && u.telegram_id !== undefined) destinatarios.push(String(u.telegram_id));
+    }
+
+    const texto = construirMensajeSilencio(ultimaIso, ahora);
+    let algunoOk = false;
+    for (const telegramId of destinatarios) {
+      const r = await enviarMensajeTelegram(sb, { telegramId, texto, tipoMensaje: 'alerta_clima_sin_datos', flujo: 'clima' });
+      if (r.ok) algunoOk = true;
+      else console.error(`${log} fallo al enviar a ${telegramId}: ${r.error}`);
+    }
+
+    if (!algunoOk) {
+      // Nadie lo recibió (sin suscriptores o Telegram falló): soltar el reclamo
+      // para que el próximo sync lo vuelva a intentar.
+      await sb.from('clima_avisos').delete().eq('clave', evaluacion.clave);
+      console.warn(`${log} aviso no entregado (${destinatarios.length} destinatarios); se reintenta en el próximo sync.`);
+      return;
+    }
+    console.info(`${log} aviso enviado: ${evaluacion.clave} (${evaluacion.horasSinDatos ?? 's/d'} h)`);
+  } catch (err) {
+    console.error(`${log} error inesperado:`, err);
+  }
+}
+
 export async function handleClimaSync(c: Context): Promise<Response> {
   const log = '[clima-sync]';
 
@@ -331,6 +420,9 @@ export async function handleClimaSync(c: Context): Promise<Response> {
   } catch (error) {
     console.error(`${log} Unhandled error:`, error);
     return c.json({ error: String(error) }, 500);
+  } finally {
+    // ESCO-152: aviso por Telegram si la estación lleva > 3 h sin datos.
+    await vigilarSilencioEstacion();
   }
 }
 
