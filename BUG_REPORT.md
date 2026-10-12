@@ -3,6 +3,7 @@
 **Abierto:** 2026-02-24
 **Re-verificado contra producción y `main@7c232f6`:** 2026-08-03
 **Re-verificado contra producción y `main@1a97b2d`:** 2026-09-07 — sin cambio de veredicto; sólo se actualizan las cifras que habían quedado rancias
+**Re-verificado contra producción y `main@a852d3e`:** 2026-10-12 — sin cambio de veredicto; cifras de reportes al día, 3b idéntico
 **Estado:** 5 de los 6 problemas originales están cerrados. 1 sigue abierto, y no por la causa que decía este archivo.
 
 > **Cómo leer este archivo.** Cada issue lleva su veredicto y **la evidencia con la que se comprobó** (archivo:línea, SQL con su resultado). Un issue sin evidencia no se cierra. Si vuelve a aparecer un síntoma listado aquí como cerrado, es un bug **nuevo** — no una reapertura — y merece su propia entrada.
@@ -20,15 +21,15 @@
 | 5 | Guardar el reporte falla con error de RLS | ✅ **Corregido** |
 | 6 | La descarga del PDF no funciona | ✅ **No reproducible** |
 
-El módulo lleva **28 reportes generados y guardados**, con cadencia semanal hasta la **semana 35 de 2026 (2026-08-31)**. La afirmación original de que "NADA funciona" dejó de ser cierta hace meses; este archivo simplemente no se actualizó.
+El módulo lleva **33 reportes generados y guardados**, con cadencia semanal hasta la **semana 40 de 2026 (2026-10-05)**. La afirmación original de que "NADA funciona" dejó de ser cierta hace meses; este archivo simplemente no se actualizó.
 
 ```sql
--- verificado 2026-09-07
+-- verificado 2026-10-12
 select count(*) total, count(url_storage) con_url,
        max(created_at)::date ultimo,
        max(numero_semana) filter (where ano = 2026) ultima_semana
 from reportes_semanales;
--- total = 28 | con_url = 28 | ultimo = 2026-08-31 | ultima_semana = 35
+-- total = 33 | con_url = 33 | ultimo = 2026-10-05 | ultima_semana = 40
 ```
 
 > El reporte **no tiene cron**: `cron.job` sólo lista los seis trabajos de clima, hato, acciones y ronda de inventario. Una semana sin fila en `reportes_semanales` es cadencia humana, no un defecto.
@@ -108,7 +109,7 @@ El corte es limpio: **toda aplicación creada desde abril de 2026 escribe `costo
 
 ### 3b. El inventario consumido se valora en $0 — ❌ SIGUE ABIERTO (causa distinta a la reportada)
 
-`src/utils/fetchDatosReporteSemanal.ts:511-522` calcula el valor del inventario que la aplicación va a consumir derivando un precio unitario **a partir de lo que hay que comprar**:
+`src/utils/fetchDatosReporteSemanal.ts:512-523` calcula el valor del inventario que la aplicación va a consumir derivando un precio unitario **a partir de lo que hay que comprar**:
 
 ```ts
 const unitCost = item.costoEstimado > 0 && cantidadComprar > 0
@@ -116,12 +117,12 @@ const unitCost = item.costoEstimado > 0 && cantidadComprar > 0
   : 0;
 ```
 
-Cuando el producto está **totalmente cubierto por inventario** — el caso normal — `cantidadComprar` es 0, así que `unitCost` es 0 y ese insumo aporta **cero** al costo. Si ninguna línea requiere compra, `costoTotal` (línea 525) es 0 y `costoPorLitroKg` / `costoPorArbol` salen en 0.
+Cuando el producto está **totalmente cubierto por inventario** — el caso normal — `cantidadComprar` es 0, así que `unitCost` es 0 y ese insumo aporta **cero** al costo. Si ninguna línea requiere compra, `costoTotal` (línea 526) es 0 y `costoPorLitroKg` / `costoPorArbol` salen en 0.
 
-Al 2026-09-07 eso aplica a **8 de las 21 aplicaciones** registradas — las que tienen lista de compras pero ninguna línea por comprar (`cantidad_faltante = 0` en todas): *Drench Enero 26*, *Fumigación 01*, *Foco Irlanda*, *Fumigación control monalonion y hongos - Mayo*, *Fertilizante mes de junio*, *Fumigacion Post cosecha junio*, *Fumigación control acaro - Julio* y *Drench agosto* (nueva desde el 2026-08-03).
+Al 2026-10-12 (sin cambio desde el 2026-09-07) eso aplica a **8 de las 21 aplicaciones** registradas — las que tienen lista de compras pero ninguna línea por comprar (`cantidad_faltante = 0` en todas): *Drench Enero 26*, *Fumigación 01*, *Foco Irlanda*, *Fumigación control monalonion y hongos - Mayo*, *Fertilizante mes de junio*, *Fumigacion Post cosecha junio*, *Fumigación control acaro - Julio* y *Drench agosto* (nueva desde el 2026-08-03).
 
 ```sql
--- verificado 2026-09-07
+-- verificado 2026-10-12 (mismo resultado que el 2026-09-07)
 select a.nombre_aplicacion, a.estado, count(c.id) items,
        sum((coalesce(c.cantidad_faltante,0) > 0)::int) items_a_comprar
 from aplicaciones a join aplicaciones_compras c on c.aplicacion_id = a.id
@@ -131,7 +132,7 @@ group by 1,2 having sum((coalesce(c.cantidad_faltante,0) > 0)::int) = 0;
 
 **Por qué no se corrige en este archivo:** existe una fuente de precio obvia (`productos.precio_unitario`, que es la que ya usa el motor de costo/kg en `calculosCostoKg.ts`), pero decidir **a qué precio se valora un insumo sacado de bodega** es una regla contable, no un bug de aritmética. Requiere aprobación del dueño antes de tocar un número que Gerencia lee.
 
-**Impacto acotado, re-verificado 2026-09-07:** `fetchAplicacionesPlaneadas()` solo trae aplicaciones en estado `Calculada`. Sigue habiendo **una** (*Aplicacion Enmienda*) y sigue sin filas en `aplicaciones_compras`; las 8 afectadas están todas `Cerrada`. Así que la sección de planeadas del reporte sale vacía casi siempre. Es un error latente, no uno que esté ensuciando el reporte cada semana.
+**Impacto acotado, re-verificado 2026-10-12:** `fetchAplicacionesPlaneadas()` solo trae aplicaciones en estado `Calculada`. Sigue habiendo **una** (*Aplicacion Enmienda*) y sigue sin filas en `aplicaciones_compras`; las 8 afectadas están todas `Cerrada`. Así que la sección de planeadas del reporte sale vacía casi siempre. Es un error latente, no uno que esté ensuciando el reporte cada semana.
 
 ---
 
@@ -176,13 +177,13 @@ Confirmado además por el hecho de que hay 24 reportes guardados (ver Resumen).
 
 **Síntoma original:** el PDF no se descargaba tras generar el reporte; se sospechaba de RLS en el bucket o de archivos que nunca llegaban a Storage.
 
-**Evidencia:** los 28 reportes tienen `url_storage` poblada. Un reporte que no llega a Storage no obtiene URL.
+**Evidencia:** los 33 reportes tienen `url_storage` poblada. Un reporte que no llega a Storage no obtiene URL.
 
 ```sql
--- verificado 2026-09-07
+-- verificado 2026-10-12
 select count(*) total, count(url_storage) con_url, max(created_at)::date ultimo
 from reportes_semanales;
--- total = 28 | con_url = 28 | ultimo = 2026-08-31
+-- total = 33 | con_url = 33 | ultimo = 2026-10-05
 ```
 
 Si vuelve a fallar una descarga, ábrase como bug nuevo con el error del navegador: el modo de falla de 2026-02 (archivo inexistente) ya no aplica.
