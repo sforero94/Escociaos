@@ -393,3 +393,11 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
 - PR #299 revisado, limpio. Regla de destinatarios `rol_bot='gerencia'` = hoy las cuentas Gerencia de la app; re-verificar esa equivalencia después de aplicar 172 (rol_bot no está atado a usuarios.rol). [corrida: 2026-10-05-lunes]
 - Nota no hallazgo: `hato_ev_undo` no verifica creador ni módulo; cualquier usuario vinculado con el botón puede deshacer un evento `fuente='telegram'`. Telegram valida callback_data contra el botón real. [corrida: 2026-10-05-lunes]
 - Storage: 8 buckets (no 7; `informes-visita` es el 8.º), 28 políticas en storage.objects. [corrida: 2026-10-05-lunes]
+
+## Corrida 2026-10-12-lunes
+- Baseline: 113 tablas / 113 con RLS / 315 políticas / 16 SECURITY DEFINER (+2 = fn_alertas_horario_listar/_cambiar, mig 175), 0 sin search_path. Advisors security: 4 categorías, ninguna nueva; rls_enabled_no_policy 55 (+3 respaldos 176/178). [corrida: 2026-10-12-lunes]
+- Estado aceptado: fn_alertas_horario_listar/_cambiar (175) SECURITY DEFINER con gate es_usuario_gerencia() → 42501, whitelist de 2 jobs, hora por regex, schedule con enteros; EXECUTE authenticated+service_role, anon revocado. Aparecen en authenticated_security_definer_function_executable y son ACEPTABLES. fn_hato_confirmar_paso_tratamiento (177): INVOKER, EXECUTE solo service_role. [corrida: 2026-10-12-lunes]
+- Always-true de escritura: 0 por 6.ª corrida. Padrón 6G+4A sin cambio; auth.users 10, última alta 2026-08-30. npm audit runtime: los mismos 9 por 6.ª corrida. rol_bot='gerencia' = Gerencia de la app (Martha, Santiago). [corrida: 2026-10-12-lunes]
+- #311 Esco: las 22 herramientas nuevas tocan fin_*/hato_* pero NO usuarios/empleados/contratistas/telegram_usuarios. Audiencia = Gerencia (web: authenticateUser chat.tsx:248; Telegram: módulo consultas, hoy solo Martha y Santiago). Gap latente = ESCO-117; no re-filar. [corrida: 2026-10-12-lunes]
+- Filado ESCO-153 (P3 codigo): handleChatMessage (chat.tsx:4058-4150) usa body.conversation_id con service role sin verificar dueño; la RLS sí lo exige. Telegram no afectado. [corrida: 2026-10-12-lunes]
+- Nota: authenticateUser del chat no mira usuarios.activo (misma ventana que ESCO-119, mitigada por el baneo de auth). No hallazgo. [corrida: 2026-10-12-lunes]

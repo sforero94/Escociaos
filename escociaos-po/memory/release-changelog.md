@@ -602,3 +602,10 @@ mensual sigue siendo la unica legible.**
 - ESCO-140 cerrada (Arreglado) por la 176. Verificar el lunes que el `secado_due` de MAGNIFICA salio tras el tick del 10-09. [corrida: 2026-10-08-jueves]
 - Deriva de "ESCRITA, SIN APLICAR": 175/176 es la octava vez (ESCO-147). [corrida: 2026-10-08-jueves]
 - El hook deniega `COMPOSIO_REMOTE_BASH_TOOL` a los subagentes: para leer campos de cierre de Notion, pedirlos al orquestador en el contexto de despacho. [corrida: 2026-10-08-jueves]
+
+## Corrida 2026-10-12-lunes
+- Línea base: HEAD a852d3e · edge v273 (2026-10-10T15:25:46Z) = drift-state de da5f5a6 · migraciones hasta 178, sin nuevas · Vercel prod = HEAD · 2 PR abiertos (#324 draft, #325) · nada pendiente de despliegue. [corrida: 2026-10-12-lunes]
+- El viernes se cerraron ESCO-146 y ESCO-149 a las 15:23Z con motivo «redeploy pending», 2 min ANTES del deploy v273 (15:25:46Z). Resultado correcto, pero viola merge != deploy. Al revisar cierres, comparar last_edited_time de la ficha con list_edge_functions.updated_at. La línea de despliegue quedó en el reporte del lunes, no en el motivo (reescribir el campo por API lo pisa entero). [corrida: 2026-10-12-lunes]
+- Notion vía Composio: filtro {"property":"ID","unique_id":{"greater_than_or_equal_to":N}} funciona. Estado does_not_equal Done da el backlog abierto en una llamada pequeña. [corrida: 2026-10-12-lunes]
+- PR #324 (draft, Codex+Santiago): 8 candidatos SQL SIN numerar en src/sql/security-candidates/ → no compite por número. Cuando salga de draft: candidatos a migraciones numeradas con barrido de ramas, y orden migración → deploy CLI. [corrida: 2026-10-12-lunes]
+- Sonda de contenido #318: literales de toast (Reporte listo para compartir) dentro de InventoryList-*.js. [corrida: 2026-10-12-lunes]

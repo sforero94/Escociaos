@@ -23,6 +23,30 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-12 — corrida lunes
+
+A cleanup week. **Seven PRs merged** (#316, #318–#323), all on 2026-10-08 and 2026-10-10,
+and **no migrations** (the ledger stays at 178). Everything is live: the frontend is on
+`a852d3e` (Vercel READY), and the edge function `make-server-1ccce916` is v273
+(2026-10-10T15:25:46Z, hash = drift-state of `da5f5a6`). The two Esco fixes went live
+about 1 h 36 min after merge. Nothing waits for a deploy.
+
+### Aguacate · Inventario
+- From the inventory list, a user can now export current stock to Excel or PDF, filtered by group or category, ready to share (#318).
+
+### Esco
+- Esco answers climate questions again: `get_climate_data` stopped failing on every call (ESCO-149, #316).
+- When asked about treatments in a date range, Esco now includes finished and cancelled treatments, not only active ones (ESCO-146, #320).
+
+### Interno
+- The daily drift check now fails if the edge function is published with `verify_jwt=true` or if anonymous `GET /health` is not 200. That is the failure behind the 16-minute outage of 2026-10-07 (ESCO-148, #322).
+- 23 characterization tests pin the current behaviour of `calculosAplicaciones.ts` (dosis and shopping list, GlobalGAP) without changing it (ESCO-145, #321).
+- `src/types/database.ts` regenerated from the live schema; hato alert hooks lost their `as any` casts. About 70 casts remain (ESCO-143 partial, #323).
+- CLAUDE.md marks migrations 175 and 176 as applied (ESCO-147, #319).
+
+### Requiere despliegue manual
+- None.
+
 ## 2026-10-08 — corrida jueves
 
 A busy window: **15 PRs merged** (#299–#315 except #311, which landed through #314) and

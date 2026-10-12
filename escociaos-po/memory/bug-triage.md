@@ -818,3 +818,10 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - El helper `consulta()` de `escoConsultas.test.ts` aplica los filtros gte/lte, asi que una prueba de rango ahi ejercita la query real. [corrida: 2026-10-09-viernes]
 - Las pruebas del detector de deriva viven en `scripts/check-deploy-drift.test.mjs` (no en `src/__tests__/`); vitest las recoge con el glob por defecto. Tras PR #322 el detector falla con `verify_jwt !== false` (campo ausente = falla) y con GET anonimo a `/functions/v1/make-server-1ccce916/health` distinto de 200; frases estables `PRODUCCION ROTA: …`. [corrida: 2026-10-09-viernes]
 - v272 (2026-10-07 15:10:31Z) = codigo de abadada (#311), hash ed115fab…, verify_jwt=false. [corrida: 2026-10-09-viernes]
+
+## Corrida 2026-10-12-lunes
+- Línea base main@a852d3e VERDE: vitest 204 ficheros / 4.175 pruebas, tsc 0, lint 0 errores / 909 warnings. [corrida: 2026-10-12-lunes]
+- Los 5 defectos de calculosAplicaciones.ts (caracterizados por #321) son LATENTES: los llamantes (PasoMezcla.tsx:129, PasoListaCompras.tsx:88) arman presentacion_comercial desde presentacion_kg_l>0 o '1 <unidad>', así que Infinity y '1,5' no se alcanzan (0 productos con presentacion_kg_l=0; 1 NULL). 'sin_stock' nunca se asigna y nadie lo lee. Las 5 fertilizaciones reales son solo Kilos. Filado como propuesta ESCO-151 (decision). No re-filar como bug. [corrida: 2026-10-12-lunes]
+- El 406 sobre hato_alertas?…estado=in.(pendiente,enviada) es el UPDATE…maybeSingle() del callback (telegram/bot.ts:1662) cuando la alerta ya estaba cerrada. Benigno. [corrida: 2026-10-12-lunes]
+- BUG_REPORT.md refrescado en PR #325 (ESCO-154): 33/33 reportes, último 2026-10-05, semana 40; 3b igual, líneas 512-523/526. [corrida: 2026-10-12-lunes]
+- La API de GitHub devolvió 502 una vez al crear el PR sin crearlo; comprobar por REST antes de reintentar. gh pr list falla (GraphQL bloqueado); usar REST. [corrida: 2026-10-12-lunes]
