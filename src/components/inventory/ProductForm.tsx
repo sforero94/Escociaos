@@ -803,7 +803,7 @@ function ProductFormSession({ isOpen, onClose, productId, onSuccess }: ProductFo
                               name="permitido_gerencia"
                               value="si"
                               checked={formData.permitido_gerencia === true}
-                              onChange={() => setFormData(prev => ({ ...prev, permitido_gerencia: true }))}
+                              onChange={() => {fieldGeneration.current++;setFormData(prev => ({ ...prev, permitido_gerencia: true }));}}
                               className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
                             />
                             <span className="ml-2 text-sm text-gray-700">Sí</span>
@@ -814,7 +814,7 @@ function ProductFormSession({ isOpen, onClose, productId, onSuccess }: ProductFo
                               name="permitido_gerencia"
                               value="no"
                               checked={formData.permitido_gerencia === false}
-                              onChange={() => setFormData(prev => ({ ...prev, permitido_gerencia: false }))}
+                              onChange={() => {fieldGeneration.current++;setFormData(prev => ({ ...prev, permitido_gerencia: false }));}}
                               className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
                             />
                             <span className="ml-2 text-sm text-gray-700">No</span>

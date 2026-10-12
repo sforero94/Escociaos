@@ -59,6 +59,14 @@ describe('mounted ProductForm original snapshot and actual SDK protocol',()=>{
   await act(async()=>tree.update(view(false)));await act(async()=>tree.update(view()));change('nombre','Reopened draft');await act(async()=>{release(catalogReceipt(b));await posting;});
   expect(tree.root.findByProps({name:'nombre'}).props.value).toBe('Reopened draft');expect(pendingCatalog(owner,null)).not.toBeNull();expect(success).not.toHaveBeenCalled();
  });
+ it('radio edits while a save is pending survive its older successful response',async()=>{
+  saved({...formFields(),categoria:'Fungicida',permitido_gerencia:false});
+  let release!:(v:unknown)=>void;let b!:Record<string,unknown>;await setup(c=>{b=c.body;return new Promise(resolve=>{release=resolve;});});await mount();
+  let posting!:Promise<unknown>;act(()=>{posting=tree.root.findByType('form').props.onSubmit({preventDefault:vi.fn()});});await vi.waitFor(()=>expect(release).toBeTypeOf('function'));
+  await click('Siguiente →');act(()=>tree.root.findAllByType('input').find(n=>n.props.name==='permitido_gerencia'&&n.props.value==='si')!.props.onChange());
+  await act(async()=>{release(catalogReceipt(b));await posting;});
+  expect(JSON.parse(memory.get(draftKey())!).data.fields.permitido_gerencia).toBe(true);expect(closed).not.toHaveBeenCalled();expect(success).not.toHaveBeenCalled();
+ });
  it('deferred product read cannot overwrite user edits or another product session',async()=>{
   target=product;let release!:(v:unknown)=>void;const h=await setup(c=>c.method==='GET'?new Promise(resolve=>{release=resolve;}):catalogReceipt(c.body));await mount();change('nombre','User edit while loading');
   await act(async()=>release(originalRow()));expect(tree.root.findByProps({name:'nombre'}).props.value).toBe('User edit while loading');change('grupo','Agroinsumos');change('categoria','Fertilizante');change('unidad_medida','Kilos');await submit();expect(h.calls).toHaveLength(1);expect(JSON.stringify(tree.toJSON())).toContain('original');
