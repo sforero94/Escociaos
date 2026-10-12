@@ -20,13 +20,19 @@ Purchase/manual-stock request evidence and cancellation fences are a distinct pr
 
 ## Remaining acceptance gates
 
-Global stock writer coordination, whole-import atomicity, cattle undo transactions, complete audit access and retention, authenticated upload bytes, hosted runtime checks and a contained real backup recovery exercise remain unfinished. The xlsx dependency advisory remains unresolved. Recovery must use an existing protected key, verified isolation, no extra spend and cleanup; absent credentials are not replaced with invented values. Historical tests from a lost worktree do not certify this reconstructed branch.
+Atomic CSV import, scoped cattle undo and authenticated invoice-byte validation now have local implementations and focused evidence. Global stock writer coordination, prospective coupled cattle creation, complete audit access and retention, hosted runtime checks and a contained real backup recovery exercise remain unfinished. The xlsx dependency advisory remains unresolved. Recovery must use an existing protected key, verified isolation, no extra spend and cleanup; absent credentials are not replaced with invented values. Historical tests from a lost worktree do not certify this reconstructed branch.
 
 ## Prepared destructive-operation safeguards
 
 The Hato candidate requires a database-owned attempt and complete private Telegram review before a separate confirmation. Sender, current linked Gerencia authority, private chat and registered control-message identity are rechecked; lost responses recover the original attempt. Coupled legacy records without trustworthy provenance refuse automatic undo. Local evidence comprises 135 synthetic PostgreSQL assertions and 163 focused adapter/Telegram tests; live schema, trigger, grant and migration parity remain prerequisites.
 
 Unused application-plan deletion now removes only a reviewed unused Calculada plan and its verified planned children, atomically archiving the original. It preserves inventory ledger, work, tasks and audit records. Plans with execution, protected proofs or unsupported references refuse deletion. Local evidence comprises 45 synthetic assertions plus cleanup and 20 SDK/React tests; the current hosted FK/trigger graph and coordinated direct-writer retirement remain prerequisites.
+
+## Prepared invoice and Ronda boundaries
+
+Invoice uploads validate bounded file-container bytes on the server and use an immutable request identity, per-write execution evidence and an unreadable quarantine namespace. Only a protected committed receipt permits ordinary readers or a new domain attachment reference. Cleanup preserves uncertain delayed writes, existing references and committed files. Eighty focused tests and 66 synthetic PostgreSQL assertions plus cleanup cover this candidate. Supported PDF validation is limited to single-revision classic-xref files with direct objects; unsupported/encrypted/incremental/object-stream PDFs refuse with a clear message. This validates container boundaries and does not sanitize files or certify malware safety. Hosted Storage policies, signed-token bypass, pinned Deno SDK, response headers and cleanup operation still require verification.
+
+Ronda adjustment/capture candidates bind one completed operation to the exception identity, trusted actor, exact input and protected persisted stock/ledger/exception results. They preserve current configured worker lanes and signed-versus-magnitude ledger conventions. Local evidence is 128 synthetic assertions plus cleanup. The existing second-confirmation boolean cannot bind a changed theoretical quantity to the exact revision observed in the UI; that caller contract remains an explicit open integrity requirement. Actual schema/policy/trigger/grant parity and all-writer cutover are prerequisites.
 
 ## Recovery procedure verification
 
