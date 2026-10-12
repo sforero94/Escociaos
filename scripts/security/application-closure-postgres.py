@@ -74,7 +74,7 @@ CREATE TYPE fraccion_jornal AS ENUM ('0.25','0.5','0.75','1');
 CREATE TYPE unidad_medida AS ENUM ('Kilos','Litros','Unidades');
 CREATE TYPE tipo_movimiento AS ENUM ('Entrada','Salida por Aplicación');
 CREATE TABLE usuarios(id uuid PRIMARY KEY,email text NOT NULL,rol rol_usuario,activo boolean);
-CREATE FUNCTION get_user_role() RETURNS rol_usuario LANGUAGE sql SECURITY DEFINER SET search_path=public AS $$ SELECT rol FROM usuarios WHERE id=auth.uid() AND activo=true $$;
+CREATE FUNCTION get_user_role() RETURNS rol_usuario LANGUAGE sql SECURITY DEFINER SET search_path TO 'public','pg_temp' AS $$ SELECT rol FROM usuarios WHERE id = auth.uid() AND activo = true $$;
 CREATE TABLE aplicaciones(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),codigo_aplicacion text,nombre_aplicacion text,tipo_aplicacion tipo_aplicacion,proposito text,blanco_biologico text,fecha_inicio_planeada date,agronomo_responsable text,estado estado_aplicacion,fecha_inicio_ejecucion date,fecha_fin_ejecucion date,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),fecha_fin_planeada date,fecha_recomendacion date,costo_por_arbol numeric,arboles_jornal numeric,fecha_cierre timestamptz,jornales_utilizados numeric,valor_jornal numeric,costo_total_insumos numeric,costo_total_mano_obra numeric,costo_total numeric,observaciones_cierre text,tarea_id uuid);
 CREATE TABLE tareas(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),codigo_tarea text,nombre text,tipo_tarea_id uuid,descripcion text,lote_id uuid,sublote_id uuid,estado estado_tarea,prioridad prioridad_tarea,fecha_estimada_inicio date,fecha_estimada_fin date,fecha_inicio_real date,fecha_fin_real date,jornales_estimados numeric,responsable_id uuid,observaciones text,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),created_by uuid,updated_by uuid,lote_ids uuid[]);
 CREATE TABLE registros_trabajo(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tarea_id uuid,empleado_id uuid,fecha_trabajo date,fraccion_jornal fraccion_jornal,valor_jornal_empleado numeric,costo_jornal numeric,observaciones text,registrado_por uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),lote_id uuid,contratista_id uuid);
@@ -458,6 +458,93 @@ $function$
 CREATE TRIGGER trigger_calcular_costo_jornal BEFORE INSERT OR UPDATE ON public.registros_trabajo FOR EACH ROW EXECUTE FUNCTION calcular_costo_jornal();
 """
 
+DEPENDENCY_FIXTURE = r"""
+CREATE TYPE estado_empleado AS ENUM ('Activo','Inactivo');
+CREATE TYPE tipo_contrato AS ENUM ('Indefinido');
+CREATE TYPE periodicidad_pago AS ENUM ('Mensual');
+CREATE TYPE medio_pago AS ENUM ('Efectivo');
+CREATE TYPE condiciones_meteorologicas AS ENUM ('Bueno');
+DROP TABLE IF EXISTS public.aplicaciones_calculos CASCADE;
+CREATE TABLE public.aplicaciones_calculos(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),aplicacion_id uuid,lote_id uuid,lote_nombre text,area_hectareas numeric(10,2),total_arboles int4,litros_mezcla numeric(12,4),numero_canecas numeric(10,2),kilos_totales numeric(12,4),numero_bultos int4,kilos_grandes numeric(12,4),kilos_medianos numeric(12,4),kilos_pequenos numeric(12,4),kilos_clonales numeric(12,4),created_at timestamptz,mezcla_id uuid);
+ALTER TABLE public.aplicaciones_calculos ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.aplicaciones_calculos TO authenticated;
+CREATE POLICY "authenticated_delete_aplicaciones_calculos" ON public.aplicaciones_calculos FOR DELETE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_insert_aplicaciones_calculos" ON public.aplicaciones_calculos FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_select_aplicaciones_calculos" ON public.aplicaciones_calculos FOR SELECT TO authenticated USING(true);
+DROP TABLE IF EXISTS public.aplicaciones_lotes CASCADE;
+CREATE TABLE public.aplicaciones_lotes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),aplicacion_id uuid,lote_id uuid,sublotes_ids uuid[],arboles_grandes int4,arboles_medianos int4,arboles_pequenos int4,arboles_clonales int4,total_arboles int4,calibracion_litros_arbol numeric(10,4),tamano_caneca int4,created_at timestamptz);
+ALTER TABLE public.aplicaciones_lotes ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.aplicaciones_lotes TO authenticated;
+CREATE POLICY "authenticated_delete_aplicaciones_lotes" ON public.aplicaciones_lotes FOR DELETE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_insert_aplicaciones_lotes" ON public.aplicaciones_lotes FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_select_aplicaciones_lotes" ON public.aplicaciones_lotes FOR SELECT TO authenticated USING(true);
+DROP TABLE IF EXISTS public.aplicaciones_mezclas CASCADE;
+CREATE TABLE public.aplicaciones_mezclas(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),aplicacion_id uuid,numero_mezcla int4,nombre_mezcla text);
+ALTER TABLE public.aplicaciones_mezclas ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.aplicaciones_mezclas TO authenticated;
+CREATE POLICY "Administrador puede todo en mezclas" ON public.aplicaciones_mezclas FOR ALL TO public USING((( SELECT get_user_role() AS get_user_role) = 'Administrador'::rol_usuario));
+CREATE POLICY "Gerencia acceso total" ON public.aplicaciones_mezclas FOR ALL TO public USING((( SELECT get_user_role() AS get_user_role) = 'Gerencia'::rol_usuario));
+DROP TABLE IF EXISTS public.aplicaciones_productos CASCADE;
+CREATE TABLE public.aplicaciones_productos(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),mezcla_id uuid,producto_id uuid,dosis_por_caneca numeric(10,4),unidad_dosis text,dosis_grandes numeric(10,4),dosis_medianos numeric(10,4),dosis_pequenos numeric(10,4),dosis_clonales numeric(10,4),cantidad_total_necesaria numeric(12,4),producto_nombre text,producto_categoria text,producto_unidad unidad_medida,created_at timestamptz);
+ALTER TABLE public.aplicaciones_productos ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.aplicaciones_productos TO authenticated;
+CREATE POLICY "authenticated_delete_aplicaciones_productos" ON public.aplicaciones_productos FOR DELETE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_insert_aplicaciones_productos" ON public.aplicaciones_productos FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_select_aplicaciones_productos" ON public.aplicaciones_productos FOR SELECT TO authenticated USING(true);
+DROP TABLE IF EXISTS public.contratistas CASCADE;
+CREATE TABLE public.contratistas(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),nombre text,tipo_contrato text,tarifa_jornal numeric,cedula text,telefono text,estado text,fecha_inicio date,fecha_fin date,observaciones text,created_at timestamptz,updated_at timestamptz);
+ALTER TABLE public.contratistas ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.contratistas TO authenticated;
+CREATE POLICY "authenticated_delete_contratistas" ON public.contratistas FOR DELETE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_insert_contratistas" ON public.contratistas FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_select_contratistas" ON public.contratistas FOR SELECT TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_update_contratistas" ON public.contratistas FOR UPDATE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario]))) WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+DROP TABLE IF EXISTS public.empleados CASCADE;
+CREATE TABLE public.empleados(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),nombre text,cedula text,telefono text,email text,estado estado_empleado,cargo text,tipo_contrato tipo_contrato,fecha_inicio_contrato date,fecha_fin_contrato date,horas_semanales numeric,periodicidad_pago periodicidad_pago,salario numeric,prestaciones_sociales numeric,auxilios_no_salariales numeric,medio_pago medio_pago,banco text,numero_cuenta text,created_at timestamptz,updated_at timestamptz,created_by uuid,updated_by uuid);
+ALTER TABLE public.empleados ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.empleados TO authenticated;
+CREATE POLICY "Administrador insert access on empleados" ON public.empleados FOR INSERT TO authenticated WITH CHECK((EXISTS ( SELECT 1
+   FROM usuarios
+  WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = ANY (ARRAY['Administrador'::rol_usuario, 'Gerencia'::rol_usuario])) AND (usuarios.activo = true)))));
+CREATE POLICY "Administrador read access on empleados" ON public.empleados FOR SELECT TO authenticated USING((EXISTS ( SELECT 1
+   FROM usuarios
+  WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = ANY (ARRAY['Administrador'::rol_usuario, 'Gerencia'::rol_usuario])) AND (usuarios.activo = true)))));
+CREATE POLICY "Gerencia full access on empleados" ON public.empleados FOR ALL TO authenticated USING((EXISTS ( SELECT 1
+   FROM usuarios
+  WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = 'Gerencia'::rol_usuario) AND (usuarios.activo = true))))) WITH CHECK((EXISTS ( SELECT 1
+   FROM usuarios
+  WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = 'Gerencia'::rol_usuario) AND (usuarios.activo = true)))));
+CREATE POLICY "Verificador read active empleados" ON public.empleados FOR SELECT TO authenticated USING(((estado = 'Activo'::estado_empleado) AND (EXISTS ( SELECT 1
+   FROM usuarios
+  WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = ANY (ARRAY['Verificador'::rol_usuario, 'Administrador'::rol_usuario, 'Gerencia'::rol_usuario])) AND (usuarios.activo = true))))));
+DROP TABLE IF EXISTS public.lotes CASCADE;
+CREATE TABLE public.lotes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),nombre text,numero_orden int4,area_hectareas numeric(10,2),arboles_grandes int4,arboles_medianos int4,arboles_pequenos int4,arboles_clonales int4,total_arboles int4,activo bool,fecha_siembra date);
+ALTER TABLE public.lotes ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.lotes TO authenticated;
+CREATE POLICY "Administrador lee lotes" ON public.lotes FOR SELECT TO public USING((( SELECT get_user_role() AS get_user_role) = 'Administrador'::rol_usuario));
+CREATE POLICY "Gerencia acceso total" ON public.lotes FOR ALL TO public USING((( SELECT get_user_role() AS get_user_role) = 'Gerencia'::rol_usuario));
+CREATE POLICY "Usuarios autenticados pueden actualizar lotes" ON public.lotes FOR UPDATE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario]))) WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "Usuarios autenticados pueden eliminar lotes" ON public.lotes FOR DELETE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "Usuarios autenticados pueden insertar lotes" ON public.lotes FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "Usuarios autenticados pueden leer lotes" ON public.lotes FOR SELECT TO authenticated USING(true);
+DROP TABLE IF EXISTS public.movimientos_diarios CASCADE;
+CREATE TABLE public.movimientos_diarios(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),aplicacion_id uuid,lote_id uuid,fecha_movimiento date,responsable text,notas text,lote_nombre text,created_at timestamptz,created_by uuid,numero_canecas numeric,condiciones_meteorologicas condiciones_meteorologicas,numero_bultos numeric,equipo_aplicacion text,personal text,hora_inicio time,hora_fin time);
+ALTER TABLE public.movimientos_diarios ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.movimientos_diarios TO authenticated;
+CREATE POLICY "Usuarios autenticados pueden crear movimientos diarios" ON public.movimientos_diarios FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "Usuarios autenticados pueden leer movimientos diarios" ON public.movimientos_diarios FOR SELECT TO authenticated USING(true);
+CREATE POLICY "Usuarios pueden actualizar sus propios movimientos" ON public.movimientos_diarios FOR UPDATE TO authenticated USING((created_by = ( SELECT auth.uid() AS uid)));
+CREATE POLICY "Usuarios pueden eliminar sus propios movimientos" ON public.movimientos_diarios FOR DELETE TO authenticated USING((created_by = ( SELECT auth.uid() AS uid)));
+DROP TABLE IF EXISTS public.movimientos_diarios_productos CASCADE;
+CREATE TABLE public.movimientos_diarios_productos(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),movimiento_diario_id uuid,producto_id uuid,producto_nombre text,producto_categoria text,cantidad_utilizada numeric,unidad unidad_medida,created_at timestamptz);
+ALTER TABLE public.movimientos_diarios_productos ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.movimientos_diarios_productos TO authenticated;
+CREATE POLICY "authenticated_delete_movimientos_diarios_productos" ON public.movimientos_diarios_productos FOR DELETE TO authenticated USING((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_insert_movimientos_diarios_productos" ON public.movimientos_diarios_productos FOR INSERT TO authenticated WITH CHECK((( SELECT get_user_role() AS get_user_role) = ANY (ARRAY['Gerencia'::rol_usuario, 'Administrador'::rol_usuario])));
+CREATE POLICY "authenticated_select_movimientos_diarios_productos" ON public.movimientos_diarios_productos FOR SELECT TO authenticated USING(true);
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.aplicaciones,public.aplicaciones_cierre,public.tareas,public.registros_trabajo,public.productos,public.movimientos_inventario TO authenticated;
+"""
+
 APP='30000000-0000-4000-8000-000000000001'
 APP2='30000000-0000-4000-8000-000000000002'
 TASK='40000000-0000-4000-8000-000000000001'
@@ -465,14 +552,15 @@ TASK2='40000000-0000-4000-8000-000000000002'
 WORK='50000000-0000-4000-8000-000000000001'
 WORK2='50000000-0000-4000-8000-000000000002'
 EMP='60000000-0000-4000-8000-000000000001'
-TABLES=['aplicaciones','aplicaciones_cierre','tareas','registros_trabajo','productos','movimientos_inventario','globalgap_correcciones']
+SOURCE_TABLES=['aplicaciones_calculos','aplicaciones_lotes','aplicaciones_mezclas','aplicaciones_productos','lotes','movimientos_diarios','movimientos_diarios_productos']
+TABLES=SOURCE_TABLES+['aplicaciones','aplicaciones_cierre','tareas','registros_trabajo','productos','movimientos_inventario','globalgap_correcciones']
 
 def state():
-    return sql('SELECT jsonb_build_array('+','.join(f"(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM public.{t} t)" for t in TABLES)+');')
+    return sql('SELECT jsonb_build_array('+','.join(f"(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]') FROM {t if '.' in t else 'public.'+t} t)" for t in TABLES)+');')
 
 def reset():
     sql('TRUNCATE '+','.join(TABLES)+' CASCADE;')
-    sql(f"INSERT INTO usuarios VALUES ('{ACTOR}','admin@synthetic.invalid','Administrador',true), ('{MANAGER}','manager@synthetic.invalid','Gerencia',true), ('{INACTIVE}','inactive@synthetic.invalid','Administrador',false), ('{VIEWER}','viewer@synthetic.invalid','Verificador',true) ON CONFLICT(id) DO UPDATE SET activo=EXCLUDED.activo,rol=EXCLUDED.rol; INSERT INTO empleados VALUES ('{EMP}',100,0,0,48) ON CONFLICT DO NOTHING; INSERT INTO contratistas VALUES ('{EMP}',10) ON CONFLICT DO NOTHING;")
+    sql(f"INSERT INTO usuarios VALUES ('{ACTOR}','admin@synthetic.invalid','Administrador',true), ('{MANAGER}','manager@synthetic.invalid','Gerencia',true), ('{INACTIVE}','inactive@synthetic.invalid','Administrador',false), ('{VIEWER}','viewer@synthetic.invalid','Verificador',true) ON CONFLICT(id) DO UPDATE SET activo=EXCLUDED.activo,rol=EXCLUDED.rol; INSERT INTO empleados(id,salario,prestaciones_sociales,auxilios_no_salariales,horas_semanales) VALUES ('{EMP}',100,0,0,48) ON CONFLICT DO NOTHING; INSERT INTO contratistas(id,tarifa_jornal) VALUES ('{EMP}',10) ON CONFLICT DO NOTHING;")
     sql(f"INSERT INTO tareas(id,nombre,estado) VALUES ('{TASK}','Synthetic task','Programada'),('{TASK2}','Other task','Programada'); INSERT INTO aplicaciones(id,nombre_aplicacion,estado,tarea_id,tipo_aplicacion) VALUES ('{APP}','Synthetic app','En ejecución','{TASK}','Fumigación'),('{APP2}','Other app','En ejecución','{TASK2}','Fumigación'); INSERT INTO productos VALUES ('{P1}','Synthetic one','Kilos',10,2,true,now(),NULL),('{P2}','Synthetic two','Kilos',10,2,true,now(),NULL); INSERT INTO registros_trabajo(id,tarea_id,empleado_id,fecha_trabajo,fraccion_jornal,costo_jornal) VALUES ('{WORK}','{TASK}','{EMP}','2026-01-02','1',10),('{WORK2}','{TASK2}','{EMP}','2026-01-02','1',10);")
 
 def body(app=APP,quantity=2.345):
@@ -493,7 +581,12 @@ def failure(payload=None,label='atomic rejection',**kwargs):
     return error
 
 def tests():
-    sql(FIXTURE);sql((ROOT/'src/sql/security-candidates/application-closure.sql').read_text())
+    sql(FIXTURE);sql(DEPENDENCY_FIXTURE)
+    candidate=(ROOT/'src/sql/security-candidates/application-closure.sql').read_text()
+    legacy,extended=candidate.split('-- Explicit privileged protocol boundary.',1)
+    sql(legacy+'COMMIT;')
+    if os.environ.get('APPLICATION_CLOSURE_PROTOCOL_ONLY')=='1':
+        sql('BEGIN;--'+extended); protocol_tests(); return
     reset(); result=call()
     verify(result['productosActualizados']==1,'positive ordinary Administrator closure returns one product')
     verify(sql(f"SELECT cantidad_actual=7.65 FROM productos WHERE id='{P1}';")=='t','quantity rounded once to numeric(12,2) for stock')
@@ -573,9 +666,115 @@ def tests():
         close=pool.submit(call,ok=False);revoke.result();error=close.result()
     verify('Current active' in error,'concurrent revocation wins before profile admission')
     verify(sql('SELECT count(*)=0 FROM movimientos_inventario;')=='t','revocation race posts nothing')
+    sql('BEGIN;--'+extended)
+    protocol_tests()
 
 def raw_call(payload):
     return docker(['exec','-i','-u','postgres',CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT fn_cerrar_aplicacion({literal(json.dumps(payload))}::jsonb); COMMIT;",False)
+def protocol_call(operation='close',payload=None,expected=None,key=None,actor=ACTOR,role='authenticated',ok=True):
+    key=key or str(uuid.uuid4());payload=payload or protocol_body()
+    expected=expected if expected is not None else snapshot(payload['aplicacion_id'],actor=actor)
+    fn='fn_application_close' if operation=='close' else 'fn_application_closure_status'
+    source=f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT public.{fn}('{key}'::uuid,{literal(json.dumps(payload))}::jsonb,{literal(json.dumps(expected))}::jsonb); COMMIT;"
+    out=sql(source,ok)
+    return json.loads(out) if ok else out
+
+def snapshot(application=APP,actor=ACTOR,ok=True):
+    out=sql(f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT fn_application_closure_snapshot('{application}'::uuid); COMMIT;",ok)
+    return json.loads(out)['expected'] if ok else out
+
+def protocol_reset():
+    reset();sql('TRUNCATE application_closure.requests;')
+    for application,task in [(APP,TASK),(APP2,TASK2)]:
+        sql(f"INSERT INTO lotes(id,nombre,total_arboles,activo) VALUES ('{task}','Synthetic lot',100,true); INSERT INTO aplicaciones_lotes(aplicacion_id,lote_id) VALUES ('{application}','{task}'); INSERT INTO movimientos_diarios(id,aplicacion_id,lote_id,fecha_movimiento) VALUES ('{task}','{application}','{task}','2026-01-02'); INSERT INTO movimientos_diarios_productos(movimiento_diario_id,producto_id,producto_nombre,cantidad_utilizada,unidad) VALUES ('{task}','{P1}','Synthetic one',2.345,'Kilos');")
+    sql("UPDATE empleados SET nombre='Synthetic employee',estado='Activo'; UPDATE contratistas SET nombre='Synthetic contractor',estado='Activo';")
+
+def protocol_body(application=APP):
+    p=body(application);p.update(costo_total_insumos=4.69,costo_total=14.69,costo_por_arbol=.1469)
+    return p
+
+def protocol_failure(label,payload=None,expected=None,key=None,operation='close',actor=ACTOR,role='authenticated'):
+    p=payload or protocol_body();expected=expected if expected is not None else snapshot(p['aplicacion_id'])
+    before=state();error=protocol_call(operation,p,expected,key,actor,role,False)
+    if any(x in error for x in ['ambiguous','syntax error','is not assigned yet']):raise AssertionError(error)
+    verify(state()==before,label)
+    return error
+
+def protocol_tests():
+    TABLES.append('application_closure.requests')
+    protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4());result=protocol_call(payload=p,expected=e,key=key)
+    verify(result['receipt']['productosActualizados']==1,'new CAS protocol positive Administrator closes with actual source quantities and totals')
+    before=state();verify(protocol_call(payload=p,expected=e,key=key)==result and state()==before,'lost-response identical retry returns exact committed receipt without mutation')
+    resolved=protocol_call('status',p,e,key)
+    verify(resolved['state']=='committed' and resolved['receipt']==result['receipt'],'status recovers exact actor-bound committed closure')
+    changed=dict(p,costo_total=999);protocol_failure('changed payload cannot reuse committed key',changed,e,key)
+    changed_expected=dict(e,forged=True);protocol_failure('changed expected cannot reuse committed key',p,changed_expected,key)
+    protocol_failure('other actor cannot replay original closure receipt',p,e,key,actor=MANAGER)
+    sql(f"UPDATE usuarios SET activo=false WHERE id='{ACTOR}';");protocol_failure('revoked actor cannot replay completed closure',p,e,key)
+    protocol_reset();p=protocol_body();e=snapshot(actor=MANAGER)
+    verify(protocol_call(payload=p,expected=e,actor=MANAGER)['receipt']['productosActualizados']==1,'new CAS protocol positive active Gerencia closes')
+    for field in ['activo','rol']:
+        protocol_reset();e=snapshot();sql(f"UPDATE usuarios SET {field}=NULL WHERE id='{ACTOR}';")
+        protocol_failure('new CAS rejects nullable '+field,expected=e)
+    protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4());before=state();out=protocol_call('status',p,e,key)
+    verify(out['state']=='cancelled' and sql('SELECT count(*)=0 FROM movimientos_inventario;')=='t','absent status creates durable cancellation without posting')
+    before=state();protocol_failure('cancelled request key cannot arrive late and post',p,e,key)
+    verify(protocol_call('status',p,e,key)==out and state()==before,'cancelled resolution retry is stable')
+    for table,mutation in [('aplicaciones',f"UPDATE aplicaciones SET observaciones_cierre='changed' WHERE id='{APP}'"),('tareas',f"UPDATE tareas SET nombre='changed' WHERE id='{TASK}'"),('registros_trabajo',f"UPDATE registros_trabajo SET costo_jornal=99 WHERE id='{WORK}'"),('productos',f"UPDATE productos SET precio_unitario=9 WHERE id='{P1}'"),('movimientos_diarios',f"UPDATE movimientos_diarios SET notas='changed' WHERE aplicacion_id='{APP}'"),('movimientos_diarios_productos',f"UPDATE movimientos_diarios_productos SET cantidad_utilizada=9 WHERE movimiento_diario_id='{TASK}'"),('lotes',f"UPDATE lotes SET total_arboles=999 WHERE id='{TASK}'"),('empleados',f"UPDATE empleados SET salario=999 WHERE id='{EMP}'"),('contratistas',f"UPDATE contratistas SET tarifa_jornal=999 WHERE id='{EMP}'")]:
+        protocol_reset();e=snapshot();sql(mutation+';');protocol_failure('stale original refuses changed '+table,expected=e)
+    protocol_reset();e=snapshot();sql(f"INSERT INTO registros_trabajo(tarea_id,empleado_id,fecha_trabajo,fraccion_jornal,costo_jornal) VALUES ('{TASK}','{EMP}','2026-01-02','1',10);");protocol_failure('new work row changes exact original set',expected=e)
+    protocol_reset();p=protocol_body();p['insumos_aplicados'][0]['cantidad']=1;protocol_failure('forged consumption refused against actual captured movements',p)
+    protocol_reset();p=protocol_body();p['costo_total']=999;protocol_failure('forged total rolls back entire application and stock',p)
+    protocol_reset();p=protocol_body();p['costo_total_mano_obra']=0;protocol_failure('omitted existing work total refuses rather than lose labor costs',p)
+    protocol_reset();e=snapshot();protocol_failure('legacy unversioned caller retired',expected=e,role='service_role')
+    failure(label='ordinary legacy RPC cannot bypass CAS')
+    sql("CREATE POLICY active_account_required ON public.productos AS RESTRICTIVE FOR ALL TO authenticated USING ((SELECT public.get_user_role()) IS NOT NULL) WITH CHECK ((SELECT public.get_user_role()) IS NOT NULL);")
+    protocol_reset();protocol_call();verify(True,'reviewed active-account AND policy supports explicit closure boundary');sql('DROP POLICY active_account_required ON productos;')
+    sql("CREATE POLICY active_account_required ON public.productos AS PERMISSIVE FOR ALL TO authenticated USING ((SELECT public.get_user_role()) IS NOT NULL) WITH CHECK ((SELECT public.get_user_role()) IS NOT NULL);")
+    protocol_reset();e=snapshot(ok=False)
+    verify('drift' in e,'permissive lookalike active-account policy refuses');sql('DROP POLICY active_account_required ON productos;')
+    for actor in [INACTIVE,VIEWER,None,'10000000-0000-4000-8000-000000000099']:
+        protocol_reset();e=snapshot();protocol_failure('new closure rejects ordinary boundary '+str(actor),expected=e,actor=actor)
+        verify('required' in snapshot(actor=actor,ok=False),'snapshot read refuses unauthorized identity '+str(actor))
+    protocol_reset();e=snapshot();sql('CREATE POLICY synthetic_drift ON productos FOR SELECT TO authenticated USING(false);');protocol_failure('runtime boundary refuses policy drift',expected=e);sql('DROP POLICY synthetic_drift ON productos;')
+    protocol_reset();e=snapshot();sql('REVOKE UPDATE ON productos FROM authenticated;');protocol_failure('runtime boundary refuses grant drift',expected=e);sql('GRANT UPDATE ON productos TO authenticated;')
+    for event in ['INSERT','UPDATE']:
+        protocol_reset();e=snapshot();suppress('application_closure.requests',event);protocol_failure('private closure proof '+event+' suppression atomic',expected=e);unsuppress('application_closure.requests')
+    protocol_reset();e=snapshot();suppress('application_closure.requests','UPDATE',"NEW.receipt:='{}'; RETURN NEW;");protocol_failure('private closure receipt rewrite atomic',expected=e);unsuppress('application_closure.requests')
+    protocol_reset();e=snapshot();suppress('application_closure.requests','INSERT',f"NEW.application_id:='{APP2}'; RETURN NEW;");protocol_failure('private closure application binding rewrite atomic',expected=e);unsuppress('application_closure.requests')
+    protocol_reset();e=snapshot();suppress('application_closure.requests','INSERT');protocol_failure('cancelled proof insertion suppression refuses safe resolution',expected=e,operation='status');unsuppress('application_closure.requests')
+    protocol_reset();e=snapshot();sql(f"CREATE FUNCTION synthetic_cross() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE empleados SET salario=999 WHERE id='{EMP}'; RETURN NEW; END $$; CREATE TRIGGER synthetic_cross AFTER INSERT ON application_closure.requests FOR EACH ROW EXECUTE FUNCTION synthetic_cross();")
+    protocol_failure('request AFTER insertion cannot alter a captured source',expected=e);sql('DROP TRIGGER synthetic_cross ON application_closure.requests; DROP FUNCTION synthetic_cross();')
+    protocol_reset();e=snapshot();sql(f"CREATE FUNCTION synthetic_cross() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE productos SET cantidad_actual=999 WHERE id='{P1}'; RETURN NEW; END $$; CREATE TRIGGER synthetic_cross AFTER UPDATE ON application_closure.requests FOR EACH ROW EXECUTE FUNCTION synthetic_cross();")
+    protocol_failure('receipt AFTER update cannot silently alter business stock',expected=e);sql('DROP TRIGGER synthetic_cross ON application_closure.requests; DROP FUNCTION synthetic_cross();')
+    protocol_reset();p=protocol_body();p.update(jornales_utilizados=1.5,costo_total_mano_obra=15,costo_total=19.69,costo_por_arbol=.1969);p['registros_trabajo']=[work(None,_isNew=True)];e=snapshot()
+    sql(f"CREATE FUNCTION synthetic_cross() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE registros_trabajo SET observaciones='forged' WHERE id='{WORK}'; RETURN NEW; END $$; CREATE TRIGGER synthetic_cross BEFORE INSERT ON registros_trabajo FOR EACH ROW EXECUTE FUNCTION synthetic_cross();")
+    protocol_failure('work trigger cannot rewrite untouched original work even with valid totals',p,e);sql('DROP TRIGGER synthetic_cross ON registros_trabajo; DROP FUNCTION synthetic_cross();')
+    protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4())
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        change=pool.submit(sql,f"BEGIN; UPDATE empleados SET salario=777 WHERE id='{EMP}'; SELECT pg_advisory_xact_lock(784043); SELECT pg_sleep(2); COMMIT;")
+        deadline=time.monotonic()+5
+        while sql("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=784043 AND granted);")!='t':
+            if change.done() or time.monotonic()>deadline:raise AssertionError('Source writer barrier missing')
+            time.sleep(.02)
+        close=pool.submit(protocol_call,'close',p,e,key,ACTOR,'authenticated',False);change.result();error=close.result()
+    verify('original changed' in error,'concurrent source edit commits before table-lock admission and CAS refuses')
+    verify(sql('SELECT count(*)=0 FROM application_closure.requests;')=='t','source-edit race posts no request or receipt')
+    protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4())
+    def raw(operation):
+        fn='fn_application_close' if operation=='close' else 'fn_application_closure_status'
+        return docker(['exec','-i','-u','postgres',CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT {fn}('{key}',{literal(json.dumps(p))}::jsonb,{literal(json.dumps(e))}::jsonb); COMMIT;",False)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:outcomes=list(pool.map(raw,['close','status']))
+    verify(all(x.returncode==0 or 'cancelled' in x.stderr for x in outcomes),'close and absent-resolution race serializes on same actor/key')
+    verify(sql("SELECT count(*)=1 AND bool_and(state IN ('committed','cancelled')) FROM application_closure.requests;")=='t','close/status race leaves one terminal outcome')
+    protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4())
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:outcomes=list(pool.map(raw,['close','close']))
+    verify(all(x.returncode==0 for x in outcomes) and outcomes[0].stdout==outcomes[1].stdout,'concurrent identical closure attempts replay exact single receipt')
+    verify(sql('SELECT count(*)=1 FROM movimientos_inventario;')=='t','concurrent identical closure attempts post once')
+    protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4());protocol_call(payload=p,expected=e,key=key)
+    sql(f"DELETE FROM movimientos_inventario WHERE aplicacion_id='{APP}'; DELETE FROM aplicaciones_cierre WHERE aplicacion_id='{APP}'; DELETE FROM aplicaciones WHERE id='{APP}';")
+    verify(protocol_call('status',p,e,key)['state']=='committed','prospective closure proof survives destructive current caller deletion without cascade')
+
 def main():
     global CONTAINER
     docker(['info','--format','{{.ServerVersion}}'])

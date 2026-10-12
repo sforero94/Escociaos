@@ -64,14 +64,17 @@ function sqlList(source: string): string[] {
 function movementInserts(body: string) {
   return [...body.matchAll(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(([^)]*)\)\s*VALUES\s*\(([\s\S]*?)\)\s*RETURNING/gi)].map(match => ({ columns: sqlList(match[1]), values: sqlList(match[2]) }));
 }
+// Match all INSERT forms, including composite SELECT, DEFAULT VALUES and
+// omitted column lists. Parsing VALUES is only an attribution check above.
+const movementInsert = /\bINSERT\s+INTO\s+(?:ONLY\s+)?(?:(?:"public"|public)\s*\.\s*)?(?:"movimientos_inventario"|movimientos_inventario)(?=\s|\()/gi;
 function sourceFiles(directory: string): string[] {
   return readdirSync(join(process.cwd(), directory), { withFileTypes: true }).flatMap(entry => {
     const path = `${directory}/${entry.name}`;
     return entry.isDirectory() ? entry.name === '__tests__' ? [] : sourceFiles(path) : /\.tsx?$/.test(path) ? [path] : [];
   });
 }
-function directMovementInserts(path: string): number {
-  const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+function directMovementInserts(path: string, text = read(path)): number {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   let count = 0;
   const walk = (node: ts.Node) => {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'from'
@@ -125,6 +128,45 @@ describe('guard: inventory writer registry follows transactional RPCs and truste
     // The three browser writers moved to reviewed RPC candidates. Any new direct
     // writer needs explicit review and authenticated email attribution coverage.
     expect(writers).toEqual([]);
+  }, 15_000); // Full AST traversal keeps escaped literal names visible under parallel load.
+
+  it('discovery recognizes escaped TS table names and every SQL INSERT shape', () => {
+    expect(directMovementInserts('synthetic.ts', String.raw`client.from('movimientos_\u0069nventario').insert(payload)`)).toBe(1);
+    for (const statement of [
+      'INSERT INTO movimientos_inventario(a) VALUES(1);',
+      'INSERT INTO public.movimientos_inventario SELECT (expected_move).*;',
+      'INSERT INTO "public"."movimientos_inventario" DEFAULT VALUES;',
+      'INSERT INTO movimientos_inventario VALUES(1);',
+    ]) expect([...statement.matchAll(movementInsert)]).toHaveLength(1);
+  });
+
+  it('CSV import follows browser, authenticated helper and human-JWT endpoint to trusted opening ledger attribution', () => {
+    expect(read('src/components/inventory/ImportarProductosCSV.tsx')).toMatch(/await importCsvProducts\(/);
+    const helper = read('src/utils/csvProductImport.ts');
+    expect(helper).toContain('client.auth.getUser()');
+    expect(helper).toContain('client.auth.getSession()');
+    expect(helper).toContain('Authorization:`Bearer ${token}`');
+    for (const endpoint of ['src/supabase/functions/server/importar-productos.tsx', 'supabase/functions/make-server-1ccce916/importar-productos.tsx']) {
+      const source = read(endpoint);
+      expect(source).toContain('supabase.auth.getUser(token)');
+      expect(source).toContain('perfilAplicacionActivo(');
+      expect(source).toContain('Authorization:`Bearer ${acceso.token}`');
+      expect(source).toContain("await human.rpc(body.action === 'import' ? 'fn_csv_product_import'");
+      expect(directMovementInserts(endpoint)).toBe(0);
+    }
+    const sql = read('src/sql/security-candidates/csv-product-import.sql');
+    const body = routine(sql, 'fn_csv_product_import'), auth = routine(sql, 'csv_product_import.authorize');
+    expect(auth).toContain('auth.uid() IS NULL');
+    expect(auth).toContain('WHERE id=auth.uid() FOR SHARE');
+    expect(auth).toContain('u.activo IS DISTINCT FROM true');
+    expect(auth).toContain("u.rol::text NOT IN ('Administrador','Gerencia')");
+    expect(auth).toContain("u.email IS NULL OR btrim(u.email)=''");
+    expect(body).toContain('u=csv_product_import.authorize()');
+    expect(body).toContain('IF expected.cantidad_actual>0 THEN');
+    expect(body).toContain("'responsable',u.email");
+    expect(body).toContain('INSERT INTO public.movimientos_inventario SELECT (expected_move).*');
+    expect(body).toContain('to_jsonb(actual_move) IS DISTINCT FROM to_jsonb(expected_move)');
+    expect(body).not.toMatch(/p_payload\s*->>\s*'responsable'/);
   });
 
   it('discovers every proposed SQL movement INSERT and refuses top-level or unregistered writers', () => {
@@ -132,16 +174,16 @@ describe('guard: inventory writer registry follows transactional RPCs and truste
     for (const file of readdirSync(join(process.cwd(), 'src/sql/security-candidates'))) {
       if (!file.endsWith('.sql')) continue;
       const sql = read(`src/sql/security-candidates/${file}`);
-      const allInserts = [...sql.matchAll(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(/gi)].length;
+      const allInserts = [...sql.matchAll(movementInsert)].length;
       let registeredInserts = 0;
       for (const match of sql.matchAll(/CREATE(?: OR REPLACE)? FUNCTION ([\w.]+)\([\s\S]*?AS (\$[a-z_]*\$)([\s\S]*?)\2\s*;/gi)) {
-        const count = [...match[3].matchAll(/INSERT INTO (?:public\.)?movimientos_inventario\s*\(/gi)].length;
+        const count = [...match[3].matchAll(movementInsert)].length;
         if (count > 0) writers.push(match[1]);
         registeredInserts += count;
       }
       expect(registeredInserts, `${file} has a movement INSERT outside the reviewed functions`).toBe(allInserts);
     }
-    expect(writers.sort()).toEqual(['public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_purchase_post','public.fn_purchase_reverse'].sort());
+    expect(writers.sort()).toEqual(['public.fn_csv_product_import','public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_purchase_post','public.fn_purchase_reverse'].sort());
   });
 
   it('the prospective application closure RPC uses active-profile EMAIL and checks the exact returned movement', () => {

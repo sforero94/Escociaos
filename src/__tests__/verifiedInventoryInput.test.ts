@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 
 const actor = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
@@ -23,6 +24,7 @@ async function loadEdge(file: string) {
   return module.exports;
 }
 function context(body: unknown) {
+  if(body && typeof body==='object' && 'csvData' in body)body={requestKey:otherId,action:'import',...body};
   return { req: { header: () => 'Bearer valid-human-jwt', json: async () => body },
     json: (value: unknown, status = 200) => new Response(JSON.stringify(value), {
       status, headers: { 'Content-Type': 'application/json' },
@@ -34,9 +36,19 @@ let profile: unknown;
 let productReply: unknown;
 let calls: Array<{ url: URL; method: string; body: Record<string, unknown> | undefined }>;
 let profileFailure: boolean;
+let csvRpcReply: unknown;
+let csvRpcFailure: boolean;
+function csvReceipt(body:Record<string,unknown>){
+  const p=body.p_payload as {raw_csv:string;products:Array<Record<string,unknown>>};
+  return {success:true,actor,requestKey:body.p_request_key,parserVersion:1,csvSha256:createHash('sha256').update(p.raw_csv).digest('hex'),
+    total:p.products.length,importados:p.products.length,message:'Imported atomically',products:p.products.map(v=>({product_id:productId,
+      opening_quantity:v.cantidad_actual??0,movement_id:Number(v.cantidad_actual??0)>0?otherId:null,
+      product:{...v,id:productId,cantidad_actual:v.cantidad_actual??0,updated_by:actor}}))};
+}
 
 beforeAll(async () => {
-  vi.stubGlobal('__verifiedInventoryCreateClient', (url: string, key: string) => createClient(url, key, {
+  vi.stubGlobal('__verifiedInventoryCreateClient', (url: string, key: string, options: Parameters<typeof createClient>[2]) => createClient(url, key, {
+    ...options,
     auth: { persistSession: false, autoRefreshToken: false },
   }));
   for (const root of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) {
@@ -47,6 +59,8 @@ beforeEach(() => {
   profile = [{ id: actor, rol: 'Administrador', activo: true }];
   productReply = { id: productId, activo: false };
   profileFailure = false;
+  csvRpcReply = undefined;
+  csvRpcFailure = false;
   calls = [];
   vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://supabase.invalid' : 'service-test-key' } });
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -59,7 +73,13 @@ beforeEach(() => {
     });
     if (url.pathname === '/auth/v1/user') return reply({ id: actor });
     if (url.pathname === '/rest/v1/usuarios') return reply(profileFailure ? { message: 'offline' } : profile, profileFailure ? 503 : 200);
-    if (url.pathname === '/rest/v1/productos' && method === 'POST') return reply([]);
+    if (url.pathname.startsWith('/rest/v1/rpc/fn_csv_product_import')) {
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer valid-human-jwt');
+      if(csvRpcFailure)return reply({message:'synthetic RPC unavailable'},503);
+      if(csvRpcReply!==undefined)return reply(csvRpcReply);
+      const r=csvReceipt(body!);
+      return reply(url.pathname.endsWith('_status')?{actor,requestKey:r.requestKey,parserVersion:1,csvSha256:r.csvSha256,committed:true,result:r}:r);
+    }
     if (url.pathname === '/rest/v1/productos' && method === 'PATCH') return reply(productReply);
     throw new Error(`Unexpected HTTP ${method} ${url}`);
   }));
@@ -101,7 +121,7 @@ for (const [index, label] of ['source', 'deployment'].entries()) {
         const result = await response.json();
         expect(result.success, token).toBe(false);
         expect(result.importados, token).toBe(0);
-        expect(result.errores[0], token).toContain('Fila 3: Cantidad actual');
+        expect(result.errores[0], token).toContain('Fila 3: cantidad_actual');
       }
       expect(calls.every(call => call.method === 'GET')).toBe(true);
     });
@@ -112,20 +132,52 @@ for (const [index, label] of ['source', 'deployment'].entries()) {
         const response = await loaded[index].csv.handleImportarProductos(context({ csvData: `${headers}\n${row(token)}` }));
         expect((await response.json()).importados).toBe(1);
         const post = calls.filter(call => call.method === 'POST').slice(-1)[0]!;
-        expect(post.body).toHaveProperty('cantidad_actual', expected);
+        expect(post.url.pathname).toBe('/rest/v1/rpc/fn_csv_product_import');
+        expect((post.body!.p_payload as {products:unknown[]}).products[0]).toHaveProperty('cantidad_actual', expected);
       }
     });
     it('leaves blank or absent opening stock omitted for the existing database default', async () => {
       for (const csvData of [`${headers}\n${row('')}`, 'nombre,categoria,grupo,unidad_medida\nProducto,Fertilizante,Agroinsumos,Kilos']) {
         const response = await loaded[index].csv.handleImportarProductos(context({ csvData }));
         expect((await response.json()).success).toBe(true);
-        expect(calls.filter(call => call.method === 'POST').slice(-1)[0]!.body).not.toHaveProperty('cantidad_actual');
+        expect((calls.filter(call => call.method === 'POST').slice(-1)[0]!.body!.p_payload as {products:unknown[]}).products[0]).not.toHaveProperty('cantidad_actual');
       }
     });
     it('preserves active Gerencia import permission', async () => {
       profile = [{ id: actor, rol: 'Gerencia', activo: true }];
       const response = await loaded[index].csv.handleImportarProductos(context({ csvData: `${headers}\n${row('5')}` }));
       expect((await response.json()).success).toBe(true);
+    });
+    it('routes resolution through the human JWT status RPC and validates bound cancellation proofs',async()=>{
+      const body={csvData:`${headers}\n${row('5')}`,requestKey:otherId,action:'resolve'};
+      let response=await loaded[index].csv.handleImportarProductos(context(body));
+      expect(response.status).toBe(200);expect((await response.json()).committed).toBe(true);
+      const post=calls.filter(c=>c.method==='POST').slice(-1)[0]!;
+      expect(post.url.pathname).toBe('/rest/v1/rpc/fn_csv_product_import_status');
+      const r=csvReceipt(post.body!);
+      const proof={actor,requestKey:otherId,parserVersion:1,csvSha256:r.csvSha256,committed:false,result:null};
+      csvRpcReply=proof;response=await loaded[index].csv.handleImportarProductos(context(body));
+      expect(response.status).toBe(200);expect(await response.json()).toEqual(proof);
+      for(const patch of [{actor:otherId},{requestKey:actor},{parserVersion:2},{csvSha256:'0'.repeat(64)},{result:{}},{committed:true},{extra:true}]){
+        csvRpcReply={...proof,...patch};expect((await loaded[index].csv.handleImportarProductos(context(body))).status).toBe(500);
+      }
+      expect(calls.filter(c=>c.method!=='GET').every(c=>c.url.pathname==='/rest/v1/rpc/fn_csv_product_import_status')).toBe(true);
+    });
+    it('fails without per-row fallback on RPC error or forged opening receipt',async()=>{
+      const body={csvData:`${headers}\n${row('5')}`};
+      csvRpcFailure=true;expect((await loaded[index].csv.handleImportarProductos(context(body))).status).toBe(500);
+      csvRpcFailure=false;const post=calls.find(c=>c.method==='POST')!;const r=csvReceipt(post.body!);
+      for(const patch of [{actor:otherId},{requestKey:actor},{parserVersion:2},{csvSha256:'0'.repeat(64)},{products:[{...r.products[0],movement_id:null}]}]){
+        csvRpcReply={...r,...patch};expect((await loaded[index].csv.handleImportarProductos(context(body))).status).toBe(500);
+      }
+      expect(calls.filter(c=>c.method!=='GET').every(c=>c.url.pathname==='/rest/v1/rpc/fn_csv_product_import')).toBe(true);
+    });
+    it('rejects invalid request identity, strict flags and numeric business bounds before any RPC',async()=>{
+      for(const patch of [{requestKey:null},{requestKey:'invalid'},{action:'write'},{action:undefined}])
+        expect((await loaded[index].csv.handleImportarProductos(context({csvData:`${headers}\n${row('5')}`,...patch}))).status).toBe(400);
+      for(const [field,value] of [['permitido_gerencia','tru'],['activo','garbage'],['stock_minimo','-1'],['precio_unitario','3usd'],['nitrogeno','100.001']])
+        expect((await loaded[index].csv.handleImportarProductos(context({csvData:`${headers},${field}\n${row('5')},${value}`}))).status).toBe(400);
+      expect(calls.every(c=>c.method==='GET')).toBe(true);
     });
     it('requires a nonblank string target and a supplied boolean for toggle', async () => {
       for (const body of [{ productoId: productId }, { productoId: productId, activo: null },

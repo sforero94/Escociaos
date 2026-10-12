@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, Download, AlertCircle, CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
 import { getSupabaseConfig } from '../../utils/supabase/config';
 import { getSupabase } from '../../utils/supabase/client';
+import { useAuth } from '../../contexts/AuthContext';
+import { importCsvProducts, pendingCsvImport, type CsvImportClient } from '../../utils/csvProductImport';
+import { CSV_MAX_BYTES, CsvValidationError } from '../../supabase/functions/server/csv-product-import';
 
 interface ImportResult {
   success: boolean;
@@ -15,10 +18,34 @@ interface ImportResult {
 }
 
 export function ImportarProductosCSV() {
+  const { user } = useAuth();
+  const owner = user?.id ?? '';
+  const currentOwner = useRef(owner); currentOwner.current=owner;
+  const generation = useRef(0);
+  const mounted = useRef(true);
+  const [pending,setPending]=useState(false);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<ImportResult | null>(null);
   const [dragActive, setDragActive] = useState(false);
+
+  useEffect(()=>{
+    generation.current++;
+    setArchivo(null);setResultado(null);setCargando(false);
+    try {setPending(Boolean(owner && pendingCsvImport(owner)));}
+    catch(error:unknown){setPending(true);setResultado({success:false,message:error instanceof Error?error.message:'Intento pendiente no verificable'});}
+  },[owner]);
+  useEffect(()=>{
+    const operationGeneration=generation;
+    mounted.current=true;
+    return()=>{mounted.current=false;operationGeneration.current++;};
+  },[]);
+  const selectFile=(file:File)=>{
+    if(cargando)return;
+    generation.current++;
+    if(!file.name.toLowerCase().endsWith('.csv') || file.size>CSV_MAX_BYTES){setResultado({success:false,message:'Seleccione un CSV de máximo 1 MiB'});return;}
+    setArchivo(file);setResultado(null);
+  };
 
   // Descargar plantilla CSV
   const descargarPlantilla = () => {
@@ -129,7 +156,7 @@ export function ImportarProductosCSV() {
       '# 7. Los números decimales deben usar punto (.) no coma (,)',
       '# 8. Los campos vacíos se dejan sin contenido (no escribir "null" o "vacío")',
       '# 9. El sistema es flexible con mayúsculas/minúsculas y acentos (ej: "edafico" = "Edáfico", "liquido" = "Líquido")',
-      '# 10. IMPORTANTE: Ejecuta primero el script SQL /sql/agregar_categorias_productos.sql en Supabase para agregar las categorías faltantes',
+      '# 10. Máximo 500 productos y 1 MiB. Todo el archivo se importa en una sola transacción.',
       ''
     ];
 
@@ -166,90 +193,42 @@ export function ImportarProductosCSV() {
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.name.endsWith('.csv')) {
-        setArchivo(file);
-        setResultado(null);
-      } else {
-        setResultado({
-          success: false,
-          message: 'Por favor selecciona un archivo CSV válido'
-        });
-      }
+      selectFile(file);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.name.endsWith('.csv')) {
-        setArchivo(file);
-        setResultado(null);
-      } else {
-        setResultado({
-          success: false,
-          message: 'Por favor selecciona un archivo CSV válido'
-        });
-      }
+      selectFile(file);
     }
   };
 
-  const procesarCSV = async () => {
-    if (!archivo) return;
-
-    setCargando(true);
-    setResultado(null);
-
+  const procesarCSV = async (resolve=false, retry=false) => {
+    if(!owner || cargando || (!archivo && !pending))return;
+    const g=++generation.current; const active=()=>mounted.current && currentOwner.current===owner && generation.current===g;
+    const submitted=archivo;
+    setCargando(true);setResultado(null);
     try {
-      // ✅ SOLUCIÓN: Usar FileReader con codificación UTF-8 explícita
-      const texto = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsText(archivo, 'UTF-8');
+      const texto=resolve || retry || !submitted ? null : await new Promise<string>((done,reject)=>{
+        const reader=new FileReader();reader.onload=()=>done(String(reader.result));reader.onerror=()=>reject(reader.error);reader.readAsText(submitted,'UTF-8');
       });
-
-      // El endpoint exige el JWT de sesion del usuario (rol Administrador o
-      // Gerencia), no el anon key -- mismo patron que UsuariosConfig.tsx y
-      // chatService.ts.
-      const { data: { session } } = await getSupabase().auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Sesion no valida -- vuelve a iniciar sesion e intenta de nuevo.');
+      if(!active())return;
+      const receipt=await importCsvProducts(getSupabase() as unknown as CsvImportClient,
+        `${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/inventario/importar-productos`,owner,texto,resolve?'resolve':'import',active);
+      if(!active())return;
+      setPending(false);
+      setResultado(receipt ?? {success:false,message:'La importación pendiente no se registró. Puede revisar el archivo e intentar de nuevo.'});
+      // Resolution may concern an older file. Preserve a later unsent selection.
+      if(receipt && !resolve && !retry && submitted)setArchivo(null);
+    } catch(error:unknown){
+      if(active()){
+        setResultado(error instanceof CsvValidationError
+          ? {success:false,message:error.message,errores:error.errores,total:error.total,importados:0}
+          : {success:false,message:error instanceof Error?error.message:'Error al procesar el archivo'});
+        try{setPending(Boolean(pendingCsvImport(owner)));}catch{setPending(true);}
       }
-
-      const response = await fetch(
-        `${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/inventario/importar-productos`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify({ csvData: texto })
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al importar productos');
-      }
-
-      setResultado(data);
-      
-      // Si fue exitoso, limpiar archivo después de 3 segundos
-      if (data.success) {
-        setTimeout(() => {
-          setArchivo(null);
-        }, 3000);
-      }
-    } catch (error: any) {
-      setResultado({
-        success: false,
-        message: error.message || 'Error al procesar el archivo'
-      });
-    } finally {
-      setCargando(false);
-    }
+    } finally{if(active())setCargando(false);}
   };
 
   return (
@@ -259,7 +238,7 @@ export function ImportarProductosCSV() {
         <div>
           <h2 className="text-foreground">Importar Productos en Masa</h2>
           <p className="text-brand-brown/60 mt-1">
-            Carga múltiples productos desde un archivo CSV
+            Máximo 500 productos y 1 MiB. Todo el archivo se valida e importa en una sola transacción.
           </p>
         </div>
         <Button
@@ -272,6 +251,11 @@ export function ImportarProductosCSV() {
         </Button>
       </div>
 
+      {pending && <Alert><AlertDescription>
+        Hay una importación pendiente de verificar. Conserve el archivo hasta conocer su resultado.
+        <Button disabled={cargando} onClick={()=>void procesarCSV(true)}>Verificar importación pendiente</Button>
+        <Button disabled={cargando} onClick={()=>void procesarCSV(false,true)}>Reintentar importación pendiente</Button>
+      </AlertDescription></Alert>}
       {/* Área de carga */}
       <Card className="p-8 bg-white/60 backdrop-blur-sm border-secondary/30">
         <div
@@ -320,7 +304,7 @@ export function ImportarProductosCSV() {
               </p>
               <div className="flex gap-3 justify-center">
                 <Button
-                  onClick={procesarCSV}
+                  onClick={() => void procesarCSV()}
                   disabled={cargando}
                   className="bg-primary hover:bg-primary/90 text-white"
                 >
@@ -328,6 +312,7 @@ export function ImportarProductosCSV() {
                 </Button>
                 <Button
                   onClick={() => {
+                    generation.current++;
                     setArchivo(null);
                     setResultado(null);
                   }}
