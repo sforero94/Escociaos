@@ -90,7 +90,7 @@ export function InformeDetallePage() {
       toast.error('No se pudo abrir el archivo');
       return;
     }
-    window.open(data.signedUrl, '_blank', 'noopener');
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   }
 
   if (cargando) {

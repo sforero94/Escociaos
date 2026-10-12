@@ -71,7 +71,7 @@ export function IngresoDetalleDialog({
         .from('facturas')
         .createSignedUrl(urlFactura, 60 * 60);
       if (error || !data?.signedUrl) throw error ?? new Error('No se pudo generar el enlace');
-      window.open(data.signedUrl, '_blank');
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
     } catch {
       toast.error('No se pudo abrir la factura');
     } finally {
