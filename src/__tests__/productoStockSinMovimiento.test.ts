@@ -132,11 +132,9 @@ function routine(source: string, name: string): string {
   expect(match, `missing SQL writer ${name}`).not.toBeNull(); return match![2];
 }
 
-// Existing form creation is an explicit opening-balance exception, not proof of
-// a ledger movement. CSV creation is now registered through its atomic RPC below;
-// direct metadata updates cannot carry stock.
+// Opening balances are posted through the catalog and CSV protocols. The only
+// remaining direct runtime product writers are narrow activation routes.
 const CATALOGUE_WRITERS = [
-  'src/components/inventory/ProductForm.tsx',
   'src/supabase/functions/server/productos.tsx',
   'supabase/functions/make-server-1ccce916/productos.tsx',
 ];
@@ -166,13 +164,7 @@ describe('guard: every stock writer remains registered across browser, helper an
     expect(writers).toEqual([...CATALOGUE_WRITERS].sort());
     for (const path of writers) {
       const writes = productWrites(path);
-      if (path.endsWith('/ProductForm.tsx')) {
-        expect(writes).toEqual([{ method: 'update', payload: 'dataToSave' }, { method: 'insert', payload: '[dataToSave]' }]);
-        expect(read(path)).toContain('prepararDatosProducto(formData, Boolean(productId))');
-        // Runtime tests above prove the update helper removes hidden/spread stock.
-      } else {
-        expect(writes).toEqual([{ method: 'update', payload: '{ activo }' }]);
-      }
+      expect(writes).toEqual([{ method: 'update', payload: '{ activo }' }]);
     }
   }, 15_000); // Keep complete AST discovery, including escaped table literals.
 
@@ -231,7 +223,7 @@ describe('guard: every stock writer remains registered across browser, helper an
       }
       expect(registeredWrites, `${entry} has a balance writer outside the reviewed functions`).toBe([...sql.matchAll(balanceWrite)].length);
     }
-    expect(names.sort()).toEqual(['public.fn_csv_product_import','public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_purchase_post','public.fn_purchase_reverse'].sort());
+    expect(names.sort()).toEqual(['public.fn_csv_product_import','public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_product_catalog_post','public.fn_purchase_post','public.fn_purchase_reverse','ronda_stock_integrity.post'].sort());
     const body = routine(read('src/sql/security-candidates/application-closure.sql'), 'fn_cerrar_aplicacion');
     expect(body).toMatch(/UPDATE productos\s+SET cantidad_actual = v_saldo_nuevo/);
     expect(body).toContain('INSERT INTO movimientos_inventario');

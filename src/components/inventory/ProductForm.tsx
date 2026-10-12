@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import {catalogPayload,postCatalog,pendingCatalog,catalogCanonical,type CatalogRow} from '../../utils/productCatalogIntegrity';
+import {draftStorageKey,writeOwnedDraft} from '../../utils/draftStorage';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
@@ -11,7 +13,7 @@ interface ProductFormProps {
   onSuccess: () => void;
 }
 
-interface ProductData {
+export interface ProductData {
   // Campos básicos (TODOS)
   nombre: string;
   categoria: string;
@@ -116,21 +118,8 @@ const initialFormData: ProductData = {
   link_hoja_seguridad: '',
 };
 
-/**
- * Arma el objeto que viaja a `productos` en INSERT o UPDATE.
- *
- * `cantidad_actual` es SALDO DE INVENTARIO, no un atributo del producto: solo
- * puede cambiar junto con la fila que lo explica en `movimientos_inventario`.
- * En modo EDICIÓN se saca del payload, porque el formulario mandaba el valor
- * del input con un `{ ...formData }` y sobrescribía el saldo sin dejar
- * movimiento -- una mutación de stock sin rastro, justo lo que el módulo de
- * inventario existe para impedir. Para corregir un saldo está
- * `NuevoMovimientoModal` con `tipo = 'Ajuste'`, que inserta el movimiento
- * ANTES de tocar `productos`.
- *
- * En modo CREACIÓN sí viaja: es el saldo de apertura del producto, y no hay
- * nada anterior que un movimiento pudiera explicar.
- */
+/** Preserve nullable business fields; edit excludes opening stock. The RPC
+ * coordinates create opening stock and trusted ledger/audit in one transaction. */
 export function prepararDatosProducto(
   formData: ProductData,
   esEdicion: boolean,
@@ -151,25 +140,44 @@ export function prepararDatosProducto(
   return datos;
 }
 
-export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFormProps) {
-  const { profile } = useAuth();
-  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<ProductData>({
-    key: productId ? `producto-edit-${productId}` : 'producto-new-v1',
-    initialState: initialFormData,
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [currentSection, setCurrentSection] = useState(1);
-
-  // Cargar datos del producto si es modo edición
-  useEffect(() => {
-    if (productId) {
-      loadProductData();
-    } else {
-      setFormData(initialFormData);
-    }
-  }, [productId, isOpen]);
-
+interface ProductDraft {fields:ProductData;original:CatalogRow|null}
+const initialDraft:ProductDraft={fields:initialFormData,original:null};
+export function ProductForm(props:ProductFormProps) {
+  const {user}=useAuth();
+  if(!props.isOpen)return null;
+  return <ProductFormSession key={`${user?.id??'none'}:${props.productId??'new'}`} {...props}/>;
+}
+function ProductFormSession({ isOpen, onClose, productId, onSuccess }: ProductFormProps) {
+  const {user}=useAuth();
+  const owner=user?.id??'';
+  const draftKey=productId ? `producto-edit-${productId}` : 'producto-new-v1';
+  const [draft,setDraft,clearFormData,wasRestored]=useFormPersistence<ProductDraft>({key:draftKey,initialState:initialDraft});
+  // Old edit drafts remain visible; without their original snapshot they cannot be rebased safely.
+  const legacy=!('fields' in draft);
+  const formData=legacy?draft as unknown as ProductData:draft.fields;
+  const original=legacy?null:draft.original;
+  const setFormData=(value:ProductData|((prev:ProductData)=>ProductData))=>{
+    setDraft(previous=>{
+      const previousFields='fields' in previous?previous.fields:previous as unknown as ProductData;
+      const next={fields:typeof value==='function'?value(previousFields):value,original:'fields' in previous?previous.original:null};
+      const key=draftStorageKey(owner,draftKey);if(key)writeOwnedDraft(key,owner,next);
+      return next;
+    });
+  };
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+  const [currentSection,setCurrentSection]=useState(1);
+  const [pending,setPending]=useState(false);
+  const live=useRef(true);
+  const loadGeneration=useRef(0);
+  const fieldGeneration=useRef(0);
+  useLayoutEffect(()=>{live.current=true;return ()=>{live.current=false;};},[]);
+  useEffect(()=>{
+    try{setPending(!!pendingCatalog(owner,productId??null));}catch(err){setError(err instanceof Error?err.message:'Intento pendiente no verificable');}
+    if(productId && !wasRestored)void loadProductData();
+    else if(productId && (legacy||!original))setError('El borrador no conserva la versión original del producto. Descarte el borrador explícitamente para cargar una versión nueva; no se sobrescribirá otro cambio.');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- owner/target are keyed sessions; initialization must never rebase a restored original.
+  },[]);
   // Calcular precio unitario automáticamente
   useEffect(() => {
     if (formData.precio_por_presentacion && formData.presentacion_kg_l && formData.presentacion_kg_l > 0) {
@@ -178,35 +186,33 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     } else {
       setFormData(prev => ({ ...prev, precio_unitario: '' }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft setter changes each render; only these business inputs trigger recalculation.
   }, [formData.precio_por_presentacion, formData.presentacion_kg_l]);
 
   const loadProductData = async () => {
-    if (!productId) return;
+    if(!productId)return;
+    const generation=++loadGeneration.current;
+    const edits=fieldGeneration.current;
     try {
-      const supabase = getSupabase();
-      const { data, error } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('id', productId)
-        .single();
-
-      if (error) throw error;
-      if (data) {
-        // Convertir nulls a strings vacíos o números vacíos
-        const formattedData = { ...initialFormData };
-        const dataRecord = data as Record<string, unknown>;
-        Object.keys(dataRecord).forEach(key => {
-          if (dataRecord[key] !== null && key in formattedData) {
-            (formattedData as Record<string, unknown>)[key] = dataRecord[key];
-          }
-        });
-        setFormData(formattedData);
-      }
-    } catch (err: any) {
-      setError('Error al cargar el producto');
-    }
+      const supabase=getSupabase();
+      const auth=await supabase.auth.getUser();
+      if(auth.error||auth.data.user?.id!==owner||!live.current)return;
+      const {data,error}=await supabase.from('productos').select('*').eq('id',productId).single();
+      if(error)throw error;
+      if(!data||!live.current||generation!==loadGeneration.current||edits!==fieldGeneration.current)return;
+      const original=data as CatalogRow;
+      const fields={...initialFormData};
+      for(const k of Object.keys(fields))if(original[k]!==null && original[k]!==undefined)(fields as unknown as CatalogRow)[k]=original[k];
+      const next={fields,original};
+      const key=draftStorageKey(owner,draftKey);if(key)writeOwnedDraft(key,owner,next);
+      setDraft(next);
+    }catch(err:unknown){if(live.current&&generation===loadGeneration.current)setError(err instanceof Error?err.message:'Error al cargar el producto');}
   };
-
+  const discardDraft=()=>{
+    fieldGeneration.current++;loadGeneration.current++;
+    clearFormData();setError(null);
+    if(productId)void loadProductData();
+  };
   // Determinar qué secciones mostrar según grupo/categoría
   const isInsumo = formData.grupo === 'Agroinsumos';
   const isFertilizante = formData.categoria === 'Fertilizante';
@@ -215,6 +221,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
   const needsSeguridad = isInsumo;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    fieldGeneration.current++;
     const { name, value, type } = e.target;
     
     if (type === 'checkbox') {
@@ -268,45 +275,32 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     setLoading(true);
     setError(null);
 
+    const generation=fieldGeneration.current;
+    const submitted=catalogCanonical(formData);
     try {
-      const supabase = getSupabase();
-      
-      // Preparar datos para insertar/actualizar. En edición NO incluye
-      // `cantidad_actual` -- ver prepararDatosProducto().
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- el builder tipado de Supabase no acepta un Record genérico; este objeto ya era `any` antes de extraer el helper
-      const dataToSave = prepararDatosProducto(formData, Boolean(productId)) as any;
-
-      if (productId) {
-        // MODO EDICIÓN
-        const { error: updateError } = await supabase
-          .from('productos')
-          .update(dataToSave)
-          .eq('id', productId);
-
-        if (updateError) throw updateError;
-      } else {
-        // MODO CREACIÓN
-        const { error: insertError } = await supabase
-          .from('productos')
-          .insert([dataToSave]);
-
-        if (insertError) throw insertError;
-      }
-
-      // Éxito
-      clearFormData();
-      onSuccess();
-      onClose();
-      setCurrentSection(1);
-    } catch (err: any) {
-      if (err.code === '23505') {
-        setError('Ya existe un producto con ese nombre');
-      } else {
-        setError(err.message || 'Error al guardar el producto');
-      }
-    } finally {
-      setLoading(false);
-    }
+      if(productId&&!original)throw new Error('Falta la versión original. Descarte explícitamente el borrador para revisar la versión actual.');
+      await postCatalog(getSupabase(),owner,productId??null,catalogPayload(formData as unknown as CatalogRow,productId?original:null),'post',()=>live.current);
+      if(!live.current)return;
+      setPending(false);
+      if(generation!==fieldGeneration.current||catalogCanonical(formData)!==submitted)return;
+      clearFormData();onSuccess();onClose();
+    }catch(err:unknown){if(live.current){setError(err instanceof Error?err.message:'Error al guardar el producto');try{setPending(!!pendingCatalog(owner,productId??null));}catch{setPending(true);}}}
+    finally{if(live.current)setLoading(false);}
+  };
+  const resolvePending=async()=>{
+    const generation=fieldGeneration.current;
+    setLoading(true);setError(null);
+    try {
+      const result=await postCatalog(getSupabase(),owner,productId??null,null,'resolve',()=>live.current);
+      if(!live.current)return;
+      setPending(false);
+      if(result) {
+        onSuccess();
+        // A later unsent draft is preserved and remains bound to its original.
+        if(generation===fieldGeneration.current){setError('El intento anterior se guardó. Se conserva este borrador; descarte para cargar la versión actual antes de editar de nuevo.');}
+      }else setError('El intento anterior no se registró. Se conserva el borrador y su versión original.');
+    }catch(err:unknown){if(live.current)setError(err instanceof Error?err.message:'Resultado pendiente no verificable');}
+    finally{if(live.current)setLoading(false);}
   };
 
   if (!isOpen) return null;
@@ -357,7 +351,8 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 220px)' }}>
           <div className="px-6 py-4">
-            <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
+            <div onClick={event=>event.preventDefault()}><FormDraftBanner variant="restored" show={wasRestored} onDiscard={discardDraft} /></div>
+            {pending && <button type="button" disabled={loading} onClick={resolvePending}>Verificar intento pendiente</button>}
 
             {/* SECCIÓN 1: INFORMACIÓN BÁSICA */}
             {currentSection === 1 && (
@@ -1059,7 +1054,6 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
               <button
                 type="button"
                 onClick={() => {
-                  clearFormData();
                   onClose();
                   setCurrentSection(1);
                   setError(null);

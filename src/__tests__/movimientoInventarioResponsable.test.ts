@@ -183,7 +183,31 @@ describe('guard: inventory writer registry follows transactional RPCs and truste
       }
       expect(registeredInserts, `${file} has a movement INSERT outside the reviewed functions`).toBe(allInserts);
     }
-    expect(writers.sort()).toEqual(['public.fn_csv_product_import','public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_purchase_post','public.fn_purchase_reverse'].sort());
+    expect(writers.sort()).toEqual(['public.fn_csv_product_import','public.fn_cerrar_aplicacion','public.fn_manual_stock_movement','public.fn_product_catalog_post','public.fn_purchase_post','public.fn_purchase_reverse','ronda_stock_integrity.post'].sort());
+  });
+
+  it('both Ronda RPC lanes delegate to one registered ledger transaction with trusted attribution', () => {
+    const sql = read('src/sql/security-candidates/ronda-stock-integrity.sql');
+    for (const [rpc, operation] of [['fn_ronda_aplicar_ajuste','adjust'],['fn_ronda_resolver_con_captura','capture']]) {
+      expect(routine(sql, rpc)).toContain(`ronda_stock_integrity.post('${operation}',payload)`);
+    }
+    const body = routine(sql, 'ronda_stock_integrity.post');
+    const inserts = movementInserts(body);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].values[inserts[0].columns.indexOf('responsable')]).toBe('public.fn_ronda_actor_correo(user_id,tg_id)');
+    expect(body).toContain('ronda_stock_integrity.authorize(');
+    expect(body).toContain("'responsable',public.fn_ronda_actor_correo(user_id,tg_id)");
+  });
+
+  it('catalog opening records are stamped from the locked profile and posted with the product', () => {
+    expect(read('src/components/inventory/ProductForm.tsx')).toContain('await postCatalog(');
+    const sql = read('src/sql/security-candidates/product-catalog-integrity.sql');
+    expect(routine(sql, 'product_catalog_integrity.authorize')).toContain('WHERE id=auth.uid() FOR SHARE');
+    const body = routine(sql, 'fn_product_catalog_post');
+    expect(body).toContain('u:=product_catalog_integrity.authorize()');
+    expect(body).toContain("'responsable',u.email");
+    expect(body).toContain('INSERT INTO public.movimientos_inventario SELECT (move).*');
+    expect(body).not.toMatch(/p_payload\s*->>\s*'responsable'/);
   });
 
   it('the prospective application closure RPC uses active-profile EMAIL and checks the exact returned movement', () => {
