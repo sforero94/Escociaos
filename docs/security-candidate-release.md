@@ -10,6 +10,8 @@ This branch is a draft implementation and contains unapplied SQL review candidat
 4. Run ordinary-role tests, account revocation and concurrent writes against the release environment. Check real browser Web Locks, Auth callbacks, Deno imports, Telegram private delivery, Vercel configuration, Storage policies and file-byte validation. Metadata MIME restrictions do not authenticate file bytes.
 5. Obtain owner approval before merging, deploying, changing production SQL/settings/jobs or other production changes. Apply within the approved maintenance window and monitor the reviewed checks. Preserve post-release transactions and proof when reverting callers; do not drop evidence tables as a routine rollback.
 
+Vercel configuration prepares lockfile-based installation with `npm ci` and response headers against MIME sniffing, cross-origin full-path referrer disclosure and embedding the app from another origin. The limited CSP permits the app's same-origin report frames and does not claim script-source enforcement. Verify headers on actual deployed HTML/assets and report workflows before release. These headers do not govern signed invoice responses served from a separate Storage origin.
+
 ## Proof and retention
 
 Memory confirmation receipts are retained seven days; expired proposals and spent token/owner/hash metadata are removed by the reviewed cleanup function. Saved memories are unaffected. Hosted pg_cron execution and quiet-period deletion must be verified separately; local PostgreSQL tests do not certify scheduling.
