@@ -107,6 +107,10 @@ def run():
   rejects(payload('Salida Otros',11),'insufficient stock rejects all writes')
   for field,value in [('observed_quantity',9),('observed_revision','2000-01-01T00:00:00Z'),('observed_revision',None)]: rejects(dict(payload('Ajuste',5),**{field:value}),'stale correction '+field+' rejects')
   for actor,role in [(None,'authenticated'),(OWNER,'anon'),(OWNER,'service_role')]: rejects(payload(),'untrusted actor/role blocked',actor=actor,role=role)
+  sql(f"ALTER TABLE public.usuarios ALTER COLUMN rol DROP NOT NULL; UPDATE public.usuarios SET rol=NULL WHERE id='{OWNER}';")
+  rejects(payload(),'NULL profile role cannot post through privileged RPC')
+  before=state();status(payload(),str(uuid.uuid4()),False);verify(state()==before,'NULL profile role cannot resolve or create cancellation evidence')
+  sql(f"UPDATE public.usuarios SET rol='Administrador' WHERE id='{OWNER}'; ALTER TABLE public.usuarios ALTER COLUMN rol SET NOT NULL;")
   for mutation,restore in [("activo=false","activo=true"),("rol='Verificador'","rol='Administrador'")]:
    sql(f"UPDATE public.usuarios SET {mutation} WHERE id='{OWNER}';");rejects(payload(),'fresh inactive/demoted actor blocked');sql(f"UPDATE public.usuarios SET {restore} WHERE id='{OWNER}';")
   for table,event in [('public.movimientos_inventario','INSERT'),('public.productos','UPDATE'),('manual_stock.requests','INSERT'),('manual_stock.requests','UPDATE')]:

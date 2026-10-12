@@ -61,7 +61,7 @@ BEGIN
   END IF;
   expires := issued + interval '30 minutes';
   SELECT * INTO profile FROM public.usuarios WHERE id = p_owner_id FOR SHARE;
-  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol::text <> 'Gerencia' THEN
+  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text <> 'Gerencia' THEN
     RAISE EXCEPTION 'Active Gerencia required' USING ERRCODE = '42501';
   END IF;
   hash := sha256(convert_to(jsonb_build_array(p_owner_id, p_token, p_content, p_reason)::text, 'UTF8'));
@@ -107,7 +107,7 @@ BEGIN
   END LOOP;
   IF registration_count <> 1 THEN RAISE EXCEPTION 'Unique Telegram link required' USING ERRCODE = '42501'; END IF;
   SELECT * INTO profile FROM public.usuarios WHERE id = p_owner_id FOR SHARE;
-  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol::text <> 'Gerencia' THEN
+  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text <> 'Gerencia' THEN
     RAISE EXCEPTION 'Active Gerencia required' USING ERRCODE = '42501';
   END IF;
   SELECT * INTO proposal FROM public.esco_memory_proposals WHERE token = p_token FOR UPDATE;

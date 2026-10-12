@@ -31,7 +31,7 @@ DECLARE actor uuid:=auth.uid(); profile public.usuarios%ROWTYPE; prod public.pro
 BEGIN
  IF actor IS NULL THEN RAISE EXCEPTION 'Human authentication required' USING ERRCODE='42501'; END IF;
  SELECT * INTO profile FROM public.usuarios WHERE id=actor FOR SHARE;
- IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN RAISE EXCEPTION 'Current active administrator required' USING ERRCODE='42501'; END IF;
+ IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN RAISE EXCEPTION 'Current active administrator required' USING ERRCODE='42501'; END IF;
  IF p_request_key IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object'
  OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(p_payload) k) IS DISTINCT FROM ARRAY['fecha','observaciones','observed_quantity','observed_revision','producto_id','quantity','tipo']::text[] THEN RAISE EXCEPTION 'Exact movement payload required'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(actor::text||':'||p_request_key::text,0));
@@ -104,7 +104,7 @@ DECLARE actor uuid:=auth.uid(); profile public.usuarios%ROWTYPE; req manual_stoc
 BEGIN
  IF actor IS NULL OR p_request_key IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Owner and exact request required'; END IF;
  SELECT * INTO profile FROM public.usuarios WHERE id=actor FOR SHARE;
- IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN RAISE EXCEPTION 'Current active administrator required' USING ERRCODE='42501'; END IF;
+ IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN RAISE EXCEPTION 'Current active administrator required' USING ERRCODE='42501'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(actor::text||':'||p_request_key::text,0));
  SELECT * INTO req FROM manual_stock.requests WHERE requests.actor=actor AND request_key=p_request_key FOR UPDATE;
  IF NOT FOUND THEN

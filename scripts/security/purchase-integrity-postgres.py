@@ -170,6 +170,9 @@ def tests():
     failed_atomically('fn_purchase_post', {'lines': [line()]}, label='inactive supplier rejected without stock or ledger writes')
     sql(f"UPDATE public.fin_proveedores SET activo=true WHERE id='{SUPPLIER}';")
     payload = {'lines': [line()]}
+    sql(f"ALTER TABLE public.usuarios ALTER COLUMN rol DROP NOT NULL; UPDATE public.usuarios SET rol=NULL WHERE id='{ACTOR}';")
+    failed_atomically('fn_purchase_post', payload, label='NULL profile role cannot post privileged purchase')
+    sql(f"UPDATE public.usuarios SET rol='Administrador' WHERE id='{ACTOR}'; ALTER TABLE public.usuarios ALTER COLUMN rol SET NOT NULL;")
     for actor in (None, INACTIVE, VIEWER, '10000000-0000-4000-8000-999999999999'):
         failed_atomically('fn_purchase_post', payload, actor=actor, label=f'creation unauthorized actor {actor}')
     failed_atomically('fn_purchase_post', payload, role='anon', label='anon has no RPC execute')

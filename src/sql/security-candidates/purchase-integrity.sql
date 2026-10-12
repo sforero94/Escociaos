@@ -68,7 +68,7 @@ DECLARE actor uuid := auth.uid(); profile public.usuarios%ROWTYPE;
 BEGIN
   IF actor IS NULL THEN RAISE EXCEPTION 'Human authentication required' USING ERRCODE='42501'; END IF;
   SELECT * INTO profile FROM public.usuarios WHERE id=actor FOR SHARE;
-  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN
+  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN
     RAISE EXCEPTION 'Active Administrador or Gerencia required' USING ERRCODE='42501';
   END IF;
   RETURN actor;

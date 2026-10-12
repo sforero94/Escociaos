@@ -44,6 +44,12 @@ def provenance_checks():
  registered=register(p,key)
  m.verify(registered==dict(actor=OWNER,requestKey=key,parserVersion=1,csvSha256=hashlib.sha256(p['raw_csv'].encode()).hexdigest(),payload=p),'service registration binds exact raw/parser/products/verified actor')
  m.verify(register(p,key)==registered,'trusted parser registration idempotent exact replay')
+ m.sql(f"ALTER TABLE public.usuarios ALTER COLUMN rol DROP NOT NULL; UPDATE public.usuarios SET rol=NULL WHERE id='{OWNER}';")
+ before=state();register(body(),str(uuid.uuid4()),ok=False)
+ m.verify(state()==before,'NULL profile role cannot register trusted parser proof')
+ before=state();call(p,key,ok=False,registered=False);call(p,key,ok=False,name='fn_csv_product_import_status')
+ m.verify(state()==before,'NULL profile role cannot post or resolve existing parsed proof')
+ m.sql(f"UPDATE public.usuarios SET rol='Administrador' WHERE id='{OWNER}'; ALTER TABLE public.usuarios ALTER COLUMN rol SET NOT NULL;")
  for patch,label in [(dict(raw_csv='forged raw'),'raw'),(dict(products=[dict(p['products'][0],cantidad_actual=8)]),'products'),(dict(parser_version=2),'version')]:
   before=state();call(dict(p,**patch),key,ok=False,registered=False)
   register(dict(p,**patch),key,ok=False)

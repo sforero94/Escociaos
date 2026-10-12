@@ -108,7 +108,7 @@ CREATE FUNCTION csv_product_import.authorize() RETURNS public.usuarios
 DECLARE u public.usuarios; BEGIN
  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Human account required'; END IF;
  SELECT * INTO u FROM public.usuarios WHERE id=auth.uid() FOR SHARE;
- IF NOT FOUND OR u.activo IS DISTINCT FROM true OR u.rol::text NOT IN ('Administrador','Gerencia') OR u.email IS NULL OR btrim(u.email)='' THEN
+ IF NOT FOUND OR u.activo IS DISTINCT FROM true OR u.rol IS NULL OR u.rol::text NOT IN ('Administrador','Gerencia') OR u.email IS NULL OR btrim(u.email)='' THEN
   RAISE EXCEPTION 'Active Administrador or Gerencia required';
  END IF; RETURN u;
 END $$;
@@ -191,7 +191,7 @@ DECLARE u public.usuarios; r csv_product_import.parsed; prior csv_product_import
 BEGIN
  IF p_actor IS NULL OR p_request_key IS NULL THEN RAISE EXCEPTION 'Verified human actor and request key required'; END IF;
  SELECT * INTO u FROM public.usuarios WHERE id=p_actor FOR SHARE;
- IF NOT FOUND OR u.activo IS DISTINCT FROM true OR u.rol::text NOT IN ('Administrador','Gerencia') OR u.email IS NULL OR btrim(u.email)='' THEN
+ IF NOT FOUND OR u.activo IS DISTINCT FROM true OR u.rol IS NULL OR u.rol::text NOT IN ('Administrador','Gerencia') OR u.email IS NULL OR btrim(u.email)='' THEN
   RAISE EXCEPTION 'Active permitted verified actor required'; END IF;
  PERFORM csv_product_import.validate(p_payload);
  PERFORM pg_advisory_xact_lock(hashtextextended(p_actor::text||':'||p_request_key::text,0));
