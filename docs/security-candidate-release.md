@@ -19,3 +19,9 @@ Purchase/manual-stock request evidence and cancellation fences are a distinct pr
 ## Remaining acceptance gates
 
 Global stock writer coordination, whole-import atomicity, cattle undo transactions, complete audit access and retention, authenticated upload bytes, hosted runtime checks and a contained real backup recovery exercise remain unfinished. The xlsx dependency advisory remains unresolved. Recovery must use an existing protected key, verified isolation, no extra spend and cleanup; absent credentials are not replaced with invented values. Historical tests from a lost worktree do not certify this reconstructed branch.
+
+## Recovery procedure verification
+
+`python3 scripts/security/recovery-postgres.py` reproduces the default psql behavior using generated SQL: a failed statement can return exit status zero while earlier and later statements persist. The guarded synthetic procedure uses `-X --set=ON_ERROR_STOP=1 --single-transaction`, rejects the failed restore and rolls back roles, schema and rows. A valid generated restore commits exactly its expected state. The cached PostgreSQL container has no network, published ports, host bind mounts or host PID access; cleanup is verified.
+
+This script accepts no backup input and reads no key or production records. Before using the guarded procedure on an actual backup, verify compatibility of every SQL file with a single transaction, the required managed schemas/extensions/Auth and Storage recovery, protected key availability, containment, archive safety and cleanup. A synthetic procedure check does not establish backup freshness, coherent recovery or the operational recovery deadline.
