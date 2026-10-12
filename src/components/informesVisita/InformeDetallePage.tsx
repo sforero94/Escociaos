@@ -14,6 +14,7 @@ import {
 import { esTablaInformesAusente, MENSAJE_MIGRACION_PENDIENTE } from '@/utils/informesVisita/migracion';
 import { sanitizarTemas } from '@/utils/informesVisita/temas';
 import { TemasChips } from './TemasChips';
+import { useScopedStorageOpen } from '@/hooks/useScopedStorageOpen';
 
 export function InformeDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,8 @@ export function InformeDetallePage() {
   const [cargando, setCargando] = useState(true);
   const [textoAbierto, setTextoAbierto] = useState(false);
   const [migracionPendiente, setMigracionPendiente] = useState(false);
+  const { openFile } = useScopedStorageOpen(BUCKET_INFORMES_VISITA, informe?.archivo_path,
+    `${id ?? ''}:${informe?.id ?? ''}`, !cargando && !!id && informe?.id === id);
 
   useEffect(() => {
     if (!id) return;
@@ -81,16 +84,11 @@ export function InformeDetallePage() {
   }
 
   async function descargar() {
-    if (!informe) return;
-    const sb = getSupabase() as any;
-    const { data, error } = await sb.storage
-      .from(BUCKET_INFORMES_VISITA)
-      .createSignedUrl(informe.archivo_path, 60);
-    if (error || !data?.signedUrl) {
+    try {
+      await openFile();
+    } catch {
       toast.error('No se pudo abrir el archivo');
-      return;
     }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   }
 
   if (cargando) {
