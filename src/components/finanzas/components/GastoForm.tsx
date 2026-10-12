@@ -436,6 +436,7 @@ function GastoFormState({ open, onOpenChange, gasto, onSuccess, onCancel }: Gast
                     <Label>Factura</Label>
                     <FacturaUploader
                       tipo="compra"
+                      targetIdentity={gasto?.id ?? 'gasto-new'} open={open}
                       currentUrl={formData.url_factura}
                       onUploadSuccess={(url) => handleInputChange('url_factura', url)}
                       onRemove={() => handleInputChange('url_factura', '')}

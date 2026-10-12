@@ -1,4 +1,6 @@
-import { prepararArchivoFactura, validarArchivoFactura } from '@/utils/archivoFactura';
+import { useAuth } from '@/contexts/AuthContext';
+import { validateInvoiceSelection,uploadInvoice,invalidateInvoiceTarget,verifyInvoiceOwner,resolveInvoice,pendingInvoice,type InvoiceClient } from '@/utils/invoiceUpload';
+import { validarArchivoFactura } from '@/utils/archivoFactura';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Save, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,7 +19,7 @@ import {
 } from '@/utils/fechas';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
-const DRAFT_KEY = 'ingresos_batch_draft';
+const DRAFT_PREFIX = 'ingresos_batch_draft';
 
 interface IngresosBatchTableProps {
   catalogs: IngresosCatalogs;
@@ -70,7 +72,13 @@ const COLUMN_HEADERS = [
   'Categoria', 'Comprador', 'Medio Pago', 'Observaciones', 'Factura', '',
 ];
 
-export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProps) {
+export function IngresosBatchTable(props:IngresosBatchTableProps) {
+  const {user}=useAuth();return <IngresosBatchTableState key={user?.id??'signed-out'} {...props} owner={user?.id??''}/>;
+}
+function IngresosBatchTableState({catalogs,onSaved,owner}:IngresosBatchTableProps & {owner:string}) {
+  const DRAFT_KEY=`${DRAFT_PREFIX}:${owner}`;
+  const operation=useRef(0);const mounted=useRef(true);const targets=useRef(new Map<string,string>());
+  useEffect(()=>{mounted.current=true;const targetMap=targets.current;const operationRef=operation;return()=>{mounted.current=false;operationRef.current++;for(const key of targetMap.values())void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,key).catch(()=>undefined);};},[owner]);
   const [rows, setRows] = useState<BatchRowDataIngreso[]>([createEmptyRow()]);
   const [errors, setErrors] = useState<Record<number, Record<string, string>>>({});
   const [saving, setSaving] = useState(false);
@@ -93,7 +101,7 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
     } catch {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, []);
+  }, [DRAFT_KEY]);
 
   // Auto-save draft on row changes (debounced 5s)
   // Skip auto-save while the draft banner is showing — otherwise the empty
@@ -105,7 +113,7 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
     } else {
       localStorage.removeItem(DRAFT_KEY);
     }
-  }, [rows]);
+  }, [rows,DRAFT_KEY]);
 
   useEffect(() => {
     if (draftBanner !== null) return;
@@ -143,6 +151,9 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
       const error = validarArchivoFactura(value as File);
       if (error) { toast.error(error); return; }
     }
+    operation.current++;
+    const rowId=rows[index].id;const previousTarget=targets.current.get(rowId);
+    if(previousTarget){targets.current.delete(rowId);void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,previousTarget).catch(()=>undefined);}
     setRows((prev) => {
       const updated = [...prev];
       if (field === 'factura_file') {
@@ -160,6 +171,7 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
   };
 
   const handleRemove = (index: number) => {
+    operation.current++;const key=targets.current.get(rows[index].id);if(key)void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,key).catch(()=>undefined);
     setRows((prev) => {
       if (prev.length === 1) return [createEmptyRow()];
       return prev.filter((_, i) => i !== index);
@@ -207,23 +219,23 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
       return;
     }
     try {
+      const g=++operation.current;const current=()=>mounted.current&&operation.current===g;
       setSaving(true);
       const supabase = getSupabase();
 
-      const facturaUrls: Record<number, string> = {};
+      for(const row of rows){if(row.factura_file)await validateInvoiceSelection(row.factura_file);if(!current())throw new Error('La cuenta o la fila cambió');}
+      const facturaUrls: Record<string, string> = {};
       for (let i = 0; i < rows.length; i++) {
         const file = rows[i].factura_file;
         if (file) {
-          const { path, contentType } = prepararArchivoFactura(file, 'venta');
-          const { data, error } = await supabase.storage
-            .from('facturas')
-            .upload(path, file, { cacheControl: '3600', upsert: false, contentType });
-          if (error) throw new Error(`Error subiendo factura fila ${i + 1}: ${error.message}`);
-          facturaUrls[i] = data.path;
+          const rowId=rows[i].id;let targetKey=targets.current.get(rowId);if(!targetKey){targetKey=crypto.randomUUID();targets.current.set(rowId,targetKey);}
+          const r=await uploadInvoice(supabase as unknown as InvoiceClient,owner,`IngresosBatchTable:${rowId}`,targetKey,'venta',file,current);
+          if(!current())throw new Error('La cuenta o la fila cambió');
+          facturaUrls[rowId]=r.path;
         }
       }
 
-      const payload = rows.map((row, i) => {
+      const payload = rows.map((row) => {
         const negocio = catalogs.negocios.find((n) => n.id === row.negocio_id);
         const negocioNombre = negocio?.nombre ?? '';
         const mostrarCantidad =
@@ -245,13 +257,15 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
           comprador_id: row.comprador_id || null,
           medio_pago_id: row.medio_pago_id,
           observaciones: row.observaciones.trim() || null,
-          url_factura: facturaUrls[i] || null,
+          url_factura: facturaUrls[row.id] || null,
           cantidad: cantidadNum,
           precio_unitario: precioUnitario,
         };
       });
 
+      await verifyInvoiceOwner(supabase as unknown as InvoiceClient,owner,current);
       const { error } = await supabase.from('fin_ingresos').insert(payload);
+      if(!current())return;
       if (error) throw error;
 
       toast.success(`${rows.length} ingreso${rows.length > 1 ? 's' : ''} guardado${rows.length > 1 ? 's' : ''} exitosamente`);
@@ -263,7 +277,7 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
       const message = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('Error al guardar: ' + message);
     } finally {
-      setSaving(false);
+      if(mounted.current)setSaving(false);
     }
   };
 
@@ -288,9 +302,16 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
   return (
     <>
     <div className="space-y-4">
+        <Button type="button" variant="outline" disabled={saving} onClick={async()=>{
+        const g=operation.current;const current=()=>mounted.current&&operation.current===g;
+        try{for(const row of rows){const scope=`IngresosBatchTable:${row.id}`;if(pendingInvoice(owner,scope))await resolveInvoice(getSupabase() as unknown as InvoiceClient,owner,scope,current);}
+          if(current())toast.success('Resultados verificados; los intentos desconocidos se conservan.');
+        }catch(error:unknown){if(current())toast.error(error instanceof Error?error.message:'Factura pendiente');}
+      }}>Verificar facturas pendientes</Button>
       {/* Draft restoration banner */}
       {draftBanner !== null && (
-        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+
+      <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
           <span className="text-sm text-amber-800 flex-1">
             Tienes {draftBanner} ingreso{draftBanner > 1 ? 's' : ''} sin guardar de una sesion anterior.

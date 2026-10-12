@@ -1,4 +1,6 @@
-import { FACTURA_ACCEPT, prepararArchivoFactura, validarArchivoFactura } from '@/utils/archivoFactura';
+import { useAuth } from '@/contexts/AuthContext';
+import { uploadInvoice,resolveInvoice,pendingInvoice,invalidateInvoiceTarget,type InvoiceClient } from '@/utils/invoiceUpload';
+import { FACTURA_ACCEPT, validarArchivoFactura,normalizarRutaFactura } from '@/utils/archivoFactura';
 import { useState, useRef, useLayoutEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
@@ -27,6 +29,8 @@ interface FacturaUploaderProps {
    * Deshabilitar el componente
    */
   disabled?: boolean;
+  targetIdentity?: string;
+  open?: boolean;
 }
 
 // Helper function to check if a path is an image
@@ -40,7 +44,13 @@ export function FacturaUploader({
   onUploadSuccess,
   onRemove,
   disabled = false,
+  targetIdentity = 'invoice-draft',
+  open = true,
 }: FacturaUploaderProps) {
+  const {user}=useAuth();const owner=user?.id??'';
+  const scope=`${tipo}:${targetIdentity}`;
+  const target=useRef('');
+  const [pending,setPending]=useState(false);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<{ path: string; url: string } | null>(null);
   const generation = useRef(0);
@@ -48,15 +58,18 @@ export function FacturaUploader({
 
   // Invalidate every request on path changes, including A → B → A and unmount.
   useLayoutEffect(() => {
-    const request = ++generation.current;
+    const operationGeneration=generation;
+    const request = ++operationGeneration.current;
+    const targetKey=crypto.randomUUID();target.current=targetKey;
+    try{setPending(Boolean(owner&&pendingInvoice(owner,scope)));}catch{setPending(true);}
     setPreview(null);
     setUploading(false);
-    if (currentUrl && isImage(currentUrl)) {
+    if (open && owner && currentUrl && isImage(currentUrl)) {
       const path = currentUrl;
       void (async () => {
         try {
           const { data, error } = await getSupabase().storage
-            .from('facturas').createSignedUrl(path, 60 * 60);
+            .from('facturas').createSignedUrl(normalizarRutaFactura(path), 60 * 60);
           if (request === generation.current && !error && data?.signedUrl) {
             setPreview({ path, url: data.signedUrl });
           }
@@ -65,14 +78,16 @@ export function FacturaUploader({
         }
       })();
     }
-    return () => { ++generation.current; };
-  }, [currentUrl]);
+    return () => {
+      ++operationGeneration.current;
+      if(owner)void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,targetKey).catch(()=>undefined);
+    };
+  }, [currentUrl,owner,scope,open]);
 
   const handleFileSelect = async (event: { target: { files: FileList | null; value: string } }) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || disabled || uploading || !open || !owner) return;
 
-    event.target.value = '';
     const validationError = validarArchivoFactura(file);
     if (validationError) {
       toast.error(validationError);
@@ -83,44 +98,32 @@ export function FacturaUploader({
     try {
       setUploading(true);
 
-      const { path: fileName, contentType } = prepararArchivoFactura(file, tipo);
-
-      // Upload to Supabase Storage (private bucket)
-      const supabase = getSupabase();
-      const { data, error } = await supabase.storage
-        .from('facturas')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType,
-        });
-
-      if (error) throw error;
-
-      // Store only the path (not a public URL)
-      // We'll generate signed URLs on-demand when viewing
-      const storagePath = data.path;
-
+      const receipt=await uploadInvoice(getSupabase() as unknown as InvoiceClient,owner,scope,target.current,tipo,file,()=>request===generation.current);
+      const storagePath=receipt.path;
       if (request !== generation.current) return;
 
       // Call success callback with storage path (not URL)
+      setPending(false);
+      event.target.value='';
+      if(fileInputRef.current)fileInputRef.current.value='';
       onUploadSuccess(storagePath);
 
       toast.success('Factura subida exitosamente');
     } catch (error: unknown) {
-      if (request === generation.current) toast.error('Error al subir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+      if (request === generation.current) {
+        try{setPending(Boolean(pendingInvoice(owner,scope)));}catch{setPending(true);}
+        toast.error('Error al subir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+      }
     } finally {
       if (request === generation.current) setUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      // Preserve the selected file after refusal or uncertain transport.
     }
   };
 
   const handleRemove = () => {
     ++generation.current;
     setPreview(null);
+    if(owner)void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,target.current).catch(()=>undefined);
     onRemove();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -128,7 +131,7 @@ export function FacturaUploader({
   };
 
   const handleViewFile = async () => {
-    if (!currentUrl) return;
+    if (!currentUrl || !open || !owner) return;
     const request = generation.current;
     const path = currentUrl;
 
@@ -138,11 +141,11 @@ export function FacturaUploader({
       // Generate a signed URL valid for 1 hour
       const { data, error } = await supabase.storage
         .from('facturas')
-        .createSignedUrl(path, 60 * 60); // 1 hour
+        .createSignedUrl(normalizarRutaFactura(path), 60 * 60, isImage(path)?undefined:{download:'factura.pdf'}); // Hosted disposition/header enforcement remains a release gate.
 
       if (error) throw error;
       if (request === generation.current && data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
+        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (error: unknown) {
       if (request === generation.current) toast.error('Error al abrir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
@@ -153,6 +156,15 @@ export function FacturaUploader({
 
   return (
     <div className="space-y-2">
+      {pending && <Button type="button" disabled={uploading||disabled||!open} onClick={async()=>{
+        const request=generation.current;
+        try{const r=await resolveInvoice(getSupabase() as unknown as InvoiceClient,owner,scope,()=>request===generation.current);
+          if(request!==generation.current)return;
+          if(r){setPending(false);toast.success('Subida anterior verificada; seleccione la factura para el destino actual');}
+          else if(!pendingInvoice(owner,scope)){setPending(false);toast.success('Factura anterior en cuarentena; puede seleccionar otra factura.');}
+          else toast.error('Factura pendiente. Conserve el intento.');
+        }catch(error:unknown){if(request===generation.current)toast.error(error instanceof Error?error.message:'Factura no verificable');}
+      }}>Verificar factura pendiente</Button>}
       <Label>Factura {tipo === 'compra' ? 'de Compra' : 'de Venta'} (Opcional)</Label>
 
       {hasFile ? (

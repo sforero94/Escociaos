@@ -550,6 +550,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
               <div className="mt-4">
                 <FacturaUploader
                   tipo="compra"
+                  targetIdentity="purchase-new"
                   currentUrl={datosCompra.url_factura}
                   onUploadSuccess={(url) => setDatosCompra({ ...datosCompra, url_factura: url })}
                   onRemove={() => setDatosCompra({ ...datosCompra, url_factura: '' })}

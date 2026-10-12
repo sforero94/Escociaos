@@ -534,6 +534,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                     <Label>Factura</Label>
                     <FacturaUploader
                       tipo="venta"
+                      targetIdentity={ingreso?.id ?? 'ingreso-new'} open={open}
                       currentUrl={formData.url_factura}
                       onUploadSuccess={(url) => handleInputChange('url_factura', url)}
                       onRemove={() => handleInputChange('url_factura', '')}

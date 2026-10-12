@@ -1,7 +1,13 @@
+import {pdf} from './invoiceUploadFixtures';
+import {owner,other,product,memory,storage,testLocks,sdkHarness} from './purchaseProtocolFixtures';
+import {validateInvoiceBytes} from '../supabase/functions/server/invoice-file-validation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { FacturaUploader } from '@/components/shared/FacturaUploader';
 
+const authState=vi.hoisted(()=>({owner:''}));
+vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:authState.owner}})}));
+vi.mock('@/utils/supabase/config',()=>({getSupabaseConfig:()=>({url:'https://invoice.invalid'})}));
 const sdk = vi.hoisted(() => ({ upload: vi.fn(), createSignedUrl: vi.fn(), client: vi.fn() }));
 vi.mock('@/utils/supabase/client', () => ({ getSupabase: sdk.client }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -18,19 +24,28 @@ describe('FacturaUploader actual React lifecycle and SDK calls', () => {
   const onUploadSuccess = vi.fn();
   const onRemove = vi.fn();
   const render = (currentUrl?: string) => <FacturaUploader tipo="compra" currentUrl={currentUrl} onUploadSuccess={onUploadSuccess} onRemove={onRemove} />;
-  beforeEach(() => {
+  beforeEach(async () => {
+    memory.clear();authState.owner=owner;
+    vi.stubGlobal('localStorage',storage);vi.stubGlobal('navigator',{locks:testLocks});
+    const h=await sdkHarness(()=>null);
     vi.clearAllMocks();
-    sdk.client.mockReturnValue({ storage: { from: () => sdk } });
-    sdk.upload.mockImplementation(async (path: string) => ({ data: { path }, error: null }));
+    sdk.client.mockReturnValue({auth:h.client.auth, storage: { from: () => sdk } });
+    vi.stubGlobal('fetch',vi.fn(async(input:unknown,init:RequestInit)=>{
+      expect(new Headers(init.headers).get('Authorization')).toMatch(/^Bearer ey/);
+      if(String(input).endsWith('/target')){const b=JSON.parse(String(init.body));return new Response(JSON.stringify({actor:owner,targetKey:b.targetKey,generation:other,active:b.action==='activate'}));}
+      const value=await sdk.upload(init.body);return new Response(JSON.stringify(value));
+    }));
+    sdk.upload.mockImplementation(async (f:FormData)=>{const file=f.get('file') as File;const identity={requestKey:f.get('requestKey'),protocolVersion:1,targetKey:f.get('targetKey'),generation:f.get('generation'),tipo:f.get('tipo'),...await validateInvoiceBytes(new Uint8Array(await file.arrayBuffer()),file.type,file.name)};return {actor:owner,identity,receiptId:product,path:`verified/${product}.pdf`,state:'committed',cleanupPending:false};});
     sdk.createSignedUrl.mockResolvedValue({ data: null, error: null });
   });
-  afterEach(() => { if (tree) act(() => tree.unmount()); });
+  afterEach(() => { if (tree) act(() => tree.unmount());vi.unstubAllGlobals(); });
 
   it('uploads with canonical MIME/UUID extension and rejects invalid metadata before SDK access', async () => {
     act(() => { tree = create(render()); });
     const select = tree.root.findByType('input').props.onChange;
-    await act(async () => { await select({ target: { files: [new File(['x'], 'evil.html', { type: 'image/jpg' })], value: 'chosen' } }); });
-    expect(sdk.upload).toHaveBeenCalledWith(expect.stringMatching(/^facturas_compra\/[0-9a-f-]+\.jpg$/), expect.any(File), { cacheControl: '3600', upsert: false, contentType: 'image/jpeg' });
+    await act(async () => { await select({ target: { files: [new File([pdf()], 'invoice.pdf', { type: 'application/pdf' })], value: 'chosen' } }); });
+    expect(sdk.upload).toHaveBeenCalledWith(expect.any(FormData));
+    expect(onUploadSuccess).toHaveBeenCalledWith(`verified/${product}.pdf`);
     expect(onUploadSuccess).toHaveBeenCalledOnce();
     sdk.client.mockClear();
     await act(async () => { await select({ target: { files: [new File(['x'], 'a.svg', { type: 'image/svg+xml' })], value: 'chosen' } }); });
@@ -91,8 +106,9 @@ describe('FacturaUploader actual React lifecycle and SDK calls', () => {
     act(() => { tree = create(render()); });
     let upload!: Promise<void>;
     act(() => {
-      upload = tree.root.findByType('input').props.onChange({ target: { files: [new File(['x'], 'a.png', { type: 'image/png' })], value: 'chosen' } });
+      upload = tree.root.findByType('input').props.onChange({ target: { files: [new File([pdf()], 'invoice.pdf', { type: 'application/pdf' })], value: 'chosen' } });
     });
+    await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));
     act(() => tree.unmount());
     await act(async () => { resolve({ data: { path: 'late.png' }, error: null }); await upload; });
     expect(onUploadSuccess).not.toHaveBeenCalled();
