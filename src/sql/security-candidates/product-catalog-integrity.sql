@@ -115,7 +115,7 @@ CREATE FUNCTION product_catalog_integrity.validate(p jsonb) RETURNS void
  LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
 DECLARE v jsonb; product public.productos;original public.productos; expected_keys text[];BEGIN
  IF p IS NULL OR jsonb_typeof(p)<>'object' OR NOT(p ?& ARRAY['mode','product_id','original','fields']) OR (SELECT count(*) FROM jsonb_object_keys(p))<>4
-  OR p->>'mode' NOT IN ('create','edit') OR jsonb_typeof(p->'fields')<>'object' THEN RAISE EXCEPTION 'Invalid catalog payload'; END IF;
+  OR jsonb_typeof(p->'mode') IS DISTINCT FROM 'string' OR p->>'mode' NOT IN ('create','edit','activation') OR jsonb_typeof(p->'fields')<>'object' THEN RAISE EXCEPTION 'Invalid catalog payload'; END IF;
  v:=p->'fields';
  IF p->>'mode'='create' THEN
   IF p->'product_id'<>'null'::jsonb OR p->'original'<>'null'::jsonb OR v->'activo' IS DISTINCT FROM 'true'::jsonb THEN RAISE EXCEPTION 'Invalid catalog create';END IF;
@@ -127,7 +127,12 @@ DECLARE v jsonb; product public.productos;original public.productos; expected_ke
   IF original.id IS DISTINCT FROM (p->>'product_id')::uuid OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(p->'original') k)
    IS DISTINCT FROM (SELECT array_agg(attname::text ORDER BY attname) FROM pg_attribute WHERE attrelid='public.productos'::regclass AND attnum>0 AND NOT attisdropped) THEN
    RAISE EXCEPTION 'Complete original catalog snapshot required';END IF;
+  IF p->>'mode'='activation' THEN
+   IF jsonb_typeof(v->'activo') IS DISTINCT FROM 'boolean' THEN RAISE EXCEPTION 'Boolean activation target required';END IF;
+   expected_keys:=ARRAY['activo'];
+  ELSE
   expected_keys:=ARRAY['nombre','categoria','grupo','unidad_medida','presentacion_kg_l','precio_por_presentacion','precio_unitario','stock_minimo','estado','registro_ica','blanco_biologico','ingrediente_activo_1','concentracion_ia_1','ingrediente_activo_2','concentracion_ia_2','ingrediente_activo_3','concentracion_ia_3','periodo_reingreso_horas','periodo_carencia_dias','tipo_aplicacion','estado_fisico','permitido_gerencia','nitrogeno','fosforo','potasio','calcio','magnesio','azufre','hierro','manganeso','zinc','cobre','boro','molibdeno','carbono_organico','silicio','sodio','epp_alto_nivel','riesgo_acuatico','riesgo_vida_silvestre','riesgo_polinizador','riesgo_transeunte','link_ficha_tecnica','link_hoja_seguridad'];
+  END IF;
  END IF;
  IF NOT(v ?& expected_keys) OR (SELECT count(*) FROM jsonb_object_keys(v))<>cardinality(expected_keys) THEN RAISE EXCEPTION 'Complete supported catalog fields required';END IF;
   IF v ? 'nombre' AND v->'nombre'<>'null'::jsonb AND (jsonb_typeof(v->'nombre') <> 'string' OR btrim(v->>'nombre') = '') THEN RAISE EXCEPTION 'Invalid catalog field nombre'; END IF;
@@ -218,11 +223,16 @@ DECLARE u public.usuarios;r product_catalog_integrity.requests;v jsonb;before_ro
   SELECT jsonb_agg(to_jsonb(o) ORDER BY request_key) INTO before_openings FROM product_catalog_integrity.openings o WHERE product_id=before_row.id;
   SELECT * INTO original FROM jsonb_populate_record(NULL::public.productos,p_payload->'original');
   IF to_jsonb(before_row) IS DISTINCT FROM to_jsonb(original) THEN RAISE EXCEPTION 'Catalog changed since original review';END IF;
+  IF p_payload->>'mode'='activation' THEN
+   SELECT * INTO expected FROM jsonb_populate_record(NULL::public.productos,to_jsonb(before_row)||v||jsonb_build_object('updated_at',now(),'updated_by',u.id));
+   UPDATE public.productos SET activo=expected.activo,updated_at=expected.updated_at,updated_by=expected.updated_by WHERE id=before_row.id;
+  ELSE
   IF before_row.unidad_medida::text IS DISTINCT FROM v->>'unidad_medida' AND (coalesce(before_row.cantidad_actual,0)<>0
    OR EXISTS(SELECT 1 FROM public.movimientos_inventario WHERE producto_id=before_row.id)) THEN
    RAISE EXCEPTION 'Unit change requires reviewed inventory conversion';END IF;
   SELECT * INTO expected FROM jsonb_populate_record(NULL::public.productos,to_jsonb(before_row)||v||jsonb_build_object('updated_at',now(),'updated_by',u.id));
   UPDATE public.productos SET nombre=expected.nombre,categoria=expected.categoria,grupo=expected.grupo,unidad_medida=expected.unidad_medida,presentacion_kg_l=expected.presentacion_kg_l,precio_por_presentacion=expected.precio_por_presentacion,precio_unitario=expected.precio_unitario,stock_minimo=expected.stock_minimo,estado=expected.estado,registro_ica=expected.registro_ica,blanco_biologico=expected.blanco_biologico,ingrediente_activo_1=expected.ingrediente_activo_1,concentracion_ia_1=expected.concentracion_ia_1,ingrediente_activo_2=expected.ingrediente_activo_2,concentracion_ia_2=expected.concentracion_ia_2,ingrediente_activo_3=expected.ingrediente_activo_3,concentracion_ia_3=expected.concentracion_ia_3,periodo_reingreso_horas=expected.periodo_reingreso_horas,periodo_carencia_dias=expected.periodo_carencia_dias,tipo_aplicacion=expected.tipo_aplicacion,estado_fisico=expected.estado_fisico,permitido_gerencia=expected.permitido_gerencia,nitrogeno=expected.nitrogeno,fosforo=expected.fosforo,potasio=expected.potasio,calcio=expected.calcio,magnesio=expected.magnesio,azufre=expected.azufre,hierro=expected.hierro,manganeso=expected.manganeso,zinc=expected.zinc,cobre=expected.cobre,boro=expected.boro,molibdeno=expected.molibdeno,carbono_organico=expected.carbono_organico,silicio=expected.silicio,sodio=expected.sodio,epp_alto_nivel=expected.epp_alto_nivel,riesgo_acuatico=expected.riesgo_acuatico,riesgo_vida_silvestre=expected.riesgo_vida_silvestre,riesgo_polinizador=expected.riesgo_polinizador,riesgo_transeunte=expected.riesgo_transeunte,link_ficha_tecnica=expected.link_ficha_tecnica,link_hoja_seguridad=expected.link_hoja_seguridad,updated_at=expected.updated_at,updated_by=expected.updated_by WHERE id=before_row.id;
+  END IF;
  END IF;
  aud:=jsonb_build_object('actor',u.id,'request_key',p_request_key,'product_id',expected.id,'mode',p_payload->>'mode',
   'origin','catalog_rpc','before_row',CASE WHEN before_row.id IS NULL THEN NULL ELSE to_jsonb(before_row) END,'after_row',to_jsonb(expected),'created_at',now());
@@ -237,7 +247,7 @@ DECLARE u public.usuarios;r product_catalog_integrity.requests;v jsonb;before_ro
   OR (move.id IS NOT NULL AND (SELECT to_jsonb(m) FROM public.movimientos_inventario m WHERE m.id=move.id) IS DISTINCT FROM to_jsonb(move))
   OR (SELECT count(*) FROM public.movimientos_inventario WHERE producto_id=expected.id)<>CASE WHEN move.id IS NULL THEN 0 ELSE 1 END) THEN
   RAISE EXCEPTION 'Catalog opening did not persist exactly';END IF;
- IF p_payload->>'mode'='edit' AND ((SELECT jsonb_agg(to_jsonb(m) ORDER BY id) FROM public.movimientos_inventario m WHERE producto_id=before_row.id) IS DISTINCT FROM before_ledger
+ IF p_payload->>'mode' IN ('edit','activation') AND ((SELECT jsonb_agg(to_jsonb(m) ORDER BY id) FROM public.movimientos_inventario m WHERE producto_id=before_row.id) IS DISTINCT FROM before_ledger
   OR (SELECT jsonb_agg(to_jsonb(o) ORDER BY request_key) FROM product_catalog_integrity.openings o WHERE product_id=before_row.id) IS DISTINCT FROM before_openings) THEN RAISE EXCEPTION 'Catalog edit altered inventory history';END IF;
  SELECT * INTO r FROM product_catalog_integrity.requests WHERE actor=u.id AND request_key=p_request_key;
  IF NOT FOUND OR r.payload IS DISTINCT FROM p_payload OR r.canceled IS DISTINCT FROM false OR r.result IS DISTINCT FROM result OR r.created_at IS DISTINCT FROM now() THEN

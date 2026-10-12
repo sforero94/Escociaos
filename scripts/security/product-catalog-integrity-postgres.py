@@ -18,15 +18,15 @@ def fields():
 def create():return dict(mode='create',product_id=None,original=None,fields=fields())
 def edit(row):
  f={key:row[key] for key in fields() if key not in ('activo','cantidad_actual')}
- return dict(mode='edit',product_id=row['id'],original=row,fields=f)
+ return dict(mode='edit',product_id=row['id'],original=json.loads(json.dumps(row)),fields=f)
 def call(p,key=None,actor=OWNER,role='authenticated',ok=True,name='fn_product_catalog_post'):
  out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.{name}('{key or uuid.uuid4()}',{m.literal(json.dumps(p))}::jsonb);COMMIT;",ok)
  return json.loads(out) if ok else out
 def state():
  ts=['public.productos','public.movimientos_inventario','product_catalog_integrity.requests','product_catalog_integrity.openings','product_catalog_integrity.audit']
  return m.sql('SELECT jsonb_build_array('+','.join(f"(SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text) FROM {t} t)" for t in ts)+');')
-def rejects(p,label,**options):
- before=state();call(p,ok=False,**options);m.verify(state()==before,label)
+def rejects(p,label,expected=None,**options):
+ before=state();error=call(p,ok=False,**options);m.verify(state()==before and (expected is None or expected in error),label)
 def run():
  m.docker(['image','inspect',m.IMAGE])
  try:
@@ -88,6 +88,21 @@ def run():
   m.verify(zer['product']['unidad_medida']=='Litros','unit edit with zero stock and no history permitted')
   m.sql(f"INSERT INTO movimientos_inventario(id,fecha_movimiento,unidad,producto_id,tipo_movimiento,cantidad) VALUES(gen_random_uuid(),current_date,'Litros','{zer['product']['id']}','Entrada',1);")
   hist=edit(zer['product']);hist['fields']['unidad_medida']='Kilos';rejects(hist,'unit edit even zero stock with ledger history refused')
+  for mode in (None,3,{},[]):
+   bad=edit(cr['product']);bad['mode']=mode;rejects(bad,'strict discriminated mode refuses '+str(mode),expected='Invalid catalog payload')
+  active=dict(mode='activation',product_id=cr['product']['id'],original=cr['product'],fields=dict(activo=False))
+  ak=str(uuid.uuid4());ar=call(active,ak)
+  m.verify(ar['product']['activo'] is False and all(ar['product'][k]==cr['product'][k] for k in cr['product'] if k not in ('activo','updated_at','updated_by')) and ar['movement_id'] is None and ar['opening'] is None,'activation changes active/attribution only preserves all metadata and stock')
+  m.verify(ar['audit']['before_row']==cr['product'] and ar['audit']['after_row']==ar['product'] and ar['audit']['origin']=='catalog_rpc','activation trusted full before/after audit')
+  before=state();m.verify(call(active,ak)==ar and state()==before,'activation exact replay no extra audit/stock')
+  rejects(active,'activation full original stale refusal')
+  for field,value in [('activo',None),('cantidad_actual',99),('precio_unitario',99),('unidad_medida','Litros')]:
+   bad=dict(active,original=ar['product'],fields=dict(activo=True));bad['fields'][field]=value;rejects(bad,'activation strict one boolean allowlist '+field)
+  m.sql(f"UPDATE productos SET activo=NULL WHERE id='{ar['product']['id']}';")
+  nullrow=json.loads(m.sql(f"SELECT to_jsonb(p) FROM productos p WHERE id='{ar['product']['id']}';"))
+  nr=call(dict(active,original=nullrow,fields=dict(activo=True)));m.verify(nr['audit']['before_row']['activo'] is None and nr['product']['activo'] is True,'null original active preserved explicitly then deliberate activation')
+  ac=dict(active,original=nr['product'],fields=dict(activo=False));ack=str(uuid.uuid4());call(ac,ack,name='fn_product_catalog_status');rejects(ac,'activation cancellation fence delayed post',key=ack)
+  cr['product']=nr['product']
   for f in ['precio_unitario','precio_por_presentacion','cantidad_actual','stock_minimo','presentacion_kg_l','concentracion_ia_1','concentracion_ia_2','concentracion_ia_3','nitrogeno','fosforo','potasio','calcio','magnesio','azufre','hierro','manganeso','zinc','cobre','boro','molibdeno','carbono_organico','silicio','sodio','periodo_carencia_dias','periodo_reingreso_horas']:
    bad=create();bad['fields'][f]=-0.001;rejects(bad,'negative full field validation '+f)
   for f,value in [('precio_unitario',1.001),('cantidad_actual',10000000000),('concentracion_ia_3',100000000),('periodo_carencia_dias',1.5),('nitrogeno',101),('estado','Bogus'),('categoria','Bogus'),('unidad_medida','Bogus'),('nombre',None),('epp_alto_nivel','true')]:
@@ -108,14 +123,22 @@ def run():
    ('public.productos','BEFORE','UPDATE','RETURN NULL;'),('product_catalog_integrity.audit','AFTER','INSERT','UPDATE product_catalog_integrity.audit SET before_row=after_row WHERE actor=NEW.actor AND request_key=NEW.request_key;RETURN NEW;')]
   for table,timing,event,code in faults:
    m.sql(f"CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN {code} END$$;CREATE TRIGGER fault {timing} {event} ON {table} FOR EACH ROW EXECUTE FUNCTION public.fault();")
-   rejects(edit(cr['product']) if event=='UPDATE' else create(),table+' '+timing+' '+event+' trigger atomicity')
+   rejects(edit(cr['product']) if event=='UPDATE' else create(),table+' '+timing+' '+event+' trigger atomicity',expected='did not persist exactly')
    if table=='product_catalog_integrity.requests' and timing=='BEFORE':rejects(create(),'status cancellation suppression',name='fn_product_catalog_status')
    m.sql(f'DROP TRIGGER fault ON {table};DROP FUNCTION public.fault();')
   for code,label in [("INSERT INTO public.movimientos_inventario(id,fecha_movimiento,producto_id,tipo_movimiento,cantidad,unidad) VALUES(gen_random_uuid(),current_date,NEW.id,'Entrada',1,NEW.unidad_medida);RETURN NEW;",'extra edit ledger'),
    ("UPDATE product_catalog_integrity.openings SET quantity_after=999 WHERE product_id=NEW.id;RETURN NEW;",'changed original opening proof')]:
    m.sql(f"CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN {code} END$$;CREATE TRIGGER fault AFTER UPDATE ON public.productos FOR EACH ROW EXECUTE FUNCTION public.fault();")
-   rejects(edit(cr['product']),label+' final history comparison rolls back')
+   rejects(edit(cr['product']),label+' final history comparison rolls back',expected='altered inventory history')
    m.sql('DROP TRIGGER fault ON public.productos;DROP FUNCTION public.fault();')
+  for timing,table,code,expected_error in [('BEFORE','public.productos','RETURN NULL;','did not persist exactly'),
+   ('AFTER','product_catalog_integrity.requests',"UPDATE public.productos SET precio_unitario=999 WHERE id=(NEW.result->'product'->>'id')::uuid;RETURN NEW;",'did not persist exactly'),
+   ('AFTER','public.productos',"INSERT INTO public.movimientos_inventario(id,fecha_movimiento,producto_id,tipo_movimiento,cantidad,unidad) VALUES(gen_random_uuid(),current_date,NEW.id,'Entrada',1,NEW.unidad_medida);RETURN NEW;",'altered inventory history')]:
+   event='UPDATE' if table=='public.productos' else 'INSERT'
+   m.sql(f"CREATE FUNCTION public.fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN {code} END$$;CREATE TRIGGER fault {timing} {event} ON {table} FOR EACH ROW EXECUTE FUNCTION public.fault();")
+   ap=dict(mode='activation',product_id=cr['product']['id'],original=cr['product'],fields=dict(activo=False))
+   rejects(ap,'activation '+timing+' '+table+' fault preserves stock/metadata/history/audit',expected=expected_error)
+   m.sql(f'DROP TRIGGER fault ON {table};DROP FUNCTION public.fault();')
   concurrent_payload=create();concurrent_key=str(uuid.uuid4())
   with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:results=list(pool.map(lambda _:call(concurrent_payload,concurrent_key),range(6)))
   m.verify(all(x==results[0] for x in results),'six concurrent create replays one canonical receipt')

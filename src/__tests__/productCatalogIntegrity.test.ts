@@ -1,5 +1,5 @@
 import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
-import {catalogPayload,postCatalog,pendingCatalog} from '../utils/productCatalogIntegrity';
+import {catalogPayload,postCatalog,pendingCatalog,postActivation,activationPayload} from '../utils/productCatalogIntegrity';
 import {owner,other,product,memory,storage,testLocks,sdkHarness} from './purchaseProtocolFixtures';
 import {formFields,originalRow,catalogReceipt,catalogStatus} from './productCatalogFixtures';
 beforeEach(()=>{memory.clear();vi.stubGlobal('localStorage',storage);vi.stubGlobal('navigator',{locks:testLocks});});
@@ -62,4 +62,21 @@ describe('actual Auth SDK catalog RPC and durable protocol',()=>{
   const posting=postCatalog(h.client,owner,null,catalogPayload(formFields(),null));await vi.waitFor(()=>expect(release).toBeTypeOf('function'));
   await expect(postCatalog(h.client,owner,null,catalogPayload({...formFields(),nombre:'Other'},null))).rejects.toThrow('pendiente');release(catalogReceipt(b));await posting;expect(h.calls).toHaveLength(1);
  });
+ it('activation uses the real session JWT HTTP wrapper, preserves original and resolves without post',async()=>{
+  const h=await sdkHarness(()=>{throw new Error('No direct SDK RPC fallback');});const row=originalRow();const requests:Array<Record<string,unknown>>=[];let lost=true;
+  vi.stubGlobal('fetch',vi.fn(async(_url:unknown,init:RequestInit)=>{
+   const session=await h.client.auth.getSession();expect(new Headers(init.headers).get('Authorization')).toBe(`Bearer ${session.data.session!.access_token}`);
+   const b=JSON.parse(String(init.body));requests.push(b);const args={p_request_key:b.requestKey,p_payload:activationPayload(b.original,b.activo)};
+   return new Response(JSON.stringify(lost?null:b.action==='resolve'?catalogStatus(args,true):catalogReceipt(args)),{headers:{'Content-Type':'application/json'}});
+  }));
+  await expect(postActivation(h.client,'https://edge.invalid/toggle',owner,product,row,false)).rejects.toThrow();const first=pendingCatalog(owner,product)!;
+  lost=false;await postActivation(h.client,'https://edge.invalid/toggle',owner,product,null,null,'resolve');
+  expect(requests.map(b=>b.action)).toEqual(['post','resolve']);expect(requests[1].original).toEqual(first.payload.original);expect(requests[1].requestKey).toBe(first.key);expect(pendingCatalog(owner,product)).toBeNull();
+ });
+ it('activation refuses incomplete originals, extra fields and nonboolean targets; null current state is explicit',()=>{
+  expect(activationPayload({...originalRow(),activo:null},true)).toMatchObject({mode:'activation',original:{activo:null},fields:{activo:true}});
+  for(const value of [null,0,'false'])expect(()=>activationPayload(originalRow(),value as unknown as boolean)).toThrow();
+  expect(()=>activationPayload({id:product,activo:true},false)).toThrow();
+ });
+
 });

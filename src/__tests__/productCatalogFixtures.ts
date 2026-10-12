@@ -1,7 +1,7 @@
 import {CSV_FIELDS,CSV_BOOLEAN} from '../supabase/functions/server/csv-product-import';
 import {catalogPayload,type CatalogPayload,type CatalogRow} from '../utils/productCatalogIntegrity';
 import {owner,product,movement} from './purchaseProtocolFixtures';
-export function formFields(){const data:Record<string,unknown>=Object.fromEntries([...CSV_FIELDS.filter(k=>k!=='activo'),'estado'].map(k=>[k,CSV_BOOLEAN.includes(k)?false:'']));return {...data,nombre:'Synthetic',categoria:'Fertilizante',grupo:'Agroinsumos',unidad_medida:'Kilos',estado:'OK',cantidad_actual:2.35,permitido_gerencia:null};}
+export function formFields():Record<string,unknown>{const data:Record<string,unknown>=Object.fromEntries([...CSV_FIELDS.filter(k=>k!=='activo'),'estado'].map(k=>[k,CSV_BOOLEAN.includes(k)?false:'']));return {...data,nombre:'Synthetic',categoria:'Fertilizante',grupo:'Agroinsumos',unidad_medida:'Kilos',estado:'OK',cantidad_actual:2.35,permitido_gerencia:null};}
 export const timestamp='2026-10-12T15:00:00.123456+00:00';
 export function originalRow(){return {...catalogPayload(formFields(),null).fields,id:product,created_at:timestamp,updated_at:timestamp,updated_by:owner};}
 export function catalogReceipt(body:Record<string,unknown>){

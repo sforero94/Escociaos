@@ -1,7 +1,7 @@
 // Requires the reviewed catalog candidate and coordinated grants; no DML fallback.
 import {csvDecimal,CSV_NUMERIC10,CSV_NUMERIC12,CSV_INTEGER,CSV_PERCENT,CSV_FIELDS} from '../supabase/functions/server/csv-product-import';
 export type CatalogRow=Record<string,unknown>;
-export interface CatalogPayload {mode:'create'|'edit';product_id:string|null;original:CatalogRow|null;fields:CatalogRow}
+export interface CatalogPayload {mode:'create'|'edit'|'activation';product_id:string|null;original:CatalogRow|null;fields:CatalogRow}
 export interface CatalogClient {
  auth:{getUser():PromiseLike<{data:{user:{id:string}|null};error:{message:string}|null}>};
  rpc(name:string,args:Record<string,unknown>):PromiseLike<{data:unknown;error:{message:string}|null}>;
@@ -32,11 +32,15 @@ export function catalogPayload(data:CatalogRow,original:CatalogRow|null):Catalog
  if(edit && !uuid(original.id))return fail();
  return {mode:edit?'edit':'create',product_id:edit?String(original.id):null,original:original?JSON.parse(JSON.stringify(original)):null,fields:v};
 }
+export function activationPayload(original:CatalogRow,activo:boolean):CatalogPayload {
+ if(!object(original)||!uuid(original.id)||Object.keys(original).sort().join('|')!==columns||typeof activo!=='boolean'||![true,false,null].includes(original.activo as boolean|null))return fail();
+ return {mode:'activation',product_id:original.id,original:JSON.parse(JSON.stringify(original)),fields:{activo}};
+}
 function validPayload(p:CatalogPayload) {
- if(!object(p)||Object.keys(p).sort().join('|')!=='fields|mode|original|product_id'||!object(p.fields)||!['create','edit'].includes(p.mode))return fail();
- if(p.mode==='edit'?(!uuid(p.product_id)||!object(p.original)||p.original.id!==p.product_id):(p.product_id!==null||p.original!==null))return fail();
+ if(!object(p)||Object.keys(p).sort().join('|')!=='fields|mode|original|product_id'||!object(p.fields)||!['create','edit','activation'].includes(p.mode))return fail();
+ if(p.mode!=='create'?(!uuid(p.product_id)||!object(p.original)||p.original.id!==p.product_id):(p.product_id!==null||p.original!==null))return fail();
  // Stored attempts must already contain canonical numeric fields and every UI field.
- const expected=catalogPayload(p.fields,p.original);
+ const expected=p.mode==='activation'?activationPayload(p.original!,p.fields.activo as boolean):catalogPayload(p.fields,p.original);
  if(catalogCanonical(p)!==catalogCanonical(expected))return fail();
 }
 export function pendingCatalog(owner:string,target:string|null):Attempt|null {
@@ -56,8 +60,9 @@ export function validateCatalogReceipt(data:unknown,a:Attempt):CatalogRow {
  for(const [key,value] of Object.entries(p.fields))if(r[key]!==((p.mode==='create'&&key==='cantidad_actual'&&value===null)?0:value))return fail();
  if(!object(data.audit)||Object.keys(data.audit).sort().join('|')!=='actor|after_row|before_row|created_at|mode|origin|product_id|request_key'||data.audit.actor!==a.owner||data.audit.request_key!==a.key||data.audit.product_id!==r.id||data.audit.mode!==p.mode||data.audit.origin!=='catalog_rpc'
   ||catalogCanonical(data.audit.before_row)!==catalogCanonical(p.original)||catalogCanonical(data.audit.after_row)!==catalogCanonical(r)||data.audit.created_at!==r.updated_at)return fail();
- if(p.mode==='edit') {
-  if(r.id!==p.product_id||r.cantidad_actual!==p.original!.cantidad_actual||r.activo!==p.original!.activo||r.created_at!==p.original!.created_at||data.movement_id!==null||data.opening!==null)return fail();
+ if(p.mode!=='create') {
+  if(r.id!==p.product_id||r.cantidad_actual!==p.original!.cantidad_actual||r.activo!==(p.mode==='activation'?p.fields.activo:p.original!.activo)||r.created_at!==p.original!.created_at||data.movement_id!==null||data.opening!==null)return fail();
+  if(p.mode==='activation'&&Object.keys(p.original!).some(k=>!['activo','updated_at','updated_by'].includes(k)&&catalogCanonical(r[k])!==catalogCanonical(p.original![k])))return fail();
  }else {
   if(!object(data.opening)||Object.keys(data.opening).sort().join('|')!=='actor|movement_id|movement_snapshot|product_id|product_snapshot|quantity_after|quantity_before|request_key'||data.opening.actor!==a.owner||data.opening.request_key!==a.key||data.opening.product_id!==r.id||data.opening.quantity_before!==0||data.opening.quantity_after!==r.cantidad_actual
    ||catalogCanonical(data.opening.product_snapshot)!==catalogCanonical(r)||data.opening.movement_id!==data.movement_id)return fail();
@@ -106,4 +111,19 @@ export async function postCatalog(client:{auth:CatalogClient['auth'];rpc:unknown
   localStorage.removeItem(slot(owner,target));
  });
  return result as CatalogRow|null;
+}
+
+export interface ActivationClient {auth:CatalogClient['auth'] & {getSession():PromiseLike<{data:{session:{access_token:string;user:{id:string}}|null};error:{message:string}|null}>}}
+export async function postActivation(client:ActivationClient,url:string,owner:string,target:string,original:CatalogRow|null,activo:boolean|null,action:'post'|'resolve'='post',current:()=>boolean=()=>true):Promise<CatalogRow|null> {
+ const payload=action==='post'?(original?activationPayload(original,activo as boolean):pendingCatalog(owner,target)?.payload??null):null;
+ if(payload && payload.mode!=='activation')throw new Error('El producto tiene un intento pendiente en su formulario. Verifíquelo allí.');
+ if(action==='resolve'&&pendingCatalog(owner,target)?.payload.mode!=='activation')throw new Error('No hay una activación pendiente verificable.');
+ return postCatalog({auth:client.auth,rpc:async(_name:string,args:Record<string,unknown>)=>{
+  const session=await client.auth.getSession();
+  if(session.error||session.data.session?.user.id!==owner||!current())throw new Error('La sesión cambió. Conserve el intento pendiente.');
+  const p=args.p_payload as CatalogPayload;
+  const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.data.session.access_token}`},
+   body:JSON.stringify({productoId:p.product_id,activo:p.fields.activo,original:p.original,requestKey:args.p_request_key,action})});
+  const data=await response.json();return response.ok?{data,error:null}:{data:null,error:{message:typeof data?.error==='string'?data.error:'Resultado de activación no verificable'}};
+ }},owner,target,payload,action,current);
 }

@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
+import {originalRow,catalogReceipt} from './productCatalogFixtures';
 
 const actor = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
@@ -40,6 +41,10 @@ let csvRpcReply: unknown;
 let csvRpcFailure: boolean;
 let registrationReply: unknown;
 let registrationFailure: boolean;
+let toggleReply:unknown;
+const toggleOriginal={...originalRow(),id:productId,updated_by:actor};
+const toggleBody=(patch:Record<string,unknown>={})=>({productoId:productId,activo:false,original:toggleOriginal,requestKey:otherId,action:'post',...patch});
+function toggleReceipt(body:Record<string,unknown>){const r=catalogReceipt(body);const product={...r.product,id:productId,updated_by:actor};return {...r,actor,product,audit:{...r.audit,actor,product_id:productId,after_row:product}};}
 function csvReceipt(body:Record<string,unknown>){
   const p=body.p_payload as {raw_csv:string;products:Array<Record<string,unknown>>};
   return {success:true,actor,requestKey:body.p_request_key,parserVersion:1,csvSha256:createHash('sha256').update(p.raw_csv).digest('hex'),
@@ -65,6 +70,7 @@ beforeEach(() => {
   csvRpcFailure = false;
   registrationReply = undefined;
   registrationFailure = false;
+  toggleReply=undefined;
   calls = [];
   vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://supabase.invalid' : 'service-test-key' } });
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -91,6 +97,11 @@ beforeEach(() => {
       if(csvRpcReply!==undefined)return reply(csvRpcReply);
       const r=csvReceipt(body!);
       return reply(url.pathname.endsWith('_status')?{actor,requestKey:r.requestKey,parserVersion:1,csvSha256:r.csvSha256,committed:true,result:r}:r);
+    }
+    if (url.pathname.startsWith('/rest/v1/rpc/fn_product_catalog_')) {
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer valid-human-jwt');
+      const r=toggleReceipt(body!);
+      return reply(toggleReply??(url.pathname.endsWith('_status')?{actor,request_key:body!.p_request_key,payload:body!.p_payload,committed:true,result:r}:r));
     }
     if (url.pathname === '/rest/v1/productos' && method === 'PATCH') return reply(productReply);
     throw new Error(`Unexpected HTTP ${method} ${url}`);
@@ -221,20 +232,27 @@ for (const [index, label] of ['source', 'deployment'].entries()) {
       }
       expect(calls.every(call => call.method === 'GET')).toBe(true);
     });
-    it('reports toggle success only for the exact returned target/state and mutates only activo', async () => {
-      const response = await loaded[index].products.toggleProductoActivo(context({ productoId: productId, activo: false, cantidad_actual: 1000 }));
-      expect(response.status).toBe(200);
-      expect((await response.json()).producto).toEqual(productReply);
-      const patch = calls.find(call => call.method === 'PATCH')!;
-      expect(patch.url.searchParams.get('id')).toBe(`eq.${productId}`);
-      expect(patch.body).toEqual({ activo: false });
-      for (const reply of [null, [], [{ id: productId, activo: false }, { id: productId, activo: false }],
-        { id: otherId, activo: false }, { id: productId, activo: true }, { id: productId, activo: 'false' }]) {
-        productReply = reply;
-        const failed = await loaded[index].products.toggleProductoActivo(context({ productoId: productId, activo: false }));
-        expect(failed.status).toBe(500);
-        expect((await failed.json()).success).toBe(false);
+    it('posts only activation fields under verified human JWT and validates exact original/receipt',async()=>{
+      const response=await loaded[index].products.toggleProductoActivo(context(toggleBody()));
+      expect(response.status).toBe(200);const receipt=await response.json();expect(receipt.product.activo).toBe(false);
+      const post=calls.find(c=>c.method==='POST')!;expect(post.url.pathname).toBe('/rest/v1/rpc/fn_product_catalog_post');
+      expect(post.body).toEqual({p_request_key:otherId,p_payload:{mode:'activation',product_id:productId,original:toggleOriginal,fields:{activo:false}}});
+      expect(calls.some(c=>c.method==='PATCH')).toBe(false);
+      for(const patch of [{actor:otherId},{request_key:actor},{movement_id:otherId},{opening:{}},{audit:{...receipt.audit,before_row:{}}},
+        {product:{...receipt.product,activo:true}},{product:{...receipt.product,precio_unitario:999}}]){
+        toggleReply={...receipt,...patch};expect((await loaded[index].products.toggleProductoActivo(context(toggleBody()))).status).toBe(500);
       }
+    });
+    it('refuses legacy toggle requests, actor/stock extras and resolves only stored exact status',async()=>{
+      for(const body of [{productoId:productId,activo:false},toggleBody({cantidad_actual:99}),toggleBody({actor:otherId}),toggleBody({original:null}),toggleBody({requestKey:'bad'})])
+        expect((await loaded[index].products.toggleProductoActivo(context(body))).status).toBe(400);
+      expect(calls.every(c=>c.method==='GET')).toBe(true);calls=[];
+      const response=await loaded[index].products.toggleProductoActivo(context(toggleBody({action:'resolve'})));expect(response.status).toBe(200);
+      expect(calls.filter(c=>c.method==='POST').map(c=>c.url.pathname)).toEqual(['/rest/v1/rpc/fn_product_catalog_status']);
+      const post=calls.find(c=>c.method==='POST')!;
+      toggleReply={actor,request_key:otherId,payload:post.body!.p_payload,committed:false,result:null};
+      expect((await loaded[index].products.toggleProductoActivo(context(toggleBody({action:'resolve'})))).status).toBe(200);
+      toggleReply={...toggleReply as Record<string,unknown>,actor:otherId};expect((await loaded[index].products.toggleProductoActivo(context(toggleBody({action:'resolve'})))).status).toBe(500);
     });
   });
 }

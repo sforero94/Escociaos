@@ -132,12 +132,9 @@ function routine(source: string, name: string): string {
   expect(match, `missing SQL writer ${name}`).not.toBeNull(); return match![2];
 }
 
-// Opening balances are posted through the catalog and CSV protocols. The only
-// remaining direct runtime product writers are narrow activation routes.
-const CATALOGUE_WRITERS = [
-  'src/supabase/functions/server/productos.tsx',
-  'supabase/functions/make-server-1ccce916/productos.tsx',
-];
+// Catalog creation, editing, activation and CSV use protected RPC protocols.
+// Any new direct runtime product writer needs an explicit reviewed cutover.
+const CATALOGUE_WRITERS: string[] = [];
 
 describe('guard: every stock writer remains registered across browser, helper and SQL layers', () => {
   it.each(ESCRITORES_AUTORIZADOS)('$entry delegates to $rpc which updates stock and checks its exact movement', writer => {

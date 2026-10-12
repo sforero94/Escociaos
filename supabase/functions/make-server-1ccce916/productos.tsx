@@ -27,7 +27,7 @@ function respuestaError(c: Context, status: 401 | 403 | 500, body: Record<string
 async function verificarAcceso(
   c: Context,
   supabase: ReturnType<typeof createClient>,
-): Promise<{ userId: string } | Response> {
+): Promise<{ userId: string; token:string } | Response> {
   const authHeader = c.req.header('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return respuestaError(c, 401, { error: 'No autorizado -- falta encabezado Authorization Bearer.' });
@@ -53,60 +53,44 @@ async function verificarAcceso(
     });
   }
 
-  return { userId: userData.user.id };
+  return { userId: userData.user.id,token };
 }
 
-/**
- * Alternar el estado activo de un producto.
- *
- * Recibe el Context completo de Hono (no sólo el body) porque el gate
- * necesita leer el encabezado Authorization -- mismo cambio de firma que
- * hizo `usuarios.tsx`.
- */
+const canonical=(value:unknown)=>JSON.stringify(value,(_k,item:unknown)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
+const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+function validateReceipt(data:unknown,actor:string,key:string,payload:Record<string,unknown>) {
+ const fail=():never=>{throw new Error('Activación no verificable. Conserve el intento pendiente.');};
+ const original=payload.original as Record<string,unknown>;const fields=payload.fields as {activo:boolean};
+ if(!object(data)||Object.keys(data).sort().join('|')!=='actor|audit|movement_id|opening|payload|product|request_key'||data.actor!==actor||data.request_key!==key||canonical(data.payload)!==canonical(payload)
+  ||data.movement_id!==null||data.opening!==null||!object(data.product)||data.product.id!==payload.product_id||data.product.activo!==fields.activo||data.product.updated_by!==actor
+  ||Object.keys(data.product).sort().join('|')!==Object.keys(original).sort().join('|')||typeof data.product.updated_at!=='string'||!Number.isFinite(Date.parse(data.product.updated_at)))return fail();
+ const product=data.product;
+ if(Object.keys(original).some(k=>!['activo','updated_at','updated_by'].includes(k)&&canonical(product[k])!==canonical(original[k])))return fail();
+ if(!object(data.audit)||Object.keys(data.audit).sort().join('|')!=='actor|after_row|before_row|created_at|mode|origin|product_id|request_key'||data.audit.actor!==actor||data.audit.request_key!==key
+  ||data.audit.product_id!==payload.product_id||data.audit.mode!=='activation'||data.audit.origin!=='catalog_rpc'||data.audit.created_at!==product.updated_at
+  ||canonical(data.audit.before_row)!==canonical(original)||canonical(data.audit.after_row)!==canonical(product))return fail();
+ return data;
+}
+// Service role performs Auth/profile reads only; all mutation/status RPCs use human JWT.
 export async function toggleProductoActivo(c: Context): Promise<Response> {
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  );
-
-  const acceso = await verificarAcceso(c, supabase);
-  if (acceso instanceof Response) return acceso;
-
-  try {
-    const body = await c.req.json();
-    const { productoId, activo } = body ?? {};
-
-    if (typeof productoId !== 'string' || !productoId.trim()) {
-      return c.json({ success: false, error: 'El ID del producto es requerido' }, 400);
-    }
-
-    if (typeof activo !== 'boolean') {
-      return c.json({ success: false, error: 'Activo debe ser booleano' }, 400);
-    }
-
-    // Actualizar el estado activo del producto
-    const { data: producto, error } = await supabase
-      .from('productos')
-      .update({ activo })
-      .eq('id', productoId)
-      .select()
-      .single();
-
-    if (error || !producto || producto.id !== productoId || producto.activo !== activo) {
-      console.error('Error al actualizar estado del producto:', error);
-      return c.json({ success: false, error: error?.message ?? 'No se confirmó el producto solicitado con el estado requerido' }, 500);
-    }
-
-    return c.json({
-      success: true,
-      message: `Producto ${activo ? 'activado' : 'desactivado'} exitosamente`,
-      producto
-    });
-  } catch (error: any) {
-    console.error('Error inesperado al actualizar estado del producto:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error inesperado al actualizar el producto'
-    }, 500);
+ const url=Deno.env.get('SUPABASE_URL')!;const apiKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+ const acceso=await verificarAcceso(c,createClient(url,apiKey));if(acceso instanceof Response)return acceso;
+ try {
+  const body=await c.req.json();
+  if(!object(body)||Object.keys(body).sort().join('|')!=='action|activo|original|productoId|requestKey'||!uuid(body.productoId)||!uuid(body.requestKey)||typeof body.activo!=='boolean'
+   ||!['post','resolve'].includes(String(body.action))||!object(body.original)||body.original.id!==body.productoId||![true,false,null].includes(body.original.activo as boolean|null))
+   return c.json({success:false,error:'La activación requiere el producto original completo, clave estable, acción y estado booleano.'},400);
+  const payload={mode:'activation',product_id:body.productoId,original:body.original,fields:{activo:body.activo}};
+  const human=createClient(url,apiKey,{global:{headers:{Authorization:`Bearer ${acceso.token}`}},auth:{persistSession:false,autoRefreshToken:false}});
+  const {data,error}=await human.rpc(body.action==='post'?'fn_product_catalog_post':'fn_product_catalog_status',{p_request_key:body.requestKey,p_payload:payload});
+  if(error)return respuestaError(c,500,{error:error.message});
+  if(body.action==='resolve') {
+   if(!object(data)||Object.keys(data).sort().join('|')!=='actor|committed|payload|request_key|result'||data.actor!==acceso.userId||data.request_key!==body.requestKey
+    ||canonical(data.payload)!==canonical(payload)||typeof data.committed!=='boolean'||(!data.committed&&data.result!==null))throw new Error('Resolución de activación no verificable. Conserve el intento pendiente.');
+   if(data.committed)validateReceipt(data.result,acceso.userId,body.requestKey,payload);
+   return c.json(data);
   }
+  return c.json(validateReceipt(data,acceso.userId,body.requestKey,payload));
+ }catch(error:unknown){return respuestaError(c,500,{error:error instanceof Error?error.message:'Error al cambiar el estado del producto'});}
 }
