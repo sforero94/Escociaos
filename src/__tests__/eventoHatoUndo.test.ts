@@ -316,13 +316,18 @@ describe('contrato del tratamiento en el código', () => {
       const fuente = leer(ruta);
       const inicio = fuente.indexOf('bot.callbackQuery(/^hato_tr_undo:/');
       expect(inicio).toBeGreaterThan(-1);
-      const handler = fuente.slice(inicio, inicio + 2600);
+      const handler = fuente.slice(inicio, fuente.indexOf('bot.callbackQuery(/^hato_alerta:', inicio));
       // Un callback_data se puede reenviar: la autorización va en el handler,
       // nunca en el botón.
-      expect(handler).toContain('tratamiento.fuente !== "telegram"');
+      expect(handler).toContain("handleHatoUndoReview(ctx, getSupabaseAdmin(), 'treatment')");
+      expect(handler).not.toMatch(/\.from\(|\.delete\(/);
+      const sql = leer('src/sql/security-candidates/hato-undo.sql');
+      expect(sql).toContain("row_json->>'fuente' IS DISTINCT FROM 'telegram'");
+      expect(sql).toContain('a:=hato_undo.review_lock(p_sender,p_request_key,p_operation)');
       // El paso cuelga con ON DELETE CASCADE: borrar la cabecera se lleva un
       // paso que alguien ya marcó como hecho desde la alerta.
-      expect(handler).toContain('fecha_ejecutada');
+      expect(sql).toContain('fecha_ejecutada IS NOT NULL');
+      expect(sql).toContain('Executed treatment step must be preserved');
     });
   }
 });
@@ -363,11 +368,16 @@ describe('contrato en el código (no volver al callback largo ni al catch mentir
   }
 
   for (const ruta of COPIAS_BOT) {
-    it(`${ruta} busca el uso por evento cuando el callback no lo trae`, () => {
+    it(`${ruta} refuses coupled legacy undo instead of guessing or deleting a usage`, () => {
       const fuente = leer(ruta);
-      expect(fuente).toContain('elegirUsoIdParaDeshacer');
-      expect(fuente).toContain('hato_pajillas_uso');
-      expect(fuente).toContain('pajilla_uso_id');
+      const undo = fuente.slice(fuente.indexOf('bot.callbackQuery(/^hato_ev_undo:/'), fuente.indexOf('bot.callbackQuery(/^hato_tr_undo:/'));
+      expect(undo).toContain("handleHatoUndoReview(ctx, getSupabaseAdmin(), 'event')");
+      expect(undo).not.toMatch(/elegirUsoIdParaDeshacer|usoIdDesdeDatosEvento|\.delete\(|\.from\(/);
+      const sql = leer('src/sql/security-candidates/hato-undo.sql');
+      expect(sql).toContain("(row_json->'datos') ? 'pajilla_uso_id'");
+      expect(sql).toContain("row_json->>'tipo_servicio' IS DISTINCT FROM 'monta'");
+      expect(sql).toContain('Only provably standalone Telegram events');
+      expect(sql).not.toMatch(/DELETE FROM public\.hato_pajillas_uso/);
     });
   }
 });

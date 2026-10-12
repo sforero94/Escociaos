@@ -15,20 +15,14 @@ import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { Context as HonoContext } from "npm:hono";
 
 import type { BotContext, TelegramUsuario } from "./types.ts";
-import { cuentaActivaTelegram, autorizarDeshacerHato } from "./cuentaActivaTelegram.ts";
+import { cuentaActivaTelegram } from "./cuentaActivaTelegram.ts";
 import { vincularCuentaTelegram } from "./vincularCuentaTelegram.ts";
 import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
-import {
-  elegirUsoIdParaDeshacer,
-  parsearCallbackDeshacerEvento,
-  parsearCallbackDeshacerTratamiento,
-  usoIdDesdeDatosEvento,
-} from "./eventoHatoUndo.ts";
-import { decidirDeshacerCria, type CriaParaDeshacer } from "../hato-cria-automatica.ts";
+import { handleHatoUndoReview } from "./hatoUndoReview.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
 import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 import {
@@ -1359,241 +1353,11 @@ function getBot(): Bot<BotContext> {
   // --------------------------------------------------------------------------
 
   bot.callbackQuery(/^hato_ev_undo:/, async (ctx) => {
-    const parsed = parsearCallbackDeshacerEvento(ctx.callbackQuery.data ?? "");
-    if (!parsed) {
-      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
-      return;
-    }
-    const eventoId = parsed.eventoId;
-
-    const sb = getSupabaseAdmin();
-    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
-      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
-      return;
-    }
-
-    const { data: evento } = await sb
-      .from("hato_eventos")
-      .select("id, fuente, animal_id, fecha, created_at, datos, tipo, tipo_servicio, cria_id")
-      .eq("id", eventoId)
-      .maybeSingle();
-
-    if (!evento) {
-      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
-      return;
-    }
-    if (evento.fuente !== "telegram") {
-      await ctx.answerCallbackQuery({ text: "Ese registro no se puede deshacer desde aquí." });
-      return;
-    }
-
-    // ESCO-135: un parto con hembra retenida creó la ficha de la ternera.
-    // Deshacer el parto se la lleva SOLO si sigue intacta (la creó este
-    // flujo, para esta madre, sin nombre, activa y sin ningún registro
-    // propio). Si no, se rechaza el Deshacer COMPLETO antes de tocar nada:
-    // borrar el parto y dejar la ternera huérfana, o borrar una ternera en la
-    // que alguien ya trabajó, es peor que no deshacer. Se decide ANTES de
-    // devolver la pajilla, por el mismo motivo.
-    let criaABorrar: { id: string; numero: number | null } | null = null;
-    const criaId = (evento.cria_id as string | null) ?? null;
-    if (criaId) {
-      const { data: cria, error: errorCria } = await sb
-        .from("hato_animales")
-        .select("id, numero, madre_id, nombre, estado, import_meta")
-        .eq("id", criaId)
-        .maybeSingle();
-      if (errorCria) {
-        await ctx.answerCallbackQuery({ text: "No se pudo revisar la ternera. No borré nada." });
-        return;
-      }
-      // Toda fila que apunte a la cría cuenta. Una consulta que falla cuenta
-      // como referencia: ante la duda, no se borra (falla cerrado).
-      const conteos = await Promise.all([
-        sb.from("hato_eventos").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_eventos").select("id", { count: "exact", head: true }).eq("cria_id", criaId).neq("id", eventoId),
-        sb.from("hato_animales").select("id", { count: "exact", head: true }).eq("madre_id", criaId),
-        sb.from("hato_animales").select("id", { count: "exact", head: true }).eq("padre_id", criaId),
-        sb.from("hato_chequeo_vacas").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_pesajes_leche").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_tratamientos").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_pajillas_uso").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_alertas").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        // Venta/muerte de la cría registrada en Finanzas: siempre una fila del
-        // Hato (`es_hato = true`, migración 059 agrega las dos columnas juntas).
-        sb
-          .from("fin_transacciones_ganado")
-          .select("id", { count: "exact", head: true })
-          .eq("es_hato", true)
-          .eq("hato_animal_id", criaId),
-      ]);
-      const referencias = conteos.reduce(
-        (total, r) => total + (r.error ? 1 : (r.count ?? 1)),
-        0,
-      );
-      const decision = decidirDeshacerCria({
-        cria: (cria ?? null) as CriaParaDeshacer | null,
-        madreId: evento.animal_id as string,
-        referencias,
-      });
-      if (decision.accion === "rechazar") {
-        await ctx.answerCallbackQuery({
-          text: `No se deshizo nada: ${decision.motivo}. Corrige el parto desde la app.`,
-          show_alert: true,
-        });
-        return;
-      }
-      if (decision.accion === "borrar") {
-        criaABorrar = { id: decision.criaId, numero: (cria?.numero as number | null) ?? null };
-      }
-    }
-
-    // El callback ya no lleva el usoId (límite de 64 bytes). Se busca por
-    // datos.pajilla_uso_id o, si falta, por vaca+fecha del mismo instante.
-    // Solo se listan usos cuando el evento es una inseminación: deshacer un
-    // parto o una monta del mismo día no puede devolver la pajilla de otra.
-    let usos: Array<{
-      id: string;
-      animal_id: string | null;
-      fecha_uso: string;
-      created_at: string;
-    }> = [];
-    const esInseminacion =
-      evento.tipo === "servicio" && evento.tipo_servicio === "inseminacion";
-    if (
-      esInseminacion &&
-      !parsed.usoId &&
-      !usoIdDesdeDatosEvento(evento.datos)
-    ) {
-      const { data: usosData } = await sb
-        .from("hato_pajillas_uso")
-        .select("id, animal_id, fecha_uso, created_at")
-        .eq("animal_id", evento.animal_id)
-        .eq("fecha_uso", evento.fecha);
-      usos = (usosData ?? []) as typeof usos;
-    }
-
-    const usoId = elegirUsoIdParaDeshacer({
-      usoIdCallback: parsed.usoId,
-      datosEvento: evento.datos,
-      evento: {
-        animal_id: evento.animal_id as string,
-        fecha: evento.fecha as string,
-        created_at: evento.created_at as string,
-      },
-      usos,
-    });
-
-
-    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
-      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
-      return;
-    }
-
-    // El uso de pajilla se borra PRIMERO: si fallara después del evento, el
-    // inventario quedaría descontado por un servicio que ya no existe.
-    if (usoId) {
-      const { error: errorUso } = await sb.from("hato_pajillas_uso").delete().eq("id", usoId);
-      if (errorUso) {
-        await ctx.answerCallbackQuery({ text: "No se pudo devolver la pajilla. No borré nada." });
-        return;
-      }
-    }
-
-    const { error } = await sb.from("hato_eventos").delete().eq("id", eventoId);
-    if (error) {
-      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
-      return;
-    }
-
-    // La ficha de la ternera va DESPUÉS del parto: `hato_eventos.cria_id` la
-    // referencia (FK sin cascada), así que antes no se puede borrar.
-    if (criaABorrar) {
-      const { error: errorBorrarCria } = await sb.from("hato_animales").delete().eq("id", criaABorrar.id);
-      if (errorBorrarCria) {
-        console.error("[Telegram] Deshacer: parto borrado, ficha de ternera no:", errorBorrarCria.message);
-        await ctx.answerCallbackQuery({ text: "Parto deshecho, pero la ternera quedó." });
-        await ctx.editMessageText(
-          `↩️ Parto deshecho, pero la ficha de la ternera${criaABorrar.numero != null ? ` #${criaABorrar.numero}` : ""} NO se pudo borrar. Bórrala desde la app.`,
-        );
-        return;
-      }
-    }
-
-    await ctx.answerCallbackQuery({ text: "Deshecho." });
-    // Se edita el mensaje para quitar el botón: un segundo toque sobre un id
-    // ya borrado solo diría "ya no existe", pero deja al usuario dudando de
-    // si borró dos cosas.
-    await ctx.editMessageText(
-      criaABorrar
-        ? `↩️ Registro deshecho, con la ficha de la ternera${criaABorrar.numero != null ? ` #${criaABorrar.numero}` : ""}. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.`
-        : "↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.",
-    );
+    await handleHatoUndoReview(ctx, getSupabaseAdmin(), 'event');
   });
 
-  // --------------------------------------------------------------------------
-  // DESHACER un tratamiento recién registrado por /evento (138).
-  //
-  // Gemelo del de arriba, con la misma guarda y por el mismo motivo: un
-  // `callback_data` se puede reenviar, así que la autorización no está en el
-  // botón sino acá. `fuente = 'telegram'` es lo que impide que este camino
-  // borre un tratamiento que escribió Martha desde la Hoja de Vida.
-  //
-  // Segunda guarda, propia de esta tabla: si alguien ya marcó el paso como
-  // hecho (desde la alerta), el tratamiento dejó de ser "lo que acabo de
-  // registrar" y borrarlo se llevaría por delante ese trabajo. El paso cuelga
-  // con `ON DELETE CASCADE`, así que un DELETE de la cabecera lo arrastra.
-  // --------------------------------------------------------------------------
-
   bot.callbackQuery(/^hato_tr_undo:/, async (ctx) => {
-    const parsed = parsearCallbackDeshacerTratamiento(ctx.callbackQuery.data ?? "");
-    if (!parsed) {
-      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
-      return;
-    }
-
-    const sb = getSupabaseAdmin();
-    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
-      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
-      return;
-    }
-
-    const { data: tratamiento } = await sb
-      .from("hato_tratamientos")
-      .select("id, fuente, hato_tratamiento_pasos(fecha_ejecutada)")
-      .eq("id", parsed.tratamientoId)
-      .maybeSingle();
-
-    if (!tratamiento) {
-      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
-      return;
-    }
-    if (tratamiento.fuente !== "telegram") {
-      await ctx.answerCallbackQuery({ text: "Ese tratamiento no se registró desde aquí." });
-      return;
-    }
-
-    const pasos = (tratamiento.hato_tratamiento_pasos ?? []) as Array<{ fecha_ejecutada: string | null }>;
-    if (pasos.some((paso) => paso.fecha_ejecutada != null)) {
-      await ctx.answerCallbackQuery({
-        text: "Ya marcaron un paso como hecho. Corrígelo desde la ficha de la vaca.",
-      });
-      return;
-    }
-
-
-    if (!await autorizarDeshacerHato(sb, ctx.from?.id)) {
-      await ctx.answerCallbackQuery({ text: "Solo una cuenta vinculada y activa de Gerencia puede deshacer este registro." });
-      return;
-    }
-
-    const { error } = await sb.from("hato_tratamientos").delete().eq("id", parsed.tratamientoId);
-    if (error) {
-      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
-      return;
-    }
-
-    await ctx.answerCallbackQuery({ text: "Deshecho." });
-    await ctx.editMessageText("↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.");
+    await handleHatoUndoReview(ctx, getSupabaseAdmin(), 'treatment');
   });
 
   bot.callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/, async (ctx) => {

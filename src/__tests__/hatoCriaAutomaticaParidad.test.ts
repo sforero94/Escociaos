@@ -105,10 +105,17 @@ describe('criaAutomatica — los escritores la usan de verdad', () => {
     expect(src).toMatch(/cria_id:\s*cria\?\.id/);
   });
 
-  it.each(BOTS)('%s decide el Deshacer con decidirDeshacerCria', (rel) => {
+  it.each(BOTS)('%s preserves coupled calf history through the reviewed atomic undo protocol', (rel) => {
     const src = leer(rel);
-    expect(src).toContain('../hato-cria-automatica.ts');
-    expect(src).toMatch(/decidirDeshacerCria\(/);
+    const undo = src.slice(src.indexOf('bot.callbackQuery(/^hato_ev_undo:/'), src.indexOf('bot.callbackQuery(/^hato_tr_undo:/'));
+    expect(undo).toContain("handleHatoUndoReview(ctx, getSupabaseAdmin(), 'event')");
+    expect(undo).not.toMatch(/\.delete\(|decidirDeshacerCria|elegirUsoIdParaDeshacer/);
+    const sql = leer('src/sql/security-candidates/hato-undo.sql');
+    expect(sql).toContain("row_json->>'cria_id' IS NOT NULL");
+    expect(sql).toContain("row_json->>'cria_destino' IS NOT DISTINCT FROM 'retenida'");
+    expect(sql).toContain("(row_json->'datos') ? 'pajilla_uso_id'");
+    expect(sql).not.toMatch(/DELETE FROM public\.(?:hato_animales|hato_pajillas_uso)/);
+    expect(sql).toContain('Only provably standalone Telegram events');
   });
 
   it('el navegador crea la ficha al marcar "parida"', () => {

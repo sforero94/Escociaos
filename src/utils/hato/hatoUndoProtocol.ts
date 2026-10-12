@@ -52,7 +52,7 @@ export function validateHatoUndoAttempt(value: unknown, sender: number): asserts
   requireProof(value.payload);
   if (value.payload.sender !== sender) throw new Error('El intento pertenece a otra cuenta de Telegram.');
 }
-function requireReceipt(value: unknown, attempt: HatoUndoAttempt): asserts value is HatoUndoReceipt {
+export function validateHatoUndoReceipt(value: unknown, attempt: HatoUndoAttempt): asserts value is HatoUndoReceipt {
   const p = attempt.payload;
   if (!object(value) || !keys(value, ['actor', 'sender', 'request_key', 'operation', 'target_id', 'before', 'after'])
     || value.actor !== p.actor || value.sender !== p.sender || value.request_key !== attempt.key
@@ -74,7 +74,7 @@ export async function prepareHatoUndo(client: HatoUndoClient, sender: number, op
 export async function postHatoUndo(client: HatoUndoClient, sender: number, attempt: HatoUndoAttempt): Promise<HatoUndoReceipt> {
   validateHatoUndoAttempt(attempt, sender);
   const receipt = await rpc(client, 'fn_hato_undo', { p_sender: sender, p_request_key: attempt.key, p_payload: attempt.payload });
-  requireReceipt(receipt, attempt);
+  validateHatoUndoReceipt(receipt, attempt);
   return receipt;
 }
 export async function resolveHatoUndo(client: HatoUndoClient, sender: number, attempt: HatoUndoAttempt): Promise<{ state: 'cancelled' } | { state: 'committed'; receipt: HatoUndoReceipt }> {
@@ -83,7 +83,7 @@ export async function resolveHatoUndo(client: HatoUndoClient, sender: number, at
   if (!object(result) || result.request_key !== attempt.key || result.operation !== attempt.payload.operation) throw new Error('Estado de Hato desconocido. Conserva el intento pendiente.');
   if (result.state === 'cancelled' && keys(result, ['state', 'request_key', 'operation'])) return { state: 'cancelled' };
   if (result.state === 'committed' && keys(result, ['state', 'request_key', 'operation', 'receipt'])) {
-    requireReceipt(result.receipt, attempt);
+    validateHatoUndoReceipt(result.receipt, attempt);
     return { state: 'committed', receipt: result.receipt };
   }
   throw new Error('Estado de Hato desconocido. Conserva el intento pendiente.');

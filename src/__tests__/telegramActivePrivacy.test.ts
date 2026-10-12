@@ -3,8 +3,12 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
 import { esConsultaGrupoEsco } from '../../supabase/functions/make-server-1ccce916/telegram/politicaGrupoEsco';
-import { cuentaActivaTelegram, autorizarDeshacerHato } from '../../supabase/functions/make-server-1ccce916/telegram/cuentaActivaTelegram';
+import { cuentaActivaTelegram } from '../../supabase/functions/make-server-1ccce916/telegram/cuentaActivaTelegram';
 
+import { handleHatoUndoReview } from '../../supabase/functions/make-server-1ccce916/telegram/hatoUndoReview';
+
+const undoTarget = '22222222-2222-4222-8222-222222222222';
+const undoKey = '33333333-3333-4333-8333-333333333333';
 const id = '11111111-1111-4111-8111-111111111111';
 let registration: unknown; let profiles: unknown; let fail: string | null;
 let calls: Array<{ path: string; method: string }>; let profileReads: number;
@@ -16,6 +20,14 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, opts?: RequestInit) => {
     const u = new URL(String(input)); calls.push({ path: u.pathname, method: opts?.method ?? 'GET' });
     let body: unknown = [];
+    if (u.pathname.includes('/rpc/fn_hato_undo_review_')) {
+      const profile = Array.isArray(profiles) && profiles.length === 1 ? profiles[0] : null;
+      const roleAllowed = profile && profile.id === id && profile.activo === true && profile.rol === 'Gerencia';
+      const deliveryRevoked = revoked && u.pathname.endsWith('/fn_hato_undo_review_deliver');
+      if (!roleAllowed || deliveryRevoked) return new Response(JSON.stringify({message:'Current active Gerencia required'}), {status:403,headers:{'content-type':'application/json'}});
+      body = {version:1,key:undoKey,state:'pending',receipt:null,animal:{numero:157,nombre:'ALINA'},payload:{actor:id,sender:123,operation:'treatment',target_id:undoTarget,
+        snapshot:{target:{id:undoTarget,animal_id:id,fuente:'telegram',estado:'activo',chequeo_id:null,nombre:'Tratamiento'},steps:[]}}};
+    }
     if (u.pathname.endsWith('/telegram_usuarios')) {
       const accept = new Headers(opts?.headers).get('accept');
       body = accept?.includes('application/vnd.pgrst.object+json') && Array.isArray(registration)
@@ -42,9 +54,7 @@ function load(source: string, locate: (n: ts.Node) => boolean, dependencies: Rec
 function callback(source: string, route: string) {
   return load(source, n => ts.isArrowFunction(n) && ts.isCallExpression(n.parent)
     && n.parent.expression.getText().includes('bot.callbackQuery') && n.parent.arguments[0].getText().includes(route), {
-    getSupabaseAdmin: client, autorizarDeshacerHato,
-    parsearCallbackDeshacerEvento: () => ({ eventoId: 'event' }),
-    parsearCallbackDeshacerTratamiento: () => ({ tratamientoId: 'event' }),
+    getSupabaseAdmin: client, handleHatoUndoReview,
   });
 }
 for (const root of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) {
@@ -71,17 +81,25 @@ for (const root of ['src/supabase/functions/server', 'supabase/functions/make-se
     });
     for (const route of ['hato_ev_undo', 'hato_tr_undo']) {
       it.each(['Administrador', 'Monitor', 'Verificador'])(`${route} denies fresh %s before domain reads`, async rol => {
-        profiles = [{ id, activo: true, rol }]; const ctx = { from: { id: 123 }, callbackQuery: { data: 'event' }, answerCallbackQuery: vi.fn() };
+        profiles = [{ id, activo: true, rol }]; const ctx = { from: { id: 123 }, chat: {id:123,type:'private'}, callbackQuery: { data: `${route}:${undoTarget}` },
+          answerCallbackQuery: vi.fn(async()=>{}), api:{sendMessage:vi.fn(async()=>({message_id:77,chat:{id:123}}))} };
         await callback(source, route)(ctx);
-        expect(calls.every(c => /telegram_usuarios|usuarios$/.test(c.path))).toBe(true);
-        expect(ctx.answerCallbackQuery).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Gerencia') }));
+        expect(calls).toEqual([{path:'/rest/v1/rpc/fn_hato_undo_review_begin',method:'POST'}]);
+        expect(ctx.answerCallbackQuery).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('No se confirmó') }));
       });
     }
-    it('rechecks treatment permission before delete after domain reads', async () => {
-      revoked = true; const ctx = { from: { id: 123 }, callbackQuery: { data: 'event' }, answerCallbackQuery: vi.fn() };
+    it('rechecks current treatment authority after DM delivery and preserves the server attempt on revocation', async () => {
+      revoked = true; const ctx = { from: { id: 123 }, chat:{id:123,type:'private'}, callbackQuery: { data:`hato_tr_undo:${undoTarget}` },
+        answerCallbackQuery:vi.fn(async()=>{}),api:{sendMessage:vi.fn(async()=>({message_id:77,chat:{id:123}}))} };
       await callback(source, 'hato_tr_undo')(ctx);
-      expect(profileReads).toBe(2); expect(calls.some(c => c.path.endsWith('/hato_tratamientos'))).toBe(true);
-      expect(calls.every(c => c.method === 'GET')).toBe(true);
+      expect(calls.map(c=>c.path)).toEqual(['/rest/v1/rpc/fn_hato_undo_review_begin','/rest/v1/rpc/fn_hato_undo_review_deliver']);
+      expect(calls.every(c => c.method === 'POST' && c.path.includes('/rpc/'))).toBe(true);
+    });
+    it('forwarded undo button cannot inherit private message or sender authority', async () => {
+      const ctx={from:{id:456},chat:{id:-99,type:'group'},callbackQuery:{data:`hato_tr_undo:${undoKey}:c`,message:{message_id:77}},
+        answerCallbackQuery:vi.fn(),api:{sendMessage:vi.fn()}};
+      await callback(source,'hato_tr_undo')(ctx);expect(calls).toEqual([]);expect(ctx.api.sendMessage).not.toHaveBeenCalled();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({text:'Abre el chat privado con Esco para revisar esta operación.'});
     });
     it.each([false, true])('keeps every Esco answer private, long text=%s', async long => {
       const sent: Array<{ destination: number; text: string }> = []; const secret = 'SECRET'.repeat(long ? 900 : 1);

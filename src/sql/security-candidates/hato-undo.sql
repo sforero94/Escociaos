@@ -265,4 +265,159 @@ END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA hato_undo FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.fn_hato_undo_prepare(bigint,text,uuid),public.fn_hato_undo(bigint,uuid,jsonb),public.fn_hato_undo_resolve(bigint,uuid,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_hato_undo_prepare(bigint,text,uuid),public.fn_hato_undo(bigint,uuid,jsonb),public.fn_hato_undo_resolve(bigint,uuid,jsonb) TO service_role;
+-- Durable review wrappers: server-owned proof/key, complete private delivery,
+-- separately authenticated human action. No KV read/overwrite or edge key creation.
+CREATE TABLE hato_undo.attempts (
+  sequence bigint GENERATED ALWAYS AS IDENTITY UNIQUE,
+  actor uuid NOT NULL, request_key uuid NOT NULL, sender bigint NOT NULL,
+  operation text NOT NULL CHECK(operation IN ('event','treatment')), target_id uuid NOT NULL,
+  payload jsonb NOT NULL, animal jsonb NOT NULL, state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','cancelled','committed')),
+  receipt jsonb, PRIMARY KEY(actor,request_key),
+  CHECK((state='committed')=(receipt IS NOT NULL))
+);
+CREATE UNIQUE INDEX hato_undo_open_review ON hato_undo.attempts(actor,sender,operation,target_id) WHERE state='pending';
+CREATE TABLE hato_undo.deliveries (
+  actor uuid NOT NULL, request_key uuid NOT NULL, chat_id bigint NOT NULL, message_id bigint NOT NULL, complete_review boolean NOT NULL,
+  PRIMARY KEY(actor,request_key,chat_id,message_id),
+  FOREIGN KEY(actor,request_key) REFERENCES hato_undo.attempts(actor,request_key)
+);
+ALTER TABLE hato_undo.attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hato_undo.deliveries ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON ALL TABLES IN SCHEMA hato_undo FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA hato_undo FROM PUBLIC,anon,authenticated,service_role;
+
+CREATE FUNCTION hato_undo.review_result(a hato_undo.attempts) RETURNS jsonb
+LANGUAGE sql SET search_path=pg_catalog AS $$
+ SELECT jsonb_build_object('version',1,'key',a.request_key,'payload',a.payload,'state',a.state,'receipt',a.receipt,'animal',a.animal)
+$$;
+CREATE FUNCTION hato_undo.review_lock(sender bigint,key uuid,op text) RETURNS hato_undo.attempts
+LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE actor_id uuid; a hato_undo.attempts;
+BEGIN
+ actor_id:=hato_undo.authorize(sender);
+ IF key IS NULL OR op NOT IN ('event','treatment') OR op IS NULL THEN RAISE EXCEPTION 'Invalid review action'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(actor_id::text||':'||key::text,0));
+ SELECT * INTO a FROM hato_undo.attempts WHERE actor=actor_id AND request_key=key FOR UPDATE;
+ IF NOT FOUND OR a.sender IS DISTINCT FROM sender OR a.operation IS DISTINCT FROM op THEN RAISE EXCEPTION 'Review owner unavailable'; END IF;
+ PERFORM hato_undo.validate_payload(actor_id,sender,a.payload);
+ IF a.payload->>'operation' IS DISTINCT FROM a.operation OR a.payload->>'target_id' IS DISTINCT FROM a.target_id::text THEN RAISE EXCEPTION 'Review proof identity corrupted'; END IF;
+ IF a.state='cancelled' AND NOT EXISTS(SELECT 1 FROM hato_undo.requests r WHERE r.actor=a.actor AND r.request_key=a.request_key
+   AND r.sender=a.sender AND r.payload=a.payload AND r.result='{"cancelled":true}'::jsonb) THEN RAISE EXCEPTION 'Cancellation fence unavailable'; END IF;
+ IF a.state='committed' AND (a.receipt IS DISTINCT FROM jsonb_build_object('actor',a.actor,'sender',a.sender,'request_key',a.request_key,
+   'operation',a.operation,'target_id',a.target_id,'before',a.payload->'snapshot','after',jsonb_build_object('target',NULL,'steps','[]'::jsonb))
+   OR NOT EXISTS(SELECT 1 FROM hato_undo.requests r WHERE r.actor=a.actor AND r.request_key=a.request_key AND r.sender=a.sender AND r.payload=a.payload AND r.result=a.receipt)
+   OR NOT EXISTS(SELECT 1 FROM hato_undo.audit audit WHERE audit.actor=a.actor
+   AND audit.request_key=a.request_key AND audit.receipt=a.receipt AND audit.before_snapshot=a.payload->'snapshot'
+   AND audit.after_snapshot='{"target":null,"steps":[]}'::jsonb AND audit.operation=a.operation AND audit.target_id=a.target_id AND audit.sender=a.sender)) THEN RAISE EXCEPTION 'Review audit unavailable'; END IF;
+ RETURN a;
+END $$;
+CREATE FUNCTION public.fn_hato_undo_review_begin(p_sender bigint,p_operation text,p_target_id uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE actor_id uuid; a hato_undo.attempts; payload jsonb; animal_display jsonb; footprint oid[]; before_state jsonb;
+BEGIN
+ actor_id:=hato_undo.authorize(p_sender);
+ IF p_target_id IS NULL OR p_operation IS NULL OR p_operation NOT IN ('event','treatment') THEN RAISE EXCEPTION 'Invalid review target'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended('hato-review:'||actor_id::text||':'||p_sender::text||':'||p_operation||':'||p_target_id::text,0));
+ SELECT * INTO a FROM hato_undo.attempts WHERE actor=actor_id AND sender=p_sender AND operation=p_operation AND target_id=p_target_id ORDER BY sequence DESC LIMIT 1;
+ IF FOUND THEN RETURN hato_undo.review_result(hato_undo.review_lock(p_sender,a.request_key,p_operation)); END IF;
+ payload:=public.fn_hato_undo_prepare(p_sender,p_operation,p_target_id);
+ SELECT jsonb_build_object('numero',to_jsonb(animal)->'numero','nombre',to_jsonb(animal)->'nombre') INTO animal_display
+ FROM public.hato_animales animal WHERE id=(payload->'snapshot'->'target'->>'animal_id')::uuid FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Clinical animal unavailable'; END IF;
+ footprint:=hato_undo.lock_footprint(p_operation); before_state:=hato_undo.capture(footprint);
+ INSERT INTO hato_undo.attempts(actor,request_key,sender,operation,target_id,payload,animal)
+ VALUES(actor_id,gen_random_uuid(),p_sender,p_operation,p_target_id,payload,animal_display) RETURNING * INTO a;
+ IF NOT FOUND OR a.actor IS DISTINCT FROM actor_id OR a.payload IS DISTINCT FROM payload OR a.animal IS DISTINCT FROM animal_display OR a.sender IS DISTINCT FROM p_sender OR a.operation IS DISTINCT FROM p_operation OR a.target_id IS DISTINCT FROM p_target_id OR a.state IS DISTINCT FROM 'pending'
+  OR a.receipt IS NOT NULL OR NOT EXISTS(SELECT 1 FROM hato_undo.attempts stored WHERE stored.actor=actor_id AND stored.request_key=a.request_key AND to_jsonb(stored)=to_jsonb(a))
+  THEN RAISE EXCEPTION 'Review registration not persisted'; END IF;
+ IF hato_undo.authorize(p_sender) IS DISTINCT FROM actor_id OR hato_undo.capture(footprint) IS DISTINCT FROM before_state THEN RAISE EXCEPTION 'Review authority changed or registration trigger mutated domain'; END IF;
+ RETURN hato_undo.review_result(a);
+END $$;
+CREATE FUNCTION public.fn_hato_undo_review_deliver(p_sender bigint,p_operation text,p_request_key uuid,p_chat_id bigint,p_message_id bigint,p_complete_review boolean) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE a hato_undo.attempts; d hato_undo.deliveries; footprint oid[]; before_state jsonb;
+BEGIN
+ a:=hato_undo.review_lock(p_sender,p_request_key,p_operation);
+ IF p_chat_id IS DISTINCT FROM p_sender OR p_message_id IS NULL OR p_message_id<=0 OR p_complete_review IS NULL THEN RAISE EXCEPTION 'Private complete review delivery required'; END IF;
+ IF a.state='committed' THEN RETURN hato_undo.review_result(a); END IF;
+ footprint:=hato_undo.lock_footprint(p_operation); before_state:=hato_undo.capture(footprint);
+ INSERT INTO hato_undo.deliveries VALUES(a.actor,a.request_key,p_chat_id,p_message_id,p_complete_review) ON CONFLICT DO NOTHING;
+ SELECT * INTO d FROM hato_undo.deliveries WHERE actor=a.actor AND request_key=a.request_key AND chat_id=p_chat_id AND message_id=p_message_id;
+ IF NOT FOUND OR d.complete_review IS DISTINCT FROM p_complete_review OR NOT EXISTS(SELECT 1 FROM hato_undo.attempts stored WHERE stored.actor=a.actor AND stored.request_key=a.request_key AND to_jsonb(stored)=to_jsonb(a))
+   OR hato_undo.authorize(p_sender) IS DISTINCT FROM a.actor OR hato_undo.capture(footprint) IS DISTINCT FROM before_state THEN RAISE EXCEPTION 'Review delivery not persisted'; END IF;
+ RETURN hato_undo.review_result(a);
+END $$;
+CREATE FUNCTION public.fn_hato_undo_review_status(p_sender bigint,p_operation text,p_request_key uuid,p_chat_id bigint,p_message_id bigint) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE a hato_undo.attempts;
+BEGIN
+ a:=hato_undo.review_lock(p_sender,p_request_key,p_operation);
+ IF p_chat_id IS DISTINCT FROM p_sender OR NOT EXISTS(SELECT 1 FROM hato_undo.deliveries WHERE actor=a.actor AND request_key=a.request_key AND chat_id=p_chat_id AND message_id=p_message_id)
+   THEN RAISE EXCEPTION 'Private delivered review required'; END IF;
+ RETURN hato_undo.review_result(a);
+END $$;
+CREATE FUNCTION public.fn_hato_undo_review_action(p_sender bigint,p_operation text,p_request_key uuid,p_chat_id bigint,p_message_id bigint,p_action text) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE a hato_undo.attempts; original hato_undo.attempts; result jsonb; footprint oid[]; expected_state jsonb; current_animal jsonb;
+BEGIN
+ result:=public.fn_hato_undo_review_status(p_sender,p_operation,p_request_key,p_chat_id,p_message_id);
+ a:=hato_undo.review_lock(p_sender,p_request_key,p_operation); original:=a;
+ IF p_action IS NULL OR p_action NOT IN ('confirm','cancel') THEN RAISE EXCEPTION 'Explicit review action required'; END IF;
+ IF p_action='confirm' AND NOT EXISTS(SELECT 1 FROM hato_undo.deliveries WHERE actor=a.actor AND request_key=a.request_key
+   AND chat_id=p_chat_id AND message_id=p_message_id AND complete_review IS TRUE) THEN RAISE EXCEPTION 'Complete clinical review required for confirmation'; END IF;
+ IF a.state='committed' OR (a.state='cancelled' AND p_action='cancel') THEN RETURN result; END IF;
+ IF a.state='cancelled' THEN RAISE EXCEPTION 'Cancelled review fenced'; END IF;
+ IF p_action='confirm' THEN
+  SELECT jsonb_build_object('numero',to_jsonb(animal)->'numero','nombre',to_jsonb(animal)->'nombre') INTO current_animal
+  FROM public.hato_animales animal WHERE id=(a.payload->'snapshot'->'target'->>'animal_id')::uuid FOR SHARE;
+  IF NOT FOUND OR current_animal IS DISTINCT FROM a.animal THEN RAISE EXCEPTION 'Animal identity label changed since review'; END IF;
+  result:=public.fn_hato_undo(p_sender,p_request_key,a.payload);
+  footprint:=hato_undo.lock_footprint(p_operation); expected_state:=hato_undo.capture(footprint);
+  UPDATE hato_undo.attempts SET state='committed',receipt=result WHERE actor=a.actor AND request_key=a.request_key RETURNING * INTO a;
+ ELSE
+  result:=public.fn_hato_undo_resolve(p_sender,p_request_key,a.payload);
+  footprint:=hato_undo.lock_footprint(p_operation); expected_state:=hato_undo.capture(footprint);
+  IF result->>'state'='committed' THEN
+   UPDATE hato_undo.attempts SET state='committed',receipt=result->'receipt' WHERE actor=a.actor AND request_key=a.request_key RETURNING * INTO a;
+  ELSE UPDATE hato_undo.attempts SET state='cancelled' WHERE actor=a.actor AND request_key=a.request_key RETURNING * INTO a; END IF;
+ END IF;
+ IF NOT FOUND OR (to_jsonb(a)-ARRAY['state','receipt']) IS DISTINCT FROM (to_jsonb(original)-ARRAY['state','receipt'])
+  OR a.state IS DISTINCT FROM (CASE WHEN p_action='confirm' OR result->>'state'='committed' THEN 'committed' ELSE 'cancelled' END)
+  OR a.receipt IS DISTINCT FROM (CASE WHEN p_action='confirm' THEN result WHEN result->>'state'='committed' THEN result->'receipt' ELSE NULL END)
+  OR NOT EXISTS(SELECT 1 FROM hato_undo.attempts stored WHERE stored.actor=a.actor AND stored.request_key=a.request_key AND to_jsonb(stored)=to_jsonb(a))
+  OR hato_undo.authorize(p_sender) IS DISTINCT FROM a.actor OR hato_undo.capture(footprint) IS DISTINCT FROM expected_state THEN RAISE EXCEPTION 'Review outcome not persisted'; END IF;
+ RETURN hato_undo.review_result(a);
+END $$;
+CREATE FUNCTION public.fn_hato_undo_review_new(p_sender bigint,p_operation text,p_request_key uuid,p_chat_id bigint,p_message_id bigint) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE old hato_undo.attempts; a hato_undo.attempts; payload jsonb; animal_display jsonb; footprint oid[]; before_state jsonb;
+BEGIN
+ SELECT * INTO old FROM hato_undo.attempts WHERE actor=hato_undo.authorize(p_sender) AND request_key=p_request_key;
+ IF NOT FOUND OR old.sender IS DISTINCT FROM p_sender OR old.operation IS DISTINCT FROM p_operation THEN RAISE EXCEPTION 'Review owner unavailable'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended('hato-review:'||old.actor::text||':'||p_sender::text||':'||p_operation||':'||old.target_id::text,0));
+ PERFORM public.fn_hato_undo_review_status(p_sender,p_operation,p_request_key,p_chat_id,p_message_id);
+ old:=hato_undo.review_lock(p_sender,p_request_key,p_operation);
+ IF old.state<>'cancelled' THEN RAISE EXCEPTION 'Only explicitly cancelled review may request a fresh review'; END IF;
+ SELECT * INTO a FROM hato_undo.attempts WHERE actor=old.actor AND sender=p_sender AND operation=p_operation AND target_id=old.target_id ORDER BY sequence DESC LIMIT 1;
+ IF a.request_key<>old.request_key THEN RETURN hato_undo.review_result(a); END IF;
+ payload:=public.fn_hato_undo_prepare(p_sender,p_operation,old.target_id);
+ SELECT jsonb_build_object('numero',to_jsonb(animal)->'numero','nombre',to_jsonb(animal)->'nombre') INTO animal_display
+ FROM public.hato_animales animal WHERE id=(payload->'snapshot'->'target'->>'animal_id')::uuid FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Clinical animal unavailable'; END IF;
+ footprint:=hato_undo.lock_footprint(p_operation); before_state:=hato_undo.capture(footprint);
+ INSERT INTO hato_undo.attempts(actor,request_key,sender,operation,target_id,payload,animal)
+ VALUES(old.actor,gen_random_uuid(),p_sender,p_operation,old.target_id,payload,animal_display) RETURNING * INTO a;
+ IF NOT FOUND OR a.payload IS DISTINCT FROM payload OR a.animal IS DISTINCT FROM animal_display OR a.actor IS DISTINCT FROM old.actor OR a.sender IS DISTINCT FROM p_sender OR a.operation IS DISTINCT FROM p_operation OR a.target_id IS DISTINCT FROM old.target_id OR a.state<>'pending' OR a.receipt IS NOT NULL
+  OR NOT EXISTS(SELECT 1 FROM hato_undo.attempts stored WHERE stored.actor=a.actor AND stored.request_key=a.request_key AND to_jsonb(stored)=to_jsonb(a))
+  OR hato_undo.authorize(p_sender) IS DISTINCT FROM old.actor OR hato_undo.capture(footprint) IS DISTINCT FROM before_state THEN RAISE EXCEPTION 'New review registration not persisted'; END IF;
+ RETURN hato_undo.review_result(a);
+END $$;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA hato_undo FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.fn_hato_undo(bigint,uuid,jsonb),public.fn_hato_undo_resolve(bigint,uuid,jsonb) FROM service_role;
+REVOKE ALL ON FUNCTION public.fn_hato_undo_review_begin(bigint,text,uuid),public.fn_hato_undo_review_deliver(bigint,text,uuid,bigint,bigint,boolean),
+ public.fn_hato_undo_review_status(bigint,text,uuid,bigint,bigint),public.fn_hato_undo_review_action(bigint,text,uuid,bigint,bigint,text),
+ public.fn_hato_undo_review_new(bigint,text,uuid,bigint,bigint) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_hato_undo_review_begin(bigint,text,uuid),public.fn_hato_undo_review_deliver(bigint,text,uuid,bigint,bigint,boolean),
+ public.fn_hato_undo_review_status(bigint,text,uuid,bigint,bigint),public.fn_hato_undo_review_action(bigint,text,uuid,bigint,bigint,text),
+ public.fn_hato_undo_review_new(bigint,text,uuid,bigint,bigint) TO service_role;
 COMMIT;

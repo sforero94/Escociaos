@@ -109,8 +109,8 @@ CREATE TABLE public.usuarios(id uuid PRIMARY KEY,activo boolean,rol text,email t
 INSERT INTO public.usuarios VALUES('{ACTOR}',true,'Gerencia','synthetic@invalid');
 CREATE TABLE public.telegram_usuarios(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),telegram_id bigint UNIQUE,usuario_id uuid REFERENCES usuarios,activo boolean);
 INSERT INTO public.telegram_usuarios(telegram_id,usuario_id,activo) VALUES(123,'{ACTOR}',true);
-CREATE TABLE public.hato_animales(id uuid PRIMARY KEY);
-INSERT INTO public.hato_animales VALUES('{ANIMAL}');
+CREATE TABLE public.hato_animales(id uuid PRIMARY KEY,numero integer,nombre text);
+INSERT INTO public.hato_animales VALUES('{ANIMAL}',157,'ALINA');
 CREATE TABLE public.hato_eventos(id uuid PRIMARY KEY,animal_id uuid NOT NULL REFERENCES hato_animales,tipo text NOT NULL,fecha date NOT NULL,
  fuente text,datos jsonb,chequeo_vaca_id uuid,cria_id uuid REFERENCES hato_animales,cria_destino text,tipo_servicio text,alerta_id uuid,transaccion_ganado_id uuid,
  created_at timestamptz DEFAULT now(),created_by uuid);
@@ -132,6 +132,11 @@ def tests():
     verify(sql('SHOW server_version;').startswith('17.6'), 'pinned local PostgreSQL17.6')
     sql(FIXTURE)
     sql((ROOT / 'src/sql/security-candidates/hato-undo.sql').read_text())
+    # Baseline core transaction regression tests exercise the now-private old
+    # entry points using LOCAL FIXTURE ONLY temporary grants, revoked afterward.
+    for name in ('fn_hato_undo','fn_hato_undo_resolve'):
+        verify(sql(f"SELECT has_function_privilege('service_role','public.{name}(bigint,uuid,jsonb)','EXECUTE');")=='f',f'{name} arbitrary payload mutation denied in installed candidate')
+    sql('GRANT EXECUTE ON FUNCTION public.fn_hato_undo(bigint,uuid,jsonb),public.fn_hato_undo_resolve(bigint,uuid,jsonb) TO service_role;')
     # Actual repository 177, not a reimplemented approximation of its lock protocol.
     sql((ROOT / 'src/sql/migrations/177_hato_confirmar_paso_tratamiento.sql').read_text())
     target = event()
@@ -214,6 +219,8 @@ def tests():
     verify(sql("SELECT count(*) FROM hato_undo.audit WHERE before_snapshot IS NULL OR after_snapshot IS NULL;")=='0','all audits contain exact affected before/after snapshots')
     extra_faults()
     races()
+    sql('REVOKE ALL ON FUNCTION public.fn_hato_undo(bigint,uuid,jsonb),public.fn_hato_undo_resolve(bigint,uuid,jsonb) FROM service_role;')
+    review_tests()
 
 
 
@@ -335,6 +342,134 @@ def races():
         wait_held(); undo=pool.submit(mutate,p,ok=False)
         writer.result(); undo.result()
     verify(sql(f"SELECT fecha_ejecutada FROM hato_tratamiento_pasos WHERE id='{step}';")=='2026-01-02','coarse locks fence direct non-header step writer in fixture')
+
+
+def review_begin(target,op='event',sender=123,role='service_role',ok=True):
+    return call('fn_hato_undo_review_begin',f"{sender},{lit(op)},{lit(target)}::uuid",role,ok)
+
+
+def review_action(review,action='confirm',message=77,chat=123,sender=123,op=None,ok=True,status=False,fresh=False):
+    name='fn_hato_undo_review_new' if fresh else 'fn_hato_undo_review_status' if status else 'fn_hato_undo_review_action'
+    args=f"{sender},{lit(op or review['payload']['operation'])},{lit(review['key'])}::uuid,{chat},{message}"
+    if not status and not fresh: args+=f",{lit(action)}"
+    return call(name,args,ok=ok)
+
+
+def delivered(review,message=77,chat=123,sender=123,ok=True,complete=True):
+    return call('fn_hato_undo_review_deliver',f"{sender},{lit(review['payload']['operation'])},{lit(review['key'])}::uuid,{chat},{message},{str(complete).lower()}",ok=ok)
+
+
+def review_tests():
+    target=event(); a=review_begin(target)
+    verify(a['state']=='pending' and a['payload']['target_id']==target and a['receipt'] is None,'server atomically owns durable original key/proof')
+    verify(review_begin(target)==a,'lost begin response and restarted worker recover original review')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        recovered=list(pool.map(lambda _:review_begin(target),range(2)))
+    verify(recovered==[a,a],'concurrent begin cannot overwrite proof or replace key')
+    for role in ('anon','authenticated'):
+        review_begin(target,role=role,ok=False)
+        verify(True,f'{role} cannot register impersonated review')
+    before=state(); review_action(a,ok=False)
+    verify(state()==before,'no destructive action before complete private delivery registered')
+    before=state(); delivered(a,chat=999,ok=False)
+    verify(state()==before,'delivery refuses non-owner private chat')
+    verify(delivered(a)==a,'complete delivered control message durably bound')
+    for args in [dict(chat=999),dict(message=999),dict(sender=999),dict(op='treatment')]:
+        before=state(); review_action(a,ok=False,**args)
+        verify(state()==before,f'forwarded/wrong owner/message/operation action refused {args}')
+    before=state(); result=review_action(a,status=True)
+    verify(result==a and state()==before,'status is read-only and cannot cancel absent request')
+    unknown={**a,'key':str(uuid.uuid4())}
+    before=state(); review_action(unknown,status=True,ok=False)
+    verify(state()==before,'unknown status cannot create a cancellation fence')
+    done=review_action(a)
+    verify(done['state']=='committed' and done['receipt']['before']==a['payload']['snapshot'],'confirmed delivery atomically commits exact original receipt')
+    verify(review_action(a)==done and review_action(a,status=True)==done and review_begin(target)==done,'failed Telegram edit/restarted worker recover committed original receipt')
+    verify(review_action(a,action='cancel')==done,'cancel after confirm returns original committed receipt')
+    a=review_begin(event()); delivered(a)
+    cancelled=review_action(a,action='cancel')
+    verify(cancelled['state']=='cancelled' and review_begin(a['payload']['target_id'])==cancelled,'explicit cancellation retained; original target never auto-rebases')
+    before=state(); review_action(a,ok=False)
+    verify(state()==before,'late confirm fenced under original cancelled key')
+    new=review_action(a,fresh=True)
+    verify(new['key']!=a['key'] and new['state']=='pending' and review_action(a,fresh=True)==new,'explicit fresh review registers one new proof/key idempotently')
+    before=state(); review_action(new,ok=False)
+    verify(state()==before,'new review needs its own complete DM delivery')
+    delivered(new,message=88); review_action(new,message=88)
+    a=review_begin(event()); delivered(a)
+    sql(f"UPDATE hato_eventos SET datos='{{\"edited\":true}}' WHERE id='{a['payload']['target_id']}';")
+    before=state(); review_action(a,ok=False)
+    verify(state()==before and review_begin(a['payload']['target_id'])==a,'stale clinical target refuses and never rebases frozen review')
+    for table,action in [('hato_undo.attempts','INSERT'),('hato_undo.deliveries','INSERT'),('hato_undo.attempts','UPDATE')]:
+        target=event()
+        if action=='INSERT' and table.endswith('attempts'):
+            fault(table,'BEFORE',action); before=state(); review_begin(target,ok=False)
+        else:
+            a=review_begin(target)
+            if action=='UPDATE': delivered(a)
+            fault(table,'BEFORE',action); before=state()
+            if action=='UPDATE':review_action(a,ok=False)
+            else:delivered(a,ok=False)
+        verify(state()==before,f'suppressed durable {table} {action} rolls back')
+        clear_fault(table)
+    a=review_begin(event()); delivered(a)
+    fault('hato_undo.attempts','AFTER','UPDATE',f"UPDATE hato_eventos SET tipo='aborto' WHERE id='{target}'; RETURN NEW;")
+    before=state();review_action(a,ok=False)
+    verify(state()==before,'durable outcome AFTER trigger cannot add protected domain mutation')
+    clear_fault('hato_undo.attempts')
+    a=review_begin(event()); delivered(a,complete=False)
+    before=state();review_action(a,ok=False)
+    verify(state()==before,'cancellation-only review control cannot be forged into destructive confirmation')
+    verify(review_action(a,status=True)==a,'cancellation-only status remains read-only')
+    cancelled=review_action(a,action='cancel')
+    verify(cancelled['state']=='cancelled','cancellation-only review can durably cancel original attempt')
+    verify(review_action(a,fresh=True)['key']!=a['key'],'cancelled incomplete review permits only explicit new review')
+    a=review_begin(event()); delivered(a)
+    sql("UPDATE hato_animales SET numero=158;")
+    before=state();review_action(a,ok=False)
+    verify(state()==before,'changed animal display identity refuses original clinical review')
+    sql("UPDATE hato_animales SET numero=157;")
+    for change,restore in [("UPDATE usuarios SET rol='Administrador';","UPDATE usuarios SET rol='Gerencia';"),
+                           ('UPDATE telegram_usuarios SET activo=false;','UPDATE telegram_usuarios SET activo=true;')]:
+        sql(change);before=state();review_action(a,ok=False);review_action(a,status=True,ok=False)
+        verify(state()==before,'current revoked role/binding refuses review confirmation and status')
+        sql(restore)
+    before=state();review_action(a,fresh=True,ok=False)
+    verify(state()==before,'pending review cannot request a replacement key')
+    for table in ('hato_undo.attempts','hato_undo.deliveries'):
+        target=event();other=event()
+        if table.endswith('deliveries'):a=review_begin(target)
+        fault(table,'AFTER','INSERT',f"UPDATE hato_eventos SET tipo='aborto' WHERE id='{other}'; RETURN NEW;")
+        before=state()
+        if table.endswith('attempts'):review_begin(target,ok=False)
+        else:delivered(a,ok=False)
+        verify(state()==before,f'{table} registration AFTER trigger cannot mutate clinical footprint')
+        clear_fault(table)
+    a=review_begin(event());delivered(a,complete=False)
+    before=state();delivered(a,complete=True,ok=False)
+    verify(state()==before,'cancellation-only message cannot be upgraded by conflicting registration')
+    a=review_begin(event());delivered(a)
+    body=f"BEGIN; SET ROLE service_role; SELECT fn_hato_undo_review_action(123,'event','{a['key']}',123,77,'confirm'); SELECT pg_sleep(2); COMMIT;"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        first=pool.submit(hold_sql,body);wait_held();second=pool.submit(review_action,a,action='cancel')
+        committed=json.loads(first.result().splitlines()[0]);cancel=second.result()
+    verify(cancel==committed and cancel['state']=='committed','confirmation winning durable fence makes racing cancel return original receipt')
+    a=review_begin(event());delivered(a)
+    body=f"BEGIN; SET ROLE service_role; SELECT fn_hato_undo_review_action(123,'event','{a['key']}',123,77,'cancel'); SELECT pg_sleep(2); COMMIT;"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        first=pool.submit(hold_sql,body);wait_held();second=pool.submit(review_action,a,ok=False)
+        first.result();second.result()
+    verify(review_action(a,status=True)['state']=='cancelled','cancellation winning durable fence blocks racing confirmation')
+    a=review_begin(event());delivered(a);done=review_action(a)
+    sql(f"UPDATE hato_undo.requests SET result='{{}}'::jsonb WHERE request_key='{a['key']}';")
+    before=state();review_action(a,status=True,ok=False)
+    verify(state()==before,'committed review status refuses corrupted underlying request receipt')
+    sql(f"UPDATE hato_undo.requests SET result={lit(json.dumps(done['receipt']))}::jsonb WHERE request_key='{a['key']}';")
+    for table in ('hato_undo.attempts','hato_undo.deliveries'):
+        for role in ('anon','authenticated','service_role'):
+            sql(f'SET ROLE {role}; SELECT * FROM {table};',ok=False)
+            sql(f'SET ROLE {role}; DELETE FROM {table};',ok=False)
+            verify(True,f'{role} cannot read/delete protected {table}')
 
 
 def main():
