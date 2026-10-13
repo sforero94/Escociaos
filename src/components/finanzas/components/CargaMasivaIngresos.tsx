@@ -117,7 +117,7 @@ export function CargaMasivaIngresos({
 
   const descargarPlantilla = async () => {
     try {
-      const XLSX = await import('xlsx');
+      const { writeXlsx, downloadXlsx } = await import('@/utils/spreadsheet');
 
       // Ensure catalogs are loaded
       if (negocios.length === 0) {
@@ -200,11 +200,9 @@ export function CargaMasivaIngresos({
       mediosPago.forEach(m => templateData.push([m.nombre]));
 
       // Create workbook
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(templateData);
 
       // Set column widths
-      ws['!cols'] = [
+      const widths = [
         { wch: 12 },  // Fecha
         { wch: 20 },  // Negocio
         { wch: 20 },  // Región
@@ -216,12 +214,10 @@ export function CargaMasivaIngresos({
         { wch: 30 }   // Observaciones
       ];
 
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Ingresos');
-
       // Generate file
       const fileName = `plantilla_ingresos_${obtenerFechaHoy()}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const bytes = await writeXlsx([{ name: 'Plantilla Ingresos', rows: templateData, widths: widths.map(column => column.wch) }]);
+      downloadXlsx(bytes, fileName);
 
     } catch (err) {
       console.error('[carga masiva ingresos] fallo generando la plantilla', err);

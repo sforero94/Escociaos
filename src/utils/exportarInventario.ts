@@ -383,23 +383,12 @@ export async function blobExcelInventario(
   reporte: ReporteInventario,
   corte: string,
 ): Promise<Blob> {
-  const XLSX = await import('xlsx');
-  const aoa = filasHojaInventario(reporte, corte);
-  const hoja = XLSX.utils.aoa_to_sheet(aoa);
-
-  for (let i = 0; i < reporte.filas.length; i++) {
-    const direccion = XLSX.utils.encode_cell({ r: FILA_TITULOS_EXCEL + 1 + i, c: 1 });
-    const celda = hoja[direccion];
-    if (celda && celda.t === 'n') celda.z = FORMATO_CANTIDAD_EXCEL;
-  }
-
-  hoja['!cols'] = [{ wch: 36 }, { wch: 22 }, { wch: 12 }, { wch: 28 }];
-  const libro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(libro, hoja, 'Inventario');
-  const buffer = XLSX.write(libro, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
-  return new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  const { writeXlsx, XLSX_MIME } = await import('./spreadsheet');
+  const bytes = await writeXlsx([{
+    name: 'Inventario', rows: filasHojaInventario(reporte, corte), widths: [36, 22, 12, 28],
+    formats: reporte.filas.map((_, i) => ({ row: FILA_TITULOS_EXCEL + 2 + i, column: 2, format: FORMATO_CANTIDAD_EXCEL })),
+  }]);
+  return new Blob([new Uint8Array(bytes).buffer], { type: XLSX_MIME });
 }
 
 const COLOR_OLIVO: [number, number, number] = [115, 153, 28];

@@ -35,7 +35,7 @@ function archivosFuente(dir: string, acc: string[] = []): string[] {
 
 /** Librerias que solo entran por `import()` dinamico, o sea en un chunk
  * aparte que un despliegue puede retirar. */
-const IMPORT_DIFERIDO = /import\(\s*'(xlsx|jspdf|jspdf-autotable|html2canvas)'\s*\)/;
+const IMPORT_DIFERIDO = /import\(\s*'(xlsx|jspdf|jspdf-autotable|html2canvas|[^']*spreadsheet)'\s*\)/;
 
 /** `export ... function nombre` / `export const nombre =` */
 const EXPORTADAS = /export\s+(?:async\s+)?function\s+(\w+)|export\s+const\s+(\w+)\s*[:=]/g;

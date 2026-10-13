@@ -36,7 +36,7 @@ export function CargaMasiva() {
   // sin manejar: el usuario hacía clic y no pasaba nada, ni archivo ni
   // mensaje.
   const construirYDescargarPlantilla = async () => {
-    const XLSX = await import('xlsx');
+    const { writeXlsx, downloadXlsx } = await import('@/utils/spreadsheet');
 
     // Crear datos de ejemplo para la plantilla
     const data = [
@@ -64,11 +64,6 @@ export function CargaMasiva() {
       }
     ];
 
-    // Crear un libro de trabajo
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Monitoreos');
-
     // Ajustar el ancho de las columnas
     const columnWidths = [
       { wch: 18 }, // Fecha
@@ -81,11 +76,11 @@ export function CargaMasiva() {
       { wch: 20 }, // Monitor
       { wch: 35 }  // Observaciones
     ];
-    worksheet['!cols'] = columnWidths;
 
     // Generar el archivo y descargarlo
     const fecha = obtenerFechaHoy();
-    XLSX.writeFile(workbook, `plantilla_monitoreos_${fecha}.xlsx`);
+    const bytes = await writeXlsx([{ name: 'Monitoreos', rows: [Object.keys(data[0]), ...data.map(row => Object.values(row))], widths: columnWidths.map(column => column.wch) }]);
+    downloadXlsx(bytes, `plantilla_monitoreos_${fecha}.xlsx`);
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
