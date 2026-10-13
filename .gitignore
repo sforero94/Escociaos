@@ -49,3 +49,7 @@ __pycache__/
 # F0 spike Tailwind: capturas locales, no se versionan
 docs/tailwind-spike/antes/
 docs/tailwind-spike/despues/
+
+# Security review: raw private production/provider evidence stays local.
+docs/security-integrity/**/*-private.json
+docs/security-integrity/*-private.json

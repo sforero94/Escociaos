@@ -1,0 +1,101 @@
+# Application deletion — October 12 read-only design checkpoint
+
+Status: local unused-plan candidate and caller implemented after root approved the initial read-only design. SQL is unapplied. No live mutation, domain-row read or private catalog export occurred. Ownership and the final evidence appear below. Global stock integrity remains uncertified until direct writer retirement and all release dependencies are complete.
+
+## Observed baseline deletion behavior before local cutover
+
+`AplicacionesList.handleEliminar` (`src/components/aplicaciones/AplicacionesList.tsx:224`) reads linked inventory movement IDs, deletes **all** `movimientos_inventario` rows by application ID, deletes application lots, reads/deletes mixture products and mixtures, deletes calculations and purchase-plan snapshots, then deletes the application. Each call commits independently. It neither restores stock nor restricts application state, checks provisional status, checks affected row counts, saves exact source versions or returns a durable receipt. A later failure leaves earlier deletes committed. A suppressed delete can still produce a success toast and local removal. The confirmation at line 731 mentions plans/lots, but does not describe erased posted inventory history.
+
+Daily movements and workers, closure rows, tasks and work records are not explicitly deleted by this handler. Any effect on these depends on actual foreign keys/triggers. Deleting a parent can bypass child RLS through cascades. Application-state labels are not proof that stock has never moved: inventory-round capture can post an application-linked physical movement independently of closure.
+
+## Baseline table and writer map before local cutover
+
+| Scope/table | Current callers and indirect writers | Deletion implication |
+| --- | --- | --- |
+| `aplicaciones` | Calculator inserts/updates (lines 488, 554); start modal updates state/date (163); list deletes (315); closure RPC updates state/totals; captured auto-task, task-sync, timestamp and GlobalGAP correction triggers | State, linked task, closure and all source sets need server comparison under one transaction. Parent delete must preserve correction history. |
+| `aplicaciones_lotes` | Calculator delete/reinsert (492, 589); list delete (251); migration 008 declares task-lot sync on INSERT/UPDATE/DELETE | A child delete can mutate retained task lot IDs. Scope by exact application UUID, never shared `lote_id`. |
+| `aplicaciones_mezclas`, `aplicaciones_productos` | Calculator replaces mixture/product rows (495–646); list reads/deletes exact mixture IDs (261–285) | Derive product child IDs from locked application mixtures. Reject cross-application mixture/calculation relationships. |
+| `aplicaciones_calculos` | Calculator replace (505, 681); list delete (295); migration 013 declares mixture FK cascade | Both application and mixture edges matter. Deleting a mixture can erase calculations even before explicit calculation deletion. |
+| `aplicaciones_compras` | Calculator replace (506, 705); list delete (305) | These are saved purchase-plan snapshots, not actual `compras` or finance rows. Preserve this distinction. |
+| `aplicaciones_lotes_planificado` | No current application writer found in inspected module; module contract says unused historically | Include actual inbound FK inventory and source set if table exists. Do not infer permanent emptiness. |
+| `movimientos_diarios` | Daily form insert (669) and compensating delete (716, 771); dashboard delete (483) | These describe execution. The form calls them provisional, but it does not insert inventory ledger rows or alter stock. A delete is not a physical return. |
+| `movimientos_diarios_productos` | Daily form insert (711), parent cascade, historical direct DML permissions | Scope through exact daily IDs belonging to this application. Units/conversions describe consumed amounts, not quantities to return. |
+| `movimientos_diarios_trabajadores` | Daily form insert (766), parent cascade; migration 012 replaces matching task/worker/lot/date work records | Daily worker writes can overwrite manually entered work with the same natural tuple. Existing schema supplies no reliable per-daily-row work lineage. |
+| `movimientos_diarios_empleados` | Legacy child named in migration 110 cascade review; no current module writer found | Must inventory its actual FK/trigger/grant and include it before any deletion implementation. Absence from current caller is not absence from database. |
+| `tareas`, `registros_trabajo` | Auto-task and application/task-sync triggers; Labor task create/edit/state/delete, manual work insert (`RegistrarTrabajoDialog:315`) and update (`EditarRegistroDialog:161`); daily-worker sync; closure edits/completes task | Retain task and all work by default. Work belongs to task, not directly to application/daily movement. Task reassignment and non-application work must not be treated as application-owned children. |
+| `movimientos_inventario`, `productos` | Closure debits stock/posts ledger; `fn_ronda_resolver_con_captura` posts application-linked physical movement; list deletes ledger; manual movement and other stock protocols manage separate writes | Never delete posted history or restore stock during ordinary application deletion. Inventory movements with NULL/unknown provisional provenance also block hard deletion. |
+| `globalgap_correcciones` | Captured application AFTER DELETE/UPDATE correction trigger stores OLD/NEW snapshots | Existing correction ledger is separate from empty generic `logs_auditoria`. Keep it and verify transactional creation; do not claim complete historical audit. |
+| Prospective closure request/receipt proof | Unapplied closure protocol stores actor/key/original/final/receipt without cascading domain FK | Proof must survive domain deletion. A committed closure receipt blocks ordinary hard deletion even if a damaged current row says open. |
+
+Other entry points remain relevant: Labor task deletion at `Labores.tsx:327`; direct calculator replacements; daily parent cleanup after partial insert; employee/contractor/lot deletion cascades described by migration 110. Service-role endpoints, writable SQL functions and cascading parents require a complete release inventory. The inspected application-module browser paths do not exhaust privileged reachability.
+
+## Metadata evidence and remaining gaps
+
+Existing private metadata capture confirms `movimientos_inventario.aplicacion_id` references `aplicaciones.id` without a delete cascade, and captures application GlobalGAP AFTER DELETE/UPDATE plus auto-task/task-edit triggers. Application/ledger writes use active Administrador/Gerencia policy admission; daily-parent update/delete policies are creator-based. A future definer deletion must explicitly preserve the intended intersection, not describe privileged execution as invoker RLS.
+
+The current private captures do **not** certify the full inbound application/daily/work FK graph, all child triggers or all relevant indexes. Migration 001 declares a unique non-null application task link and task-delete SET NULL; this is repository evidence, not a current live guarantee. Its direction is important: deleting an application does not delete its task. Migration 007 declares linked-task delete prevention. Migration 110 records cascades from applications to calculations/compras/lots; mixtures to calculations/products; daily parents to three worker/product children; worker/lot parents to daily worker children. Migration 012 records delete-and-insert work synchronization, not a provenance FK. These must be checked against current metadata before coding.
+
+Metadata-only prerequisite capture should cover all inbound foreign keys, nullability, unique/partial indexes, actual delete/update triggers and definitions, grants/RLS/policies, correction-table constraints/permissions, source revision fields and writable function EXECUTE grants. Include cross-schema inbound links and any child/application mismatch allowed by current constraints. Keep raw captures private. Do not select domain records or infer their current counts.
+
+## Concrete safe deletion proposal
+
+First release proposal: hard-delete only a **Calculada** application with no closure, committed closure proof, inventory movement, daily movement or linked-task work. This preserves the existing useful operation of removing an unused saved plan. An open or En ejecución label alone cannot prove no physical work/stock. Reject ambiguous/corrupt relationships without repair.
+
+Use an exact actor/application/key/payload/expected protocol. A reviewed snapshot includes application, all plan children, inbound dependent sets, task, its work and other application references, closure/ledger/daily rows and prospective proofs. Fresh server admission locks current active Administrador/Gerencia; reject service/anonymous writes. Bind original reviewed state and stable key to the actor before mutations. Serialize with closure, calculator, task/work, daily and inventory posting writers using coordinated deterministic locks; protect absent/new child sets, not just existing rows. Require current metadata equality before installation and explicit policy-equivalent authorization for any privileged wrapper.
+
+In one transaction, archive the actual pre-delete plan graph and exact prospective actor/reason/time/key, perform only scoped permitted plan deletion, retain task/work and all correction/proof history, then verify affected IDs/counts, absence of deleted plan rows and unchanged retained task/work/stock/ledger/proofs. Verify the existing GlobalGAP correction entry and new deletion receipt. Snapshot/audit failure, suppressed delete, trigger rewrite or unexpected cascade aborts everything. Receipt replay returns exact original results after fresh admission; absent status durably fences the key against delayed deletion. Browser unknown outcomes retain owner-scoped evidence; later edits are not represented as the confirmed original.
+
+Deletion order must follow the captured graph. Prefer deleting the parent before task-lot lookup triggers fire through verified cascades, so a retained task does not lose its lot context. This is conditional on actual FK behavior. If current constraints require child-first deletion that mutates the task, fail the initial proposal rather than invent a task restore or silently change task semantics. Synthetic trigger/constraint tests must establish exact retained-task postconditions before authorizing implementation.
+
+Global release also retires direct ordinary application/ledger DELETE and supplies transactional protected calculator/daily replacements that currently need DELETE. Revoking child privileges alone cannot contain parent cascades; restrict or coordinate the parent writers too. Close/open/delete and source-writer races must resolve to one valid transition. Merely replacing `handleEliminar` does not close direct-table bypasses.
+
+## Business choices reserved for a later concrete review
+
+For En ejecución applications or any daily/work history, default to refusal of hard deletion. A future cancellation/archive proposal could hide the application from active lists while retaining its daily/work/stock history. That needs a chosen lifecycle label, report treatment, task behavior and correction/reason requirements. No new lifecycle is authorized in this checkpoint.
+
+For Cerrada applications or any posted physical consumption, retain application and all stock/ledger evidence. A factual return requires a separate compensating movement with actual returned quantity, date, actor and original-movement link. Cancellation of a plan is not evidence of returned material. The system cannot add consumed quantities back automatically, infer usable returned stock, subtract labor history or rewrite existing saldo chains.
+
+Task deletion/cancellation requires an explicit business decision even when no work exists. A generated-looking task description is not exclusive ownership proof. A live unique application/task index, if present, prevents simultaneous application sharing but does not prevent manual work, historic reassignment or independent task edits. Keep task/work by default; never delete work by date/worker/lot tuple or all rows on a linked task.
+
+The new deletion archive records current facts prospectively. It cannot invent the original capturer for old applications, reconstruct overwritten work, manufacture missing historical receipts or claim that all prior deleted children remain recoverable. Retention/access requirements for archived plans and receipts need release review; no seven-day cleanup rule is inferred.
+
+## Required local evidence before implementation handback
+
+Synthetic graph fixtures for every verified FK/cascade; unused-plan success; task retained byte-for-byte; daily/work/ledger/closure-proof refusal; NULL provisional refusal; cross-application mixture references; simultaneous calculator/daily/work/close/post/delete races; suppressed/rewritten audit and business writes; exact retry/cancelled-key behavior; fresh profile revocation; no stock delta; correction/proof survival; calculator/daily functionality after direct DELETE retirement. Actual SDK/React tests must cover lost responses, account changes, duplicate confirmation and later unsent edits. The final local evidence below covers the new unused-plan caller and candidate. Coordinated direct DELETE retirement, hosted metadata parity and calculator/daily replacement verification remain release requirements.
+
+## Authorized local implementation contract and ownership
+
+Root approved a local unused-plan-only candidate and caller on October 12. Owned paths: `src/components/aplicaciones/AplicacionesList.tsx` (delete handler and associated confirmation/error state only), new `src/sql/security-candidates/application-plan-delete.sql`, `scripts/security/application-plan-delete-postgres.py`, `src/utils/applicationPlanDelete.ts`, `src/__tests__/applicationPlanDelete.test.ts`, `src/__tests__/AplicacionesListPlanDelete.test.tsx` and this checkpoint. Closure files and other slices remain outside ownership.
+
+Contract: public snapshot returns exact application/plan children plus task/work and blocking execution/ledger/closure sets. Mutation binds trusted current actor, stable key, application and original; receipt contains exact deleted IDs and preserved task identity. Status returns committed receipt or durably cancels an absent identical key. Unknown/malformed responses preserve browser evidence. Server permits only exact `Calculada` with no execution dates, daily/work/closure/ledger/committed closure proof or unknown inbound/finance references. No credit or physical reversal exists. Retain task/work, GlobalGAP corrections and prospective proofs. Installation/runtime reject unsupported relationship/schema/delete-trigger drift; known local repository relationships are candidate prerequisites, not live certification.
+
+Delete explicit mixtures/products/calculations/purchase plans first; delete application last and require verified application-lot cascade so task-lot sync finds no remaining parent and cannot change retained task. Every deletion is audited and checked against the actual original, and final task/work/stock/proof state must match the baseline. Unknown cascade or mutation aborts. Whole definer admission preserves active Administrador/Gerencia, with explicit captured policy-equivalent boundary and no service write grant. Direct writer retirement remains a coordinated release dependency; this slice does not revoke calculator/daily DML prematurely.
+
+
+## Final local implementation and verification
+
+The list now obtains a trusted snapshot before showing confirmation. It sends one stable-key RPC rather than the prior browser table-delete chain. Confirmation names the reviewed plan and explains that execution/work/inventory history prevents deletion, with task/history retained. Malformed/lost outcomes keep the original owner/application evidence. Explicit resolution never resubmits; cancelled outcomes require a new review. Account changes/unmounts invalidate in-flight clearing and success paths; synchronous guards prevent duplicate confirmation posts.
+
+The SQL uses whole SECURITY DEFINER admission with current active Administrador/Gerencia and the existing captured fifteen-table boundary, plus a **repository-derived** purchase-plan policy prerequisite from migrations 033/110. Unsupported live variants fail. The guard requires known child FKs, verified application-lot cascade, exact reviewed delete-trigger bodies, required correction triggers and plain tables without inheritance/rewrite rules. Unknown inbound FK or named application references—including finance and an unreviewed `aplicaciones_lotes_planificado` relation—refuse installation/runtime. The correction ledger's known non-cascading corrected-by auth-user FK is allowed; domain-cascading audit/proof links are not.
+
+The transaction archives the actual original, removes only its exact planned child IDs, deletes the application last and lets verified lot cascade run after the parent disappears. It verifies the actual OLD-row correction audit and every deletion. Internal retained fingerprints prove stock/ledger/task/work/daily/closure and prospective closure proofs unchanged. Stable requests bind exact actor/key/application/expected/archive/receipt; absent status cancels the key. No stock credit, task/work delete, physical reversal or stronger role rule exists.
+
+Final current-source checks:
+
+- `python scripts/security/application-plan-delete-postgres.py`: exit 0; **45 synthetic assertions plus cleanup (46 total)**. Log `/tmp/application-plan-delete-postgres-final.log`. Digest-pinned cached PostgreSQL 17.6, pull never, network none, no binds/ports, read-only root, bounded tmpfs, verified cleanup. Fixture imports the existing closure harness's synthetic fixture only; it neither runs that suite nor changes its files.
+- `npx vitest run src/__tests__/applicationPlanDelete.test.ts src/__tests__/AplicacionesListPlanDelete.test.tsx`: exit 0; **20 tests in 2 files**. Log `/tmp/application-plan-delete-sdk-react-final.log`.
+- `npm run typecheck`: current log `/tmp/application-plan-delete-typecheck-final.log` has **no owned-path errors**, but exits nonzero on other current edits: `invoiceUploadEndpoint.test.ts:11` Uint8Array/BodyInit and `telegram/hatoUndoReview.ts:65` replaceAll target library. The earlier `/tmp/application-plan-delete-typecheck-work.log` passed before those other edits appeared. Root owns final whole-tree integration.
+- `python -m py_compile scripts/security/application-plan-delete-postgres.py` and owned-file `git diff --check`: passed.
+
+These local checks do not certify live FK/schema/grant/trigger parity, hosted Auth/PostgREST, coordinated direct writer retirement or global stock integrity. The candidate deliberately fails on the incomplete/unreviewed live graph rather than importing a guessed relationship. SQL/caller must release together only after metadata prerequisites and the global release graph receive explicit review. No production, merge, deployment, spend, alert or external metadata export occurred. More destructive capabilities still require a separate business choice and release approval.
+
+Final owned source SHA256:
+
+- `src/components/aplicaciones/AplicacionesList.tsx`: `2f13b8b57455f1357cd1b9780e6d4c692311fdeae63685e590d6b1166ab0a783`.
+- `src/sql/security-candidates/application-plan-delete.sql`: `a2717cae104213d224485b901004613d36897aafff8a856ac7188129f52909c3`.
+- `scripts/security/application-plan-delete-postgres.py`: `eb017ff72b1dacf58fc2aea0829fa808b2037d30f93ea4e726d9024ea5906699`.
+- `src/utils/applicationPlanDelete.ts`: `518abafb3709fd90dc344091954cc345a3523c0f7e535d48c0eb40a4b0e8fc91`.
+- `src/__tests__/applicationPlanDelete.test.ts`: `6e8678e08fb9356e19b7d12a02872578ae3a794c45257b48553055fd494b93d5`.
+- `src/__tests__/AplicacionesListPlanDelete.test.tsx`: `1e8bf53d2dbf4e3fb6cc696954719acc74a20ea4b985c36f20260dcdb9f78af6`.
+
+Ownership is returned to root for review. No owned verification process remains active.
