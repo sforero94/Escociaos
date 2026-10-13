@@ -71,7 +71,7 @@ export async function postManualMovement(client: ManualStockClient, owner: strin
     return a;
   });
   await authorize(client,owner,current);
-  const args = { p_request_key:a.key,p_payload:a.payload };
+  const args = { p_request_key:a.key,p_payload:a.payload,p_expected_owner:a.owner };
   const response = await client.rpc('fn_manual_stock_movement',args);
   let data = response.data;
   const error = response.error;

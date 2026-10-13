@@ -136,7 +136,7 @@ describe('explicit server-proven pending-attempt resolution', () => {
     const old = JSON.parse(memory.get(postSlot)!);
     expect((await resolvePendingPurchase(protocol(h.client), owner, 'post')).state).toBe('cancelled');
     expect(memory.has(postSlot)).toBe(false);
-    expect(h.calls[1].body).toEqual({ p_request_key: old.key, p_operation: 'post', p_payload: old.payload });
+    expect(h.calls[1].body).toEqual({ p_request_key: old.key, p_operation: 'post', p_payload: old.payload, p_expected_owner: owner });
     await expect(postPurchase(protocol(h.client), owner, { lines: [{ ...line, numero_factura: 'reviewed' }] })).rejects.toThrow();
     expect(h.calls[2].body.p_request_key).not.toBe(old.key);
     expect(h.calls[2].body.p_payload).toEqual({ lines: [{ ...line, numero_factura: 'reviewed' }] });

@@ -34,12 +34,12 @@ def verify(condition,label):
 def payload(tipo='Entrada',quantity=2.345):
  row=json.loads(sql(f"SELECT jsonb_build_object('quantity',cantidad_actual,'revision',updated_at) FROM public.productos WHERE id='{PRODUCT}';"))
  return dict(producto_id=PRODUCT,tipo=tipo,quantity=quantity,observed_quantity=row['quantity'],observed_revision=row['revision'],fecha='2026-10-10',observaciones='Synthetic note')
-def call(body,key=None,actor=OWNER,role='authenticated',ok=True):
- r=sql(f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT public.fn_manual_stock_movement('{key or uuid.uuid4()}',{literal(json.dumps(body))}::jsonb); COMMIT;",ok)
+def call(body,key=None,actor=OWNER,role='authenticated',ok=True,expected_owner='session'):
+ r=sql(f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT public.fn_manual_stock_movement('{key or uuid.uuid4()}',{literal(json.dumps(body))}::jsonb,{('NULL' if actor is None else literal(actor)+'::uuid') if expected_owner=='session' else 'NULL' if expected_owner is None else literal(expected_owner)+'::uuid'}); COMMIT;",ok)
  return json.loads(r) if ok else r
 
-def status(body,key,ok=True,actor=OWNER):
- r=sql(f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub={literal(actor)}; SELECT public.fn_manual_stock_request_status('{key}',{literal(json.dumps(body))}::jsonb); COMMIT;",ok)
+def status(body,key,ok=True,actor=OWNER,expected_owner='session'):
+ r=sql(f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub={literal(actor)}; SELECT public.fn_manual_stock_request_status('{key}',{literal(json.dumps(body))}::jsonb,{('NULL' if actor is None else literal(actor)+'::uuid') if expected_owner=='session' else 'NULL' if expected_owner is None else literal(expected_owner)+'::uuid'}); COMMIT;",ok)
  return json.loads(r) if ok else r
 
 def state():
@@ -74,7 +74,12 @@ def run():
  """)
   for table,columns in {'productos':['cantidad_actual'],'movimientos_inventario':['cantidad','saldo_anterior','saldo_nuevo']}.items():
    verify(all(any(r['table_name']==table and r['column_name']==col and r.get('numeric_precision')==12 and r.get('numeric_scale')==2 for r in c) for col in columns),table+' quantity precision matches numeric(12,2) catalog')
+  sql("CREATE FUNCTION fn_manual_stock_movement(uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;CREATE FUNCTION fn_manual_stock_request_status(uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;")
   sql((ROOT/'src/sql/security-candidates/manual-stock-movement.sql').read_text())
+  verify(sql("SELECT to_regprocedure('public.fn_manual_stock_movement(uuid,jsonb)') IS NULL AND to_regprocedure('public.fn_manual_stock_request_status(uuid,jsonb)') IS NULL;")=='t','unbound manual overloads retired despite prior PUBLIC execute')
+  for expected_owner in [None,OTHER]:
+   before=state();error=call(payload(),ok=False,expected_owner=expected_owner);verify('Expected operation owner/session mismatch' in error and state()==before,'manual mismatch/null owner no posting')
+   before=state();error=status(payload(),str(uuid.uuid4()),ok=False,expected_owner=expected_owner);verify('Expected operation owner/session mismatch' in error and state()==before,'manual mismatch/null owner no cancellation fence')
   b=payload();key=str(uuid.uuid4());r=call(b,key)
   verify(r['quantity_before']==10 and r['quantity_after']==12.35 and r['delta']==2.35,'positive normalization and atomic signed entry')
   before=state();verify(call(b,key)==r and state()==before,'lost response replay exact receipt no second stock write')

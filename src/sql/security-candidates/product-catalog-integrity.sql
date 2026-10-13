@@ -185,12 +185,15 @@ DECLARE v jsonb; product public.productos;original public.productos; expected_ke
  IF EXISTS(SELECT 1 FROM unnest(ARRAY['nombre','categoria','grupo','unidad_medida']) f WHERE v->f='null'::jsonb) THEN RAISE EXCEPTION 'Required catalog fields';END IF;
  SELECT * INTO product FROM jsonb_populate_record(NULL::public.productos,v);
 END $$;
-CREATE FUNCTION public.fn_product_catalog_post(p_request_key uuid,p_payload jsonb) RETURNS jsonb
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_product_catalog_post(uuid,jsonb);
+CREATE FUNCTION public.fn_product_catalog_post(p_request_key uuid,p_payload jsonb,p_expected_owner uuid) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE u public.usuarios;r product_catalog_integrity.requests;v jsonb;before_row public.productos;
  expected public.productos;actual public.productos;original public.productos;move public.movimientos_inventario;
  proof jsonb;aud jsonb;result jsonb;before_ledger jsonb;before_openings jsonb;BEGIN
  u:=product_catalog_integrity.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM u.id THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501';END IF;
  IF p_request_key IS NULL THEN RAISE EXCEPTION 'Request key required';END IF;
  PERFORM product_catalog_integrity.validate(p_payload);
  PERFORM pg_advisory_xact_lock(hashtextextended(u.id::text||':'||p_request_key::text,0));
@@ -254,10 +257,13 @@ DECLARE u public.usuarios;r product_catalog_integrity.requests;v jsonb;before_ro
   RAISE EXCEPTION 'Catalog receipt did not persist exactly';END IF;
  RETURN result;
 END $$;
-CREATE FUNCTION public.fn_product_catalog_status(p_request_key uuid,p_payload jsonb) RETURNS jsonb
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_product_catalog_status(uuid,jsonb);
+CREATE FUNCTION public.fn_product_catalog_status(p_request_key uuid,p_payload jsonb,p_expected_owner uuid) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE u public.usuarios;r product_catalog_integrity.requests;BEGIN
  u:=product_catalog_integrity.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM u.id THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501';END IF;
  IF p_request_key IS NULL THEN RAISE EXCEPTION 'Request key required';END IF;
  PERFORM product_catalog_integrity.validate(p_payload);
  PERFORM pg_advisory_xact_lock(hashtextextended(u.id::text||':'||p_request_key::text,0));
@@ -270,6 +276,6 @@ DECLARE u public.usuarios;r product_catalog_integrity.requests;BEGIN
  RETURN jsonb_build_object('actor',u.id,'request_key',p_request_key,'payload',p_payload,'committed',NOT r.canceled,'result',r.result);
 END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA product_catalog_integrity FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION public.fn_product_catalog_post(uuid,jsonb),public.fn_product_catalog_status(uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_product_catalog_post(uuid,jsonb),public.fn_product_catalog_status(uuid,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_product_catalog_post(uuid,jsonb,uuid),public.fn_product_catalog_status(uuid,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_product_catalog_post(uuid,jsonb,uuid),public.fn_product_catalog_status(uuid,jsonb,uuid) TO authenticated;
 COMMIT;

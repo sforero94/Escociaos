@@ -115,7 +115,9 @@ BEGIN
   RETURN receipt;
 END $$;
 
-CREATE FUNCTION public.fn_purchase_post(p_request_key uuid, p_payload jsonb) RETURNS jsonb
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_purchase_post(uuid,jsonb);
+CREATE FUNCTION public.fn_purchase_post(p_request_key uuid, p_payload jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 DECLARE
   actor uuid; replay jsonb; line jsonb; pos integer := 0; locked integer; wanted integer;
@@ -124,7 +126,8 @@ DECLARE
   target_product uuid; quantity numeric; unit_cost numeric; total_cost numeric; old_stock numeric; new_stock numeric;
   receipt jsonb := '[]'; actor_email text;
 BEGIN
-  actor := purchase_integrity.authorize(); -- Reauthorize even successful replays.
+  actor := purchase_integrity.authorize();
+  IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501'; END IF; -- Reauthorize even successful replays.
   replay := purchase_integrity.begin_request(actor,p_request_key,'post',p_payload);
   IF replay IS NOT NULL THEN RETURN replay; END IF;
   IF jsonb_typeof(p_payload) IS DISTINCT FROM 'object' OR (p_payload - 'lines') <> '{}'
@@ -231,7 +234,9 @@ BEGIN
   RETURN purchase_integrity.finish_request(actor,p_request_key,'post',p_payload,jsonb_build_object('purchases',receipt));
 END $$;
 
-CREATE FUNCTION public.fn_purchase_reverse(p_request_key uuid, p_payload jsonb) RETURNS jsonb
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_purchase_reverse(uuid,jsonb);
+CREATE FUNCTION public.fn_purchase_reverse(p_request_key uuid, p_payload jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 <<reverse_purchase>>
 DECLARE
@@ -242,6 +247,7 @@ DECLARE
   target_product uuid; quantity numeric; old_stock numeric; new_stock numeric; price numeric; actor_email text; count_expenses integer:=0;
 BEGIN
   actor := purchase_integrity.authorize();
+  IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501'; END IF;
   replay := purchase_integrity.begin_request(actor,p_request_key,'reverse',p_payload);
   IF replay IS NOT NULL THEN RETURN replay; END IF;
   IF jsonb_typeof(p_payload) IS DISTINCT FROM 'object' OR (p_payload - ARRAY['purchase_id','expected']) <> '{}'
@@ -324,12 +330,15 @@ BEGIN
 END $$;
 
 -- Minimal canonical proof reader for an authorized history session. No expense data.
-CREATE FUNCTION public.fn_purchase_proof(p_purchase_id uuid) RETURNS jsonb
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_purchase_proof(uuid);
+CREATE FUNCTION public.fn_purchase_proof(p_purchase_id uuid,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
-DECLARE proof purchase_integrity.postings%ROWTYPE; buy public.compras%ROWTYPE;
+DECLARE actor uuid; proof purchase_integrity.postings%ROWTYPE; buy public.compras%ROWTYPE;
   original_mov public.movimientos_inventario%ROWTYPE;
 BEGIN
-  PERFORM purchase_integrity.authorize();
+  actor:=purchase_integrity.authorize();
+  IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501'; END IF;
   SELECT * INTO proof FROM purchase_integrity.postings WHERE purchase_id=p_purchase_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'Missing or legacy purchase requires management review'; END IF;
   -- Same product-first order as posting/reversal; reread proof after the product lock.
@@ -347,12 +356,15 @@ END $$;
 -- Defense for stale callers: the previous routine must NEVER delete expenses.
 -- Missing requests are durably cancelled under the posting advisory lock so a
 -- delayed caller cannot post after local retry evidence has been cleared.
-CREATE FUNCTION public.fn_purchase_resolve(p_request_key uuid, p_operation text, p_payload jsonb) RETURNS jsonb
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_purchase_resolve(uuid,text,jsonb);
+CREATE FUNCTION public.fn_purchase_resolve(p_request_key uuid, p_operation text, p_payload jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 <<resolve_attempt>>
 DECLARE actor uuid; request purchase_integrity.requests%ROWTYPE;
 BEGIN
   actor := purchase_integrity.authorize();
+  IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501'; END IF;
   IF p_request_key IS NULL OR p_operation NOT IN ('post','reverse') OR p_operation IS NULL
     OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'Exact request identity required';
@@ -379,6 +391,6 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 BEGIN RAISE EXCEPTION 'Deprecated cleanup: preserve all expenses for management review' USING ERRCODE='42501'; END $$;
 REVOKE ALL ON FUNCTION public.fn_cleanup_compra_dependencies(uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA purchase_integrity FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION public.fn_purchase_post(uuid,jsonb),public.fn_purchase_reverse(uuid,jsonb),public.fn_purchase_proof(uuid),public.fn_purchase_resolve(uuid,text,jsonb) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_purchase_post(uuid,jsonb),public.fn_purchase_reverse(uuid,jsonb),public.fn_purchase_proof(uuid),public.fn_purchase_resolve(uuid,text,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_purchase_post(uuid,jsonb,uuid),public.fn_purchase_reverse(uuid,jsonb,uuid),public.fn_purchase_proof(uuid,uuid),public.fn_purchase_resolve(uuid,text,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_purchase_post(uuid,jsonb,uuid),public.fn_purchase_reverse(uuid,jsonb,uuid),public.fn_purchase_proof(uuid,uuid),public.fn_purchase_resolve(uuid,text,jsonb,uuid) TO authenticated;
 COMMIT;

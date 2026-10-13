@@ -19,7 +19,9 @@ CREATE TABLE manual_stock.requests (
 );
 ALTER TABLE manual_stock.requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON manual_stock.requests FROM PUBLIC,anon,authenticated,service_role;
-CREATE FUNCTION public.fn_manual_stock_movement(p_request_key uuid,p_payload jsonb)
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_manual_stock_movement(uuid,jsonb);
+CREATE FUNCTION public.fn_manual_stock_movement(p_request_key uuid,p_payload jsonb,p_expected_owner uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 #variable_conflict use_variable
 DECLARE actor uuid:=auth.uid(); profile public.usuarios%ROWTYPE; prod public.productos%ROWTYPE;
@@ -32,6 +34,7 @@ BEGIN
  IF actor IS NULL THEN RAISE EXCEPTION 'Human authentication required' USING ERRCODE='42501'; END IF;
  SELECT * INTO profile FROM public.usuarios WHERE id=actor FOR SHARE;
  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN RAISE EXCEPTION 'Current active administrator required' USING ERRCODE='42501'; END IF;
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501'; END IF;
  IF p_request_key IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object'
  OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(p_payload) k) IS DISTINCT FROM ARRAY['fecha','observaciones','observed_quantity','observed_revision','producto_id','quantity','tipo']::text[] THEN RAISE EXCEPTION 'Exact movement payload required'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(actor::text||':'||p_request_key::text,0));
@@ -97,7 +100,9 @@ BEGIN
 END $$;
 -- Resolves failed/unknown caller outcomes without rebasing the reviewed snapshot.
 -- The same actor/key lock waits for any in-flight transaction before proving absence.
-CREATE FUNCTION public.fn_manual_stock_request_status(p_request_key uuid,p_payload jsonb)
+-- Retire unbound overload; RESTRICT refuses dependent callers until coordinated release.
+DROP FUNCTION IF EXISTS public.fn_manual_stock_request_status(uuid,jsonb);
+CREATE FUNCTION public.fn_manual_stock_request_status(p_request_key uuid,p_payload jsonb,p_expected_owner uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 #variable_conflict use_variable
 DECLARE actor uuid:=auth.uid(); profile public.usuarios%ROWTYPE; req manual_stock.requests%ROWTYPE; durable manual_stock.requests%ROWTYPE;
@@ -105,6 +110,7 @@ BEGIN
  IF actor IS NULL OR p_request_key IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Owner and exact request required'; END IF;
  SELECT * INTO profile FROM public.usuarios WHERE id=actor FOR SHARE;
  IF NOT FOUND OR profile.activo IS DISTINCT FROM true OR profile.rol IS NULL OR profile.rol::text NOT IN ('Administrador','Gerencia') THEN RAISE EXCEPTION 'Current active administrator required' USING ERRCODE='42501'; END IF;
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Expected operation owner/session mismatch' USING ERRCODE='42501'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(actor::text||':'||p_request_key::text,0));
  SELECT * INTO req FROM manual_stock.requests WHERE requests.actor=actor AND request_key=p_request_key FOR UPDATE;
  IF NOT FOUND THEN
@@ -121,8 +127,8 @@ BEGIN
  IF req.result IS NULL THEN RAISE EXCEPTION 'Incomplete request proof'; END IF;
  RETURN jsonb_build_object('committed',true,'result',req.result);
 END $$;
-REVOKE ALL ON FUNCTION public.fn_manual_stock_request_status(uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_manual_stock_request_status(uuid,jsonb) TO authenticated;
-REVOKE ALL ON FUNCTION public.fn_manual_stock_movement(uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_manual_stock_movement(uuid,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_manual_stock_request_status(uuid,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_manual_stock_request_status(uuid,jsonb,uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_manual_stock_movement(uuid,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_manual_stock_movement(uuid,jsonb,uuid) TO authenticated;
 COMMIT;

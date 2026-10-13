@@ -83,7 +83,7 @@ export async function toggleProductoActivo(c: Context): Promise<Response> {
    return c.json({success:false,error:'La activación requiere el producto original completo, clave estable, acción y estado booleano.'},400);
   const payload={mode:'activation',product_id:body.productoId,original:body.original,fields:{activo:body.activo}};
   const human=createClient(url,apiKey,{global:{headers:{Authorization:`Bearer ${acceso.token}`}},auth:{persistSession:false,autoRefreshToken:false}});
-  const {data,error}=await human.rpc(body.action==='post'?'fn_product_catalog_post':'fn_product_catalog_status',{p_request_key:body.requestKey,p_payload:payload});
+  const {data,error}=await human.rpc(body.action==='post'?'fn_product_catalog_post':'fn_product_catalog_status',{p_request_key:body.requestKey,p_payload:payload,p_expected_owner:acceso.userId});
   if(error)return respuestaError(c,500,{error:error.message});
   if(body.action==='resolve') {
    if(!object(data)||Object.keys(data).sort().join('|')!=='actor|committed|payload|request_key|result'||data.actor!==acceso.userId||data.request_key!==body.requestKey

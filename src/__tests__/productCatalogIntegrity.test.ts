@@ -34,7 +34,7 @@ describe('actual Auth SDK catalog RPC and durable protocol',()=>{
   const h=await sdkHarness(c=>c.url.pathname.endsWith('_status')?catalogStatus(c.body,true):null);
   await expect(postCatalog(h.client,owner,null,catalogPayload(formFields(),null))).rejects.toThrow();
   const before=pendingCatalog(owner,null)!;expect(await postCatalog(h.client,owner,null,null,'resolve')).toBeDefined();
-  expect(h.calls[1].body).toEqual({p_request_key:before.key,p_payload:before.payload});expect(h.calls[1].url.pathname).toBe('/rest/v1/rpc/fn_product_catalog_status');expect(pendingCatalog(owner,null)).toBeNull();
+  expect(h.calls[1].body).toEqual({p_request_key:before.key,p_payload:before.payload,p_expected_owner:owner});expect(h.calls[1].url.pathname).toBe('/rest/v1/rpc/fn_product_catalog_status');expect(pendingCatalog(owner,null)).toBeNull();
  });
  it('clears only exact canceled proof and preserves malformed status evidence',async()=>{
   let forged=true;const h=await sdkHarness(c=>c.url.pathname.endsWith('_status')?{...catalogStatus(c.body,false),...(forged?{actor:other}:{})}:null);

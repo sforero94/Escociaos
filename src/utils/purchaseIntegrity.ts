@@ -180,7 +180,7 @@ export async function postPurchase(client: PurchaseProtocolClient, owner: string
   await authorize(client, owner, current);
   const a = await attempt(owner, 'post', payload);
   await authorize(client, owner, current);
-  const result = object(await rpc(client, 'fn_purchase_post', { p_request_key: a.key, p_payload: a.payload }));
+  const result = object(await rpc(client, 'fn_purchase_post', { p_request_key: a.key, p_payload: a.payload, p_expected_owner: a.owner }));
   validatePostingReceipt(result, payload);
   await authorize(client, owner, current);
   await withAttemptLock(owner, 'post', '', () => {
@@ -195,7 +195,7 @@ export async function reversePurchase(client: PurchaseProtocolClient, owner: str
   const id = uuid(selected.id);
   let a = await withAttemptLock(owner, 'reverse', id, () => readAttempt(owner, 'reverse', id));
   if (!a) {
-    const proof = object(await rpc(client, 'fn_purchase_proof', { p_purchase_id: id }));
+    const proof = object(await rpc(client, 'fn_purchase_proof', { p_purchase_id: id, p_expected_owner: owner }));
     exactKeys(proof, ['purchase_id','expected']);
     if (proof.purchase_id !== id) fail();
     const s = snapshot(proof.expected, id);
@@ -208,7 +208,7 @@ export async function reversePurchase(client: PurchaseProtocolClient, owner: str
     for (const k of snapshotFields) if (k in selected && (selected as JsonObject)[k] !== s[k]) fail();
   }
   await authorize(client, owner, current);
-  const result = object(await rpc(client, 'fn_purchase_reverse', { p_request_key: a.key, p_payload: a.payload }));
+  const result = object(await rpc(client, 'fn_purchase_reverse', { p_request_key: a.key, p_payload: a.payload, p_expected_owner: a.owner }));
   validateReversalReceipt(result, id);
   await authorize(client, owner, current);
   await withAttemptLock(owner, 'reverse', id, () => {
@@ -248,7 +248,7 @@ export async function resolvePendingPurchase(
   if (!a) throw new Error('No hay un intento pendiente para verificar.');
   if (operation === 'post') validatePostingPayload(a.payload as unknown as { lines: PurchaseLine[] });
   await authorize(client, owner, current);
-  const result = object(await rpc(client, 'fn_purchase_resolve', { p_request_key: a.key, p_operation: operation, p_payload: a.payload }));
+  const result = object(await rpc(client, 'fn_purchase_resolve', { p_request_key: a.key, p_operation: operation, p_payload: a.payload, p_expected_owner: a.owner }));
   if (result.request_key !== a.key || result.operation !== operation) fail();
   if (result.state === 'committed') {
     exactKeys(result, ['state','request_key','operation','receipt']);

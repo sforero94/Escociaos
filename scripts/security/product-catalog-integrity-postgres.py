@@ -19,8 +19,8 @@ def create():return dict(mode='create',product_id=None,original=None,fields=fiel
 def edit(row):
  f={key:row[key] for key in fields() if key not in ('activo','cantidad_actual')}
  return dict(mode='edit',product_id=row['id'],original=json.loads(json.dumps(row)),fields=f)
-def call(p,key=None,actor=OWNER,role='authenticated',ok=True,name='fn_product_catalog_post'):
- out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.{name}('{key or uuid.uuid4()}',{m.literal(json.dumps(p))}::jsonb);COMMIT;",ok)
+def call(p,key=None,actor=OWNER,role='authenticated',ok=True,name='fn_product_catalog_post',expected_owner='session'):
+ out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.{name}('{key or uuid.uuid4()}',{m.literal(json.dumps(p))}::jsonb,{('NULL' if actor is None else m.literal(actor)+'::uuid') if expected_owner=='session' else 'NULL' if expected_owner is None else m.literal(expected_owner)+'::uuid'});COMMIT;",ok)
  return json.loads(out) if ok else out
 def state():
  ts=['public.productos','public.movimientos_inventario','product_catalog_integrity.requests','product_catalog_integrity.openings','product_catalog_integrity.audit']
@@ -61,7 +61,14 @@ def run():
   candidate=(ROOT/'src/sql/security-candidates/product-catalog-integrity.sql').read_text()
   m.sql("CREATE FUNCTION public.baseline_fault() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW;END$$;CREATE TRIGGER baseline_fault BEFORE INSERT ON public.productos FOR EACH ROW EXECUTE FUNCTION public.baseline_fault();")
   m.sql(candidate,False);m.verify(m.sql("SELECT to_regnamespace('product_catalog_integrity') IS NULL;")=='t','unreviewed current trigger baseline refuses installation')
-  m.sql('DROP TRIGGER baseline_fault ON public.productos;DROP FUNCTION public.baseline_fault();');m.sql(candidate)
+  m.sql('DROP TRIGGER baseline_fault ON public.productos;DROP FUNCTION public.baseline_fault();')
+  m.sql("CREATE FUNCTION fn_product_catalog_post(uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;CREATE FUNCTION fn_product_catalog_status(uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;")
+  m.sql(candidate)
+  m.verify(m.sql("SELECT to_regprocedure('public.fn_product_catalog_post(uuid,jsonb)') IS NULL AND to_regprocedure('public.fn_product_catalog_status(uuid,jsonb)') IS NULL;")=='t','unbound catalog overloads retired despite prior PUBLIC execute')
+  for expected_owner in [None,OTHER]:
+   for name in ['fn_product_catalog_post','fn_product_catalog_status']:
+    rejects(create(),name+' mismatch/null owner zero effects',expected='Expected operation owner/session mismatch',name=name,expected_owner=expected_owner)
+
   p=create();key=str(uuid.uuid4());r=call(p,key);row=r['product'];mid=r['movement_id']
   m.verify(row['cantidad_actual']==2.35 and row['updated_by']==OWNER and r['audit']['before_row'] is None,'create trusted row and transactional before/after audit')
   m.verify(m.sql(f"SELECT cantidad=2.35 AND saldo_anterior=0 AND saldo_nuevo=2.35 AND valor_movimiento IS NULL AND responsable='owner@synthetic.invalid' AND fecha_movimiento=(created_at AT TIME ZONE 'America/Bogota')::date FROM movimientos_inventario WHERE id='{mid}';")=='t','positive opening Entrada null valuation trusted actor/date')

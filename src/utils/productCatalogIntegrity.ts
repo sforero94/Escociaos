@@ -96,7 +96,7 @@ export async function postCatalog(client:{auth:CatalogClient['auth'];rpc:unknown
   localStorage.setItem(slot(owner,target),JSON.stringify(attempt));return attempt;
  });
  await authorize(c,owner,current);
- const response=await c.rpc(action==='post'?'fn_product_catalog_post':'fn_product_catalog_status',{p_request_key:a.key,p_payload:a.payload});
+ const response=await c.rpc(action==='post'?'fn_product_catalog_post':'fn_product_catalog_status',{p_request_key:a.key,p_payload:a.payload,p_expected_owner:a.owner});
  if(response.error)throw new Error(`${response.error.message} Conserve el intento pendiente y verifique su resultado.`);
  let result=response.data;
  if(action==='resolve') {

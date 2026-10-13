@@ -44,19 +44,19 @@ def literal(value):
     return "'" + value.replace("'", "''") + "'"
 
 
-def call(fn, payload, key=None, actor=ACTOR, ok=True, role='authenticated'):
+def call(fn, payload, key=None, actor=ACTOR, ok=True, role='authenticated', expected_owner='session'):
     key = key or str(uuid.uuid4())
     claim = actor or ''
     source = f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(claim)}; "
-    source += f"SELECT public.{fn}('{key}'::uuid,{literal(json.dumps(payload))}::jsonb); COMMIT;"
+    source += f"SELECT public.{fn}('{key}'::uuid,{literal(json.dumps(payload))}::jsonb,{('NULL' if actor is None else literal(actor)+'::uuid') if expected_owner=='session' else 'NULL' if expected_owner is None else literal(expected_owner)+'::uuid'}); COMMIT;"
     result = sql(source, ok)
     return json.loads(result) if ok else result
 
 
-def read_proof(purchase, actor=ACTOR, role='authenticated', ok=True):
+def read_proof(purchase, actor=ACTOR, role='authenticated', ok=True, expected_owner='session'):
     claim=actor or ''
     result=sql(f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(claim)}; "
-               f"SELECT public.fn_purchase_proof('{purchase}'::uuid); COMMIT;",ok)
+               f"SELECT public.fn_purchase_proof('{purchase}'::uuid,{('NULL' if actor is None else literal(actor)+'::uuid') if expected_owner=='session' else 'NULL' if expected_owner is None else literal(expected_owner)+'::uuid'}); COMMIT;",ok)
     return json.loads(result) if ok else result
 
 
@@ -163,7 +163,14 @@ def add_expenses(purchase):
 def tests():
     verify(sql('SHOW server_version;').startswith('17.6'), 'pinned PostgreSQL17.6')
     sql(FIXTURE)
+    sql("CREATE FUNCTION public.fn_purchase_post(uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$; CREATE FUNCTION public.fn_purchase_reverse(uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$; CREATE FUNCTION public.fn_purchase_resolve(uuid,text,jsonb) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$; CREATE FUNCTION public.fn_purchase_proof(uuid) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;")
     sql((ROOT / 'src/sql/security-candidates/purchase-integrity.sql').read_text())
+    verify(sql("SELECT to_regprocedure('public.fn_purchase_post(uuid,jsonb)') IS NULL AND to_regprocedure('public.fn_purchase_reverse(uuid,jsonb)') IS NULL AND to_regprocedure('public.fn_purchase_resolve(uuid,text,jsonb)') IS NULL AND to_regprocedure('public.fn_purchase_proof(uuid)') IS NULL")== 't','unbound purchase overloads retired despite previous PUBLIC execute')
+    for expected_owner in [None,MANAGER]:
+        for fn in ['fn_purchase_post','fn_purchase_reverse']:
+            before=state();error=call(fn,{'lines':[line()]},expected_owner=expected_owner,ok=False);verify('Expected operation owner/session mismatch' in error and state()==before,fn+' mismatched/null owner zero effects')
+        before=state();error=resolve_attempt(str(uuid.uuid4()),'post',{'lines':[line()]},expected_owner=expected_owner,ok=False);verify('Expected operation owner/session mismatch' in error and state()==before,'resolve mismatched/null owner cannot fence')
+        before=state();error=read_proof(str(uuid.uuid4()),expected_owner=expected_owner,ok=False);verify('Expected operation owner/session mismatch' in error and state()==before,'proof mismatched/null owner refuses before disclosure')
     for field, value in [('proveedor_id', None), ('proveedor', 'Stale supplier'), ('numero_factura', ' '), ('unidad', 'Litros')]:
         failed_atomically('fn_purchase_post', {'lines': [line(), {**line(P2), field: value}]}, label=f'all-line fresh reference validation {field}')
     sql(f"UPDATE public.fin_proveedores SET activo=false WHERE id='{SUPPLIER}';")
@@ -337,7 +344,7 @@ def tests():
     # A profile change cannot race a posting after fresh authorization: row-share
     # lock lasts until commit. Synthetic pg_sleep is bounded and has no network.
     lock_key=str(uuid.uuid4()); lock_payload={'lines':[line(P2,1,2,2)]}
-    session_sql=f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT public.fn_purchase_post('{lock_key}',{literal(json.dumps(lock_payload))}::jsonb); SELECT pg_sleep(2); COMMIT;"
+    session_sql=f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT public.fn_purchase_post('{lock_key}',{literal(json.dumps(lock_payload))}::jsonb,'{ACTOR}'::uuid); SELECT pg_sleep(2); COMMIT;"
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         posting=executor.submit(sql,session_sql)
         deadline=time.monotonic()+5
@@ -361,9 +368,9 @@ def tests():
     sql(f"UPDATE public.usuarios SET rol='Administrador' WHERE id='{ACTOR}';")
 
 
-def resolve_attempt(key, operation, payload, actor=ACTOR, role='authenticated', ok=True):
+def resolve_attempt(key, operation, payload, actor=ACTOR, role='authenticated', ok=True, expected_owner='session'):
     result=sql(f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; "
-        f"SELECT public.fn_purchase_resolve('{key}','{operation}',{literal(json.dumps(payload))}::jsonb); COMMIT;",ok)
+        f"SELECT public.fn_purchase_resolve('{key}','{operation}',{literal(json.dumps(payload))}::jsonb,{('NULL' if actor is None else literal(actor)+'::uuid') if expected_owner=='session' else 'NULL' if expected_owner is None else literal(expected_owner)+'::uuid'}); COMMIT;",ok)
     return json.loads(result) if ok else result
 
 
@@ -396,7 +403,7 @@ def resolution_tests():
     verify(resolve_attempt(reverse_key,'reverse',reverse_payload)['state']=='cancelled','unposted reversal sealed separately')
     failed_atomically('fn_purchase_reverse',reverse_payload,reverse_key,label='late original reversal cannot delete preserved purchase')
     concurrent_key=str(uuid.uuid4())
-    source=f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT public.fn_purchase_post('{concurrent_key}',{literal(json.dumps(payload))}::jsonb); SELECT pg_sleep(1); COMMIT;"
+    source=f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT public.fn_purchase_post('{concurrent_key}',{literal(json.dumps(payload))}::jsonb,'{ACTOR}'::uuid); SELECT pg_sleep(1); COMMIT;"
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         posting=executor.submit(sql,source)
         deadline=time.monotonic()+5
