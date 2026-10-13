@@ -356,6 +356,7 @@ export function HojaDeVida() {
             open={tratamientoOpen}
             onOpenChange={setTratamientoOpen}
             animalId={animal.id}
+            originalAnimal={{...animal}}
             animalEtiqueta={
               animal.nombre ?? (animal.numero != null ? `#${animal.numero}` : 'sin caravana')
             }

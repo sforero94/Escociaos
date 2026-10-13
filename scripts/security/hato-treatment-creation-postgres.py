@@ -9,8 +9,8 @@ OWNER=m.OWNER;OTHER=m.OTHER;ANIMAL=m.PRODUCT
 def literal(value):return m.literal(json.dumps(value))+'::jsonb'
 def proposal(next_date='2026-10-15'):
  return dict(version=1,animalId=ANIMAL,nombre='Tratamiento de prueba',fechaInicio='2026-10-12',nota=None,fechaProximoPaso=next_date,descripcionPaso=None,observedAnimal=json.loads(m.sql(f"SELECT to_jsonb(a) FROM public.hato_animales a WHERE id='{ANIMAL}';")))
-def web(p,key,action='prepare',actor=OWNER,role='authenticated',ok=True):
- out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.fn_hato_treatment_create_web({m.literal(action) if action is not None else 'NULL'},{m.literal(key) if key else 'NULL'}::uuid,{literal(p)});COMMIT;",ok);return json.loads(out) if ok else out
+def web(p,key,action='prepare',actor=OWNER,role='authenticated',ok=True,expected_owner=OWNER):
+ out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SET LOCAL request.jwt.claim.sub={m.literal(actor or '')};SELECT public.fn_hato_treatment_create_web({m.literal(action) if action is not None else 'NULL'},{m.literal(key) if key else 'NULL'}::uuid,{literal(p)},{m.literal(expected_owner) if expected_owner else 'NULL'}::uuid);COMMIT;",ok);return json.loads(out) if ok else out
 
 def telegram(p,action='prepare',sender=123,message=1,key=None,chat=None,role='service_role',ok=True):
  out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SELECT public.fn_hato_treatment_create_telegram({m.literal(action) if action is not None else 'NULL'},{sender if sender is not None else 'NULL'},{chat if chat is not None else sender if sender is not None else 'NULL'},{message if message is not None else 'NULL'},{literal(p)},{m.literal(key) if key else 'NULL'}::uuid);COMMIT;",ok);return json.loads(out) if ok else out
@@ -56,7 +56,11 @@ def run():
   drift=["ALTER TABLE public.hato_tratamientos ADD COLUMN unexpected text", "ALTER TABLE public.hato_tratamientos ALTER COLUMN fecha_inicio DROP NOT NULL", "ALTER TABLE public.hato_tratamientos ALTER COLUMN estado SET DEFAULT 'completado'", "ALTER TABLE public.hato_tratamientos DROP CONSTRAINT hato_tratamientos_animal_id_fkey", "GRANT SELECT ON public.hato_tratamientos TO anon", "ALTER TABLE public.hato_tratamiento_pasos DISABLE ROW LEVEL SECURITY", "ALTER TABLE public.telegram_usuarios DROP CONSTRAINT telegram_usuarios_telegram_id_key", "ALTER TABLE public.usuarios ADD COLUMN unexpected text", "ALTER TABLE public.hato_animales ADD COLUMN unexpected text", "ALTER TABLE public.telegram_usuarios ALTER COLUMN activo SET DEFAULT true"]
   for mutation in drift:
    m.sql('BEGIN;'+mutation+';'+gate+'ROLLBACK;',False);m.verify(True,'installation refuses shape drift '+mutation)
-  p=proposal();key=str(uuid.uuid4());r=web(p,key);m.verify(r['state']=='pending' and r['payload']==p,'human immutable proposal reservation');r=web(p,key,'post');m.verify(r['state']=='committed' and len(r['receipt']['after']['steps'])==1,'header plus mandatory requested pending step committed')
+  p=proposal();
+  for action in ['prepare','post','status','resolve']:
+   reject(lambda:web(p,str(uuid.uuid4()),action,expected_owner=OTHER,ok=False),'expected owner mismatch no effect '+action)
+  reject(lambda:web(p,str(uuid.uuid4()),expected_owner=None,ok=False),'null expected owner refused')
+  key=str(uuid.uuid4());r=web(p,key);m.verify(r['state']=='pending' and r['payload']==p,'human immutable proposal reservation');r=web(p,key,'post');m.verify(r['state']=='committed' and len(r['receipt']['after']['steps'])==1,'header plus mandatory requested pending step committed')
   before=state();m.verify(web(p,key,'post')==r and state()==before,'lost human response exact key replay no duplicate')
   q=proposal(None);k=str(uuid.uuid4());web(q,k);c=web(q,k,'post');m.verify(c['receipt']['after']['header']['estado']=='completado' and c['receipt']['after']['steps']==[],'no follow-up produces completed header with zero steps')
   t=telegram(p);m.verify(telegram(p)==t,'server action slot reuses same UUID after missing prepare response');tr=telegram(p,'post',key=t['requestKey']);m.verify(tr['receipt']['actor']['profileId']==OWNER and tr['receipt']['after']['header']['fuente']=='telegram','linked Telegram trusted source/creator receipt')
@@ -84,11 +88,11 @@ def run():
    reject(lambda:telegram(p,message=303,ok=False),'null/missing module refused '+modules)
   m.sql("UPDATE public.telegram_usuarios SET modulos_permitidos=ARRAY['hato_produccion'] WHERE telegram_id=123;")
   # Both historical human roles and Telegram non-manager linked worker lane.
-  g=str(uuid.uuid4());web(p,g,actor=OTHER);m.verify(web(p,g,'post',actor=OTHER)['state']=='committed','Gerencia human creation remains allowed')
+  g=str(uuid.uuid4());web(p,g,actor=OTHER,expected_owner=OTHER);m.verify(web(p,g,'post',actor=OTHER,expected_owner=OTHER)['state']=='committed','Gerencia human creation remains allowed')
   m.sql(f"UPDATE public.usuarios SET rol='Campo' WHERE id='{OWNER}';")
   field=telegram(p,message=304);m.verify(telegram(p,'post',message=304,key=field['requestKey'])['state']=='committed','linked Campo Telegram lane remains allowed')
   m.sql(f"UPDATE public.usuarios SET rol='Administrador' WHERE id='{OWNER}';")
-  reject(lambda:web(p,key,'status',actor=OTHER,ok=False),'cross-human key refused')
+  reject(lambda:web(p,key,'status',actor=OTHER,expected_owner=OTHER,ok=False),'cross-human key refused')
   changed=dict(p);changed['nombre']='Changed'
   reject(lambda:web(changed,key,'status',ok=False),'same key changed original payload refused')
   reject(lambda:telegram(changed,message=1,ok=False),'same Telegram slot changed payload refused')
@@ -147,7 +151,7 @@ def run():
   # Corrupt durable proof is never accepted on committed replay.
   m.sql("ALTER TABLE hato_treatment_creation.audit DISABLE TRIGGER immutable_creation_proof;")
   m.sql(f"DELETE FROM hato_treatment_creation.audit WHERE request_key='{g}';")
-  reject(lambda:web(p,g,'status',actor=OTHER,ok=False),'missing immutable audit refuses committed replay')
+  reject(lambda:web(p,g,'status',actor=OTHER,expected_owner=OTHER,ok=False),'missing immutable audit refuses committed replay')
   print('Treatment foundation assertions',m.CHECKS,flush=True)
  finally:
   m.docker(['rm','-f',m.NAME],check=False);m.verify(m.docker(['inspect',m.NAME],check=False).returncode!=0,'finally cleanup verified')

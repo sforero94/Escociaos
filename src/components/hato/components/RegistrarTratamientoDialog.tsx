@@ -1,6 +1,6 @@
 // ARCHIVO: components/hato/components/RegistrarTratamientoDialog.tsx
 // DESCRIPCIÓN: Diálogo "Registrar tratamiento" de la card Tratamientos
-// (Hoja de Vida). Escribe por `fn_hato_registrar_tratamiento` (138).
+// (Hoja de Vida). Usa el protocolo revisado `fn_hato_treatment_create_web`.
 //
 // DECISIONES DEL DUEÑO (2026-09-09) QUE ESTE FORMULARIO EJECUTA
 // ------------------------------------------------------------
@@ -18,7 +18,7 @@
 // no había un solo paso que recordar. El texto de ayuda lo dice, para que
 // dejarla vacía sea una decisión y no un descuido.
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, useRef, useLayoutEffect, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -33,6 +33,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {useAuth} from '@/contexts/AuthContext';
+import {pendingBrowserTreatment,treatmentCanonical} from '@/utils/hato/hatoTreatmentBrowserAttempt';
+import {canonicalTreatmentProposal,type JsonRow,type TreatmentProposal} from '@/utils/hato/hatoTreatmentCreation';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import type {
   InputRegistrarTratamiento,
@@ -43,6 +46,7 @@ export function RegistrarTratamientoDialog({
   open,
   onOpenChange,
   animalId,
+  originalAnimal,
   animalEtiqueta,
   registrar,
   guardando,
@@ -51,9 +55,10 @@ export function RegistrarTratamientoDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   animalId: string;
+  originalAnimal: JsonRow;
   /** "MOCA (#177)" -- para que el título diga sobre cuál vaca se escribe. */
   animalEtiqueta: string;
-  registrar: (input: InputRegistrarTratamiento) => Promise<ResultadoRegistrarTratamiento>;
+  registrar: (input: InputRegistrarTratamiento,mode?:'post'|'retry'|'status'|'resolve'|'new',current?:()=>boolean) => Promise<ResultadoRegistrarTratamiento>;
   guardando: boolean;
   onGuardado: () => void;
 }) {
@@ -63,17 +68,52 @@ export function RegistrarTratamientoDialog({
   const [fechaProximoPaso, setFechaProximoPaso] = useState('');
   const [descripcionPaso, setDescripcionPaso] = useState('');
 
-  useEffect(() => {
-    if (open) {
-      setNombre('');
-      // `obtenerFechaHoy()` y nunca `toISOString().slice(0,10)`: de 19:00 en
-      // adelante eso ya devuelve mañana en Bogotá.
-      setFechaInicio(obtenerFechaHoy());
-      setNota('');
-      setFechaProximoPaso('');
-      setDescripcionPaso('');
+  const {user}=useAuth();const owner=user?.id;
+  const identity=`${open}:${owner}:${animalId}`;const life=useRef({identity,n:0,mounted:true});
+  const [original,setOriginal]=useState<JsonRow|null>(null);
+  const [loadedGeneration,setLoadedGeneration]=useState(-1);
+  const [pending,setPending]=useState(false);const [pendingPayload,setPendingPayload]=useState<TreatmentProposal|null>(null);const [message,setMessage]=useState('');
+  const revision=useRef(0);const latest=useRef(originalAnimal);
+  useLayoutEffect(()=>{latest.current=originalAnimal;},[originalAnimal]);
+  const draftKey=owner?`hato_treatment_draft_v1:${owner}:${animalId}`:null;
+  useLayoutEffect(()=>{life.current={identity,n:life.current.n+1,mounted:true};return()=>{life.current.mounted=false;life.current.n++;};},[identity]);
+  useLayoutEffect(()=>{
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Restore the owned external storage snapshot on dialog/session changes.
+    if(!open)return;revision.current++;setMessage('');
+    let a=null;try{a=owner?pendingBrowserTreatment(owner,animalId):null;setPending(!!a);setPendingPayload(a?.payload??null);}catch(error){setMessage(String(error));setPending(true);}
+    let draft:InputRegistrarTratamiento|null=null;
+    try{const raw=draftKey?localStorage.getItem(draftKey):null;if(raw){const d=JSON.parse(raw) as InputRegistrarTratamiento;if(d.animalId===animalId&&d.observedAnimal?.id===animalId&&typeof d.nombre==='string'&&typeof d.fechaInicio==='string'&&[d.nota,d.fechaProximoPaso,d.descripcionPaso].every(v=>v===null||typeof v==='string'))draft=d;}}catch{setMessage('No se pudo recuperar el borrador original.');}
+    const p=draft??a?.payload;
+    setNombre(p?.nombre??'');setFechaInicio(p?.fechaInicio??obtenerFechaHoy());setNota(p?.nota??'');setFechaProximoPaso(p?.fechaProximoPaso??'');setDescripcionPaso(p?.descripcionPaso??'');
+    setOriginal(JSON.parse(JSON.stringify(p?.observedAnimal??latest.current)) as JsonRow);setLoadedGeneration(life.current.n);
+  },[open,owner,animalId,draftKey]);
+  useEffect(()=>{
+    if(!open||!draftKey||!original||loadedGeneration!==life.current.n)return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Surface failure from the external durable-storage write.
+    try{localStorage.setItem(draftKey,JSON.stringify({animalId,nombre,fechaInicio,nota:nota||null,fechaProximoPaso:fechaProximoPaso||null,descripcionPaso:descripcionPaso||null,observedAnimal:original}));}catch{setMessage('No se pudo conservar el borrador. No cierre el formulario.');}
+  },[open,draftKey,animalId,nombre,fechaInicio,nota,fechaProximoPaso,descripcionPaso,original,loadedGeneration]);
+  const input=():InputRegistrarTratamiento=>({animalId,nombre:nombre.trim(),fechaInicio,nota:nota.trim()||null,fechaProximoPaso:fechaProximoPaso||null,descripcionPaso:descripcionPaso.trim()||null,observedAnimal:original!});
+  const edit=()=>{revision.current++;};
+  async function perform(mode:'post'|'retry'|'status'|'resolve'|'new'){
+    if(!original)return;const n=life.current.n,r=revision.current;const sent=input();
+    const current=()=>life.current.mounted&&life.current.n===n&&life.current.identity===identity&&open;
+    const outcome=await registrar(sent,mode,current);if(!current())return;
+    try{const a=owner?pendingBrowserTreatment(owner,animalId):null;setPending(!!a);setPendingPayload(a?.payload??null);}catch{setPending(true);}
+    if(outcome.error){toast.error(outcome.error);setMessage(outcome.error);return;}
+    let sameProposal=false;try{sameProposal=!!outcome.result&&treatmentCanonical(canonicalTreatmentProposal({version:1,...sent}))===treatmentCanonical(outcome.result.payload);}catch{/* Later incomplete edits remain an unsent draft. */}
+    if(mode==='new'){
+      if(revision.current!==r)return;
+      if(!sameProposal){setMessage('El intento anterior quedó resuelto. Revise los cambios conservados antes de guardarlos.');return;}
+      setOriginal(JSON.parse(JSON.stringify(latest.current)) as JsonRow);setNombre('');setNota('');setFechaInicio(obtenerFechaHoy());setFechaProximoPaso('');setDescripcionPaso('');setMessage('Revise el animal y complete un tratamiento nuevo.');revision.current++;return;
     }
-  }, [open]);
+    const state=outcome.result?.state;
+    setMessage(state==='committed'?'El intento original quedó registrado.':state==='canceled'?'El intento original fue cancelado.':state==='pending'?'El intento original está pendiente. Puede reintentar o cancelarlo.':'El intento original aún no se registró. Puede reintentar o cancelarlo.');
+    if(state!=='committed')return;
+    onGuardado();
+    if(revision.current!==r||treatmentCanonical(input())!==treatmentCanonical(sent)||!sameProposal)return;
+    toast.success(sent.fechaProximoPaso?'Tratamiento registrado. Llegará un recordatorio por Telegram el día del próximo paso.':'Tratamiento registrado');
+    try{if(draftKey)localStorage.removeItem(draftKey);}catch{setMessage('El tratamiento está registrado. No se pudo limpiar el borrador local.');return;}onOpenChange(false);
+  }
 
   const proximaFechaInvalida = fechaProximoPaso !== '' && fechaProximoPaso < fechaInicio;
 
@@ -92,25 +132,7 @@ export function RegistrarTratamientoDialog({
       return;
     }
 
-    const resultado = await registrar({
-      animalId,
-      nombre: nombre.trim(),
-      fechaInicio,
-      nota: nota.trim() || null,
-      fechaProximoPaso: fechaProximoPaso || null,
-      descripcionPaso: descripcionPaso.trim() || null,
-    });
-    if (!resultado.ok) {
-      toast.error(resultado.error ?? 'Error desconocido registrando el tratamiento');
-      return;
-    }
-    toast.success(
-      fechaProximoPaso
-        ? 'Tratamiento registrado. Llegará un recordatorio por Telegram el día del próximo paso.'
-        : 'Tratamiento registrado',
-    );
-    onGuardado();
-    onOpenChange(false);
+    await perform('post');
   };
 
   return (
@@ -118,15 +140,23 @@ export function RegistrarTratamientoDialog({
       <DialogContent size="md">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
           <DialogHeader>
-            <DialogTitle>Registrar tratamiento — {animalEtiqueta}</DialogTitle>
+            <DialogTitle>Registrar tratamiento — {String(original?.nombre??(original?.numero!=null?`#${original.numero}`:animalEtiqueta))}</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
+            {message&&<p role="status">{message}</p>}
+            {pending&&<div className="flex flex-wrap gap-2">
+              {pendingPayload&&<p>Intento original: {pendingPayload.nombre} · {pendingPayload.fechaInicio}{pendingPayload.fechaProximoPaso?` · Seguimiento: ${pendingPayload.fechaProximoPaso}`:''}{pendingPayload.nota?` · ${pendingPayload.nota}`:''}{pendingPayload.descripcionPaso?` · ${pendingPayload.descripcionPaso}`:''}</p>}
+              <Button type="button" disabled={guardando} onClick={()=>perform('retry')}>Reintentar intento original</Button>
+              <Button type="button" disabled={guardando} onClick={()=>perform('status')}>Verificar intento original</Button>
+              <Button type="button" disabled={guardando} onClick={()=>perform('resolve')}>Cancelar intento original</Button>
+              <Button type="button" disabled={guardando} onClick={()=>perform('new')}>Preparar otro tratamiento</Button>
+            </div>}
             <div className="space-y-1.5">
               <Label htmlFor="ttto-nombre">¿Qué se aplicó?</Label>
               <Input
                 id="ttto-nombre"
                 value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
+                onChange={(e) => {edit();setNombre(e.target.value);}}
                 placeholder="Ej: Estrumate"
                 maxLength={120}
                 autoFocus
@@ -139,7 +169,7 @@ export function RegistrarTratamientoDialog({
                 id="ttto-fecha"
                 type="date"
                 value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
+                onChange={(e) => {edit();setFechaInicio(e.target.value);}}
               />
             </div>
 
@@ -148,7 +178,7 @@ export function RegistrarTratamientoDialog({
               <Textarea
                 id="ttto-nota"
                 value={nota}
-                onChange={(e) => setNota(e.target.value)}
+                onChange={(e) => {edit();setNota(e.target.value);}}
                 rows={3}
                 placeholder="Dosis, quién aplicó, días de retiro de la leche, lo que sea útil."
               />
@@ -162,7 +192,7 @@ export function RegistrarTratamientoDialog({
                   type="date"
                   value={fechaProximoPaso}
                   min={fechaInicio || undefined}
-                  onChange={(e) => setFechaProximoPaso(e.target.value)}
+                  onChange={(e) => {edit();setFechaProximoPaso(e.target.value);}}
                 />
                 <p className="text-xs text-gray-500">
                   Si la dejas vacía, el tratamiento queda como completado y nadie recibe aviso. Con
@@ -182,7 +212,7 @@ export function RegistrarTratamientoDialog({
                   <Input
                     id="ttto-paso-desc"
                     value={descripcionPaso}
-                    onChange={(e) => setDescripcionPaso(e.target.value)}
+                    onChange={(e) => {edit();setDescripcionPaso(e.target.value);}}
                     placeholder="Ej: segunda dosis"
                     maxLength={120}
                   />
@@ -199,7 +229,7 @@ export function RegistrarTratamientoDialog({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={guardando}>
+            <Button type="submit" disabled={guardando||!original}>
               {guardando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Guardar
             </Button>

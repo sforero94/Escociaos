@@ -192,15 +192,17 @@ BEGIN
  RETURN hato_treatment_creation.response(r);
 END $$;
 
-CREATE FUNCTION public.fn_hato_treatment_create_web(p_action text,p_request_key uuid,p_payload jsonb) RETURNS jsonb
+CREATE FUNCTION public.fn_hato_treatment_create_web(p_action text,p_request_key uuid,p_payload jsonb,p_expected_owner uuid) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-BEGIN RETURN hato_treatment_creation.step(hato_treatment_creation.web_actor(),p_action,p_request_key,p_payload);END $$;
+BEGIN
+ IF p_expected_owner IS NULL OR auth.uid() IS DISTINCT FROM p_expected_owner THEN RAISE EXCEPTION 'Original human owner changed' USING ERRCODE='42501';END IF;
+ RETURN hato_treatment_creation.step(hato_treatment_creation.web_actor(),p_action,p_request_key,p_payload);END $$;
 CREATE FUNCTION public.fn_hato_treatment_create_telegram(p_action text,p_sender bigint,p_chat_id bigint,p_message_id bigint,p_payload jsonb,p_request_key uuid DEFAULT NULL) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 BEGIN RETURN hato_treatment_creation.step(hato_treatment_creation.telegram_actor(p_sender,p_chat_id,p_message_id),p_action,p_request_key,p_payload,p_sender,p_chat_id,p_message_id);END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA hato_treatment_creation FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION public.fn_hato_treatment_create_web(text,uuid,jsonb),public.fn_hato_treatment_create_telegram(text,bigint,bigint,bigint,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_create_web(text,uuid,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_hato_treatment_create_web(text,uuid,jsonb,uuid),public.fn_hato_treatment_create_telegram(text,bigint,bigint,bigint,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_create_web(text,uuid,jsonb,uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_create_telegram(text,bigint,bigint,bigint,jsonb,uuid) TO service_role;
 -- Old RPC execute remains unchanged until separately authorized coordinated release.
 COMMIT;

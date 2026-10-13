@@ -50,11 +50,11 @@ async function call(client:TreatmentClient,name:string,args:Record<string,unknow
 }
 export async function prepareWebTreatment(client:TreatmentClient,owner:string,key:string,proposal:TreatmentProposal):Promise<TreatmentAttempt>{
  if(!uuid(owner)||!uuid(key))return fail();const p=canonicalTreatmentProposal(proposal);
- const r=await call(client,'fn_hato_treatment_create_web',{p_action:'prepare',p_request_key:key,p_payload:p},owner,p,null,key);if(r.state==='unknown')return fail();return r as TreatmentAttempt;
+ const r=await call(client,'fn_hato_treatment_create_web',{p_action:'prepare',p_request_key:key,p_payload:p,p_expected_owner:owner},owner,p,null,key);if(r.state==='unknown')return fail();return r as TreatmentAttempt;
 }
 export async function queryWebTreatment(client:TreatmentClient,owner:string,attempt:TreatmentAttempt,action:'post'|'status'|'resolve'):Promise<TreatmentResult>{
  if(!['post','status','resolve'].includes(action))return fail();validateTreatmentResult(attempt,owner,attempt.payload,null,attempt.requestKey);
- return call(client,'fn_hato_treatment_create_web',{p_action:action,p_request_key:attempt.requestKey,p_payload:attempt.payload},owner,attempt.payload,null,attempt.requestKey,attempt.actor);
+ return call(client,'fn_hato_treatment_create_web',{p_action:action,p_request_key:attempt.requestKey,p_payload:attempt.payload,p_expected_owner:owner},owner,attempt.payload,null,attempt.requestKey,attempt.actor);
 }
 export async function prepareTelegramTreatment(client:TreatmentClient,action:TelegramTreatmentAction,proposal:TreatmentProposal):Promise<TreatmentAttempt>{
  if(!actionProof(action))return fail();const p=canonicalTreatmentProposal(proposal);
@@ -73,5 +73,5 @@ export async function resolveTelegramTreatmentAction(client:TreatmentClient,acti
 /** Recover or cancel a lost first browser prepare using the persisted original key/proposal. */
 export async function resolveWebTreatmentKey(client:TreatmentClient,owner:string,key:string,proposal:TreatmentProposal,mode:'status'|'resolve'):Promise<TreatmentResult>{
  if(!uuid(owner)||!uuid(key)||!['status','resolve'].includes(mode))return fail();const p=canonicalTreatmentProposal(proposal);
- return call(client,'fn_hato_treatment_create_web',{p_action:mode,p_request_key:key,p_payload:p},owner,p,null,key);
+ return call(client,'fn_hato_treatment_create_web',{p_action:mode,p_request_key:key,p_payload:p,p_expected_owner:owner},owner,p,null,key);
 }
