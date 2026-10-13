@@ -15,7 +15,7 @@ def setup():
  f.sql("""ALTER TABLE movimientos_inventario ADD COLUMN factura text;
  ALTER TABLE movimientos_inventario ADD COLUMN created_at timestamptz DEFAULT now();
  ALTER TABLE movimientos_inventario ADD COLUMN notas text;
- CREATE TABLE telegram_usuarios(id uuid PRIMARY KEY,usuario_id uuid,nombre_display text NOT NULL,rol_bot text NOT NULL,modulos_permitidos text[],activo bool,updated_at timestamptz DEFAULT now());
+ CREATE TABLE telegram_usuarios(id uuid PRIMARY KEY,usuario_id uuid,nombre_display text NOT NULL,rol_bot text NOT NULL,modulos_permitidos text[],activo bool,updated_at timestamptz DEFAULT now(),telegram_id bigint UNIQUE);
  ALTER TABLE telegram_usuarios ENABLE ROW LEVEL SECURITY;
  CREATE TYPE estado_excepcion_inventario AS ENUM ('reportada','explicada','ajuste_aprobado','ajuste_aplicado','resuelta_con_captura');
  CREATE TABLE rondas_inventario(id uuid PRIMARY KEY,periodo date,estado text);
@@ -38,11 +38,11 @@ def setup():
  f.sql(ACTUAL.read_text().replace('END $function$','END $function$;'))
  f.sql('REVOKE ALL ON FUNCTION fn_ronda_validar_actor(uuid,uuid,text),fn_ronda_aplicar_ajuste(jsonb),fn_ronda_resolver_con_captura(jsonb) FROM PUBLIC,anon; GRANT EXECUTE ON FUNCTION fn_ronda_validar_actor(uuid,uuid,text),fn_ronda_aplicar_ajuste(jsonb),fn_ronda_resolver_con_captura(jsonb) TO authenticated,service_role;')
  f.sql((ROOT/'src/sql/security-candidates/ronda-stock-integrity.sql').read_text())
- f.TABLES=['usuarios','telegram_usuarios','productos','movimientos_inventario','rondas_excepciones','rondas_inventario','inventario_causas_raiz','ronda_stock_integrity.proofs']
+ f.TABLES=['usuarios','telegram_usuarios','productos','movimientos_inventario','rondas_excepciones','rondas_inventario','inventario_causas_raiz','ronda_stock_integrity.proofs','ronda_stock_integrity.proposals','ronda_stock_integrity.deliveries']
 
 def reset(state='ajuste_aprobado',quantity=12,theory=10):
  f.sql('TRUNCATE '+','.join(f.TABLES)+' CASCADE;')
- f.sql(f"INSERT INTO usuarios(id,email,rol,activo) VALUES ('{f.ACTOR}','admin@synthetic.invalid','Administrador',true),('{f.MANAGER}','manager@synthetic.invalid','Gerencia',true),('{f.INACTIVE}','inactive@synthetic.invalid','Administrador',false),('{f.VIEWER}','viewer@synthetic.invalid','Verificador',true) ON CONFLICT(id) DO UPDATE SET activo=EXCLUDED.activo,rol=EXCLUDED.rol; INSERT INTO telegram_usuarios VALUES ('{WORKER}',NULL,'Worker','campo',ARRAY['inventario_ronda','inventario_explicacion'],true,now()),('{TG_MANAGER}','{f.MANAGER}','Manager','gerencia',ARRAY['inventario_aprobacion','inventario_explicacion'],true,now()) ON CONFLICT(id) DO UPDATE SET usuario_id=EXCLUDED.usuario_id,activo=EXCLUDED.activo,modulos_permitidos=EXCLUDED.modulos_permitidos,rol_bot=EXCLUDED.rol_bot; INSERT INTO productos(id,nombre,unidad_medida,cantidad_actual,precio_unitario,activo) VALUES ('{f.P1}','Synthetic SKU','Kilos',10,2,true),('{f.P2}','Other SKU','Kilos',10,2,true); INSERT INTO rondas_inventario VALUES ('{ROUND}','2026-10-01','en_curso'); INSERT INTO inventario_causas_raiz VALUES ('synthetic','Synthetic cause',true); INSERT INTO rondas_excepciones(id,ronda_id,producto_id,estado,cantidad_fisica,teorico_conteo,explicacion_david_en,decision_causa) VALUES ('{EX}','{ROUND}','{f.P1}','{state}',{quantity},{theory},now(),'synthetic'),('{EX2}','{ROUND}','{f.P1}','{state}',{quantity},{theory},now(),'synthetic');")
+ f.sql(f"INSERT INTO usuarios(id,email,rol,activo) VALUES ('{f.ACTOR}','admin@synthetic.invalid','Administrador',true),('{f.MANAGER}','manager@synthetic.invalid','Gerencia',true),('{f.INACTIVE}','inactive@synthetic.invalid','Administrador',false),('{f.VIEWER}','viewer@synthetic.invalid','Verificador',true) ON CONFLICT(id) DO UPDATE SET activo=EXCLUDED.activo,rol=EXCLUDED.rol; INSERT INTO telegram_usuarios(id,usuario_id,nombre_display,rol_bot,modulos_permitidos,activo,updated_at) VALUES ('{WORKER}',NULL,'Worker','campo',ARRAY['inventario_ronda','inventario_explicacion'],true,now()),('{TG_MANAGER}','{f.MANAGER}','Manager','gerencia',ARRAY['inventario_aprobacion','inventario_explicacion'],true,now()) ON CONFLICT(id) DO UPDATE SET usuario_id=EXCLUDED.usuario_id,activo=EXCLUDED.activo,modulos_permitidos=EXCLUDED.modulos_permitidos,rol_bot=EXCLUDED.rol_bot; INSERT INTO productos(id,nombre,unidad_medida,cantidad_actual,precio_unitario,activo) VALUES ('{f.P1}','Synthetic SKU','Kilos',10,2,true),('{f.P2}','Other SKU','Kilos',10,2,true); INSERT INTO rondas_inventario VALUES ('{ROUND}','2026-10-01','en_curso'); INSERT INTO inventario_causas_raiz VALUES ('synthetic','Synthetic cause',true); INSERT INTO rondas_excepciones(id,ronda_id,producto_id,estado,cantidad_fisica,teorico_conteo,explicacion_david_en,decision_causa) VALUES ('{EX}','{ROUND}','{f.P1}','{state}',{quantity},{theory},now(),'synthetic'),('{EX2}','{ROUND}','{f.P1}','{state}',{quantity},{theory},now(),'synthetic');")
 
 def body(op='adjust',exception=EX,user=f.ACTOR,tg=None):
  p=dict(actor_usuario_id=user,actor_telegram_usuario_id=tg,excepcion_id=exception,fecha_movimiento='2026-10-10')
@@ -60,6 +60,65 @@ def reject(label,p=None,op='adjust',**kw):
  if any(x in err for x in ['ambiguous','syntax error','is not assigned yet']):raise AssertionError(err)
  f.verify(f.state()==before,label)
  return err
+
+def confirm(p,token,ok=True):
+ out=f.sql(f"BEGIN;SET LOCAL ROLE authenticated;SET LOCAL request.jwt.claim.sub='{f.ACTOR}';SELECT fn_ronda_confirmar_ajuste({f.literal(json.dumps(p))}::jsonb,'{token}');COMMIT;",ok)
+ return json.loads(out) if ok else out
+
+def telegram_rpc(name,args,ok=True):
+ out=f.sql(f"BEGIN;SET LOCAL ROLE service_role;SET LOCAL request.jwt.claim.sub='';SELECT {name}({args});COMMIT;",ok)
+ return json.loads(out) if ok else out
+
+def telegram_tests():
+ reset();f.sql(f"UPDATE telegram_usuarios SET telegram_id=123 WHERE id='{TG_MANAGER}';UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';")
+ warning=telegram_rpc('fn_ronda_telegram_ajuste',f"123,123,'{EX}','2026-10-10'");token=warning['propuesta_id'];before=f.state()
+ f.verify({k:warning[k] for k in ['producto_nombre','unidad','fecha_movimiento','cantidad_fisica']}==dict(producto_nombre='Synthetic SKU',unidad='Kilos',fecha_movimiento='2026-10-10',cantidad_fisica=12),'warning exposes immutable original SKU unit date and physical count')
+ err=telegram_rpc('fn_ronda_telegram_confirmar_ajuste',f"123,123,456,'{token}'",False)
+ f.verify('Original private Telegram review required' in err and f.state()==before,'undelivered private warning has no destructive confirmation')
+ before=f.state();f.verify(telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{token}'")==warning and f.state()==before,'absent-delivery recovery retains same proposal without posting')
+ telegram_rpc('fn_ronda_telegram_registrar_revision',f"123,123,456,'{token}'")
+ for args in [f"123,999,456,'{token}'",f"124,124,456,'{token}'",f"123,123,457,'{token}'",f"123,123,456,'{uuid.uuid4()}'"]:
+  before=f.state();telegram_rpc('fn_ronda_telegram_confirmar_ajuste',args,False);f.verify(f.state()==before,'forwarded/foreign/unknown proposal confirmation refuses '+args)
+ before=f.state();review=telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{token}'");f.verify(review==warning and f.state()==before,'read-only recovery returns same original proposal with no posting or key replacement')
+ telegram_rpc('fn_ronda_telegram_registrar_revision',f"123,123,789,'{token}'")
+ f.verify(f.sql('SELECT count(*)=2 FROM ronda_stock_integrity.deliveries;')=='t','commit-unknown original delivery can recover another immutable control for same proposal')
+ result=telegram_rpc('fn_ronda_telegram_confirmar_ajuste',f"123,123,456,'{token}'")
+ f.verify(result['saldo_nuevo']==17,'exact delivered original private warning confirms')
+ f.verify(f.sql("SELECT fecha_movimiento::text FROM movimientos_inventario;")=='2026-10-10','confirmed movement preserves original proposal date')
+ before=f.state();f.verify(telegram_rpc('fn_ronda_telegram_confirmar_ajuste',f"123,123,456,'{token}'")==result and f.state()==before,'private lost-response retry returns original receipt')
+ f.sql(f"UPDATE productos SET cantidad_actual=20 WHERE id='{f.P1}';");before=f.state();f.verify(telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{token}'")==result and f.state()==before,'completed read-only recovery returns original receipt after subsequent stock change')
+ f.sql(f"UPDATE usuarios SET activo=false WHERE id='{f.MANAGER}';");before=f.state();telegram_rpc('fn_ronda_telegram_confirmar_ajuste',f"123,123,456,'{token}'",False);f.verify(f.state()==before,'fresh linked Gerencia revocation refuses completed retry')
+ for role in ['anon','authenticated']:
+  f.sql(f"SET ROLE {role};SELECT fn_ronda_telegram_ajuste(123,123,'{EX}','2026-10-10');",False);f.verify(True,'Telegram selector service-only '+role)
+ reset();f.sql(f"UPDATE telegram_usuarios SET telegram_id=123 WHERE id='{TG_MANAGER}';UPDATE productos SET cantidad_actual=15;UPDATE rondas_excepciones SET producto_id='{f.P2}' WHERE id='{EX2}';")
+ first=telegram_rpc('fn_ronda_telegram_ajuste',f"123,123,'{EX}','2026-10-09'");second=telegram_rpc('fn_ronda_telegram_ajuste',f"123,123,'{EX2}','2026-10-09'")
+ f.verify(first['producto_nombre']=='Synthetic SKU' and second['producto_nombre']=='Other SKU' and all(first[k]==second[k] for k in ['teorico_al_conteo','teorico_hoy','delta','cantidad_fisica','unidad','fecha_movimiento']),'same-numeric different-SKU warnings retain distinct original names')
+ before=f.state();f.verify(telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{first['propuesta_id']}'")==first and telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{second['propuesta_id']}'")==second and f.state()==before,'both different-SKU recoveries equal exact original warnings and dates without posting')
+ reset();f.sql(f"UPDATE telegram_usuarios SET telegram_id=123 WHERE id='{TG_MANAGER}';UPDATE productos SET cantidad_actual=NULL WHERE id='{f.P1}';")
+ warning=telegram_rpc('fn_ronda_telegram_ajuste',f"123,123,'{EX}','2026-10-10'");before=f.state()
+ review=telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{warning['propuesta_id']}'")
+ f.verify(review==warning and review['teorico_hoy']==0 and f.state()==before,'nullable live balance recovery preserves exact originally normalized reviewed zero')
+
+def proposal_fault_tests():
+ for table,action in [('ronda_stock_integrity.proposals','RETURN NULL;'),('ronda_stock_integrity.proposals',"NEW.id:='ffffffff-ffff-4fff-8fff-ffffffffffff';RETURN NEW;"),('ronda_stock_integrity.proposals',"NEW.payload:='{}';RETURN NEW;"),('ronda_stock_integrity.proposals',"UPDATE public.productos SET nombre='foreign';RETURN NEW;")]:
+  reset();f.sql(f"UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';")
+  f.sql(f"CREATE FUNCTION public.proposal_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN {action} END $$;CREATE TRIGGER proposal_fault BEFORE INSERT ON {table} FOR EACH ROW EXECUTE FUNCTION public.proposal_fault();")
+  before=f.state();err=call(ok=False);f.verify('observed proposal insertion/source' in err and f.state()==before,'proposal insertion/source fault rolls back '+action)
+  f.sql(f'DROP TRIGGER proposal_fault ON {table};DROP FUNCTION public.proposal_fault();')
+ for action in ['RETURN NULL;',"NEW.message:=999;RETURN NEW;","UPDATE public.productos SET nombre='foreign';RETURN NEW;"]:
+  reset();f.sql(f"UPDATE telegram_usuarios SET telegram_id=123 WHERE id='{TG_MANAGER}';UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';")
+  token=telegram_rpc('fn_ronda_telegram_ajuste',f"123,123,'{EX}','2026-10-10'")['propuesta_id']
+  f.sql(f"CREATE FUNCTION public.delivery_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN {action} END $$;CREATE TRIGGER delivery_fault BEFORE INSERT ON ronda_stock_integrity.deliveries FOR EACH ROW EXECUTE FUNCTION public.delivery_fault();")
+  before=f.state();err=telegram_rpc('fn_ronda_telegram_registrar_revision',f"123,123,456,'{token}'",False);f.verify('review delivery suppressed/rewritten' in err and f.state()==before,'delivery/source insertion fault rolls back '+action)
+  f.sql('DROP TRIGGER delivery_fault ON ronda_stock_integrity.deliveries;DROP FUNCTION public.delivery_fault();')
+ reset();f.sql(f"UPDATE telegram_usuarios SET telegram_id=123 WHERE id='{TG_MANAGER}';UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';")
+ token=telegram_rpc('fn_ronda_telegram_ajuste',f"123,123,'{EX}','2026-10-10'")['propuesta_id'];f.sql(f"UPDATE productos SET cantidad_actual=16 WHERE id='{f.P1}';");before=f.state()
+ err=telegram_rpc('fn_ronda_telegram_revisar_ajuste',f"123,123,'{token}'",False);f.verify('Original review source/authority changed' in err and f.state()==before,'stale source refuses read-only recovery without replacement')
+ err=telegram_rpc('fn_ronda_telegram_registrar_revision',f"123,123,456,'{token}'",False);f.verify('Original review source changed' in err and f.state()==before,'stale warning delivery cannot bind a destructive control')
+ for table in ['ronda_stock_integrity.proposals','ronda_stock_integrity.deliveries']:
+  for role in ['anon','authenticated','service_role']:
+   f.sql(f'SET ROLE {role};SELECT * FROM {table};',False);f.verify(True,'private proposal/review unreadable '+table+' '+role)
+
 
 def tests():
  setup();reset();p=body();r=call(p)
@@ -81,7 +140,21 @@ def tests():
  reset();f.sql(f"UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';");r=call();f.verify(not r['aplicado'] and r['motivo']=='teorico_cambio' and r['delta']==2,'live theoretical change warns without posting')
  f.verify(f.sql('SELECT count(*)=0 FROM movimientos_inventario;')=='t','warning creates no stock ledger or completed proof')
  f.verify(f.sql('SELECT count(*)=0 FROM ronda_stock_integrity.proofs;')=='t','warning preserves ability to explicitly confirm later')
- f.verify(call(dict(body(),confirmar_cambio_teorico=True))['saldo_nuevo']==17,'explicit existing confirmation applies frozen delta to live balance')
+ reject('old boolean-only force refuses',dict(body(),confirmar_cambio_teorico=True))
+ token=r['propuesta_id']; other=call()['propuesta_id'];original=body();result=confirm(original,token)
+ before=f.state();err=confirm(original,other,ok=False);f.verify('Ronda proof original/actor conflict' in err and f.state()==before,'another warning proposal cannot claim completed original confirmation receipt')
+ f.verify(result['saldo_nuevo']==17,'original observed proposal applies frozen delta to exact observed live balance')
+ before=f.state();f.verify(confirm(original,token)==result and f.state()==before,'confirmed proposal retry returns original receipt')
+ f.sql(f"UPDATE productos SET cantidad_actual=20 WHERE id='{f.P1}';")
+ f.verify(confirm(original,token)==result,'completed confirmation preserves original receipt after legitimate subsequent SKU edits')
+ for change in [f"UPDATE productos SET cantidad_actual=16 WHERE id='{f.P1}'", f"UPDATE productos SET nombre='changed' WHERE id='{f.P1}'", f"UPDATE rondas_excepciones SET cantidad_fisica=13 WHERE id='{EX}'", f"UPDATE inventario_causas_raiz SET etiqueta='changed'", f"UPDATE usuarios SET email='changed' WHERE id='{f.ACTOR}'"]:
+  reset();f.sql(f"UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';");warning=call();f.sql(change+';');before=f.state();err=confirm(body(),warning['propuesta_id'],ok=False)
+  f.verify('original observed source/authority changed' in err and f.state()==before,'pending original proposal refuses '+change.split(' SET')[0])
+ reset();f.sql(f"UPDATE productos SET cantidad_actual=15 WHERE id='{f.P1}';");warning=call();before=f.state()
+ for field in ['payload','actor_snapshot','before_product','before_exception','sources']:
+  f.sql(f"UPDATE ronda_stock_integrity.proposals SET {field}='{{}}';",False);f.verify(f.state()==before,'immutable observed proposal '+field)
+ f.sql('DELETE FROM ronda_stock_integrity.proposals;',False);f.verify(f.state()==before,'immutable observed proposal deletion')
+ telegram_tests();proposal_fault_tests()
  for physical,theory,delta in [(8,10,-2),(10,10,0),(0,10,-10)]:
   reset(quantity=physical,theory=theory);r=call();f.verify(r['delta']==delta and r['saldo_nuevo']==10+delta,'signed/zero/exact-depletion adjustment '+str(delta))
  reset('explicada');p=body('capture');r=call(p,'capture')
@@ -151,10 +224,10 @@ def tests():
  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:out=list(pool.map(raw,[p,p]))
  f.verify(all(x.returncode==0 for x in out) and out[0].stdout==out[1].stdout,'same exception simultaneous exact retries return one matching receipt')
  f.verify(f.sql('SELECT count(*)=1 FROM movimientos_inventario;')=='t','concurrent duplicate posts once')
- reset();p2=dict(body(exception=EX2),confirmar_cambio_teorico=True);p=dict(body(),confirmar_cambio_teorico=True)
+ reset();p2=body(exception=EX2);p=body()
  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:out=list(pool.map(raw,[p,p2]))
- f.verify(all(x.returncode==0 for x in out) and f.sql(f"SELECT cantidad_actual=14 FROM productos WHERE id='{f.P1}';")=='t','different approved exceptions on same SKU serialize without lost stock')
- f.verify(f.sql('SELECT count(*)=2 FROM ronda_stock_integrity.proofs;')=='t','independent same-SKU outcomes both have exact prospective proof')
+ f.verify(all(x.returncode==0 for x in out) and f.sql(f"SELECT cantidad_actual=12 FROM productos WHERE id='{f.P1}';")=='t','different same-SKU exceptions serialize and second warns against changed original theoretical stock')
+ f.verify(f.sql('SELECT count(*)=1 FROM ronda_stock_integrity.proofs;')=='t','same-SKU concurrent operation has one proof and one observed warning proposal')
  # Witness the SKU lock wait, replace the exception reference, then release
  # that lock. The RPC must refuse its initially observed SKU after re-reading.
  reset();holder=f.subprocess.Popen(f.DOCKER+['exec','-i','-u','postgres',f.CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],stdin=f.subprocess.PIPE,stdout=f.subprocess.PIPE,stderr=f.subprocess.PIPE,text=True,env=f.ENV)

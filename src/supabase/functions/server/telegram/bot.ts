@@ -1,3 +1,4 @@
+import { beginTelegramAdjustment, confirmTelegramAdjustment, recoverTelegramAdjustment, PendingRondaReview, escapeRondaReviewText, RONDA_FORCE, RONDA_REVIEW } from '../ronda-adjustment-confirmation.ts';
 import { esConsultaGrupoEsco } from './politicaGrupoEsco.ts';
 import { confirmarMemoriaTelegram } from '../memory-confirmation.ts';
 // telegram/bot.ts — Grammy bot setup with webhook handler for Escocia OS
@@ -1155,53 +1156,71 @@ function getBot(): Bot<BotContext> {
     confirmarCambioTeorico: boolean,
   ) {
     if (!ctx.telegramUser) return;
-    const { data, error } = await sb.rpc("fn_ronda_aplicar_ajuste", {
-      payload: {
-        ...payloadActorTelegram(ctx.telegramUser.id),
-        excepcion_id: excepcionId,
-        fecha_movimiento: hoyBogota(),
-        confirmar_cambio_teorico: confirmarCambioTeorico,
-      },
-    });
-    if (error) {
-      await ctx.reply(`El ajuste quedó aprobado, pero no se pudo aplicar automáticamente: ${mensajeErrorRpc(error)}\n\nAvisa a un administrador -- queda pendiente de aplicar.`);
+    if (confirmarCambioTeorico) {
+      await ctx.reply("Ese botón antiguo requiere una nueva revisión privada del ajuste.");
       return;
     }
-    const resultado = data as {
-      aplicado?: boolean;
-      motivo?: string;
-      teorico_al_conteo?: number;
-      teorico_hoy?: number;
-      delta?: number;
-    } | null;
-
-    if (resultado?.aplicado === false && resultado.motivo === "teorico_cambio") {
-      const kb = new InlineKeyboard().text("⚠️ Aplicar de todas formas", `rda:${excepcionId}:forzar`);
-      const fmt = (n: number | undefined) => (n === undefined ? "—" : formatearCantidad(n));
-      await ctx.reply(
-        [
+    try {
+      const resultado = await beginTelegramAdjustment(sb, { sender: ctx.from?.id, chat: ctx.chat }, excepcionId, hoyBogota(), async (review, callback) => {
+        const fmt = (n: number | undefined) => n === undefined ? "—" : String(n);
+        return await ctx.reply([
           "El teórico del sistema cambió desde el conteo -- el ajuste NO se aplicó todavía:",
-          `Teórico al contar: ${fmt(resultado.teorico_al_conteo)}`,
-          `Teórico hoy: ${fmt(resultado.teorico_hoy)}`,
-          `El ajuste seguiría aplicando la misma diferencia (delta ${fmt(resultado.delta)}) sobre el saldo de HOY.`,
-          "",
+          `Producto: ${escapeRondaReviewText(review.producto_nombre)}`,
+          `Unidad: ${escapeRondaReviewText(review.unidad)}`,
+          `Cantidad física contada: ${fmt(review.cantidad_fisica)}`,
+          `Fecha del movimiento: ${escapeRondaReviewText(review.fecha_movimiento)}`,
+          `Teórico al contar: ${fmt(review.teorico_al_conteo)}`,
+          `Teórico revisado: ${fmt(review.teorico_hoy)}`,
+          `El ajuste aplicaría la misma diferencia (delta ${fmt(review.delta)}) sobre ese saldo revisado.`,
+          "Si el inventario cambia nuevamente, esta confirmación se rechazará.",
           "¿Lo aplico igual?",
-        ].join("\n"),
-        { reply_markup: kb },
-      );
-      return;
+        ].join("\n"), { parse_mode: "HTML", reply_markup: new InlineKeyboard().text("⚠️ Aplicar ajuste revisado", callback) });
+      });
+      if (resultado.aplicado) await ctx.reply("✅ Ajuste aplicado al inventario.");
+    } catch (error) {
+      await ctx.reply(`El ajuste sigue pendiente de verificación: ${error instanceof Error ? error.message : "No se pudo verificar el resultado."}`, error instanceof PendingRondaReview ? { reply_markup: new InlineKeyboard().text("Volver a mostrar esta revisión", `rda_review:${error.proposal}`) } : undefined);
     }
-
-    await ctx.reply("✅ Ajuste aplicado al inventario.");
   }
+
+  bot.callbackQuery(RONDA_FORCE, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
+    try {
+      await confirmTelegramAdjustment(getSupabaseAdmin(), { sender: ctx.from?.id, chat: ctx.chat, message: ctx.callbackQuery.message?.message_id }, ctx.callbackQuery.data);
+      await ctx.reply("✅ Ajuste aplicado al inventario.");
+    } catch (error) {
+      await ctx.reply(error instanceof Error ? error.message : "No se pudo verificar el resultado. Conserva el botón original para reintentar.", { reply_markup: new InlineKeyboard().text("Volver a mostrar esta revisión", `rda_review:${ctx.match?.[1]}`) });
+    }
+  });
+
+  bot.callbackQuery(RONDA_REVIEW, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
+    try {
+      const resultado = await recoverTelegramAdjustment(getSupabaseAdmin(), { sender: ctx.from?.id, chat: ctx.chat }, ctx.callbackQuery.data, async (review, callback) => {
+        const fmt = (n: number | undefined) => n === undefined ? "—" : String(n);
+        return await ctx.reply([
+          "El teórico del sistema cambió desde el conteo -- el ajuste NO se aplicó todavía:",
+          `Producto: ${escapeRondaReviewText(review.producto_nombre)}`,
+          `Unidad: ${escapeRondaReviewText(review.unidad)}`,
+          `Cantidad física contada: ${fmt(review.cantidad_fisica)}`,
+          `Fecha del movimiento: ${escapeRondaReviewText(review.fecha_movimiento)}`,
+          `Teórico al contar: ${fmt(review.teorico_al_conteo)}`,
+          `Teórico revisado: ${fmt(review.teorico_hoy)}`,
+          `El ajuste aplicaría la misma diferencia (delta ${fmt(review.delta)}) sobre ese saldo revisado.`,
+          "Si el inventario cambia nuevamente, esta confirmación se rechazará.",
+          "¿Lo aplico igual?",
+        ].join("\n"), { parse_mode: "HTML", reply_markup: new InlineKeyboard().text("⚠️ Aplicar ajuste revisado", callback) });
+      });
+      if (resultado.aplicado) await ctx.reply("✅ Este ajuste ya fue aplicado; se verificó su recibo original.");
+    } catch (error) {
+      await ctx.reply(error instanceof Error ? error.message : "No se pudo verificar esta revisión original.", { reply_markup: new InlineKeyboard().text("Volver a mostrar esta revisión", `rda_review:${ctx.match?.[1]}`) });
+    }
+  });
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):forzar$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!(await tieneAccesoAprobacionGerencia(ctx)) || !ctx.telegramUser) return;
-    const excepcionId = ctx.match?.[1];
-    if (!excepcionId) return;
-    const sb = getSupabaseAdmin();
-    await aplicarAjusteRondaYResponder(ctx, sb, excepcionId, true);
+    await ctx.reply("Ese botón antiguo requiere una nueva revisión privada del ajuste.");
   });
 
   bot.command("ayuda", async (ctx) => {

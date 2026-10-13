@@ -1,4 +1,4 @@
--- Local review candidate only. Unapplied; no numbered migration or caller changes.
+-- Local review candidate only. Unapplied; coordinated DB-before-caller release required.
 -- Whole privileged boundary preserves existing JSON signatures, worker modules and
 -- approved-delta/capture business meaning. Direct-DML retirement is coordinated.
 BEGIN;
@@ -11,7 +11,7 @@ END $gate$;
 CREATE SCHEMA ronda_stock_integrity;
 REVOKE ALL ON SCHEMA ronda_stock_integrity FROM PUBLIC,anon,authenticated,service_role;
 CREATE TABLE ronda_stock_integrity.proofs(
- exception_id uuid PRIMARY KEY, operation text NOT NULL CHECK(operation IN ('adjust','capture')),
+ exception_id uuid PRIMARY KEY, proposal_id uuid, operation text NOT NULL CHECK(operation IN ('adjust','capture')),
  origin text NOT NULL CHECK(origin IN ('human','telegram')),actor_id uuid NOT NULL,payload jsonb NOT NULL,
  actor_snapshot jsonb NOT NULL,before_product jsonb NOT NULL,before_exception jsonb NOT NULL,
  sources jsonb NOT NULL,actual_product jsonb,actual_exception jsonb,actual_movement jsonb,result jsonb,
@@ -35,6 +35,23 @@ BEGIN
 END $$;
 CREATE TRIGGER preserve_ronda_proof BEFORE UPDATE OR DELETE ON ronda_stock_integrity.proofs
 FOR EACH ROW EXECUTE FUNCTION ronda_stock_integrity.preserve_proof();
+CREATE TABLE ronda_stock_integrity.proposals(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), operation text NOT NULL CHECK(operation='adjust'),
+ payload jsonb NOT NULL, actor_snapshot jsonb NOT NULL, before_product jsonb NOT NULL,
+ before_exception jsonb NOT NULL, sources jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+ALTER TABLE ronda_stock_integrity.proposals ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON ronda_stock_integrity.proposals FROM PUBLIC,anon,authenticated,service_role;
+CREATE FUNCTION ronda_stock_integrity.preserve_proposal() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+BEGIN RAISE EXCEPTION 'Ronda observed proposal is immutable'; END $$;
+CREATE TRIGGER preserve_ronda_proposal BEFORE UPDATE OR DELETE ON ronda_stock_integrity.proposals
+FOR EACH ROW EXECUTE FUNCTION ronda_stock_integrity.preserve_proposal();
+CREATE TABLE ronda_stock_integrity.deliveries(proposal_id uuid NOT NULL, sender bigint NOT NULL, chat bigint NOT NULL, message bigint NOT NULL CHECK(message>0),PRIMARY KEY(proposal_id,message));
+ALTER TABLE ronda_stock_integrity.deliveries ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON ronda_stock_integrity.deliveries FROM PUBLIC,anon,authenticated,service_role;
+CREATE TRIGGER preserve_ronda_delivery BEFORE UPDATE OR DELETE ON ronda_stock_integrity.deliveries
+FOR EACH ROW EXECUTE FUNCTION ronda_stock_integrity.preserve_proposal();
 CREATE FUNCTION ronda_stock_integrity.authorize(p_usuario uuid,p_telegram uuid,p_modulo text) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET lock_timeout='5s' AS $$
 DECLARE profile public.usuarios%ROWTYPE; registration public.telegram_usuarios%ROWTYPE; link uuid; fetched public.telegram_usuarios%ROWTYPE;
@@ -111,7 +128,7 @@ $correo$)) THEN RAISE EXCEPTION 'Reviewed ronda attribution helper drift'; END I
  IF EXISTS(SELECT 1 FROM pg_trigger WHERE tgdeferrable AND tgenabled<>'D' AND tgrelid=ANY(ARRAY[
  'public.productos'::regclass,'public.movimientos_inventario'::regclass,'public.rondas_excepciones'::regclass,
  'public.rondas_inventario'::regclass,'public.inventario_causas_raiz'::regclass,
- 'public.usuarios'::regclass,'public.telegram_usuarios'::regclass,'ronda_stock_integrity.proofs'::regclass]))
+ 'public.usuarios'::regclass,'public.telegram_usuarios'::regclass,'ronda_stock_integrity.proofs'::regclass,'ronda_stock_integrity.proposals'::regclass,'ronda_stock_integrity.deliveries'::regclass]))
  THEN RAISE EXCEPTION 'Deferred ronda source/result trigger requires review'; END IF;
  -- Privileged APIs deliberately do not require ordinary stock UPDATE/ledger INSERT:
  -- coordinated direct-DML retirement must leave these protected wrappers functional.
@@ -120,7 +137,7 @@ SELECT ronda_stock_integrity.assert_boundary();
 CREATE FUNCTION ronda_stock_integrity.number(value numeric,minimum numeric,maximum numeric) RETURNS numeric
 LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog AS $$
 BEGIN IF value IS NULL OR value::text IN ('NaN','Infinity','-Infinity') OR value<minimum OR value>maximum THEN RAISE EXCEPTION 'Finite bounded ronda number required'; END IF; RETURN value; END $$;
-CREATE FUNCTION ronda_stock_integrity.post(operation text,payload jsonb) RETURNS jsonb
+CREATE FUNCTION ronda_stock_integrity.post(operation text,payload jsonb,proposal_id uuid DEFAULT NULL) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public SET lock_timeout='5s' AS $$
 <<post>>
 DECLARE user_id uuid:=nullif(payload->>'actor_usuario_id','')::uuid; tg_id uuid:=nullif(payload->>'actor_telegram_usuario_id','')::uuid;
@@ -129,8 +146,9 @@ DECLARE user_id uuid:=nullif(payload->>'actor_usuario_id','')::uuid; tg_id uuid:
  exception_before public.rondas_excepciones%ROWTYPE; product_before public.productos%ROWTYPE; product_id uuid;
  exception_after jsonb; product_after jsonb; movement jsonb; expected jsonb; expected_product jsonb; sources jsonb; round_source jsonb; cause_source jsonb;
  ledger_before jsonb; quantity numeric; physical numeric; delta numeric; before_stock numeric; after_stock numeric; price numeric; result jsonb; movement_id uuid; baseline bigint; count_after bigint;
- tipo text; observations text; proof_time timestamptz; confirmed boolean:=coalesce((payload->>'confirmar_cambio_teorico')::boolean,false);
+ tipo text; observations text; proof_time timestamptz; proposal ronda_stock_integrity.proposals%ROWTYPE; proposal_original jsonb; proposal_key uuid;
 BEGIN
+ IF coalesce((payload->>'confirmar_cambio_teorico')::boolean,false) THEN RAISE EXCEPTION 'Boolean-only ronda force is unsupported; original observed proposal required'; END IF;
  IF operation NOT IN ('adjust','capture') OR exception_id IS NULL OR fecha IS NULL OR jsonb_typeof(payload) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Exact ronda operation required'; END IF;
  IF operation='capture' THEN actor:=ronda_stock_integrity.authorize(user_id,tg_id,'inventario_explicacion');
  ELSE
@@ -140,17 +158,27 @@ BEGIN
  IF NOT allowed THEN RAISE EXCEPTION 'Current approved ronda module/actor required'; END IF;
  END IF;
  PERFORM ronda_stock_integrity.assert_boundary();
+ IF proposal_id IS NOT NULL THEN
+ SELECT * INTO proposal FROM ronda_stock_integrity.proposals q WHERE q.id=proposal_id FOR SHARE;
+ IF NOT FOUND OR proposal.operation IS DISTINCT FROM operation OR proposal.payload IS DISTINCT FROM payload
+ OR proposal.actor_snapshot->>'origin' IS DISTINCT FROM actor->>'origin'
+ OR proposal.actor_snapshot->>'actor_id' IS DISTINCT FROM actor->>'actor_id'
+ THEN RAISE EXCEPTION 'Ronda original proposal/actor/payload mismatch'; END IF;
+ END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('ronda-stock:'||exception_id::text,0));
  SELECT * INTO proof FROM ronda_stock_integrity.proofs p WHERE p.exception_id=post.exception_id FOR UPDATE;
  IF FOUND THEN
- IF proof.operation IS DISTINCT FROM operation OR proof.payload IS DISTINCT FROM payload OR proof.origin IS DISTINCT FROM actor->>'origin' OR proof.actor_id IS DISTINCT FROM (actor->>'actor_id')::uuid OR proof.result IS NULL OR proof.actual_movement IS NULL OR proof.actual_exception IS NULL OR proof.actual_product IS NULL THEN RAISE EXCEPTION 'Ronda proof original/actor conflict or incomplete'; END IF;
+ IF proof.proposal_id IS DISTINCT FROM proposal_id OR proof.operation IS DISTINCT FROM operation OR proof.payload IS DISTINCT FROM payload OR proof.origin IS DISTINCT FROM actor->>'origin' OR proof.actor_id IS DISTINCT FROM (actor->>'actor_id')::uuid OR proof.result IS NULL OR proof.actual_movement IS NULL OR proof.actual_exception IS NULL OR proof.actual_product IS NULL THEN RAISE EXCEPTION 'Ronda proof original/actor conflict or incomplete'; END IF;
  -- The returned balances are the original event, never a new claim about current stock.
  IF NOT EXISTS(SELECT 1 FROM public.movimientos_inventario m WHERE to_jsonb(m)=proof.actual_movement)
  OR NOT EXISTS(SELECT 1 FROM public.rondas_excepciones e WHERE e.id=post.exception_id AND to_jsonb(e)=proof.actual_exception) THEN RAISE EXCEPTION 'Ronda proof no longer matches its exception/movement'; END IF;
  RETURN proof.result;
  END IF;
+ IF proposal_id IS NOT NULL THEN product_id:=(proposal.before_product->>'id')::uuid;
+ ELSE
  SELECT e.producto_id INTO product_id FROM public.rondas_excepciones e WHERE e.id=post.exception_id;
  IF NOT FOUND THEN RAISE EXCEPTION 'Ronda exception missing'; END IF;
+ END IF;
  -- One SKU per operation. SKU before exception gives deterministic shared-SKU order.
  SELECT * INTO product_before FROM public.productos WHERE id=product_id FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'Ronda SKU missing'; END IF;
@@ -166,10 +194,29 @@ BEGIN
  IF round_source IS NULL THEN RAISE EXCEPTION 'Ronda source missing'; END IF;
  SELECT to_jsonb(c) INTO cause_source FROM public.inventario_causas_raiz c WHERE clave=exception_before.decision_causa FOR SHARE;
  sources:=jsonb_build_object('ronda',round_source,'causa',cause_source);
+ IF proposal_id IS NOT NULL AND (proposal.before_product IS DISTINCT FROM to_jsonb(product_before)
+ OR proposal.before_exception IS DISTINCT FROM to_jsonb(exception_before) OR proposal.sources IS DISTINCT FROM sources
+ OR proposal.actor_snapshot IS DISTINCT FROM actor) THEN RAISE EXCEPTION 'Ronda original observed source/authority changed'; END IF;
  IF operation='adjust' THEN
  delta:=round(exception_before.cantidad_fisica-exception_before.teorico_conteo,2); quantity:=delta; tipo:='Ajuste';
- IF before_stock IS DISTINCT FROM exception_before.teorico_conteo AND NOT confirmed THEN
- RETURN jsonb_build_object('aplicado',false,'motivo','teorico_cambio','excepcion_id',exception_id,'teorico_al_conteo',exception_before.teorico_conteo,'teorico_hoy',before_stock,'delta',delta); END IF;
+ IF before_stock IS DISTINCT FROM exception_before.teorico_conteo AND proposal_id IS NULL THEN
+ proof_time:=clock_timestamp();proposal_key:=gen_random_uuid();
+ SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.id),'[]') INTO ledger_before FROM public.movimientos_inventario m WHERE producto_id=product_id;
+ INSERT INTO ronda_stock_integrity.proposals(id,operation,payload,actor_snapshot,before_product,before_exception,sources,created_at)
+ VALUES(proposal_key,operation,payload,actor,to_jsonb(product_before),to_jsonb(exception_before),sources,proof_time) RETURNING * INTO proposal;
+ proposal_original:=jsonb_build_object('id',proposal_key,'operation',operation,'payload',payload,'actor_snapshot',actor,
+ 'before_product',to_jsonb(product_before),'before_exception',to_jsonb(exception_before),'sources',sources,'created_at',proof_time);
+ IF NOT FOUND OR proposal.id IS NULL OR to_jsonb(proposal) IS DISTINCT FROM proposal_original
+ OR NOT EXISTS(SELECT 1 FROM ronda_stock_integrity.proposals q WHERE to_jsonb(q)=proposal_original)
+ OR NOT EXISTS(SELECT 1 FROM public.productos p WHERE p.id=product_id AND to_jsonb(p)=to_jsonb(product_before))
+ OR NOT EXISTS(SELECT 1 FROM public.rondas_excepciones e WHERE e.id=post.exception_id AND to_jsonb(e)=to_jsonb(exception_before))
+ OR NOT EXISTS(SELECT 1 FROM public.rondas_inventario r WHERE to_jsonb(r)=round_source)
+ OR (cause_source IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.inventario_causas_raiz c WHERE to_jsonb(c)=cause_source))
+ OR (SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.id),'[]') FROM public.movimientos_inventario m WHERE producto_id=product_id) IS DISTINCT FROM ledger_before
+ OR EXISTS(SELECT 1 FROM ronda_stock_integrity.proofs p WHERE p.exception_id=post.exception_id)
+ OR ronda_stock_integrity.authorize(user_id,tg_id,module) IS DISTINCT FROM actor
+ THEN RAISE EXCEPTION 'Ronda observed proposal insertion/source suppressed or rewritten'; END IF;
+ RETURN jsonb_build_object('propuesta_id',proposal.id,'aplicado',false,'motivo','teorico_cambio','excepcion_id',exception_id,'producto_nombre',proposal.before_product->'nombre','unidad',proposal.before_product->'unidad_medida','fecha_movimiento',proposal.payload->'fecha_movimiento','cantidad_fisica',proposal.before_exception->'cantidad_fisica','teorico_al_conteo',exception_before.teorico_conteo,'teorico_hoy',before_stock,'delta',delta); END IF;
  after_stock:=ronda_stock_integrity.number(before_stock+delta,0,9999999999.99);
  observations:='Ronda '||to_char((round_source->>'periodo')::date,'YYYY-MM')||coalesce(' · '||(cause_source->>'etiqueta'),'')||' · excepción '||exception_id::text;
  ELSE
@@ -186,10 +233,10 @@ BEGIN
  SELECT count(*),coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.id),'[]') INTO baseline,ledger_before FROM public.movimientos_inventario m WHERE producto_id=product_id;
  sources:=sources||jsonb_build_object('ledger_before',ledger_before);
  proof_time:=clock_timestamp();
- INSERT INTO ronda_stock_integrity.proofs(exception_id,operation,origin,actor_id,payload,actor_snapshot,before_product,before_exception,sources,created_at)
- VALUES(exception_id,operation,actor->>'origin',(actor->>'actor_id')::uuid,payload,actor,to_jsonb(product_before),to_jsonb(exception_before),sources,proof_time) RETURNING * INTO proof;
+ INSERT INTO ronda_stock_integrity.proofs(exception_id,proposal_id,operation,origin,actor_id,payload,actor_snapshot,before_product,before_exception,sources,created_at)
+ VALUES(exception_id,proposal_id,operation,actor->>'origin',(actor->>'actor_id')::uuid,payload,actor,to_jsonb(product_before),to_jsonb(exception_before),sources,proof_time) RETURNING * INTO proof;
  IF proof.created_at IS DISTINCT FROM proof_time THEN RAISE EXCEPTION 'Ronda proof trusted timestamp rewritten'; END IF;
- IF NOT FOUND OR proof.exception_id IS DISTINCT FROM exception_id OR proof.operation IS DISTINCT FROM operation OR proof.origin IS DISTINCT FROM actor->>'origin' OR proof.actor_id IS DISTINCT FROM (actor->>'actor_id')::uuid OR proof.payload IS DISTINCT FROM payload OR proof.actor_snapshot IS DISTINCT FROM actor OR proof.before_product IS DISTINCT FROM to_jsonb(product_before) OR proof.before_exception IS DISTINCT FROM to_jsonb(exception_before) OR proof.sources IS DISTINCT FROM sources OR proof.result IS NOT NULL OR proof.actual_product IS NOT NULL OR proof.actual_exception IS NOT NULL OR proof.actual_movement IS NOT NULL THEN RAISE EXCEPTION 'Trusted ronda proof insertion suppressed/rewritten'; END IF;
+ IF NOT FOUND OR proof.exception_id IS DISTINCT FROM exception_id OR proof.proposal_id IS DISTINCT FROM proposal_id OR proof.operation IS DISTINCT FROM operation OR proof.origin IS DISTINCT FROM actor->>'origin' OR proof.actor_id IS DISTINCT FROM (actor->>'actor_id')::uuid OR proof.payload IS DISTINCT FROM payload OR proof.actor_snapshot IS DISTINCT FROM actor OR proof.before_product IS DISTINCT FROM to_jsonb(product_before) OR proof.before_exception IS DISTINCT FROM to_jsonb(exception_before) OR proof.sources IS DISTINCT FROM sources OR proof.result IS NOT NULL OR proof.actual_product IS NOT NULL OR proof.actual_exception IS NOT NULL OR proof.actual_movement IS NOT NULL THEN RAISE EXCEPTION 'Trusted ronda proof insertion suppressed/rewritten'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.productos p WHERE p.id=product_id AND to_jsonb(p)=to_jsonb(product_before)) OR NOT EXISTS(SELECT 1 FROM public.rondas_excepciones e WHERE e.id=post.exception_id AND to_jsonb(e)=to_jsonb(exception_before)) THEN RAISE EXCEPTION 'Ronda proof trigger changed original sources'; END IF;
  INSERT INTO public.movimientos_inventario(producto_id,tipo_movimiento,cantidad,unidad,fecha_movimiento,saldo_anterior,saldo_nuevo,responsable,observaciones,provisional,valor_movimiento,factura,lote_aplicacion,aplicacion_id,created_at,notas)
  VALUES(product_id,tipo::public.tipo_movimiento,quantity,product_before.unidad_medida,fecha,before_stock,after_stock,public.fn_ronda_actor_correo(user_id,tg_id),observations,false,round(abs(quantity)*price,2),CASE WHEN operation='capture' THEN nullif(payload->>'factura','') ELSE NULL END,CASE WHEN operation='capture' THEN nullif(payload->>'lote_aplicacion','') ELSE NULL END,CASE WHEN operation='capture' THEN nullif(payload->>'aplicacion_id','')::uuid ELSE NULL END,now(),NULL)
@@ -217,13 +264,14 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM public.rondas_inventario r WHERE r.id=exception_before.ronda_id AND to_jsonb(r)=round_source) OR (cause_source IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.inventario_causas_raiz c WHERE c.clave=exception_before.decision_causa AND to_jsonb(c)=cause_source)) THEN RAISE EXCEPTION 'Ronda descriptive sources changed'; END IF;
  UPDATE ronda_stock_integrity.proofs SET actual_product=product_after,actual_exception=exception_after,actual_movement=movement,result=post.result WHERE proofs.exception_id=post.exception_id RETURNING * INTO proof;
  IF proof.created_at IS DISTINCT FROM proof_time THEN RAISE EXCEPTION 'Ronda proof trusted timestamp rewritten'; END IF;
- IF NOT FOUND OR proof.exception_id IS DISTINCT FROM exception_id OR proof.operation IS DISTINCT FROM operation OR proof.origin IS DISTINCT FROM actor->>'origin' OR proof.actor_id IS DISTINCT FROM (actor->>'actor_id')::uuid OR proof.payload IS DISTINCT FROM payload OR proof.actor_snapshot IS DISTINCT FROM actor OR proof.before_product IS DISTINCT FROM to_jsonb(product_before) OR proof.before_exception IS DISTINCT FROM to_jsonb(exception_before) OR proof.sources IS DISTINCT FROM sources OR proof.actual_product IS DISTINCT FROM product_after OR proof.actual_exception IS DISTINCT FROM exception_after OR proof.actual_movement IS DISTINCT FROM movement OR proof.result IS DISTINCT FROM result THEN RAISE EXCEPTION 'Ronda trusted final proof suppressed/rewritten'; END IF;
+ IF NOT FOUND OR proof.exception_id IS DISTINCT FROM exception_id OR proof.proposal_id IS DISTINCT FROM proposal_id OR proof.operation IS DISTINCT FROM operation OR proof.origin IS DISTINCT FROM actor->>'origin' OR proof.actor_id IS DISTINCT FROM (actor->>'actor_id')::uuid OR proof.payload IS DISTINCT FROM payload OR proof.actor_snapshot IS DISTINCT FROM actor OR proof.before_product IS DISTINCT FROM to_jsonb(product_before) OR proof.before_exception IS DISTINCT FROM to_jsonb(exception_before) OR proof.sources IS DISTINCT FROM sources OR proof.actual_product IS DISTINCT FROM product_after OR proof.actual_exception IS DISTINCT FROM exception_after OR proof.actual_movement IS DISTINCT FROM movement OR proof.result IS DISTINCT FROM result THEN RAISE EXCEPTION 'Ronda trusted final proof suppressed/rewritten'; END IF;
  IF NOT EXISTS(SELECT 1 FROM ronda_stock_integrity.proofs p WHERE p.exception_id=post.exception_id AND to_jsonb(p)=to_jsonb(proof)) OR NOT EXISTS(SELECT 1 FROM public.productos p WHERE p.id=product_id AND to_jsonb(p)=product_after) OR NOT EXISTS(SELECT 1 FROM public.movimientos_inventario m WHERE m.id=movement_id AND to_jsonb(m)=movement) OR NOT EXISTS(SELECT 1 FROM public.rondas_excepciones e WHERE e.id=post.exception_id AND to_jsonb(e)=exception_after) THEN RAISE EXCEPTION 'Ronda after-proof business result changed'; END IF;
  SELECT count(*) INTO count_after FROM public.movimientos_inventario WHERE producto_id=product_id;
  IF count_after<>baseline+1 OR EXISTS(SELECT 1 FROM jsonb_array_elements(ledger_before) old WHERE NOT EXISTS(SELECT 1 FROM public.movimientos_inventario m WHERE to_jsonb(m)=old))
  OR NOT EXISTS(SELECT 1 FROM public.rondas_inventario r WHERE r.id=exception_before.ronda_id AND to_jsonb(r)=round_source)
  OR (cause_source IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.inventario_causas_raiz c WHERE c.clave=exception_before.decision_causa AND to_jsonb(c)=cause_source))
  OR ronda_stock_integrity.authorize(user_id,tg_id,CASE WHEN operation='capture' THEN 'inventario_explicacion' ELSE module END) IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Ronda final sources/actor/ledger changed'; END IF;
+ IF proposal_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM ronda_stock_integrity.proposals q WHERE to_jsonb(q)=to_jsonb(proposal)) THEN RAISE EXCEPTION 'Ronda original proposal changed during posting'; END IF;
  RETURN result;
 END $$;
 CREATE OR REPLACE FUNCTION public.fn_ronda_aplicar_ajuste(payload jsonb) RETURNS jsonb
@@ -232,6 +280,111 @@ BEGIN RETURN ronda_stock_integrity.post('adjust',payload); END $$;
 CREATE OR REPLACE FUNCTION public.fn_ronda_resolver_con_captura(payload jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET lock_timeout='5s' AS $$
 BEGIN RETURN ronda_stock_integrity.post('capture',payload); END $$;
+-- Human selector must carry the exact original request; no source relookup/rebase.
+CREATE FUNCTION public.fn_ronda_confirmar_ajuste(payload jsonb,p_propuesta uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ IF auth.uid() IS NULL OR p_propuesta IS NULL THEN RAISE EXCEPTION 'Human session and original proposal required'; END IF;
+ RETURN ronda_stock_integrity.post('adjust',payload,p_propuesta);
+END $$;
+-- Actual Telegram transport identity is selected only by the trusted service.
+CREATE FUNCTION ronda_stock_integrity.telegram_actor(p_sender bigint,p_chat bigint) RETURNS uuid
+LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE registration public.telegram_usuarios%ROWTYPE; admitted jsonb;
+BEGIN
+ IF auth.uid() IS NOT NULL OR NOT (current_setting('role',true)='service_role' OR session_user='service_role')
+ OR p_sender IS NULL OR p_sender<=0 OR p_chat IS DISTINCT FROM p_sender THEN RAISE EXCEPTION 'Private trusted Telegram sender required'; END IF;
+ IF (SELECT count(*) FROM public.telegram_usuarios WHERE telegram_id=p_sender)<>1 THEN RAISE EXCEPTION 'Unique current Telegram sender required'; END IF;
+ SELECT * INTO registration FROM public.telegram_usuarios WHERE telegram_id=p_sender;
+ IF NOT FOUND OR registration.rol_bot IS DISTINCT FROM 'gerencia' THEN RAISE EXCEPTION 'Current Telegram Gerencia required'; END IF;
+ admitted:=ronda_stock_integrity.authorize(NULL,registration.id,'inventario_aprobacion');
+ IF (admitted->'registration') IS DISTINCT FROM to_jsonb(registration) THEN RAISE EXCEPTION 'Telegram sender registration changed'; END IF;
+ RETURN registration.id;
+END $$;
+CREATE FUNCTION public.fn_ronda_telegram_ajuste(p_sender bigint,p_chat bigint,p_excepcion uuid,p_fecha date) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE actor_id uuid;
+BEGIN
+ actor_id:=ronda_stock_integrity.telegram_actor(p_sender,p_chat);
+ RETURN ronda_stock_integrity.post('adjust',jsonb_build_object('actor_usuario_id',NULL,'actor_telegram_usuario_id',actor_id,
+ 'excepcion_id',p_excepcion,'fecha_movimiento',p_fecha,'telegram_sender',p_sender,'telegram_chat',p_chat));
+END $$;
+CREATE FUNCTION public.fn_ronda_telegram_confirmar_ajuste(p_sender bigint,p_chat bigint,p_message bigint,p_propuesta uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE actor_id uuid; proposal ronda_stock_integrity.proposals%ROWTYPE;
+BEGIN
+ actor_id:=ronda_stock_integrity.telegram_actor(p_sender,p_chat);
+ SELECT * INTO proposal FROM ronda_stock_integrity.proposals WHERE id=p_propuesta;
+ IF NOT FOUND OR proposal.payload->>'actor_telegram_usuario_id' IS DISTINCT FROM actor_id::text
+ OR proposal.payload->>'telegram_sender' IS DISTINCT FROM p_sender::text OR proposal.payload->>'telegram_chat' IS DISTINCT FROM p_chat::text
+ OR NOT EXISTS(SELECT 1 FROM ronda_stock_integrity.deliveries d WHERE d.proposal_id=p_propuesta AND d.sender=p_sender AND d.chat=p_chat AND d.message=p_message)
+ THEN RAISE EXCEPTION 'Original private Telegram review required'; END IF;
+ RETURN ronda_stock_integrity.post('adjust',proposal.payload,p_propuesta);
+END $$;
+CREATE FUNCTION public.fn_ronda_telegram_registrar_revision(p_sender bigint,p_chat bigint,p_message bigint,p_propuesta uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET lock_timeout='5s' AS $$
+DECLARE actor_id uuid; proposal ronda_stock_integrity.proposals%ROWTYPE; actor jsonb; product jsonb; exception jsonb; round_source jsonb; cause_source jsonb; delivery jsonb; ledger_original jsonb;
+BEGIN
+ actor_id:=ronda_stock_integrity.telegram_actor(p_sender,p_chat);
+ actor:=ronda_stock_integrity.authorize(NULL,actor_id,'inventario_aprobacion');
+ PERFORM ronda_stock_integrity.assert_boundary();
+ SELECT * INTO proposal FROM ronda_stock_integrity.proposals WHERE id=p_propuesta FOR SHARE;
+ IF NOT FOUND OR proposal.actor_snapshot IS DISTINCT FROM actor OR proposal.payload->>'telegram_sender' IS DISTINCT FROM p_sender::text
+ OR proposal.payload->>'telegram_chat' IS DISTINCT FROM p_chat::text OR p_message IS NULL OR p_message<=0 THEN RAISE EXCEPTION 'Original private review actor required'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended('ronda-stock:'||(proposal.before_exception->>'id'),0));
+ SELECT to_jsonb(p) INTO product FROM public.productos p WHERE id=(proposal.before_product->>'id')::uuid FOR SHARE;
+ SELECT to_jsonb(e) INTO exception FROM public.rondas_excepciones e WHERE id=(proposal.before_exception->>'id')::uuid FOR SHARE;
+ SELECT to_jsonb(r) INTO round_source FROM public.rondas_inventario r WHERE id=(proposal.before_exception->>'ronda_id')::uuid FOR SHARE;
+ SELECT to_jsonb(c) INTO cause_source FROM public.inventario_causas_raiz c WHERE clave=proposal.before_exception->>'decision_causa' FOR SHARE;
+ IF product IS DISTINCT FROM proposal.before_product OR exception IS DISTINCT FROM proposal.before_exception
+ OR jsonb_build_object('ronda',round_source,'causa',cause_source) IS DISTINCT FROM proposal.sources THEN RAISE EXCEPTION 'Original review source changed'; END IF;
+ SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.id),'[]') INTO ledger_original FROM public.movimientos_inventario m WHERE producto_id=(proposal.before_product->>'id')::uuid;
+ INSERT INTO ronda_stock_integrity.deliveries VALUES(p_propuesta,p_sender,p_chat,p_message) ON CONFLICT DO NOTHING;
+ delivery:=jsonb_build_object('proposal_id',p_propuesta,'sender',p_sender,'chat',p_chat,'message',p_message);
+ IF NOT EXISTS(SELECT 1 FROM ronda_stock_integrity.deliveries d WHERE to_jsonb(d)=delivery)
+ OR NOT EXISTS(SELECT 1 FROM ronda_stock_integrity.proposals q WHERE to_jsonb(q)=to_jsonb(proposal))
+ OR NOT EXISTS(SELECT 1 FROM public.productos p WHERE to_jsonb(p)=product)
+ OR NOT EXISTS(SELECT 1 FROM public.rondas_excepciones e WHERE to_jsonb(e)=exception)
+ OR NOT EXISTS(SELECT 1 FROM public.rondas_inventario r WHERE to_jsonb(r)=round_source)
+ OR (cause_source IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.inventario_causas_raiz c WHERE to_jsonb(c)=cause_source))
+ OR (SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.id),'[]') FROM public.movimientos_inventario m WHERE producto_id=(proposal.before_product->>'id')::uuid) IS DISTINCT FROM ledger_original
+ OR EXISTS(SELECT 1 FROM ronda_stock_integrity.proofs p WHERE p.exception_id=(proposal.before_exception->>'id')::uuid)
+ OR ronda_stock_integrity.authorize(NULL,actor_id,'inventario_aprobacion') IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Original review delivery suppressed/rewritten'; END IF;
+ RETURN delivery;
+END $$;
+CREATE FUNCTION public.fn_ronda_telegram_revisar_ajuste(p_sender bigint,p_chat bigint,p_propuesta uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET lock_timeout='5s' AS $$
+DECLARE actor_id uuid; proposal ronda_stock_integrity.proposals%ROWTYPE; actor jsonb; product jsonb; exception jsonb; round_source jsonb; cause_source jsonb;
+BEGIN
+ actor_id:=ronda_stock_integrity.telegram_actor(p_sender,p_chat);
+ actor:=ronda_stock_integrity.authorize(NULL,actor_id,'inventario_aprobacion');
+ PERFORM ronda_stock_integrity.assert_boundary();
+ SELECT * INTO proposal FROM ronda_stock_integrity.proposals WHERE id=p_propuesta FOR SHARE;
+ IF NOT FOUND OR proposal.payload->>'actor_telegram_usuario_id' IS DISTINCT FROM actor_id::text
+ OR proposal.payload->>'telegram_sender' IS DISTINCT FROM p_sender::text OR proposal.payload->>'telegram_chat' IS DISTINCT FROM p_chat::text
+ THEN RAISE EXCEPTION 'Original private review actor required'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended('ronda-stock:'||(proposal.before_exception->>'id'),0));
+ IF EXISTS(SELECT 1 FROM ronda_stock_integrity.proofs p WHERE p.exception_id=(proposal.before_exception->>'id')::uuid AND p.result IS NOT NULL) THEN
+ -- This branch can only replay immutable completion, never post a pending operation.
+ RETURN ronda_stock_integrity.post('adjust',proposal.payload,p_propuesta);
+ END IF;
+ SELECT to_jsonb(p) INTO product FROM public.productos p WHERE id=(proposal.before_product->>'id')::uuid FOR SHARE;
+ SELECT to_jsonb(e) INTO exception FROM public.rondas_excepciones e WHERE id=(proposal.before_exception->>'id')::uuid FOR SHARE;
+ SELECT to_jsonb(r) INTO round_source FROM public.rondas_inventario r WHERE id=(proposal.before_exception->>'ronda_id')::uuid FOR SHARE;
+ SELECT to_jsonb(c) INTO cause_source FROM public.inventario_causas_raiz c WHERE clave=proposal.before_exception->>'decision_causa' FOR SHARE;
+ IF proposal.actor_snapshot IS DISTINCT FROM actor OR product IS DISTINCT FROM proposal.before_product OR exception IS DISTINCT FROM proposal.before_exception
+ OR jsonb_build_object('ronda',round_source,'causa',cause_source) IS DISTINCT FROM proposal.sources THEN RAISE EXCEPTION 'Original review source/authority changed'; END IF;
+ RETURN jsonb_build_object('aplicado',false,'motivo','teorico_cambio','propuesta_id',proposal.id,
+ 'excepcion_id',proposal.before_exception->>'id','producto_nombre',proposal.before_product->'nombre','unidad',proposal.before_product->'unidad_medida','fecha_movimiento',proposal.payload->'fecha_movimiento','cantidad_fisica',proposal.before_exception->'cantidad_fisica','teorico_al_conteo',proposal.before_exception->'teorico_conteo',
+ 'teorico_hoy',coalesce((proposal.before_product->>'cantidad_actual')::numeric,0),'delta',round((proposal.before_exception->>'cantidad_fisica')::numeric-(proposal.before_exception->>'teorico_conteo')::numeric,2));
+END $$;
+REVOKE ALL ON FUNCTION public.fn_ronda_telegram_revisar_ajuste(bigint,bigint,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_ronda_telegram_revisar_ajuste(bigint,bigint,uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.fn_ronda_telegram_registrar_revision(bigint,bigint,bigint,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_ronda_telegram_registrar_revision(bigint,bigint,bigint,uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.fn_ronda_confirmar_ajuste(jsonb,uuid),public.fn_ronda_telegram_ajuste(bigint,bigint,uuid,date),public.fn_ronda_telegram_confirmar_ajuste(bigint,bigint,bigint,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_ronda_confirmar_ajuste(jsonb,uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_ronda_telegram_ajuste(bigint,bigint,uuid,date),public.fn_ronda_telegram_confirmar_ajuste(bigint,bigint,bigint,uuid) TO service_role;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA ronda_stock_integrity FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.fn_ronda_validar_actor(uuid,uuid,text),public.fn_ronda_aplicar_ajuste(jsonb),public.fn_ronda_resolver_con_captura(jsonb) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.fn_ronda_validar_actor(uuid,uuid,text),public.fn_ronda_aplicar_ajuste(jsonb),public.fn_ronda_resolver_con_captura(jsonb) TO authenticated,service_role;
