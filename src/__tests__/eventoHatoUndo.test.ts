@@ -247,7 +247,8 @@ describe('contrato del tratamiento en el código', () => {
   for (const ruta of COPIAS_CONVERSACION) {
     it(`${ruta} escribe el tratamiento por el RPC, nunca con inserts sueltos`, () => {
       const fuente = leer(ruta);
-      expect(fuente).toContain('fn_hato_registrar_tratamiento');
+      expect(fuente).toContain('return await confirmTreatment(conversation,ctx,getSupabaseAdmin');
+      expect(fuente).not.toContain('fn_hato_registrar_tratamiento');
       // La cabecera y su paso son dos filas en dos tablas: un insert suelto
       // que falle deja el tratamiento guardado y el recordatorio inexistente.
       // La consulta de pendientes (#257) puede leer estas tablas. Las
@@ -266,8 +267,8 @@ describe('contrato del tratamiento en el código', () => {
       // El insert de `hato_eventos` toma su tipo de `def.tipo`, así que con
       // `tipo: null` no hay forma de que el tratamiento llegue ahí -- pero
       // solo si el camino del RPC RETORNA antes de ese insert.
-      const idxRpc = fuente.indexOf('fn_hato_registrar_tratamiento');
-      const idxRetorno = fuente.indexOf('return { tratamientoId: idTratamiento', idxRpc);
+      const idxRpc = fuente.indexOf('if(def.esTratamiento){');
+      const idxRetorno = fuente.indexOf('return await confirmTreatment(', idxRpc);
       const idxInsertEventos = fuente.indexOf('animal_id: vaca!.animal_id,\n          tipo: def.tipo,');
       expect(idxRpc).toBeGreaterThan(-1);
       expect(idxRetorno).toBeGreaterThan(idxRpc);

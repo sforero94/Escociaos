@@ -22,6 +22,8 @@ import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
+import { handleTreatmentRecovery, renderTreatment } from './treatmentCreation.ts';
+import { recoverTelegramTreatment } from './treatmentCreationProtocol.ts';
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
 import { handleHatoUndoReview } from "./hatoUndoReview.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
@@ -144,20 +146,19 @@ function supabaseStorage<T>(
         .eq("key", key)
         .single();
       if (error && error.code !== "PGRST116") {
-        console.error("[Session] read error:", error.message);
+        throw new Error("No pude leer la sesión persistida.");
       }
-      console.log("[Session] read", key, data ? "found" : "not found");
+
       return data?.session as T | undefined;
     },
     async write(key: string, value: T) {
-      const { error } = await supabase
-        .from(table)
-        .upsert({ key, session: value }, { onConflict: "key" });
-      if (error) console.error("[Session] write error:", error.message);
-      else console.log("[Session] write", key, "ok");
+      const { data,error } = await supabase.from(table)
+        .upsert({key,session:value},{onConflict:'key'}).select('key').single();
+      if(error||data?.key!==key)throw new Error('No pude verificar la sesión persistida.');
     },
     async delete(key: string) {
-      await supabase.from(table).delete().eq("key", key);
+      const {error}=await supabase.from(table).delete().eq("key",key);
+      if(error)throw new Error("No pude borrar la sesión persistida.");
     },
   };
 }
@@ -260,6 +261,13 @@ function getBot(): Bot<BotContext> {
 
   bot.use(conversations({ storage: conversationStorage }));
 
+  // Native message recovery must precede createConversation replay, including
+  // after a persisted conversation exits or its last response is lost.
+  bot.use(async (ctx,next)=>{
+    if(!ctx.callbackQuery?.data?.startsWith('htc:'))return next();
+    await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
+  });
+
   // --- SALIDA DE EMERGENCIA — va ANTES de los `createConversation` -----------
   //
   // ORIGEN: incidente del 2026-09-08. Dos usuarios quedaron con una
@@ -283,6 +291,20 @@ function getBot(): Bot<BotContext> {
   // Va después del middleware de autenticación a propósito: cancelar sigue
   // siendo una acción de un usuario registrado.
   bot.command("cancelar", async (ctx) => {
+    let tratamientoRegistrado=false;
+    const pendiente=ctx.session.pendienteTratamiento;
+    if(pendiente){
+      try{
+        if(ctx.chat?.type!=='private'||ctx.from?.id!==pendiente.sender||ctx.chat.id!==pendiente.chatId)throw Error('Identidad privada inválida');
+        const result=await recoverTelegramTreatment(getSupabaseAdmin(),pendiente,'resolve');
+        if(result.state!=='committed'&&result.state!=='canceled')throw Error('Cancelación no verificable');
+        tratamientoRegistrado=result.state==='committed';
+        ctx.session.pendienteTratamiento=null;
+        try{await renderTreatment(ctx,pendiente,result);}catch{/* Proof is already durable; original buttons still recover it. */}
+      }catch{
+        await ctx.reply('No pude verificar la cancelación del tratamiento. Conserve el mensaje original y sus botones.');return;
+      }
+    }
     ctx.session.pendienteNotaRonda = null;
     // `exitAll()`, NUNCA `exit()`. La firma es `exit(name: string)`: con el
     // nombre de UNA conversación. Llamarla sin argumento no falla y no avisa —
@@ -290,7 +312,7 @@ function getBot(): Bot<BotContext> {
     // un no-op, y por eso nadie lo notó: sin conversación abierta el comando
     // igual contestaba «Operación cancelada» y pintaba el menú.
     await ctx.conversation.exitAll();
-    await ctx.reply("Operación cancelada.");
+    await ctx.reply(tratamientoRegistrado?"La conversación terminó; el tratamiento ya estaba registrado.":"Operación cancelada.");
     await sendMainMenu(ctx);
   });
 

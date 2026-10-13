@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import ts from 'typescript';
 
 /**
  * Guarda estructural: el comando de cancelar SIEMPRE saca al usuario de una
@@ -69,8 +70,12 @@ describe('salida de conversación del bot de Telegram', () => {
       });
 
       it('la salida llama a exitAll(), nunca al exit() pelado', () => {
-        const desde = texto.indexOf(REGISTRO_CANCELAR);
-        const cuerpo = texto.slice(desde, desde + 900);
+        const sf=ts.createSourceFile('bot.ts',texto,ts.ScriptTarget.Latest,true);
+        let cuerpo='';
+        const visit=(node:ts.Node)=>{
+          if(ts.isCallExpression(node)&&node.expression.getText(sf)==='bot.command'&&node.arguments[0]?.getText(sf)==='"cancelar"')cuerpo=node.arguments[1].getText(sf);
+          ts.forEachChild(node,visit);
+        };visit(sf);
         expect(cuerpo).toContain('ctx.conversation.exitAll()');
       });
 

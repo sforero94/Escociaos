@@ -75,3 +75,24 @@ export async function resolveWebTreatmentKey(client:TreatmentClient,owner:string
  if(!uuid(owner)||!uuid(key)||!['status','resolve'].includes(mode))return fail();const p=canonicalTreatmentProposal(proposal);
  return call(client,'fn_hato_treatment_create_web',{p_action:mode,p_request_key:key,p_payload:p,p_expected_owner:owner},owner,p,null,key);
 }
+
+/** Native message recovery reads the immutable proposal/key exclusively on the server. */
+export type TelegramTreatmentRecovery = Omit<TreatmentResult,'payload'> & {payload:TreatmentProposal|null};
+export async function recoverTelegramTreatment(client:TreatmentClient,action:TelegramTreatmentAction,mode:'post'|'status'|'resolve'):Promise<TelegramTreatmentRecovery>{
+ if(!actionProof(action)||!['post','status','resolve'].includes(mode))return fail();
+ const {data,error}=await client.rpc('fn_hato_treatment_create_telegram_action',{p_action:mode,p_sender:action.sender,p_chat_id:action.chatId,p_message_id:action.messageId});
+ if(error)return fail();
+ if(!keys(data,['version','requestKey','actor','payload','action','state','receipt']))return fail();
+ if(data.payload!==null)return validateTreatmentResult(data,null,canonicalTreatmentProposal(data.payload as unknown as TreatmentProposal),action);
+ if(data.version!==1||!same(data.action,action)||!actorProof(data.actor,null,action)||data.receipt!==null||
+  !((data.state==='unknown'&&data.requestKey===null)||(data.state==='canceled'&&uuid(data.requestKey))))return fail();
+ return data as unknown as TelegramTreatmentRecovery;
+}
+
+/** Complete observed animal under the same fresh server actor admission as posting. */
+export async function loadTelegramTreatmentAnimal(client:TreatmentClient,action:TelegramTreatmentAction,animalId:string):Promise<JsonRow>{
+ if(!actionProof(action)||!uuid(animalId))return fail();
+ const {data,error}=await client.rpc('fn_hato_treatment_snapshot_telegram',{p_sender:action.sender,p_chat_id:action.chatId,p_message_id:action.messageId,p_animal_id:animalId});
+ if(error||!keys(data,['actor','animal'])||!actorProof(data.actor,null,action)||!object(data.animal)||!jsonValue(data.animal)||data.animal.id!==animalId)return fail();
+ return JSON.parse(JSON.stringify(data.animal)) as JsonRow;
+}

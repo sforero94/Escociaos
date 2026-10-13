@@ -47,6 +47,12 @@ CREATE TABLE hato_treatment_creation.requests(
  CHECK((actor->>'origin'='web' AND sender IS NULL AND chat_id IS NULL AND message_id IS NULL)
  OR (actor->>'origin'='telegram' AND sender>0 AND chat_id=sender AND message_id>0)));
 CREATE TABLE hato_treatment_creation.audit(request_key uuid PRIMARY KEY REFERENCES hato_treatment_creation.requests(request_key),actor jsonb NOT NULL,payload jsonb NOT NULL,receipt jsonb NOT NULL);
+-- A native private-message cancellation can precede a lost first prepare.
+CREATE TABLE hato_treatment_creation.action_fences(
+ sender bigint NOT NULL,chat_id bigint NOT NULL,message_id bigint NOT NULL,
+ actor jsonb NOT NULL,request_key uuid NOT NULL UNIQUE,created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(sender,chat_id,message_id),CHECK(sender>0 AND chat_id=sender AND message_id>0));
+ALTER TABLE hato_treatment_creation.action_fences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hato_treatment_creation.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hato_treatment_creation.audit ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON ALL TABLES IN SCHEMA hato_treatment_creation FROM PUBLIC,anon,authenticated,service_role;
@@ -63,6 +69,10 @@ BEGIN
 END $$;
 CREATE TRIGGER immutable_creation_proof BEFORE UPDATE OR DELETE ON hato_treatment_creation.audit FOR EACH ROW EXECUTE FUNCTION hato_treatment_creation.immutable_proof();
 CREATE TRIGGER immutable_creation_identity BEFORE UPDATE OR DELETE ON hato_treatment_creation.requests FOR EACH ROW EXECUTE FUNCTION hato_treatment_creation.immutable_proof();
+
+CREATE FUNCTION hato_treatment_creation.immutable_fence() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+BEGIN RAISE EXCEPTION 'Immutable original treatment cancellation fence';END $$;
+CREATE TRIGGER immutable_action_fence BEFORE UPDATE OR DELETE ON hato_treatment_creation.action_fences FOR EACH ROW EXECUTE FUNCTION hato_treatment_creation.immutable_fence();
 
 CREATE FUNCTION hato_treatment_creation.web_actor() RETURNS jsonb LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE p public.usuarios; a uuid=auth.uid(); BEGIN
@@ -109,7 +119,7 @@ CREATE FUNCTION hato_treatment_creation.step(p_actor jsonb,p_action text,p_key u
  LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE r hato_treatment_creation.requests;expected_r hato_treatment_creation.requests;audit_row hato_treatment_creation.audit;expected_audit hato_treatment_creation.audit;
  payload jsonb;animal public.hato_animales;header public.hato_tratamientos;expected_header public.hato_tratamientos;followup public.hato_tratamiento_pasos;expected_followup public.hato_tratamiento_pasos;
- created_steps jsonb='[]';before_state jsonb;after_state jsonb;new_receipt jsonb;key uuid=p_key;actual_actor jsonb;found_request boolean;
+ created_steps jsonb='[]';before_state jsonb;after_state jsonb;new_receipt jsonb;key uuid=p_key;actual_actor jsonb;found_request boolean;fence hato_treatment_creation.action_fences;
 BEGIN
  IF p_action IS NULL OR p_action NOT IN('prepare','post','status','resolve') THEN RAISE EXCEPTION 'Invalid treatment action';END IF;
  payload=hato_treatment_creation.canonical_payload(p_payload);
@@ -130,10 +140,17 @@ BEGIN
   RETURN jsonb_build_object('version',1,'requestKey',p_key,'actor',p_actor,'payload',payload,'action',CASE WHEN p_sender IS NULL THEN NULL ELSE jsonb_build_object('sender',p_sender,'chatId',p_chat,'messageId',p_message) END,'state','unknown','receipt',NULL);
  ELSIF p_action='post' THEN RAISE EXCEPTION 'Original treatment reservation required';
  ELSE
+  IF p_sender IS NOT NULL THEN
+   SELECT * INTO fence FROM hato_treatment_creation.action_fences WHERE sender=p_sender AND chat_id=p_chat AND message_id=p_message FOR SHARE;
+   IF FOUND THEN
+    IF fence.actor IS DISTINCT FROM p_actor THEN RAISE EXCEPTION 'Changed original cancellation actor';END IF;
+    key=fence.request_key;
+   END IF;
+  END IF;
   IF p_sender IS NOT NULL AND p_key IS NOT NULL THEN RAISE EXCEPTION 'Telegram first reservation uses server-owned UUID';END IF;
   IF key IS NULL THEN key=gen_random_uuid();END IF;
-  r.request_key=key;r.actor=p_actor;r.payload=payload;r.sender=p_sender;r.chat_id=p_chat;r.message_id=p_message;r.state=CASE WHEN p_action='resolve' THEN 'canceled' ELSE 'pending' END;r.receipt=NULL;r.created_at=now();
-  IF p_action='prepare' THEN
+  r.request_key=key;r.actor=p_actor;r.payload=payload;r.sender=p_sender;r.chat_id=p_chat;r.message_id=p_message;r.state=CASE WHEN p_action='resolve' OR fence.request_key IS NOT NULL THEN 'canceled' ELSE 'pending' END;r.receipt=NULL;r.created_at=now();
+  IF p_action='prepare' AND r.state='pending' THEN
    SELECT * INTO animal FROM public.hato_animales WHERE id=(payload->>'animalId')::uuid FOR SHARE;
    IF NOT FOUND OR to_jsonb(animal) IS DISTINCT FROM payload->'observedAnimal' THEN RAISE EXCEPTION 'Original animal changed; review again';END IF;
   END IF;
@@ -200,8 +217,51 @@ BEGIN
 CREATE FUNCTION public.fn_hato_treatment_create_telegram(p_action text,p_sender bigint,p_chat_id bigint,p_message_id bigint,p_payload jsonb,p_request_key uuid DEFAULT NULL) RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 BEGIN RETURN hato_treatment_creation.step(hato_treatment_creation.telegram_actor(p_sender,p_chat_id,p_message_id),p_action,p_request_key,p_payload,p_sender,p_chat_id,p_message_id);END $$;
+-- Capture the complete original row under fresh locked native Hato authority.
+CREATE FUNCTION public.fn_hato_treatment_snapshot_telegram(p_sender bigint,p_chat_id bigint,p_message_id bigint,p_animal_id uuid) RETURNS jsonb
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE actor jsonb;animal public.hato_animales;
+BEGIN
+ actor=hato_treatment_creation.telegram_actor(p_sender,p_chat_id,p_message_id);
+ SELECT * INTO animal FROM public.hato_animales WHERE id=p_animal_id FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Treatment animal does not exist';END IF;
+ IF hato_treatment_creation.telegram_actor(p_sender,p_chat_id,p_message_id) IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Treatment snapshot authority changed';END IF;
+ RETURN jsonb_build_object('actor',actor,'animal',to_jsonb(animal));
+END $$;
+-- Recovery accepts only trusted native sender/chat/message identifiers, never a
+-- client proposal or retry UUID. Original payload/key are read under the same lock.
+CREATE FUNCTION public.fn_hato_treatment_create_telegram_action(p_action text,p_sender bigint,p_chat_id bigint,p_message_id bigint) RETURNS jsonb
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE actor jsonb; r hato_treatment_creation.requests; fence hato_treatment_creation.action_fences;expected_fence hato_treatment_creation.action_fences;
+BEGIN
+ IF p_action IS NULL OR p_action NOT IN('post','status','resolve') THEN RAISE EXCEPTION 'Invalid native treatment recovery action';END IF;
+ actor=hato_treatment_creation.telegram_actor(p_sender,p_chat_id,p_message_id);
+ PERFORM pg_advisory_xact_lock(hashtextextended('hato-treatment:telegram:'||p_sender::text||':'||p_chat_id::text||':'||p_message_id::text,0));
+ SELECT * INTO r FROM hato_treatment_creation.requests WHERE sender=p_sender AND chat_id=p_chat_id AND message_id=p_message_id FOR UPDATE;
+ IF FOUND THEN
+  IF r.actor IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Changed original treatment recovery actor';END IF;
+  RETURN hato_treatment_creation.step(actor,CASE WHEN r.state='canceled' AND p_action='post' THEN 'status' ELSE p_action END,r.request_key,r.payload,p_sender,p_chat_id,p_message_id);
+ END IF;
+ SELECT * INTO fence FROM hato_treatment_creation.action_fences WHERE sender=p_sender AND chat_id=p_chat_id AND message_id=p_message_id FOR UPDATE;
+ IF FOUND AND fence.actor IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Changed original cancellation actor';END IF;
+ IF fence.request_key IS NULL AND p_action='resolve' THEN
+  expected_fence.sender=p_sender;expected_fence.chat_id=p_chat_id;expected_fence.message_id=p_message_id;
+  expected_fence.actor=actor;expected_fence.request_key=gen_random_uuid();expected_fence.created_at=now();
+  INSERT INTO hato_treatment_creation.action_fences SELECT expected_fence.*;
+  SELECT * INTO fence FROM hato_treatment_creation.action_fences WHERE sender=p_sender AND chat_id=p_chat_id AND message_id=p_message_id;
+  IF NOT FOUND OR to_jsonb(fence) IS DISTINCT FROM to_jsonb(expected_fence) THEN RAISE EXCEPTION 'Treatment cancellation fence suppressed/mutated';END IF;
+ END IF;
+ IF hato_treatment_creation.telegram_actor(p_sender,p_chat_id,p_message_id) IS DISTINCT FROM actor THEN RAISE EXCEPTION 'Treatment recovery authority changed';END IF;
+ RETURN jsonb_build_object('version',1,'requestKey',fence.request_key,'actor',actor,'payload',NULL,
+  'action',jsonb_build_object('sender',p_sender,'chatId',p_chat_id,'messageId',p_message_id),
+  'state',CASE WHEN fence.request_key IS NULL THEN 'unknown' ELSE 'canceled' END,'receipt',NULL);
+END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA hato_treatment_creation FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.fn_hato_treatment_create_web(text,uuid,jsonb,uuid),public.fn_hato_treatment_create_telegram(text,bigint,bigint,bigint,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.fn_hato_treatment_snapshot_telegram(bigint,bigint,bigint,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_snapshot_telegram(bigint,bigint,bigint,uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.fn_hato_treatment_create_telegram_action(text,bigint,bigint,bigint) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_create_telegram_action(text,bigint,bigint,bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_create_web(text,uuid,jsonb,uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_hato_treatment_create_telegram(text,bigint,bigint,bigint,jsonb,uuid) TO service_role;
 -- Old RPC execute remains unchanged until separately authorized coordinated release.

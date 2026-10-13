@@ -60,6 +60,7 @@ import {
   resolverUsuarioTelegram,
 } from "../resolverUsuarioTelegram.ts";
 import { ofrecerPasosPendientes, type PasoTratamientoPendiente } from "../confirmarPasoTratamiento.ts";
+import { confirmTreatment, readOriginalTreatmentAnimal } from '../treatmentCreation.ts';
 import { cerrarAlertaEnEnvios } from "../enviar.ts";
 import {
   avisoFechaLejana,
@@ -200,7 +201,7 @@ interface DefinicionEvento {
   tipoServicio?: "monta" | "inseminacion";
   /** ¿Pide toro del catálogo? */
   pideToro: boolean;
-  /** Camino de escritura aparte: `fn_hato_registrar_tratamiento` (138). */
+  /** Camino de escritura aparte: protocolo protegido con intento original y comprobante. */
   esTratamiento?: boolean;
 }
 
@@ -398,6 +399,10 @@ export async function eventoHatoConversation(
       }
       vaca = encontradas[Number(cbVaca.callbackQuery.data.replace("vaca_", ""))];
     }
+
+    const observedAnimal = def.esTratamiento ? await conversation.external(() =>
+      readOriginalTreatmentAnimal(getSupabaseAdmin(),ctx,vaca!.animal_id)
+    ) : null;
 
     const estadoActual = derivarEstadoReproductivo(vaca.fila, config, hoyBogota());
 
@@ -916,6 +921,13 @@ export async function eventoHatoConversation(
       .filter(Boolean)
       .join("\n");
 
+    if(def.esTratamiento){
+      return await confirmTreatment(conversation,ctx,getSupabaseAdmin,{
+        version:1,animalId:vaca!.animal_id,nombre:nombreTratamiento!,fechaInicio:fecha,
+        nota:notaTratamiento,fechaProximoPaso,descripcionPaso:null,observedAnimal:observedAnimal!,
+      },resumen);
+    }
+
     const kbConfirmar = new InlineKeyboard()
       .text("✅ Guardar", "ok")
       .text("❌ Cancelar", "cancel_flow");
@@ -948,30 +960,6 @@ export async function eventoHatoConversation(
         throw new Error(mensajeResolverUsuarioTelegram(resuelto.motivo));
       }
       const { usuarioId, nombreDisplay } = resuelto;
-
-      // Tratamiento: otra tabla y un solo RPC (138). La cabecera y su paso de
-      // seguimiento son dos filas en dos tablas y tienen que quedar juntas —
-      // con inserts sueltos, un fallo del segundo deja el tratamiento
-      // guardado y el recordatorio inexistente, sin que nadie lo note. No
-      // toca `hato_eventos` (decisión: fuera de la línea de tiempo), así que
-      // retorna antes de armar `datosEvento`.
-      if (def.esTratamiento) {
-        const { data: idTratamiento, error: errorTtto } = await sb.rpc(
-          "fn_hato_registrar_tratamiento",
-          {
-            p_animal_id: vaca!.animal_id,
-            p_nombre: nombreTratamiento,
-            p_fecha_inicio: fecha,
-            p_nota: notaTratamiento,
-            p_fecha_proximo_paso: fechaProximoPaso,
-            p_descripcion_paso: null,
-            p_fuente: "telegram",
-            p_created_by: usuarioId,
-          },
-        );
-        if (errorTtto) throw new Error(`No se pudo guardar: ${errorTtto.message}`);
-        return { tratamientoId: idTratamiento as string, eventoId: null, usoId: null, cria: null, errorCria: null };
-      }
 
       const datosEvento: Record<string, unknown> = {
         origen: "telegram",

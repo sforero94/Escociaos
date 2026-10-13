@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Synthetic historical-DDL PG17.6 only. Cached image, no network/data/exports."""
-import importlib.util,json,uuid,time,concurrent.futures,re
+import importlib.util,json,uuid,time,concurrent.futures,re,os,subprocess,tempfile,shutil
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('manual',Path(__file__).with_name('manual-stock-postgres.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 m.NAME='escocia-hato-treatment-'+uuid.uuid4().hex[:12]
@@ -15,7 +15,10 @@ def web(p,key,action='prepare',actor=OWNER,role='authenticated',ok=True,expected
 def telegram(p,action='prepare',sender=123,message=1,key=None,chat=None,role='service_role',ok=True):
  out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SELECT public.fn_hato_treatment_create_telegram({m.literal(action) if action is not None else 'NULL'},{sender if sender is not None else 'NULL'},{chat if chat is not None else sender if sender is not None else 'NULL'},{message if message is not None else 'NULL'},{literal(p)},{m.literal(key) if key else 'NULL'}::uuid);COMMIT;",ok);return json.loads(out) if ok else out
 
-def state():return m.sql("SELECT jsonb_build_array((SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.hato_tratamientos t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.hato_tratamiento_pasos t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY request_key) FROM hato_treatment_creation.requests t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY request_key) FROM hato_treatment_creation.audit t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.hato_animales t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.usuarios t));")
+def native(action='status',sender=123,message=1,role='service_role',ok=True):
+ out=m.sql(f"BEGIN;SET LOCAL ROLE {role};SELECT public.fn_hato_treatment_create_telegram_action({m.literal(action) if action is not None else 'NULL'},{sender},{sender},{message});COMMIT;",ok);return json.loads(out) if ok else out
+
+def state():return m.sql("SELECT jsonb_build_array((SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.hato_tratamientos t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.hato_tratamiento_pasos t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY request_key) FROM hato_treatment_creation.requests t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY request_key) FROM hato_treatment_creation.audit t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY sender,chat_id,message_id) FROM hato_treatment_creation.action_fences t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.hato_animales t),(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.usuarios t));")
 def reject(call,label):
  before=state();call();m.verify(state()==before,label)
 def fixture():
@@ -42,14 +45,37 @@ INSTALL_FINGERPRINT="""SELECT md5(jsonb_agg(jsonb_build_object('table',c.relname
  FROM pg_class c WHERE c.oid IN('public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass);"""
 
 def run():
- m.docker(['image','inspect',m.IMAGE])
+ runtime=os.environ.get('ESCOCIA_SYNTHETIC_PG_HOME')
+ local=None;local_env=os.environ.copy()
  try:
-  m.docker(['run','-d','--pull=never','--name',m.NAME,'--network=none','--tmpfs','/var/lib/postgresql/data:rw','--tmpfs','/var/run/postgresql:rw','-e','POSTGRES_HOST_AUTH_METHOD=trust',m.IMAGE])
-  deadline=time.monotonic()+30
-  while m.docker(['exec',m.NAME,'cat','/proc/1/comm'],check=False).stdout.strip()!='postgres' or m.docker(['exec','-u','postgres',m.NAME,'pg_isready'],check=False).returncode:
-   if time.monotonic()>deadline:raise AssertionError('readiness timeout')
-   time.sleep(.1)
-  config=json.loads(m.docker(['inspect',m.NAME]).stdout)[0];m.verify(config['HostConfig']['NetworkMode']=='none' and not config['HostConfig']['Binds'] and not config['HostConfig']['PortBindings'] and all(x['Type']=='tmpfs' for x in config['Mounts']),'isolated cached tmpfs network-none no binds/ports');m.verify(m.sql('SHOW server_version;').startswith('17.6'),'pinned PG17.6')
+  if runtime:
+   runtime=Path(runtime).resolve()
+   if not runtime.is_relative_to('/tmp'):raise AssertionError('temporary synthetic runtime required')
+   local_env['LD_LIBRARY_PATH']=str(runtime/'lib')
+   version=subprocess.check_output([str(runtime/'bin/postgres'),'--version'],env=local_env,text=True)
+   if version.strip()!='postgres (PostgreSQL) 17.6':raise AssertionError('exact PostgreSQL17.6 required')
+   local=Path(tempfile.mkdtemp(prefix='escocia-treatment-pg-',dir='/tmp'));(local/'socket').mkdir(mode=0o700)
+   subprocess.run([str(runtime/'bin/initdb'),'-D',str(local/'data'),'-U','postgres','--auth-local=trust','--auth-host=reject','--encoding=UTF8','--locale=C'],env=local_env,check=True,capture_output=True)
+   subprocess.run([str(runtime/'bin/pg_ctl'),'-D',str(local/'data'),'-l',str(local/'server.log'),'-o',f"-c listen_addresses='' -c unix_socket_directories={local}/socket -c unix_socket_permissions=0700 -p 55439",'-w','start'],env=local_env,check=True,capture_output=True)
+   def local_sql(source,ok=True):
+    client=os.environ['ESCOCIA_SYNTHETIC_PG_CLIENT']
+    r=subprocess.run(['node',str(m.ROOT/'scripts/security/local-postgres-query.mjs'),str(local/'socket'),client],input=source,text=True,capture_output=True,timeout=60)
+    if ok and r.returncode:raise AssertionError(r.stderr)
+    if not ok and not r.returncode:raise AssertionError('Expected rejection')
+    if not ok and any(v in r.stderr for v in ('ambiguous','syntax error','is not assigned')):raise AssertionError(r.stderr)
+    return r.stdout.strip() if ok else r.stderr
+   m.sql=local_sql
+  else:m.docker(['image','inspect',m.IMAGE])
+  if local:
+   m.verify(m.sql('SHOW listen_addresses;')=='' and oct((local/'socket').stat().st_mode & 0o777)=='0o700','local synthetic PG: no TCP listener, private temporary Unix socket')
+  else:
+   m.docker(['run','-d','--pull=never','--name',m.NAME,'--network=none','--tmpfs','/var/lib/postgresql/data:rw','--tmpfs','/var/run/postgresql:rw','-e','POSTGRES_HOST_AUTH_METHOD=trust',m.IMAGE])
+   deadline=time.monotonic()+30
+   while m.docker(['exec',m.NAME,'cat','/proc/1/comm'],check=False).stdout.strip()!='postgres' or m.docker(['exec','-u','postgres',m.NAME,'pg_isready'],check=False).returncode:
+    if time.monotonic()>deadline:raise AssertionError('readiness timeout')
+    time.sleep(.1)
+   config=json.loads(m.docker(['inspect',m.NAME]).stdout)[0];m.verify(config['HostConfig']['NetworkMode']=='none' and not config['HostConfig']['Binds'] and not config['HostConfig']['PortBindings'] and all(x['Type']=='tmpfs' for x in config['Mounts']),'isolated cached tmpfs network-none no binds/ports')
+  m.verify(m.sql('SHOW server_version;').startswith('17.6'),'pinned PG17.6')
   fixture();print('Synthetic identity fingerprint',m.sql(INSTALL_FINGERPRINT.replace("'public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass","'public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass")),flush=True);print('Synthetic install fingerprint',m.sql(INSTALL_FINGERPRINT),flush=True);candidate=(m.ROOT/'src/sql/security-candidates/hato-treatment-creation.sql').read_text();m.sql(candidate)
   # Exercise installation gate independently without reinstalling protected schema.
   gate=candidate.split('CREATE SCHEMA hato_treatment_creation;')[0].replace('BEGIN;','',1)
@@ -143,7 +169,46 @@ def run():
   with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
    x,y=pool.submit(racepost),pool.submit(web,p,race,'resolve');x=x.result();y=y.result()
   final=web(p,race,'status');m.verify((final['state']=='committed' and x=='committed' and y['state']=='committed') or (final['state']=='canceled' and x=='refused' and y['state']=='canceled'),'post/cancel race chooses one durable terminal state')
-  for table in ['requests','audit']:
+  def snapshot(role='service_role',sender=123,ok=True):
+   return m.sql(f"BEGIN;SET LOCAL ROLE {role};SELECT public.fn_hato_treatment_snapshot_telegram({sender},{sender},77,'{ANIMAL}');COMMIT;",ok)
+  snap=json.loads(snapshot());m.verify(snap['animal']==p['observedAnimal'],'full original treatment snapshot under native authority')
+  for role in ['anon','authenticated']:
+   reject(lambda role=role:snapshot(role=role,ok=False),'snapshot denies ordinary caller '+role)
+  m.sql('UPDATE public.usuarios SET activo=false;')
+  reject(lambda:snapshot(ok=False),'snapshot refuses inactive linked profile before data disclosure')
+  m.sql('UPDATE public.usuarios SET activo=true;')
+  m.sql("UPDATE public.telegram_usuarios SET modulos_permitidos=ARRAY[]::text[] WHERE telegram_id=123;")
+  reject(lambda:snapshot(ok=False),'snapshot refuses revoked Hato module')
+  m.sql("UPDATE public.telegram_usuarios SET modulos_permitidos=ARRAY['hato_produccion'] WHERE telegram_id=123;")
+  m.verify(json.loads(snapshot(sender=456))['actor']['profileId'] is None,'snapshot preserves unlinked active worker lane')
+  unchanged=state();m.verify(native(message=600)['state']=='unknown' and state()==unchanged,'native unknown status has no writes')
+  canceled=native('resolve',message=600);m.verify(canceled['state']=='canceled' and canceled['payload'] is None,'native cancellation reserves server UUID without caller proposal')
+  delayed=telegram(p,message=600);m.verify(delayed['state']=='canceled' and delayed['requestKey']==canceled['requestKey'],'delayed first prepare binds original proposal to same canceled UUID')
+  m.verify(native('post',message=600)['state']=='canceled','native canceled replay never posts')
+  first=telegram(p,message=601);posted=native('post',message=601)
+  m.verify(posted['state']=='committed' and posted['requestKey']==first['requestKey'],'native post recovers original server-owned proposal/key')
+  m.verify(native(message=601)==posted and native('post',message=601)==posted and native('resolve',message=601)==posted,'native status/retry/cancel return original committed receipt')
+  for role in ['anon','authenticated']:
+   reject(lambda role=role:native(message=601,role=role,ok=False),'native recovery service-only '+role)
+  for mode in [None,'prepare','forged']:
+   reject(lambda mode=mode:native(mode,message=601,ok=False),'native malformed operation refuses without effects')
+  m.sql(f"UPDATE public.telegram_usuarios SET usuario_id='{OTHER}' WHERE telegram_id=123;")
+  reject(lambda:native(message=601,ok=False),'native relink cannot recover another actor original proof')
+  m.sql(f"UPDATE public.telegram_usuarios SET usuario_id='{OWNER}' WHERE telegram_id=123;")
+  m.sql('UPDATE public.usuarios SET activo=false;')
+  reject(lambda:native(message=601,ok=False),'native linked revocation refuses committed disclosure')
+  m.sql('UPDATE public.usuarios SET activo=true;')
+  for fault in ['RETURN NULL;',"NEW.request_key=gen_random_uuid();RETURN NEW;",f"UPDATE public.usuarios SET activo=false WHERE id='{OWNER}';RETURN NEW;"]:
+   m.sql('CREATE FUNCTION public.native_fault() RETURNS trigger LANGUAGE plpgsql AS $f$BEGIN '+fault+' END$f$;CREATE TRIGGER native_fault BEFORE INSERT ON hato_treatment_creation.action_fences FOR EACH ROW EXECUTE FUNCTION public.native_fault();')
+   # UUID mutation is a mismatch against the exact expected server-owned row.
+   reject(lambda:native('resolve',message=602,ok=False),'native fence trigger corruption/suppression rolls back')
+   m.sql('DROP TRIGGER native_fault ON hato_treatment_creation.action_fences;DROP FUNCTION public.native_fault();')
+  with concurrent.futures.ThreadPoolExecutor(2) as pool:
+   prep,cancel=[f.result() for f in [pool.submit(telegram,p,message=603),pool.submit(native,'resolve',123,603)]]
+  m.verify(native(message=603)['state']=='canceled' and prep['requestKey']==cancel['requestKey'],'native cancel/first prepare race shares original key and cancellation')
+  m.verify(native('resolve',sender=456,message=604)['actor']['profileId'] is None,'native unlinked active Hato worker retained')
+  m.sql(f"DELETE FROM hato_treatment_creation.action_fences WHERE message_id=604;",False);m.verify(True,'native fence cannot be deleted')
+  for table in ['requests','audit','action_fences']:
    for role in ['anon','authenticated','service_role']:
     m.sql('BEGIN;SET LOCAL ROLE '+role+';SELECT * FROM hato_treatment_creation.'+table+';COMMIT;',False);m.verify(True,'protected '+table+' no direct '+role+' access')
   m.sql(f"UPDATE hato_treatment_creation.audit SET receipt='{{}}'::jsonb WHERE request_key='{g}';",False);m.verify(True,'original audit proof cannot be mutated')
@@ -154,5 +219,10 @@ def run():
   reject(lambda:web(p,g,'status',actor=OTHER,expected_owner=OTHER,ok=False),'missing immutable audit refuses committed replay')
   print('Treatment foundation assertions',m.CHECKS,flush=True)
  finally:
-  m.docker(['rm','-f',m.NAME],check=False);m.verify(m.docker(['inspect',m.NAME],check=False).returncode!=0,'finally cleanup verified')
+  if local:
+   stopped=subprocess.run([str(runtime/'bin/pg_ctl'),'-D',str(local/'data'),'-w','-m','immediate','stop'],env=local_env,capture_output=True)
+   if stopped.returncode and (local/'data/postmaster.pid').exists():raise AssertionError('synthetic server stop not verified')
+   shutil.rmtree(local);m.verify(not local.exists(),'temporary database/socket removed after server stop')
+  else:
+   m.docker(['rm','-f',m.NAME],check=False);m.verify(m.docker(['inspect',m.NAME],check=False).returncode!=0,'finally cleanup verified')
 if __name__=='__main__':run()

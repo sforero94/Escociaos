@@ -28,6 +28,7 @@ export interface TelegramUsuario {
 }
 
 export interface SessionData {
+  pendienteTratamiento?: {sender:number;chatId:number;messageId:number} | null;
   // grammy conversations stores its state here automatically
 
   // Fase 4 de docs/brief_tecnico_verificacion_inventario.md (§7.2/§13,
