@@ -6,6 +6,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { readImportFile } from '@/utils/spreadsheet/importFile';
 
 interface ResultadoCarga {
   exito: boolean;
@@ -256,12 +257,7 @@ export function CargaMasiva() {
   };
 
   const leerArchivo = async (file: File): Promise<any[]> => {
-    const XLSX = await import('xlsx');
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    return XLSX.utils.sheet_to_json(worksheet);
+    return readImportFile(file, { allowCsv: true });
   };
 
   const normalizarFecha = (fecha: any): string | null => {
@@ -276,9 +272,9 @@ export function CargaMasiva() {
       }
 
       // Formatear como YYYY-MM-DD
-      const year = fechaJS.getFullYear();
-      const month = String(fechaJS.getMonth() + 1).padStart(2, '0');
-      const day = String(fechaJS.getDate()).padStart(2, '0');
+      const year = fechaJS.getUTCFullYear();
+      const month = String(fechaJS.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(fechaJS.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
 
@@ -362,7 +358,7 @@ export function CargaMasiva() {
                 <div className="cursor-pointer border-2 border-dashed border-primary/30 rounded-xl p-6 hover:border-primary hover:bg-primary/5 transition-all duration-200">
                   <input
                     type="file"
-                    accept=".csv,.xlsx,.xls"
+                    accept=".csv,.xlsx"
                     onChange={handleFileSelect}
                     className="hidden"
                   />
@@ -382,7 +378,7 @@ export function CargaMasiva() {
                           Haz clic para seleccionar un archivo
                         </p>
                         <p className="text-xs text-brand-brown/50 mt-1">
-                          CSV, XLSX o XLS
+                          CSV o XLSX (máximo 20 MiB). Para .xls, convierta a .xlsx en Excel o LibreOffice.
                         </p>
                       </>
                     )}

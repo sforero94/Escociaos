@@ -24,6 +24,7 @@ import {
 import { parsearFechaFlexible, obtenerFechaHoy } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaIngreso, Comprador, MedioPago } from '../../../types/finanzas';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { readImportFile } from '@/utils/spreadsheet/importFile';
 
 interface CargaMasivaIngresosProps {
   open: boolean;
@@ -246,18 +247,10 @@ export function CargaMasivaIngresos({
     setProgress(0);
 
     try {
-      const XLSX = await import('xlsx');
-
-      // Read file
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-
-
-      // Convert to JSON - use first row as headers, start data from row 3
-      const jsonData: IngresoRow[] = XLSX.utils.sheet_to_json(worksheet, {
-        range: 2, // Start from row 3 (skip header and instructions)
-        header: [
+      // The fixed finance schema skips the header and instruction rows.
+      const jsonData = await readImportFile(file, {
+        skipRows: 2,
+        headers: [
           'Fecha',
           'Negocio',
           'Región',
@@ -268,8 +261,8 @@ export function CargaMasivaIngresos({
           'Valor',
           'Observaciones'
         ],
-        defval: ''
-      });
+        defaultValue: '',
+      }) as unknown as IngresoRow[];
 
 
       if (jsonData.length === 0) {
@@ -566,7 +559,7 @@ export function CargaMasivaIngresos({
               <div className="flex-1">
                 <h3 className="font-medium text-gray-900 mb-2">Descargar Plantilla</h3>
                 <p className="text-sm text-gray-600 mb-3">
-                  Descargue la plantilla Excel que incluye todos los catálogos disponibles
+                  Descargue la plantilla XLSX que incluye todos los catálogos disponibles. Máximo 20 MiB; convierta .xls a .xlsx en Excel o LibreOffice.
                 </p>
                 <Button
                   onClick={descargarPlantilla}
@@ -596,7 +589,7 @@ export function CargaMasivaIngresos({
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".xlsx,.xls"
+                      accept=".xlsx"
                       onChange={handleFileUpload}
                       className="hidden"
                       id="file-upload-ingresos"
