@@ -22,9 +22,6 @@ const VerificacionesList = lazy(() => import('./components/inventory/Verificacio
 const RondasList = lazy(() => import('./components/inventory/RondasList').then(m => ({ default: m.RondasList })));
 const RondaDetalle = lazy(() => import('./components/inventory/RondaDetalle').then(m => ({ default: m.RondaDetalle })));
 const ComingSoon = lazy(() => import('./components/shared/ComingSoon').then(m => ({ default: m.ComingSoon })));
-const MovementsDashboard = lazy(() => import('./components/inventory/MovementsDashboard').then(m => ({ default: m.MovementsDashboard })));
-const PurchaseHistory = lazy(() => import('./components/inventory/PurchaseHistory').then(m => ({ default: m.PurchaseHistory })));
-const NewPurchase = lazy(() => import('./components/inventory/NewPurchase').then(m => ({ default: m.NewPurchase })));
 const AplicacionesList = lazy(() => import('./components/aplicaciones/AplicacionesList').then(m => ({ default: m.AplicacionesList })));
 const CalculadoraAplicaciones = lazy(() => import('./components/aplicaciones/CalculadoraAplicaciones').then(m => ({ default: m.CalculadoraAplicaciones })));
 const DailyMovementsDashboardWrapper = lazy(() => import('./components/aplicaciones/DailyMovementsDashboardWrapper').then(m => ({ default: m.DailyMovementsDashboardWrapper })));

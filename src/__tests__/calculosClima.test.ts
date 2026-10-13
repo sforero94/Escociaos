@@ -596,9 +596,9 @@ describe('lluviaDeLecturasVivas', () => {
     // El evento arranca ayer con 20 mm ya caídos; hoy caen 5 más. El día de hoy
     // son 5, no 25.
     const lecturas = [
-      { timestamp: '2026-08-25T23:00:00Z', lluvia_evento_mm: 20 },
-      { timestamp: '2026-08-26T01:00:00Z', lluvia_evento_mm: 22 },
-      { timestamp: '2026-08-26T02:00:00Z', lluvia_evento_mm: 25 },
+      { timestamp: '2026-08-25T23:00:00-05:00', lluvia_evento_mm: 20 },
+      { timestamp: '2026-08-26T01:00:00-05:00', lluvia_evento_mm: 22 },
+      { timestamp: '2026-08-26T02:00:00-05:00', lluvia_evento_mm: 25 },
     ];
     expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBe(5);
   });

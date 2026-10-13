@@ -72,6 +72,11 @@ const PATRON_UTC_HOY =
  * les correría un día hacia atrás en UTC-5. */
 const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[] = [
   {
+    archivo: 'src/utils/hato/hatoTreatmentCreation.ts',
+    ocurrencias: 1,
+    razon: 'Valida la fecha explícita del tratamiento mediante ida y vuelta desde medianoche UTC; no calcula hoy.',
+  },
+  {
     archivo: 'src/utils/purchaseIntegrity.ts',
     ocurrencias: 1,
     razon: 'Valida una fecha recibida AAAA-MM-DD con ida y vuelta desde medianoche UTC; no calcula hoy.',

@@ -134,6 +134,11 @@ describe('hostile archive rejection before ExcelJS parsing', () => {
                 bytes.set(replacement, i);
         await expect(inspectXlsxArchive(bytes)).rejects.toThrow('ruta ZIP ambigua');
     });
+    it.each([...Array.from({ length: 32 }, (_, code) => String.fromCharCode(code)), '\\'])('rejects forbidden ZIP path character %j', async character => {
+        const zip = new JSZip();
+        zip.file(`bad${character}name.xml`, '<x/>');
+        await expect(inspectXlsxArchive(await zip.generateAsync({ type: 'uint8array' }))).rejects.toThrow('ruta ZIP ambigua');
+    });
     it('rejects Unicode ZIP extra fields that override admitted paths', async () => {
         const zip = new JSZip(); zip.file('café.xml', '<x/>');
         const bytes = await zip.generateAsync({ type: 'uint8array' });

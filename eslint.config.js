@@ -7,7 +7,8 @@ export default tseslint.config(
   // `archive/` (issue #266): código retirado, preservado tal cual para poder
   // restaurarlo -- nunca se relintea ni se retipa, mismo criterio que
   // `src/supabase`/`supabase` (árboles que no corren por Vitest/tsc).
-  { ignores: ['node_modules', 'build', 'dist', 'src/supabase', 'supabase', 'archive'] },
+  // Generated vendor artifacts are verified by spreadsheet:verify, not linted.
+  { ignores: ['node_modules', 'build', 'dist', 'src/supabase', 'supabase', 'archive', 'src/vendor'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

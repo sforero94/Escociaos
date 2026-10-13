@@ -236,7 +236,7 @@ for (const [index, label] of ['source', 'deployment'].entries()) {
       const response=await loaded[index].products.toggleProductoActivo(context(toggleBody()));
       expect(response.status).toBe(200);const receipt=await response.json();expect(receipt.product.activo).toBe(false);
       const post=calls.find(c=>c.method==='POST')!;expect(post.url.pathname).toBe('/rest/v1/rpc/fn_product_catalog_post');
-      expect(post.body).toEqual({p_request_key:otherId,p_payload:{mode:'activation',product_id:productId,original:toggleOriginal,fields:{activo:false}}});
+      expect(post.body).toEqual({p_expected_owner:actor,p_request_key:otherId,p_payload:{mode:'activation',product_id:productId,original:toggleOriginal,fields:{activo:false}}});
       expect(calls.some(c=>c.method==='PATCH')).toBe(false);
       for(const patch of [{actor:otherId},{request_key:actor},{movement_id:otherId},{opening:{}},{audit:{...receipt.audit,before_row:{}}},
         {product:{...receipt.product,activo:true}},{product:{...receipt.product,precio_unitario:999}}]){

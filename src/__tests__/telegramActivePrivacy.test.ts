@@ -60,7 +60,7 @@ function callback(source: string, route: string) {
 for (const root of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) {
   const source = readFileSync(`${root}/telegram/bot.ts`, 'utf8');
   describe(root, () => {
-    it('requires fresh Gerencia on all four approval callback stages before domain reads or writes', async () => {
+    it('requires fresh Gerencia on supported approval stages and refuses the retired force button without reads or writes', async () => {
       const sf = ts.createSourceFile('bot.ts', source, ts.ScriptTarget.Latest, true);
       const nodes: ts.Node[] = [];
       const visit = (node: ts.Node) => {
@@ -73,9 +73,15 @@ for (const root of ['src/supabase/functions/server', 'supabase/functions/make-se
       for (const node of nodes) {
         const permission = vi.fn(async () => false);
         const handler = load(source, candidate => candidate.getText() === node.getText(sf), { tieneAccesoAprobacionGerencia: permission });
-        const ctx = { answerCallbackQuery: vi.fn(), telegramUser: { id: 'registration' }, match: ['data', 'id'] };
+        const ctx = { answerCallbackQuery: vi.fn(), reply: vi.fn(), telegramUser: { id: 'registration' }, match: ['data', 'id'] };
         await handler(ctx);
-        expect(permission).toHaveBeenCalledWith(ctx);
+        if (node.parent.getText(sf).includes(':forzar')) {
+          expect(permission).not.toHaveBeenCalled();
+          expect(ctx.reply).toHaveBeenCalledWith('Ese botón antiguo requiere una nueva revisión privada del ajuste.');
+        } else {
+          expect(permission).toHaveBeenCalledWith(ctx);
+          expect(ctx.reply).not.toHaveBeenCalled();
+        }
         expect(ctx.answerCallbackQuery).toHaveBeenCalledOnce();
       }
     });

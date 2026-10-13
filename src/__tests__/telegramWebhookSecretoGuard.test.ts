@@ -91,7 +91,8 @@ describe('webhook de Telegram: secreto compartido obligatorio', () => {
 // ============================================================================
 
 /** Un chat id de Telegram es un entero de ~9-11 dígitos. */
-const DIGITOS = /(?<![\d.])\d{9,11}(?![\d.])/;
+// Do not mistake digit runs inside hexadecimal commit hashes for chat ids.
+const DIGITOS = /(?<![\da-f.])\d{9,11}(?![\da-f.])/i;
 /** Palabras que delatan que el número de al lado es un chat id. */
 const CONTEXTO = /telegram|chat[_\s-]?id/i;
 /** Cuántas líneas alrededor se miran para decidir el contexto. */
@@ -120,6 +121,9 @@ const ALLOWLIST = new Map<string, string>([
   // Identificador de la cuenta pública del propio bot (@escociaos_bot), parte
   // del `botInfo` que Grammy necesita para arrancar sin llamar a getMe.
   ['8759479581', 'id público del bot @escociaos_bot (botInfo de Grammy)'],
+  ['38262143090', 'GitHub Actions backup run id in the published recovery checkpoint'],
+  ['11752768083', 'GitHub Actions encrypted backup artifact id in the recovery checkpoint'],
+  ['134657409', 'Encrypted backup artifact byte size, not an identity'],
 ]);
 
 function recolectar(dir: string, salida: string[] = []): string[] {
