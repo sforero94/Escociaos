@@ -1,16 +1,16 @@
 {
   "schema": 1,
-  "lockSHA256": "e2029c18046f3a3fbe44d237c06bea117b00743340657d059d7b681ebab2dcf2",
+  "lockSHA256": "6be137e733d61a4cf8417ac1776c57c72a2709045333342e5e93f784e5daf40e",
   "runtimeArtifactSHA256": "4d834989f7ec1a59fc9e9f4718899ef42b334da798bd3b22fca7e3046e21ccca",
   "fullApplicationVulnerabilities": {
     "info": 0,
     "low": 0,
     "moderate": 0,
-    "high": 1,
+    "high": 0,
     "critical": 0,
-    "total": 1
+    "total": 0
   },
   "runtimeSourcePackageAdvisories": [],
-  "remainingFinding": "xlsx remains installed pending coordinated consumer cutover",
+  "remainingFinding": null,
   "scope": "npm registry audit of exact app lock, not a runtime/fuzz/security guarantee"
 }

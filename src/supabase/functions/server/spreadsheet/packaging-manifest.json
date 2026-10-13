@@ -44,8 +44,8 @@
     {
       "source": "src/vendor/spreadsheet/manifest.json",
       "destination": "vendor/spreadsheet/manifest.json",
-      "sourceSHA256": "1c475c7d3c5c34168f157322269c25f6c7db885eb2019d675da4d7fdd88e0423",
-      "deployedSHA256": "1c475c7d3c5c34168f157322269c25f6c7db885eb2019d675da4d7fdd88e0423"
+      "sourceSHA256": "8544d0495399e6ec5ba800709c7098c9f43c2d3dce304efde6daed8130682d2e",
+      "deployedSHA256": "8544d0495399e6ec5ba800709c7098c9f43c2d3dce304efde6daed8130682d2e"
     },
     {
       "source": "src/vendor/spreadsheet/LICENSES.md",
@@ -68,8 +68,8 @@
     {
       "source": "src/vendor/spreadsheet/audit-evidence.json",
       "destination": "vendor/spreadsheet/audit-evidence.json",
-      "sourceSHA256": "907ba434abefc5bdc2d6001731d87300bbaf764b2e97f8ca38587176189dbd95",
-      "deployedSHA256": "907ba434abefc5bdc2d6001731d87300bbaf764b2e97f8ca38587176189dbd95"
+      "sourceSHA256": "9fba0ace1f610f848b78cd6ece6b8ef795afbcfef0863176bf7bc391644dfd76",
+      "deployedSHA256": "9fba0ace1f610f848b78cd6ece6b8ef795afbcfef0863176bf7bc391644dfd76"
     }
   ]
 }

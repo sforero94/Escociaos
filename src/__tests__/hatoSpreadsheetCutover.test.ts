@@ -20,6 +20,8 @@ async function fixture() {
 }
 describe('Hato actual-byte server cutover', () => {
   it('verifies both deployable packages against canonical source, runtime and provenance', () => {
+    expect(JSON.parse(execFileSync(process.execPath, ['scripts/security/verify-spreadsheet-runtime.mjs'], { encoding: 'utf8' })).verified)
+      .toBe(true);
     expect(execFileSync(process.execPath, ['scripts/security/package-spreadsheet-server.mjs', '--check'], { encoding: 'utf8' }))
       .toContain('verified from canonical sources');
   });
