@@ -1,6 +1,10 @@
 import { XLSX_LIMITS } from './limits.ts';
-import type { CellValue, Workbook } from 'exceljs';
+import type { CellValue, Workbook } from '../../vendor/spreadsheet/exceljs-types.d.ts';
 import type { Range } from './archive';
+// Minimal browser-only download shape avoids requiring DOM library types in
+// Deno reader deployments. This declaration emits no code.
+type DownloadLink = { href: string; download: string; click(): void; remove(): void };
+declare const document: { createElement(tag: 'a'): DownloadLink; body: { appendChild(link: DownloadLink): unknown } };
 export type RawCell = string | number | boolean | null;
 export type RawSheet = {
     name: string;
@@ -152,7 +156,7 @@ export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsh
 export function downloadXlsx(bytes: Uint8Array, filename: string): void {
     const blob = new Blob([new Uint8Array(bytes).buffer], { type: XLSX_MIME });
     const url = URL.createObjectURL(blob);
-    let link: HTMLAnchorElement | undefined;
+    let link: DownloadLink | undefined;
     try {
         link = document.createElement('a');
         link.href = url;

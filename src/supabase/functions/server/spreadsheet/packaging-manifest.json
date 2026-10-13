@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "transforms": [
+    "Adapter runtime import path ../../vendor/spreadsheet/ -> ../vendor/spreadsheet/",
+    "Type-only ./archive -> ./archive.ts"
+  ],
+  "files": [
+    {
+      "source": "src/utils/spreadsheet/index.ts",
+      "destination": "spreadsheet/index.ts",
+      "sourceSHA256": "402b34bb4266ae18ed3795f7501ed65c45e0177b4babe44be779c6f34ad2e371",
+      "deployedSHA256": "ae98d7822520ae3b70e3fd9530f7a7bfdeca36a81da9a186930083a52d9f760e"
+    },
+    {
+      "source": "src/utils/spreadsheet/archive.ts",
+      "destination": "spreadsheet/archive.ts",
+      "sourceSHA256": "57f0d4aa8998fc80cd780783edd9d5dc9252ec24bd36170905249703de0b9945",
+      "deployedSHA256": "e2a38d47202f8efc5cd5213a3edf15e363df344d26689635294dfac6f5528ada"
+    },
+    {
+      "source": "src/utils/spreadsheet/limits.ts",
+      "destination": "spreadsheet/limits.ts",
+      "sourceSHA256": "c1de828ff4020037cb9e8ec0def32feba2f09cb98df73a28df2c3a376b48940d",
+      "deployedSHA256": "c1de828ff4020037cb9e8ec0def32feba2f09cb98df73a28df2c3a376b48940d"
+    },
+    {
+      "source": "src/vendor/spreadsheet/exceljs-runtime.mjs",
+      "destination": "vendor/spreadsheet/exceljs-runtime.mjs",
+      "sourceSHA256": "4d834989f7ec1a59fc9e9f4718899ef42b334da798bd3b22fca7e3046e21ccca",
+      "deployedSHA256": "4d834989f7ec1a59fc9e9f4718899ef42b334da798bd3b22fca7e3046e21ccca"
+    },
+    {
+      "source": "src/vendor/spreadsheet/exceljs-runtime.d.mts",
+      "destination": "vendor/spreadsheet/exceljs-runtime.d.mts",
+      "sourceSHA256": "d3f54972b03f858e8bf12878006284e6342d3662f9c956c6a76dffaad63f4b69",
+      "deployedSHA256": "d3f54972b03f858e8bf12878006284e6342d3662f9c956c6a76dffaad63f4b69"
+    },
+    {
+      "source": "src/vendor/spreadsheet/exceljs-types.d.ts",
+      "destination": "vendor/spreadsheet/exceljs-types.d.ts",
+      "sourceSHA256": "434f3041fa07098df0b6bcba49526933c93bff73bf984e920aec6b1e4023afdb",
+      "deployedSHA256": "434f3041fa07098df0b6bcba49526933c93bff73bf984e920aec6b1e4023afdb"
+    },
+    {
+      "source": "src/vendor/spreadsheet/manifest.json",
+      "destination": "vendor/spreadsheet/manifest.json",
+      "sourceSHA256": "1c475c7d3c5c34168f157322269c25f6c7db885eb2019d675da4d7fdd88e0423",
+      "deployedSHA256": "1c475c7d3c5c34168f157322269c25f6c7db885eb2019d675da4d7fdd88e0423"
+    },
+    {
+      "source": "src/vendor/spreadsheet/LICENSES.md",
+      "destination": "vendor/spreadsheet/LICENSES.md",
+      "sourceSHA256": "c92fa5109a6541b27ff9519eb3cafda896ceb57ef357cfbbe9f52a8a56c8e1cb",
+      "deployedSHA256": "c92fa5109a6541b27ff9519eb3cafda896ceb57ef357cfbbe9f52a8a56c8e1cb"
+    },
+    {
+      "source": "src/vendor/spreadsheet/saxes-LICENSE.txt",
+      "destination": "vendor/spreadsheet/saxes-LICENSE.txt",
+      "sourceSHA256": "0fac2374380621b22e6b50451057721a9c52935b02d16d106a9f04897f061d0e",
+      "deployedSHA256": "0fac2374380621b22e6b50451057721a9c52935b02d16d106a9f04897f061d0e"
+    },
+    {
+      "source": "src/vendor/spreadsheet/README.md",
+      "destination": "vendor/spreadsheet/README.md",
+      "sourceSHA256": "b192d05e875ca5f845176f60913e4ff0160e7bda12236600b8c4e8f7438f3c76",
+      "deployedSHA256": "b192d05e875ca5f845176f60913e4ff0160e7bda12236600b8c4e8f7438f3c76"
+    },
+    {
+      "source": "src/vendor/spreadsheet/audit-evidence.json",
+      "destination": "vendor/spreadsheet/audit-evidence.json",
+      "sourceSHA256": "907ba434abefc5bdc2d6001731d87300bbaf764b2e97f8ca38587176189dbd95",
+      "deployedSHA256": "907ba434abefc5bdc2d6001731d87300bbaf764b2e97f8ca38587176189dbd95"
+    }
+  ]
+}

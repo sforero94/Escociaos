@@ -1,4 +1,4 @@
-import type { Workbook as ExcelWorkbook } from 'exceljs';
+import type { Workbook as ExcelWorkbook } from './exceljs-types.d.ts';
 export const Workbook: { new(): ExcelWorkbook };
 export class Inflate {
   constructor(options: { raw: boolean; chunkSize: number });
@@ -11,7 +11,9 @@ export class Inflate {
 }
 export class SaxesParser {
   constructor(options?: { xmlns?: boolean });
-  on(event: string, callback: (...args: any[]) => void): this;
+  on(event: 'doctype' | 'text' | 'cdata', callback: (text: string) => void): this;
+  on(event: 'error', callback: (error: Error) => void): this;
+  on(event: 'opentag' | 'closetag', callback: (tag: { local: string; uri: string; attributes: Record<string, { value: string; local: string; uri: string }> }) => void): this;
   write(xml: string): this;
   close(): this;
 }
