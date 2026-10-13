@@ -1,6 +1,11 @@
 -- Local review candidate only; unapplied. Unused Calculada plans only.
 -- Whole DEFINER boundary with captured-policy equivalence; no stock credits.
 BEGIN;
+-- Retire ownerless overloads: no current-session fallback is permitted.
+DROP FUNCTION IF EXISTS public.fn_application_plan_delete_snapshot(uuid);
+DROP FUNCTION IF EXISTS public.fn_application_plan_delete(uuid,uuid,jsonb);
+DROP FUNCTION IF EXISTS public.fn_application_plan_delete_status(uuid,uuid,jsonb);
+
 CREATE SCHEMA application_plan_delete;
 REVOKE ALL ON SCHEMA application_plan_delete FROM PUBLIC,anon,authenticated,service_role;
 CREATE TABLE application_plan_delete.requests(
@@ -250,11 +255,15 @@ BEGIN
  RAISE EXCEPTION 'Solo puede eliminar un plan sin ejecución, trabajo ni movimientos de inventario.'; END IF;
  IF e->'aplicaciones'->>'tarea_id' IS NOT NULL AND e->'tarea'='null'::jsonb THEN RAISE EXCEPTION 'Linked task unavailable'; END IF;
 END $$;
-CREATE FUNCTION public.fn_application_plan_delete_snapshot(p_application_id uuid) RETURNS jsonb
+CREATE FUNCTION public.fn_application_plan_delete_snapshot(p_application_id uuid,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE e jsonb;
 BEGIN
- PERFORM application_plan_delete.authorize(); PERFORM application_plan_delete.assert_boundary(); PERFORM application_plan_delete.assert_graph();
+ PERFORM application_plan_delete.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM auth.uid() THEN
+  RAISE EXCEPTION 'Operation owner mismatch' USING ERRCODE='42501';
+ END IF;
+ PERFORM application_plan_delete.assert_boundary(); PERFORM application_plan_delete.assert_graph();
  e:=application_plan_delete.snapshot(p_application_id); PERFORM application_plan_delete.eligible(e);
  RETURN jsonb_build_object('application_id',p_application_id,'expected',e);
 END $$;
@@ -270,12 +279,16 @@ BEGIN
  result:=result||jsonb_build_object('closure_proofs',fingerprint); END IF;
  RETURN result;
 END $$;
-CREATE FUNCTION public.fn_application_plan_delete(p_request_key uuid,p_application_id uuid,p_expected jsonb) RETURNS jsonb
+CREATE FUNCTION public.fn_application_plan_delete(p_request_key uuid,p_application_id uuid,p_expected jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public SET lock_timeout='5s' AS $$
 <<del>>
 DECLARE actor uuid; r application_plan_delete.requests%ROWTYPE; e jsonb; baseline jsonb; audit_before jsonb; table_name text; row jsonb; expected_ids jsonb; actual_ids jsonb; deleted jsonb:='{}'; result jsonb;
 BEGIN
- actor:=application_plan_delete.authorize(); PERFORM application_plan_delete.assert_boundary(); PERFORM application_plan_delete.assert_graph();
+ actor:=application_plan_delete.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM auth.uid() THEN
+  RAISE EXCEPTION 'Operation owner mismatch' USING ERRCODE='42501';
+ END IF;
+ PERFORM application_plan_delete.assert_boundary(); PERFORM application_plan_delete.assert_graph();
  IF p_request_key IS NULL OR p_application_id IS NULL OR jsonb_typeof(p_expected) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Exact plan-delete original required'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('plan-delete:'||actor::text||':'||p_request_key::text,0));
  SELECT * INTO r FROM application_plan_delete.requests q WHERE q.actor=del.actor AND q.request_key=p_request_key FOR UPDATE;
@@ -318,12 +331,16 @@ BEGIN
  IF NOT FOUND OR r.state<>'committed' OR r.actor IS DISTINCT FROM actor OR r.request_key IS DISTINCT FROM p_request_key OR r.application_id IS DISTINCT FROM p_application_id OR r.expected IS DISTINCT FROM p_expected OR r.archive IS DISTINCT FROM e OR r.receipt IS DISTINCT FROM result THEN RAISE EXCEPTION 'Plan receipt not confirmed'; END IF;
  RETURN jsonb_build_object('request_key',p_request_key,'receipt',result);
 END $$;
-CREATE FUNCTION public.fn_application_plan_delete_status(p_request_key uuid,p_application_id uuid,p_expected jsonb) RETURNS jsonb
+CREATE FUNCTION public.fn_application_plan_delete_status(p_request_key uuid,p_application_id uuid,p_expected jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public SET lock_timeout='5s' AS $$
 <<status>>
 DECLARE actor uuid; r application_plan_delete.requests%ROWTYPE;
 BEGIN
- actor:=application_plan_delete.authorize(); PERFORM application_plan_delete.assert_boundary(); PERFORM application_plan_delete.assert_graph();
+ actor:=application_plan_delete.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM auth.uid() THEN
+  RAISE EXCEPTION 'Operation owner mismatch' USING ERRCODE='42501';
+ END IF;
+ PERFORM application_plan_delete.assert_boundary(); PERFORM application_plan_delete.assert_graph();
  IF p_request_key IS NULL OR p_application_id IS NULL OR jsonb_typeof(p_expected) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Exact plan-delete original required'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('plan-delete:'||actor::text||':'||p_request_key::text,0));
  SELECT * INTO r FROM application_plan_delete.requests q WHERE q.actor=status.actor AND q.request_key=p_request_key FOR UPDATE;
@@ -338,6 +355,6 @@ BEGIN
  RETURN jsonb_build_object('state','cancelled','request_key',p_request_key);
 END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA application_plan_delete FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION public.fn_application_plan_delete_snapshot(uuid),public.fn_application_plan_delete(uuid,uuid,jsonb),public.fn_application_plan_delete_status(uuid,uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_application_plan_delete_snapshot(uuid),public.fn_application_plan_delete(uuid,uuid,jsonb),public.fn_application_plan_delete_status(uuid,uuid,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_application_plan_delete_snapshot(uuid,uuid),public.fn_application_plan_delete(uuid,uuid,jsonb,uuid),public.fn_application_plan_delete_status(uuid,uuid,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_application_plan_delete_snapshot(uuid,uuid),public.fn_application_plan_delete(uuid,uuid,jsonb,uuid),public.fn_application_plan_delete_status(uuid,uuid,jsonb,uuid) TO authenticated;
 COMMIT;

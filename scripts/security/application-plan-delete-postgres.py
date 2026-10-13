@@ -36,6 +36,8 @@ def setup():
  f.sql('CREATE OR REPLACE FUNCTION public.fn_globalgap_registrar_correccion()'+func)
  for t in ['aplicaciones_lotes','aplicaciones_productos','aplicaciones_calculos','aplicaciones_compras']:
   f.sql(f'CREATE TRIGGER trg_globalgap_correccion AFTER UPDATE OR DELETE ON {t} FOR EACH ROW EXECUTE FUNCTION fn_globalgap_registrar_correccion();')
+ for signature in ['fn_application_plan_delete_snapshot(uuid)','fn_application_plan_delete(uuid,uuid,jsonb)','fn_application_plan_delete_status(uuid,uuid,jsonb)']:
+  f.sql('CREATE FUNCTION public.'+signature+" RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;")
  f.sql((ROOT/'src/sql/security-candidates/application-plan-delete.sql').read_text())
  f.TABLES+=['aplicaciones_compras','application_plan_delete.requests']
 
@@ -43,9 +45,11 @@ def reset():
  f.reset()
  f.sql(f"DELETE FROM registros_trabajo WHERE tarea_id='{TASK}'; UPDATE aplicaciones SET estado='Calculada',fecha_inicio_ejecucion=NULL,fecha_fin_ejecucion=NULL,fecha_cierre=NULL WHERE id='{APP}'; INSERT INTO aplicaciones_mezclas(id,aplicacion_id) VALUES ('{MIX}','{APP}'); INSERT INTO aplicaciones_lotes(aplicacion_id,lote_id) VALUES ('{APP}','{TASK}'); INSERT INTO aplicaciones_productos(mezcla_id,producto_id) VALUES ('{MIX}','{f.P1}'); INSERT INTO aplicaciones_calculos(aplicacion_id,mezcla_id) VALUES ('{APP}','{MIX}'); INSERT INTO aplicaciones_compras(aplicacion_id,producto_id,cantidad_necesaria) VALUES ('{APP}','{f.P1}',2);")
 
-def call(op='delete',e=None,key=None,actor=f.ACTOR,app=APP,role='authenticated',ok=True):
+def call(op='delete',e=None,key=None,actor=f.ACTOR,app=APP,role='authenticated',ok=True,expected_owner='actor'):
  name={'snapshot':'fn_application_plan_delete_snapshot','delete':'fn_application_plan_delete','status':'fn_application_plan_delete_status'}[op]
  args=f"'{app}'::uuid" if op=='snapshot' else f"'{key or str(uuid.uuid4())}'::uuid,'{app}'::uuid,{f.literal(json.dumps(e))}::jsonb"
+ owner_sql=f.literal(actor if expected_owner=='actor' else expected_owner)+'::uuid' if (actor if expected_owner=='actor' else expected_owner) is not None else 'NULL::uuid'
+ args+=','+owner_sql
  result=f.sql(f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={f.literal(actor or '')}; SELECT {name}({args}); COMMIT;",ok)
  return json.loads(result) if ok else result
 
@@ -56,8 +60,20 @@ def reject(label,op='delete',e=None,**kw):
  f.verify(f.state()==before,label)
 
 def tests():
- setup();reset();e=snapshot();key=str(uuid.uuid4());before=f.sql('SELECT application_plan_delete.retained();')
+ setup();reset();e=snapshot()
+ for owner in [None,f.MANAGER]:
+  for op in ['delete','status','snapshot']:
+   before=f.state();error=call(op,e,ok=False,expected_owner=owner)
+   f.verify('Operation owner mismatch' in error and f.state()==before,'null/mismatched owner refuses '+op+' with zero effect '+str(owner))
+ for signature in ['fn_application_plan_delete_snapshot(uuid)','fn_application_plan_delete(uuid,uuid,jsonb)','fn_application_plan_delete_status(uuid,uuid,jsonb)']:
+  f.verify(f.sql('SELECT to_regprocedure('+f.literal('public.'+signature)+') IS NULL;')=='t','ownerless overload retired '+signature)
+ reset();e=snapshot();key=str(uuid.uuid4());before=f.sql('SELECT application_plan_delete.retained();')
  r=call(e=e,key=key)
+ for owner in [None,f.MANAGER]:
+  for op in ['delete','status']:
+   before_state=f.state();error=call(op,e,key,ok=False,expected_owner=owner)
+   f.verify('Operation owner mismatch' in error and f.state()==before_state,'owner guard prevents committed plan replay/disclosure '+op+' '+str(owner))
+
  f.verify(r['receipt']['preserved_task_id']==TASK and all(len(ids)==1 for ids in r['receipt']['deleted'].values()),'unused Calculada plan deletes exact reviewed IDs and retains task')
  f.verify(f.sql('SELECT application_plan_delete.retained();')==before,'all stock ledger task work daily closure unchanged')
  f.verify(f.sql(f"SELECT count(*)=5 FROM globalgap_correcciones WHERE operacion='delete' AND corregido_por='{f.ACTOR}';")=='t','each audited plan table has actual original delete correction')
@@ -111,7 +127,7 @@ def tests():
  f.verify(f.sql(f"SELECT EXISTS(SELECT 1 FROM aplicaciones WHERE id='{APP}') AND (SELECT count(*)=0 FROM application_plan_delete.requests);")=='t','source race retains application and creates no deletion proof')
  reset();e=snapshot();key=str(uuid.uuid4())
  def raw(op):
-  return f.docker(['exec','-i','-u','postgres',f.CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN;SET LOCAL ROLE authenticated;SET LOCAL request.jwt.claim.sub='{f.ACTOR}';SELECT fn_application_plan_delete{'_status' if op=='status' else ''}('{key}','{APP}',{f.literal(json.dumps(e))});COMMIT;",False)
+  return f.docker(['exec','-i','-u','postgres',f.CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN;SET LOCAL ROLE authenticated;SET LOCAL request.jwt.claim.sub='{f.ACTOR}';SELECT fn_application_plan_delete{'_status' if op=='status' else ''}('{key}','{APP}',{f.literal(json.dumps(e))},'{f.ACTOR}'::uuid);COMMIT;",False)
  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:out=list(pool.map(raw,['delete','status']))
  f.verify(out[1].returncode==0 and (out[0].returncode==0 or 'cancelled' in out[0].stderr),'delete/status race serializes to committed or cancelled')
  f.verify(f.sql("SELECT count(*)=1 AND bool_and(state IN ('committed','cancelled')) FROM application_plan_delete.requests;")=='t','one terminal prospective deletion proof after race')

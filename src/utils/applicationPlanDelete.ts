@@ -1,4 +1,5 @@
 // Requires the reviewed unused-plan SQL protocol; no table-delete fallback.
+// The server must bind snapshot/replay/mutation to the original operation owner.
 import { matchesClosureOriginal, type ApplicationClosureClient } from '@/utils/applicationClosureIntegrity';
 export type PlanDeleteExpected = Record<string, unknown>;
 export interface PlanDeleteReceipt { actor: string; request_key: string; application_id: string; deleted: Record<string, string[]>; preserved_task_id: string | null }
@@ -36,7 +37,7 @@ async function rpc(client: ApplicationClosureClient, name: string, args: Record<
 }
 export async function loadPlanDeleteExpected(client: ApplicationClosureClient, owner: string, application: string, current: () => boolean) {
   await auth(client,owner,current);
-  const r = await rpc(client,'fn_application_plan_delete_snapshot',{p_application_id:uuid(application)});
+  const r = await rpc(client,'fn_application_plan_delete_snapshot',{p_application_id:uuid(application),p_expected_owner:uuid(owner)});
   exact(r,['application_id','expected']); if (uuid(r.application_id) !== uuid(application)) fail();
   const e = original(r.expected,application); await auth(client,owner,current); return e;
 }
@@ -62,14 +63,14 @@ export async function deleteUnusedPlan(client: ApplicationClosureClient, owner: 
     localStorage.setItem(planDeleteSlot(owner,application),JSON.stringify(next)); return next;
   });
   await auth(client,owner,current);
-  const r = await rpc(client,'fn_application_plan_delete',{p_request_key:a.key,p_application_id:a.application,p_expected:a.expected});
+  const r = await rpc(client,'fn_application_plan_delete',{p_expected_owner:a.owner,p_request_key:a.key,p_application_id:a.application,p_expected:a.expected});
   exact(r,['request_key','receipt']); if (uuid(r.request_key) !== uuid(a.key)) fail();
   const confirmed = receipt(r.receipt,a); await clear(client,a,current); return confirmed;
 }
 export async function resolvePlanDelete(client: ApplicationClosureClient, owner: string, application: string, current: () => boolean) {
   await auth(client,owner,current); const a = await lock(owner,application,() => read(owner,application)); if (!a) throw new Error('No hay una eliminación pendiente para verificar.');
   await auth(client,owner,current);
-  const r = await rpc(client,'fn_application_plan_delete_status',{p_request_key:a.key,p_application_id:a.application,p_expected:a.expected});
+  const r = await rpc(client,'fn_application_plan_delete_status',{p_expected_owner:a.owner,p_request_key:a.key,p_application_id:a.application,p_expected:a.expected});
   if (uuid(r.request_key) !== uuid(a.key)) fail();
   if (r.state === 'committed') { exact(r,['state','request_key','receipt']); receipt(r.receipt,a); }
   else if (r.state === 'cancelled') exact(r,['state','request_key']); else fail();

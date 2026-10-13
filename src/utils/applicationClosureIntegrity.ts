@@ -2,6 +2,7 @@ import type { PayloadCierreAplicacion } from '@/utils/calculosCierreAplicacion';
 
 // Release gate: reviewed snapshot/CAS/receipt SQL must be installed before this caller.
 // No legacy RPC or direct-table fallback can preserve these guarantees.
+// Bind each RPC to its original owner even if SDK transport acquires a newer session.
 export interface ApplicationClosureClient {
   auth: { getUser(): PromiseLike<{ data: { user: { id: string } | null }; error: { message: string } | null }> };
   rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string } | null }>;
@@ -90,7 +91,7 @@ async function rpc(client: ApplicationClosureClient, name: string, args: JsonObj
 }
 export async function loadClosureExpected(client: ApplicationClosureClient, owner: string, application: string, current: () => boolean): Promise<ClosureExpected> {
   await authorize(client, owner, current);
-  const result = object(await rpc(client, 'fn_application_closure_snapshot', { p_aplicacion_id: uuid(application) }));
+  const result = object(await rpc(client, 'fn_application_closure_snapshot', { p_aplicacion_id: uuid(application), p_expected_owner: uuid(owner) }));
   exact(result, ['aplicacion_id','expected']);
   if (uuid(result.aplicacion_id) !== uuid(application)) fail();
   const original = copy(expected(result.expected));
@@ -125,7 +126,7 @@ export async function closeApplication(client: ApplicationClosureClient, owner: 
     return next;
   });
   await authorize(client, owner, current);
-  const result = object(await rpc(client, 'fn_application_close', { p_request_key: attempt.key, p_payload: attempt.payload, p_expected: attempt.expected }));
+  const result = object(await rpc(client, 'fn_application_close', { p_expected_owner: attempt.owner, p_request_key: attempt.key, p_payload: attempt.payload, p_expected: attempt.expected }));
   exact(result, ['request_key','receipt']);
   if (uuid(result.request_key) !== uuid(attempt.key)) fail();
   const confirmed = receipt(result.receipt, attempt.payload);
@@ -137,7 +138,7 @@ export async function resolveClosure(client: ApplicationClosureClient, owner: st
   const attempt = await locked(owner, application, () => read(owner, application));
   if (!attempt) throw new Error('No hay un intento de cierre pendiente para verificar.');
   await authorize(client, owner, current);
-  const result = object(await rpc(client, 'fn_application_closure_status', { p_request_key: attempt.key, p_payload: attempt.payload, p_expected: attempt.expected }));
+  const result = object(await rpc(client, 'fn_application_closure_status', { p_expected_owner: attempt.owner, p_request_key: attempt.key, p_payload: attempt.payload, p_expected: attempt.expected }));
   if (uuid(result.request_key) !== uuid(attempt.key)) fail();
   let confirmed: ClosureReceipt | undefined;
   if (result.state === 'committed') { exact(result, ['state','request_key','receipt']); confirmed = receipt(result.receipt, attempt.payload); }

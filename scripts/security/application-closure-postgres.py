@@ -585,6 +585,10 @@ def tests():
     candidate=(ROOT/'src/sql/security-candidates/application-closure.sql').read_text()
     legacy,extended=candidate.split('-- Explicit privileged protocol boundary.',1)
     sql(legacy+'COMMIT;')
+    # Model preinstalled ownerless entry points with public/default EXECUTE grants.
+    for signature in ['fn_application_closure_snapshot(uuid)','fn_application_close(uuid,jsonb,jsonb)','fn_application_closure_status(uuid,jsonb,jsonb)']:
+        sql('CREATE FUNCTION public.'+signature+" RETURNS jsonb LANGUAGE sql AS $$ SELECT '{}'::jsonb $$;")
+
     if os.environ.get('APPLICATION_CLOSURE_PROTOCOL_ONLY')=='1':
         sql('BEGIN;--'+extended); protocol_tests(); return
     reset(); result=call()
@@ -671,16 +675,18 @@ def tests():
 
 def raw_call(payload):
     return docker(['exec','-i','-u','postgres',CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT fn_cerrar_aplicacion({literal(json.dumps(payload))}::jsonb); COMMIT;",False)
-def protocol_call(operation='close',payload=None,expected=None,key=None,actor=ACTOR,role='authenticated',ok=True):
+def protocol_call(operation='close',payload=None,expected=None,key=None,actor=ACTOR,role='authenticated',ok=True,expected_owner='actor'):
     key=key or str(uuid.uuid4());payload=payload or protocol_body()
     expected=expected if expected is not None else snapshot(payload['aplicacion_id'],actor=actor)
     fn='fn_application_close' if operation=='close' else 'fn_application_closure_status'
-    source=f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT public.{fn}('{key}'::uuid,{literal(json.dumps(payload))}::jsonb,{literal(json.dumps(expected))}::jsonb); COMMIT;"
+    owner_sql=literal(actor if expected_owner=='actor' else expected_owner)+'::uuid' if (actor if expected_owner=='actor' else expected_owner) is not None else 'NULL::uuid'
+    source=f"BEGIN; SET LOCAL ROLE {role}; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT public.{fn}('{key}'::uuid,{literal(json.dumps(payload))}::jsonb,{literal(json.dumps(expected))}::jsonb,{owner_sql}); COMMIT;"
     out=sql(source,ok)
     return json.loads(out) if ok else out
 
-def snapshot(application=APP,actor=ACTOR,ok=True):
-    out=sql(f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT fn_application_closure_snapshot('{application}'::uuid); COMMIT;",ok)
+def snapshot(application=APP,actor=ACTOR,ok=True,expected_owner='actor'):
+    owner_sql=literal(actor if expected_owner=='actor' else expected_owner)+'::uuid' if (actor if expected_owner=='actor' else expected_owner) is not None else 'NULL::uuid'
+    out=sql(f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub={literal(actor or '')}; SELECT fn_application_closure_snapshot('{application}'::uuid,{owner_sql}); COMMIT;",ok)
     return json.loads(out)['expected'] if ok else out
 
 def protocol_reset():
@@ -702,8 +708,25 @@ def protocol_failure(label,payload=None,expected=None,key=None,operation='close'
 
 def protocol_tests():
     TABLES.append('application_closure.requests')
+    protocol_reset();p=protocol_body();e=snapshot()
+    for owner in [None,MANAGER]:
+        for operation in ['close','status','snapshot']:
+            before=state()
+            error=snapshot(ok=False,expected_owner=owner) if operation=='snapshot' else protocol_call(operation,p,e,ok=False,expected_owner=owner)
+            verify('Operation owner mismatch' in error and state()==before,'null/mismatched owner refuses '+operation+' with zero effect '+str(owner))
+    for signature in ['fn_application_closure_snapshot(uuid)','fn_application_close(uuid,jsonb,jsonb)','fn_application_closure_status(uuid,jsonb,jsonb)']:
+        verify(sql('SELECT to_regprocedure('+literal('public.'+signature)+') IS NULL;')=='t','ownerless overload retired '+signature)
+    for role in ['authenticated','anon','service_role']:
+        before=state();error=call(p,role=role,ok=False)
+        verify('permission denied for function fn_cerrar_aplicacion' in error and state()==before,'private legacy closure core refuses '+role)
+
     protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4());result=protocol_call(payload=p,expected=e,key=key)
     verify(result['receipt']['productosActualizados']==1,'new CAS protocol positive Administrator closes with actual source quantities and totals')
+    for owner in [None,MANAGER]:
+        for operation in ['close','status']:
+            before=state();error=protocol_call(operation,p,e,key,expected_owner=owner,ok=False)
+            verify('Operation owner mismatch' in error and state()==before,'owner guard prevents committed closure replay/disclosure '+operation+' '+str(owner))
+
     before=state();verify(protocol_call(payload=p,expected=e,key=key)==result and state()==before,'lost-response identical retry returns exact committed receipt without mutation')
     resolved=protocol_call('status',p,e,key)
     verify(resolved['state']=='committed' and resolved['receipt']==result['receipt'],'status recovers exact actor-bound committed closure')
@@ -763,7 +786,7 @@ def protocol_tests():
     protocol_reset();p=protocol_body();e=snapshot();key=str(uuid.uuid4())
     def raw(operation):
         fn='fn_application_close' if operation=='close' else 'fn_application_closure_status'
-        return docker(['exec','-i','-u','postgres',CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT {fn}('{key}',{literal(json.dumps(p))}::jsonb,{literal(json.dumps(e))}::jsonb); COMMIT;",False)
+        return docker(['exec','-i','-u','postgres',CONTAINER,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-d','postgres'],f"BEGIN; SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claim.sub='{ACTOR}'; SELECT {fn}('{key}',{literal(json.dumps(p))}::jsonb,{literal(json.dumps(e))}::jsonb,'{ACTOR}'::uuid); COMMIT;",False)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:outcomes=list(pool.map(raw,['close','status']))
     verify(all(x.returncode==0 or 'cancelled' in x.stderr for x in outcomes),'close and absent-resolution race serializes on same actor/key')
     verify(sql("SELECT count(*)=1 AND bool_and(state IN ('committed','cancelled')) FROM application_closure.requests;")=='t','close/status race leaves one terminal outcome')

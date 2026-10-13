@@ -17,12 +17,12 @@ describe('closure protocol through actual Supabase SDK', () => {
   it('brackets trusted snapshot owner/application and preserves microsecond original text', async () => {
     const h = await sdkHarness(() => ({ aplicacion_id: application, expected: expectedClosure }));
     expect(await loadClosureExpected(client(h.client), owner, application, () => true)).toEqual(expectedClosure);
-    expect(h.calls[0].body).toEqual({ p_aplicacion_id: application });
+    expect(h.calls[0].body).toEqual({ p_aplicacion_id: application, p_expected_owner: owner });
   });
   it('persists exact original before send and clears only a complete matching receipt', async () => {
     const h = await sdkHarness(c => { expect(memory.has(slot)).toBe(true); return { request_key: c.body.p_request_key, receipt: closureReceipt }; });
     expect(await closeApplication(client(h.client), owner, closurePayload(), expectedClosure, () => true)).toEqual(closureReceipt);
-    expect(memory.has(slot)).toBe(false); expect(h.calls[0].url.pathname).toContain('fn_application_close');
+    expect(memory.has(slot)).toBe(false); expect(h.calls[0].url.pathname).toContain('fn_application_close'); expect(h.calls[0].body.p_expected_owner).toBe(owner);
   });
   it('lost or malformed responses retain original then exact retry uses identical key/body', async () => {
     let valid = false; const h = await sdkHarness(c => valid ? { request_key: c.body.p_request_key, receipt: closureReceipt } : null);

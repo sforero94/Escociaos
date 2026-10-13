@@ -391,7 +391,12 @@ $function$
 REVOKE ALL ON FUNCTION public.fn_cerrar_aplicacion(jsonb) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.fn_cerrar_aplicacion(jsonb) TO authenticated;
 
--- Explicit privileged protocol boundary. Retire the unversioned ordinary RPC.
+-- Explicit privileged protocol boundary.
+-- Retire ownerless overloads: no current-session fallback is permitted.
+DROP FUNCTION IF EXISTS public.fn_application_closure_snapshot(uuid);
+DROP FUNCTION IF EXISTS public.fn_application_close(uuid,jsonb,jsonb);
+DROP FUNCTION IF EXISTS public.fn_application_closure_status(uuid,jsonb,jsonb);
+-- Retire the unversioned ordinary RPC.
 CREATE TABLE application_closure.requests(
  actor uuid NOT NULL, request_key uuid NOT NULL, application_id uuid NOT NULL,
  payload jsonb NOT NULL, expected jsonb NOT NULL,
@@ -457,11 +462,14 @@ LANGUAGE sql STABLE SET search_path=pg_catalog AS $$
  'aplicaciones_productos',(SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id),'[]') FROM public.aplicaciones_productos p JOIN public.aplicaciones_mezclas m ON m.id=p.mezcla_id WHERE m.aplicacion_id=application_id)
  )
 $$;
-CREATE FUNCTION public.fn_application_closure_snapshot(p_aplicacion_id uuid) RETURNS jsonb
+CREATE FUNCTION public.fn_application_closure_snapshot(p_aplicacion_id uuid,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE original jsonb;
 BEGIN
  PERFORM application_closure.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM auth.uid() THEN
+  RAISE EXCEPTION 'Operation owner mismatch' USING ERRCODE='42501';
+ END IF;
  PERFORM application_closure.assert_boundary();
  original:=application_closure.snapshot(p_aplicacion_id);
  IF original->'aplicacion'='null'::jsonb THEN RAISE EXCEPTION 'Application missing'; END IF;
@@ -473,13 +481,17 @@ BEGIN
  -- Complete source/set CAS, including absent/new rows; broad locks are deliberate.
  LOCK TABLE public.aplicaciones,public.aplicaciones_calculos,public.aplicaciones_cierre,public.aplicaciones_lotes,public.aplicaciones_mezclas,public.aplicaciones_productos,public.contratistas,public.empleados,public.lotes,public.movimientos_diarios,public.movimientos_diarios_productos,public.movimientos_inventario,public.productos,public.registros_trabajo,public.tareas IN SHARE ROW EXCLUSIVE MODE;
 END $$;
-CREATE FUNCTION public.fn_application_close(p_request_key uuid,p_payload jsonb,p_expected jsonb) RETURNS jsonb
+CREATE FUNCTION public.fn_application_close(p_request_key uuid,p_payload jsonb,p_expected jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET lock_timeout='5s' AS $$
 <<close_request>>
 DECLARE actor uuid; application_id uuid; request application_closure.requests%ROWTYPE;
  original jsonb; final jsonb; result jsonb; baseline_products jsonb; final_products jsonb; work_original jsonb; work_final jsonb; work_edit jsonb; unchanged_fields text[]; n integer; costs numeric; labor numeric; jornales numeric; trees numeric;
 BEGIN
- PERFORM application_closure.authorize(); actor:=auth.uid();
+ PERFORM application_closure.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM auth.uid() THEN
+  RAISE EXCEPTION 'Operation owner mismatch' USING ERRCODE='42501';
+ END IF;
+ actor:=auth.uid();
  PERFORM application_closure.assert_boundary();
  application_id:=nullif(p_payload->>'aplicacion_id','')::uuid;
  IF p_request_key IS NULL OR application_id IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object'
@@ -558,12 +570,16 @@ BEGIN
  IF application_closure.snapshot(application_id) IS DISTINCT FROM final THEN RAISE EXCEPTION 'Closure proof trigger changed business results'; END IF;
  RETURN jsonb_build_object('request_key',p_request_key,'receipt',result);
 END $$;
-CREATE FUNCTION public.fn_application_closure_status(p_request_key uuid,p_payload jsonb,p_expected jsonb) RETURNS jsonb
+CREATE FUNCTION public.fn_application_closure_status(p_request_key uuid,p_payload jsonb,p_expected jsonb,p_expected_owner uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET lock_timeout='5s' AS $$
 <<resolve_request>>
 DECLARE actor uuid; application_id uuid; request application_closure.requests%ROWTYPE;
 BEGIN
- PERFORM application_closure.authorize(); actor:=auth.uid(); PERFORM application_closure.assert_boundary();
+ PERFORM application_closure.authorize();
+ IF p_expected_owner IS NULL OR p_expected_owner IS DISTINCT FROM auth.uid() THEN
+  RAISE EXCEPTION 'Operation owner mismatch' USING ERRCODE='42501';
+ END IF;
+ actor:=auth.uid(); PERFORM application_closure.assert_boundary();
  application_id:=nullif(p_payload->>'aplicacion_id','')::uuid;
  IF p_request_key IS NULL OR application_id IS NULL OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object'
  OR jsonb_typeof(p_expected) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Exact closure original required'; END IF;
@@ -589,8 +605,8 @@ BEGIN
 END $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA application_closure FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.fn_cerrar_aplicacion(jsonb) FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION public.fn_application_closure_snapshot(uuid),public.fn_application_close(uuid,jsonb,jsonb),
- public.fn_application_closure_status(uuid,jsonb,jsonb) FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION public.fn_application_closure_snapshot(uuid),public.fn_application_close(uuid,jsonb,jsonb),
- public.fn_application_closure_status(uuid,jsonb,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.fn_application_closure_snapshot(uuid,uuid),public.fn_application_close(uuid,jsonb,jsonb,uuid),
+ public.fn_application_closure_status(uuid,jsonb,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_application_closure_snapshot(uuid,uuid),public.fn_application_close(uuid,jsonb,jsonb,uuid),
+ public.fn_application_closure_status(uuid,jsonb,jsonb,uuid) TO authenticated;
 COMMIT;
