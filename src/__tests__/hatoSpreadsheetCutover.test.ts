@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { leerHojasCrudas as source } from '../supabase/functions/server/hato-chequeo-spreadsheet';
 import { leerHojasCrudas as deployed } from '../../supabase/functions/make-server-1ccce916/hato-chequeo-spreadsheet';
 
@@ -18,6 +19,10 @@ async function fixture() {
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 }
 describe('Hato actual-byte server cutover', () => {
+  it('verifies both deployable packages against canonical source, runtime and provenance', () => {
+    expect(execFileSync(process.execPath, ['scripts/security/package-spreadsheet-server.mjs', '--check'], { encoding: 'utf8' }))
+      .toContain('verified from canonical sources');
+  });
   it.each([source, deployed])('preserves all ordered raw sheets in each function-root package', async read => {
     expect(await read(await fixture(), 'synthetic.xlsx')).toEqual([
       { archivo: 'synthetic.xlsx', hoja: 'Zeta', filas: [[46225.50000000001, '#VALUE!', true, 0, ' raw '], [null, null, null, null, null], [null, null, null, null, null]] },

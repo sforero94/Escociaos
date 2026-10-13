@@ -85,7 +85,7 @@ function unzip(bytes: Uint8Array): Map<string, Uint8Array> {
         catch {
             return invalid('nombre ZIP no UTF-8');
         }
-        if (!name || /[\\\x00-\x1f]/.test(name) || name.startsWith('/') || name.split('/').some((part, i, parts) => part === '.' || part === '..' || (!part && i !== parts.length - 1)) || files.has(name))
+        if (!name || name.includes('\\') || [...name].some(character => character.charCodeAt(0) < 32) || name.startsWith('/') || name.split('/').some((part, i, parts) => part === '.' || part === '..' || (!part && i !== parts.length - 1)) || files.has(name))
             return invalid('ruta ZIP ambigua');
         // JSZip honors Unicode-path extra fields. Admit them only when identical to
         // the already checked UTF-8 path; ZIP64 metadata is deliberately unsupported.

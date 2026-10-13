@@ -14,8 +14,8 @@
     {
       "source": "src/utils/spreadsheet/archive.ts",
       "destination": "spreadsheet/archive.ts",
-      "sourceSHA256": "57f0d4aa8998fc80cd780783edd9d5dc9252ec24bd36170905249703de0b9945",
-      "deployedSHA256": "e2a38d47202f8efc5cd5213a3edf15e363df344d26689635294dfac6f5528ada"
+      "sourceSHA256": "764ac568d6dfa7e1db7e36ce91a3518ed90349e2e605fccbf3637b0b1fb76161",
+      "deployedSHA256": "8577262fcf17fea38ac0aa7d22f09892f93704bff5f57f782ad3e5adb420701c"
     },
     {
       "source": "src/utils/spreadsheet/limits.ts",
