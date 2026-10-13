@@ -14,6 +14,14 @@ Vercel configuration prepares lockfile-based installation with `npm ci` and resp
 
 ## Proof and retention
 
+Human operation protocols must bind the original operation owner as well as the
+trusted current session. An SDK session switch between an earlier account check
+and RPC transmission can otherwise execute a saved operation under the new
+account. Required expected-owner arguments must equal the trusted Auth UID before
+any source selection, posting, replay or cancellation. The claimed owner never
+supplies privilege or attribution. Retire ownerless overloads in the coordinated
+database cutover; late browser receipt rejection cannot undo a committed write.
+
 Memory confirmation receipts are retained seven days; expired proposals and spent token/owner/hash metadata are removed by the reviewed cleanup function. Saved memories are unaffected. Hosted pg_cron execution and quiet-period deletion must be verified separately; local PostgreSQL tests do not certify scheduling.
 
 Purchase/manual-stock request evidence and cancellation fences are a distinct prospective audit/idempotency mechanism. Their access, capacity, archival and deletion policy remain a release gate. Deleting a fence without an equivalent protection can allow historical key reuse. No historical proof is inferred from a displayed row. A failed or lost response retains the original owner/key/payload until the transactionally serialized resolution returns a verified outcome.
@@ -23,6 +31,16 @@ Purchase/manual-stock request evidence and cancellation fences are a distinct pr
 Atomic CSV import, scoped cattle undo and authenticated invoice-byte validation now have local implementations and focused evidence. Global stock writer coordination, prospective coupled cattle creation, complete audit access and retention, hosted runtime checks and a contained real backup recovery exercise remain unfinished. The xlsx dependency advisory remains unresolved. Recovery must use an existing protected key, verified isolation, no extra spend and cleanup; absent credentials are not replaced with invented values. Historical tests from a lost worktree do not certify this reconstructed branch.
 
 ## Prepared destructive-operation safeguards
+
+Web treatment creation now persists the original complete animal/proposal and
+one owner-bound request key before sending. Treatment and requested follow-up
+commit together with exact protected proof. Full-workflow Web Locks serialize
+duplicate tabs; uncertain outcomes offer original-key status, retry or explicit
+cancellation. Preparing another treatment is explicit. The expected-owner server
+guard rejects switched-session requests before effects. Local evidence includes
+74 SDK/React cases and 91 synthetic PostgreSQL assertions plus cleanup. Telegram
+creation integration, legacy writer retirement, actual schema parity and hosted
+runtime remain separate prerequisites.
 
 The Hato candidate requires a database-owned attempt and complete private Telegram review before a separate confirmation. Sender, current linked Gerencia authority, private chat and registered control-message identity are rechecked; lost responses recover the original attempt. Coupled legacy records without trustworthy provenance refuse automatic undo. Local evidence comprises 135 synthetic PostgreSQL assertions and 163 focused adapter/Telegram tests; live schema, trigger, grant and migration parity remain prerequisites.
 
