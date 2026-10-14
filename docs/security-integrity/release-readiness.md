@@ -39,3 +39,6 @@ October14 retirement dependency: append `coordinated-writer-retirement.sql` LAST
 
 
 Clinical creation/deletion retirement is a separate dependency after coordinated stock retirement: clinical-creation-retirement.sql has68native assertions/nine observed races and preserves177/direct step UPDATE compatibility and readers. It remains unapplied. Clinical confirmation still needs the saved atomic trusted-audit/caller cutover before retiring UPDATE and177; current split alert/step writes are not certified. See clinical-writer-checkpoint.md.
+
+
+October14 clinical confirmation foundation: clinical-step-confirmation.sql follows both retirement candidates and the nine protocols.81 native assertions/three observed177/undo lock races validate prepared originals, transactional trusted audit, exact readbacks and original-key/private recovery on the local replay. Actual browser/bot/native conversation integration and coordinated direct UPDATE/old177 retirement remain prerequisites; no caller is cut over by this foundation. Reader restrictions and remaining global/hosted/recovery gates remain open. See clinical-step-confirmation-checkpoint.md. No production application authorized.
