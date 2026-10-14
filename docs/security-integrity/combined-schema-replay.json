@@ -1,0 +1,177 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "recreated_tables": 170,
+  "runtime": "postgres (PostgreSQL) 17.6",
+  "postgres_binary_sha256": "23cd174849b273064c47d581b55be596be2f5cf0ee5d3e76c0146e2464bf873a",
+  "runner_sha256": "fa85f8a168533c0c66a4b4915c0d215b74bcca479a30feb49a3d3ae2aaa0d53d",
+  "no_tcp_listener": true,
+  "unix_socket_permissions": "0700",
+  "recreated_constraints": 508,
+  "recreated_indexes": 353,
+  "excluded_non_protocol_identity_tables": [
+    "public.clima_lecturas"
+  ],
+  "parity": {
+    "exported_property_parity_passed": true,
+    "verified_counts": {
+      "columns": 2026,
+      "source_constraint_ddl_canonicalizations": 2,
+      "constraints": 508,
+      "secondary_index_key_label_differences": 2,
+      "indexes": 353,
+      "triggers": 78,
+      "policies": 314,
+      "relations": 170,
+      "functions": 72,
+      "views": 7,
+      "enums": 23,
+      "roles": 32,
+      "memberships": 22,
+      "object_acl_checks": 249,
+      "column_acl_checks": 3,
+      "schema_acl_checks": 2,
+      "default_acl_checks": 6,
+      "user_rewrite_rules": 0
+    },
+    "mismatches": []
+  },
+  "status": "exported-property parity passed",
+  "limits": [
+    "Synthetic Auth users/uid/role/jwt and local uuid-ossp; no hosted Auth/Storage/extension parity.",
+    "No production rows or scheduled jobs; no captured function invoked during reconstruction.",
+    "Constraint DDL is parsed literally; its initial local canonical form binds subsequent drift checks.",
+    "Supplemental index key labels are diagnostic; full index DDL/expressions/counts/state remain strict."
+  ],
+  "rehearsal": {
+    "adversarial_catalog_probes": [
+      {
+        "probe": "column precision",
+        "refused": true,
+        "sections": [
+          "columns"
+        ]
+      },
+      {
+        "probe": "trigger state",
+        "refused": true,
+        "sections": [
+          "triggers"
+        ]
+      },
+      {
+        "probe": "index removal",
+        "refused": true,
+        "sections": [
+          "indexes"
+        ]
+      },
+      {
+        "probe": "RLS disable",
+        "refused": true,
+        "sections": [
+          "relations"
+        ]
+      },
+      {
+        "probe": "function body",
+        "refused": true,
+        "sections": [
+          "functions"
+        ]
+      },
+      {
+        "probe": "grant option",
+        "refused": true,
+        "sections": [
+          "acl"
+        ]
+      },
+      {
+        "probe": "expense FK removal",
+        "refused": true,
+        "sections": [
+          "constraints"
+        ]
+      }
+    ],
+    "isolated_installs": [
+      {
+        "candidate": "purchase-integrity",
+        "source_sha256": "70b155aa8a80e373948b2b5082772055cbd95cf0e4d3336a989f7a8d83c3c941",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "manual-stock-movement",
+        "source_sha256": "d2b96e3f245e867d4bf71510c61aa86b5a8655e96e80df5f15dffb18fc0590a4",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "product-catalog-integrity",
+        "source_sha256": "783b7055c1c879a7340cc9f4fe138076f46e1236a495bdce2e103c0fc9a36ad8",
+        "isolated_install": "refused",
+        "source_diagnostic": "Catalog installation requires reviewed current trigger baseline",
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "csv-product-import",
+        "source_sha256": "7d8d7760154f7fcd52eff36cf84250d6ca15cf745c4e10f12223fb36cc1778cb",
+        "isolated_install": "refused",
+        "source_diagnostic": "CSV installation requires reviewed current trigger baseline",
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "application-closure",
+        "source_sha256": "9369d7e2d4c19c0b5b53569e74fad185be4c13a667c44ce6eb54a444c95c348f",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "application-plan-delete",
+        "source_sha256": "f20cfe9fb73a28bf7b305214662258b7bbdb22c93fbb4579e78270895f06267c",
+        "isolated_install": "refused",
+        "source_diagnostic": "Unsupported purchase-plan policy/grant schema",
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "ronda-stock-integrity",
+        "source_sha256": "27c42a1fb7846ec2ff16ec78e63fa1b798132375c183d70be47ec2d791170c75",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "hato-undo",
+        "source_sha256": "aaf13fcfc2bb460d8e1acedfb3fe4848f32c73b102ccdc3ac117ed30d3364ad3",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
+        "server_diagnostic_sha256": null
+      },
+      {
+        "candidate": "hato-treatment-creation",
+        "source_sha256": "1f2137277268037a73261a7b88a83e3cc30ca5bbcc5d42e7a563ed7c1387e557",
+        "isolated_install": "refused",
+        "source_diagnostic": "Unreviewed treatment/identity/target trigger",
+        "server_diagnostic_sha256": null
+      }
+    ],
+    "coordinated_install": {
+      "result": "refused_and_rolled_back",
+      "source_diagnostic": "Catalog installation requires reviewed current trigger baseline",
+      "protected_schemas_remaining": 0,
+      "schema_parity_restored": true
+    },
+    "domain_rows_loaded": 0,
+    "mutation_protocol_rehearsal": "not admitted while coordinated installation refuses"
+  },
+  "temporary_database_stopped_and_removed": true
+}

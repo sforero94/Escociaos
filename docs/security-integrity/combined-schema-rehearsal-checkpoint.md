@@ -35,6 +35,31 @@ python3 -m unittest discover -s scripts/security/tests
 
 Preserve the failing gates until the observed triggers and dependencies have a reviewed compatible contract. Do not simply whitelist names, suppress triggers, substitute a new fingerprint or retire direct grants before all writers/callers participate. Current application/closure/deletion/Ronda/Hato-undo/financial/audit behavior still requires the complete combined installation and adversarial mutation rehearsal.
 
-The evidence also lacks explicit index validity/readiness/live/immediacy flags, constraint validation/deferral flags and a user rewrite-rule inventory. Current gates inspect these catalog properties (including immediate valid Telegram/profile indexes, convalidated fingerprints and unsupported rewrite rules); textual CREATE INDEX/constraint/view definitions do not establish the full current catalog state. An exact replay must not invent these flags or assume no rules. Request only a private structure-only addendum for those properties, tied to the existing evidence and any intervening schema changes. rolbypassrls is resolved and must not be re-requested.
+The authorized21:24:24CT addendum resolves the index-state, constraint-flag and rewrite-rule omissions. All357index identities/definitions and510constraint identities/types reconcile; the rule inventory is explicitly empty. This and rolbypassrls are resolved and must not be re-requested. Reconciliation72481e7 is pushed.
 
 The existing SECURITY DEFINER expense-cleanup function remains a separately identified legacy writer; its candidate retirement is unapplied. No historical repair, expense deletion, merge, deploy, live migration, settings/jobs or keys operation occurred.
+
+## Full domain catalog replay — October 14 continuation
+
+`schema-replay.py` replaces the narrow projection for further combined work. Four external input digests bind `combined-schema-replay.json`. It reconstructs170public/respaldos tables with2,026columns,508constraints,353indexes,78triggers,314policies,72functions,7views and23enums, plus32role flags/22memberships and249object/3column/2schema/6default-ACL checks. The sole telemetry identity table public.clima_lecturas is explicitly excluded: identity generation mode is not exported and that table is outside these stock/cattle/financial/audit protocols. No claim of a complete platform clone is made.
+
+Exported properties are verified before installation probes. Active column positions preserve observed dropped-column gaps using temporary placeholders that are dropped before constraints/triggers are installed. PostgreSQL literally parses each exported constraint DDL; the initial canonical form is captured before probes and binds subsequent constraint drift checks (two source cast/array renderings canonicalize). Supplemental per-key index display labels differ in two cases; complete CREATE INDEX text, expressions, predicates, key/include counts and every state flag remain strict. These representation differences are counted in the report rather than silently described as byte equality. Function bodies/owner/config/volatility/definer state, view definitions/options, enums, RLS, trigger state/definitions and semantic grants/options/grantors are checked too.
+
+The disposable cluster uses supabase_admin as bootstrap identity because PostgreSQL17 records superuser role grants under that identity; this preserves the exported membership grantors. After reconstruction postgres is restored to its actual exported non-superuser attributes, not left as a test superuser. Auth.users/id and uid/role/jwt are explicit synthetic helpers, and uuid-ossp comes from the cached local distribution. Hosted Auth/Storage, extension version parity, event triggers, sequence ownership/state, telemetry and restore containment are not certified. No production rows, jobs, passwords or external connections are loaded. Private diagnostics, if needed, are0600files under /tmp; generated private SQL never enters git.
+
+Seven adversarial catalog changes (numeric precision, trigger state, index removal, RLS, function body, grant option and expense FK removal) are detected. Each exists only inside local rolled-back transactions; a fresh parity check confirms restoration. Nine complete candidate sources are attempted independently with only their outer transaction wrapper replaced by a rolled-back local transaction. Purchase, manual, closure, Ronda and Hato undo install in isolation; catalog/CSV reject product triggers, plan deletion rejects the purchase-plan policy/grant baseline, treatment rejects animal/identity triggers. Passing isolated DDL is not mutation or concurrency evidence.
+
+The ordered coordinated package refuses at catalog's current-trigger gate. Connection termination rolls back the failed transaction; the harness verifies complete base-schema parity, zero remaining protected schemas and zero domain rows. Full protocol mutations and concurrent stock/cattle/financial/audit verification remain **unadmitted**, not passed. Candidate gates and implementations are unchanged by this replay unit. Next implementation front must review exact observed trigger/dependency contracts and update compatible candidates with drift/atomicity proofs; never suppress triggers or skip the installation checks to obtain a passing run.
+
+Private-source product-trigger review identifies two invoker timestamp triggers using the same body (body MD5 `06bcf30ac3d0a7f279a54cbf228a7bec`) and one invoker updated-by trigger (body MD5 `624e45577efa9efef341d0c7549201c5`). The actor helper uses trusted auth.uid() before the existing updated_by fallback; the three helpers contain no ordinary static domain DML. Catalog/CSV already set explicit trusted actor/current transaction timestamps, but compatibility still needs exact trigger/function/config/grant binding plus actual mutation/readback tests. A name-only allowlist or removal of the zero-trigger check is insufficient. Animal correction, Telegram timestamp and purchase-plan policy/grant incompatibilities remain separate review contracts.
+
+Reproduce using the cached paths above:
+
+```sh
+python3 scripts/security/schema-replay.py \
+  /workspace/escociaos-security-control/schema-evidence \
+  --runtime /tmp/escocia-pg17-runtime/package/native \
+  --client /tmp/escocia-pg-client/node_modules/pg/lib/index.js \
+  --private-diagnostics /tmp/escocia-schema-replay-diagnostics-private.txt \
+  --output docs/security-integrity/combined-schema-replay.json
+```
