@@ -19,7 +19,7 @@ def js(value):return lit(json.dumps(value))+'::jsonb'
 def uuid_sql(value):return lit(value)+'::uuid'
 
 
-def run(catalog,rls,hashes,sql):
+def run(catalog,rls,hashes,sql,followup=None):
     checks=[]
     def check(value,label):
         if not value:raise AssertionError(label)
@@ -30,8 +30,10 @@ def run(catalog,rls,hashes,sql):
     sql('BEGIN;'+'\n'.join(r.transaction_body(s) for s in sources.values())+'COMMIT;')
     check(True,'all nine candidates installed together before any synthetic mutation')
     tables=json.loads(sql("SELECT jsonb_agg(jsonb_build_array(schemaname,tablename) ORDER BY schemaname,tablename) FROM pg_tables WHERE schemaname IN('public','respaldos','purchase_integrity','manual_stock','product_catalog_integrity','csv_product_import','application_closure','application_plan_delete','ronda_stock_integrity','hato_undo','hato_treatment_creation');"))
+    def state_query():
+        return 'SELECT jsonb_object_agg(name,rows) FROM ('+' UNION ALL '.join('SELECT '+lit(s+'.'+t)+' name,(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text),\'[]\') FROM '+r.q(s)+'.'+r.q(t)+' x) rows' for s,t in tables)+') snapshot;'
     def state():
-        return sql('SELECT jsonb_object_agg(name,rows) FROM ('+' UNION ALL '.join('SELECT '+lit(s+'.'+t)+' name,(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text),\'[]\') FROM '+r.q(s)+'.'+r.q(t)+' x) rows' for s,t in tables)+') snapshot;')
+        return sql(state_query())
     def call(fn,args,actor=OWNER,role='authenticated',ok=True):
         result=sql('BEGIN;SET LOCAL ROLE '+role+';SET LOCAL request.jwt.claim.sub='+lit(actor or '')+';SELECT public.'+fn+'('+','.join(args)+');COMMIT;',ok)
         return json.loads(result) if ok else result
@@ -149,6 +151,8 @@ def run(catalog,rls,hashes,sql):
     sql('UPDATE usuarios SET activo=false WHERE id='+uuid_sql(OTHER)+';')
     refuse('fn_hato_treatment_create_telegram_action',[lit('status'),'789','789','50'],'revoked Gerencia cannot disclose committed treatment creation',actor=None,role='service_role')
     refuse('fn_hato_undo_review_action',undo_args,'revoked Gerencia cannot replay undo receipt',actor=None,role='service_role')
+    if followup is not None:
+        followup(sql,dict(check=check,state=state,state_query=state_query,call=call,request=request,refuse=refuse,row=row,stock=stock,manual=manual,purchase=purchase,pid=pid,mp=mp,mk=mk,treated=treated))
     return {'snapshot_hashes':hashes,'candidate_hashes':{n:r.p.digest(s.encode()) for n,s in sources.items()},'runner_sha256':r.p.digest(Path(__file__).read_bytes()),'assertions':len(checks),'checks':checks,'limits':['Synthetic data/Auth only on verified local replay; no production or hosted certification.','All nine candidates exercised with selected mutations; broader competing writers, source/edit races, resource limits and ordinary-role matrix remain separate.','Backup063 provenance remains unknown.']}
 
 
