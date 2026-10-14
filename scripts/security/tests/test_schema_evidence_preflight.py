@@ -26,7 +26,80 @@ def fixture():
     return catalog, rls
 
 
+def supplemented_fixture():
+    catalog, rls = fixture()
+    catalog['migrations'] = [{'name': '180_example', 'version': '20261013000000'}]
+    supplement = {
+        'meta': dict(catalog['meta'], exported_at='2026-10-13T20:26:15-05:00',
+                     supplement_to={'catalog': 'live-catalog-private.json', 'rls': 'live-rls-private.json',
+                                    'original_exported_at': catalog['meta']['exported_at']},
+                     schema_change_check={'schema_changes_detected_vs_original': False,
+                                          'migrations_count_now': 1, 'migrations_count_original_export': 1,
+                                          'latest_migration_now': '20261013000000_180_example',
+                                          'latest_migration_original_export': '180_example'}),
+        'column_types': [], 'sequences': [],
+        'roles': [dict(r, role=r['rolname']) for r in catalog['roles']], 'role_memberships': []}
+    for column in catalog['columns']:
+        column.update(pos=1, nullable='YES', default=None)
+        supplement['column_types'].append(dict(column, not_null=False, default_expr=None))
+        for field in ('formatted_type', 'typmod', 'collation'):
+            del column[field]
+    return catalog, rls, supplement
+
+
 class Preflight(unittest.TestCase):
+    def test_supplement_preserves_original_and_admits_exact_joined_types(self):
+        catalog, rls, supplement = supplemented_fixture()
+        merged = p.with_supplement(catalog, supplement)
+        self.assertTrue(p.assess(merged, rls, {})['minimum_metadata_admission_passed'])
+        self.assertNotIn('formatted_type', catalog['columns'][0])
+        self.assertEqual(merged['columns'][0]['formatted_type'], 'numeric(12,2)')
+
+    def test_supplement_wrong_snapshot_or_changed_schema_refuses(self):
+        for field in ('project', 'timestamp', 'schema', 'tip'):
+            catalog, _, supplement = supplemented_fixture()
+            if field == 'project':
+                supplement['meta']['project_ref'] = 'wrong'
+            elif field == 'timestamp':
+                supplement['meta']['supplement_to']['original_exported_at'] = 'wrong'
+            elif field == 'schema':
+                supplement['meta']['schema_change_check']['schema_changes_detected_vs_original'] = True
+            else:
+                supplement['meta']['schema_change_check']['latest_migration_now'] = '181_changed'
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                p.with_supplement(catalog, supplement)
+
+    def test_supplement_missing_or_duplicate_column_refuses(self):
+        for duplicate in (False, True):
+            catalog, _, supplement = supplemented_fixture()
+            if duplicate:
+                supplement['column_types'].append(supplement['column_types'][0])
+            else:
+                supplement['column_types'].pop()
+            with self.subTest(duplicate=duplicate), self.assertRaises(ValueError):
+                p.with_supplement(catalog, supplement)
+
+    def test_supplement_overlapping_structural_changes_refuse(self):
+        for field, value in [('pos', 2), ('not_null', True), ('default_expr', '1'), ('generated', 's')]:
+            catalog, _, supplement = supplemented_fixture()
+            supplement['column_types'][0][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                p.with_supplement(catalog, supplement)
+
+    def test_supplement_does_not_invent_missing_bypass_flag(self):
+        catalog, rls, supplement = supplemented_fixture()
+        for role in supplement['roles']:
+            del role['rolbypassrls']
+        report = p.assess(p.with_supplement(catalog, supplement), rls, {})
+        self.assertIn('effective_permissions', [b['gate'] for b in report['blockers']])
+
+    def test_supplement_sequence_state_refuses(self):
+        catalog, _, supplement = supplemented_fixture()
+        catalog['sequences'] = [{'schema': 'public', 'name': 'example', 'owner': 'postgres', 'type': 'bigint'}]
+        supplement['sequences'] = [dict(catalog['sequences'][0], last_value=123)]
+        with self.assertRaises(ValueError):
+            p.with_supplement(catalog, supplement)
+
     def test_minimum_complete_fixture_passes_without_claiming_runtime_parity(self):
         catalog, rls = fixture()
         self.assertTrue(p.assess(catalog, rls, {})['minimum_metadata_admission_passed'])

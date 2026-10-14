@@ -2,45 +2,13 @@
   "version": 1,
   "snapshot_hashes": {
     "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
-    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3"
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566"
   },
   "exported_at": "2026-10-13T19:06:45.019295-05:00",
   "source": "Owner-provided structure-only exports; no production connection",
-  "minimum_metadata_admission_passed": false,
-  "blockers": [
-    {
-      "gate": "exact_column_types",
-      "affected_columns": 213,
-      "tables": [
-        "aplicaciones",
-        "compras",
-        "fin_gastos",
-        "fin_ingresos",
-        "hato_animales",
-        "hato_tratamiento_pasos",
-        "hato_tratamientos",
-        "movimientos_inventario",
-        "productos",
-        "telegram_usuarios",
-        "usuarios"
-      ],
-      "required": [
-        "pg_attribute formatted_type, typmod, collation; numeric precision/scale and character limits must not be guessed"
-      ]
-    },
-    {
-      "gate": "sequence_configuration",
-      "required": [
-        "pg_sequences structure properties only; exclude last_value"
-      ]
-    },
-    {
-      "gate": "effective_permissions",
-      "required": [
-        "role privilege flags and memberships (including inherit/set options); exclude passwords and authentication/domain rows"
-      ]
-    }
-  ],
+  "minimum_metadata_admission_passed": true,
+  "blockers": [],
   "counts": {
     "relations": 186,
     "columns": 2152,
@@ -390,5 +358,13 @@
     "Static DML tokens are a review map, not exhaustive writer/call-graph or execution proof.",
     "Passing admission is not schema parity, combined installation or runtime certification.",
     "No row data, sequence state, production connection, generated schema or SQL execution."
-  ]
+  ],
+  "supplement": {
+    "exported_at": "2026-10-13T20:26:15-05:00",
+    "base_columns_joined": 2041,
+    "roles": 32,
+    "memberships": 22,
+    "overlapping_structure_matches": true,
+    "limit": "Exporter attests no schema change; matching migration tips alone do not prove absence of manual DDL."
+  }
 }

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Offline admission/writer map. Never imports a DB client or prints private definitions."""
 import argparse
+import copy
+from datetime import datetime
 import hashlib
 import json
 import re
@@ -12,6 +14,68 @@ TABLES = ('productos', 'movimientos_inventario', 'compras', 'fin_gastos', 'fin_i
           'hato_tratamientos', 'hato_tratamiento_pasos')
 REQUIRED = ('relations', 'columns', 'constraints', 'indexes', 'triggers', 'functions',
             'views', 'enums', 'sequences', 'migrations')
+
+
+def unique_rows(rows, fields):
+    result = {}
+    for row in rows:
+        key = tuple(row[field] for field in fields)
+        if key in result:
+            raise ValueError('Duplicate metadata identity')
+        result[key] = row
+    return result
+
+
+def with_supplement(catalog, supplement):
+    """Join only after provenance and overlapping structural fields agree."""
+    meta = supplement['meta']
+    link = meta['supplement_to']
+    check = meta['schema_change_check']
+    if (meta['project_ref'] != catalog['meta']['project_ref']
+        or link['original_exported_at'] != catalog['meta']['exported_at']
+        or link['catalog'] != 'live-catalog-private.json'
+        or link['rls'] != 'live-rls-private.json'
+        or datetime.fromisoformat(meta['exported_at']) < datetime.fromisoformat(catalog['meta']['exported_at'])):
+        raise ValueError('Supplement snapshot provenance does not match')
+    tip = catalog['migrations'][-1]['name']
+    if (check['schema_changes_detected_vs_original'] is not False
+        or check['migrations_count_now'] != len(catalog['migrations'])
+        or check['migrations_count_original_export'] != len(catalog['migrations'])
+        or check['latest_migration_original_export'] != tip
+        or not (check['latest_migration_now'] == tip or check['latest_migration_now'].endswith('_' + tip))):
+        raise ValueError('Supplement schema-change attestation does not match')
+    merged = copy.deepcopy(catalog)
+    base = {(r['schema'], r['table']) for r in catalog['relations']
+            if r['kind'] in ('r', 'p') and r['schema'] in ('public', 'respaldos')}
+    original = unique_rows([c for c in merged['columns'] if (c['schema'], c['table']) in base], ('schema', 'table', 'column'))
+    extra = unique_rows(supplement['column_types'], ('schema', 'table', 'column'))
+    if original.keys() != extra.keys():
+        raise ValueError('Supplement base-table column coverage does not match')
+    for key, column in original.items():
+        added = extra[key]
+        generated = added['generated'] not in ('', None, 'NEVER')
+        if (column['pos'] != added['pos']
+            or (column['nullable'] == 'NO') != added['not_null']
+            or (column['generated'] == 'ALWAYS') != generated
+            or (not generated and column['default'] != added['default_expr'])):
+            raise ValueError('Supplement overlapping column structure changed')
+        for field in ('formatted_type', 'typmod', 'collation'):
+            column[field] = added[field]
+        if generated:
+            column['generation_expression'] = added['default_expr']
+    old_sequences = unique_rows(merged['sequences'], ('schema', 'name'))
+    new_sequences = unique_rows(supplement['sequences'], ('schema', 'name'))
+    if old_sequences.keys() != new_sequences.keys():
+        raise ValueError('Supplement sequence identities do not match')
+    for key, sequence in old_sequences.items():
+        added = new_sequences[key]
+        if any(sequence[field] != added[field] for field in ('owner', 'type')) or 'last_value' in added:
+            raise ValueError('Supplement sequence structure changed or contains state')
+        for field in ('start_value', 'min_value', 'max_value', 'increment_by', 'cycle', 'cache_size'):
+            sequence[field] = added[field]
+    merged['roles'] = [dict(r, rolname=r['role']) for r in supplement['roles']]
+    merged['role_memberships'] = copy.deepcopy(supplement['role_memberships'])
+    return merged
 
 
 def digest(value):
@@ -44,7 +108,7 @@ def assess(catalog, rls, hashes):
         raise ValueError('Missing or malformed RLS sections')
     if not catalog.get('meta', {}).get('project_ref') or catalog['meta']['project_ref'] != rls.get('meta', {}).get('project_ref'):
         raise ValueError('Snapshot project identities do not match')
-    if catalog['meta'].get('exported_at') != rls['meta'].get('exported_at'):
+    if not catalog['meta'].get('exported_at') or catalog['meta'].get('exported_at') != rls['meta'].get('exported_at'):
         raise ValueError('Snapshot timestamps do not match')
     blockers = []
     columns = [c for c in catalog['columns'] if c['schema'] == 'public' and c['table'] in TABLES]
@@ -63,7 +127,7 @@ def assess(catalog, rls, hashes):
     memberships = catalog.get('role_memberships')
     if (not isinstance(roles, list) or not isinstance(memberships, list)
         or not {'postgres', 'anon', 'authenticated', 'service_role'}.issubset({r.get('rolname') for r in roles if isinstance(r, dict)})
-        or any(not all(key in r for key in role_fields) for r in roles)
+        or any(not all(key in r for key in role_fields) or any(not isinstance(r[key], bool) for key in role_fields[1:]) for r in roles)
         or any(not all(key in membership for key in ('role', 'member', 'grantor', 'admin_option', 'inherit_option', 'set_option')) for membership in memberships)):
         blockers.append({'gate': 'effective_permissions', 'required': ['role privilege flags and memberships (including inherit/set options); exclude passwords and authentication/domain rows']})
     owners = catalog.get('grants', {}).get('table_grants', [])
@@ -126,7 +190,22 @@ def main():
         raw = (evidence / name).read_bytes()
         hashes[name] = digest(raw)
         values.append(json.loads(raw))
+    supplement_path = evidence / 'live-catalog-supplement-private.json'
+    supplement = None
+    if supplement_path.exists():
+        raw = supplement_path.read_bytes()
+        hashes[supplement_path.name] = digest(raw)
+        supplement = json.loads(raw)
+        values[0] = with_supplement(values[0], supplement)
     report = assess(*values, hashes)
+    if supplement:
+        report['supplement'] = {
+            'exported_at': supplement['meta']['exported_at'],
+            'base_columns_joined': len(supplement['column_types']),
+            'roles': len(supplement['roles']),
+            'memberships': len(supplement['role_memberships']),
+            'overlapping_structure_matches': True,
+            'limit': 'Exporter attests no schema change; matching migration tips alone do not prove absence of manual DDL.'}
     output = json.dumps(report, indent=2) + '\n'
     if args.output:
         destination = args.output.resolve()
