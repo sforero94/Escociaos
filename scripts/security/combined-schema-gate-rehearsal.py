@@ -36,6 +36,9 @@ def entry_gate(source):
 
 
 def trigger_gate(source):
+    reviewed = re.search(r'-- BEGIN REVIEWED PRODUCT TRIGGER BASELINE([\s\S]*?)-- END REVIEWED PRODUCT TRIGGER BASELINE', entry_gate(source))
+    if reviewed:
+        return 'DO $$ BEGIN ' + reviewed[1] + ' END $$;'
     matches = re.findall(r'IF EXISTS\(SELECT 1 FROM pg_trigger WHERE NOT tgisinternal[\s\S]*?END IF;', entry_gate(source))
     if len(matches) != 1:
         raise ValueError('Expected exactly one unconditional noninternal trigger gate')
@@ -111,6 +114,9 @@ def unique_functions(functions):
 
 
 def run(evidence, runtime, client):
+    if any('BEGIN REVIEWED PRODUCT TRIGGER BASELINE' in (ROOT / 'src/sql/security-candidates' / (name + '.sql')).read_text()
+           for name in ('product-catalog-integrity','csv-product-import')):
+        raise ValueError('Historical trigger-free projection retired; use product-trigger-replay.py or schema-replay.py for the exact current baseline')
     if evidence.is_relative_to(ROOT) or not runtime.is_relative_to('/tmp') or not client.is_relative_to('/tmp'):
         raise ValueError('External private evidence and temporary local runtime/client required')
     values, hashes = [], {}

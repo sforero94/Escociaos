@@ -116,16 +116,16 @@
       },
       {
         "candidate": "product-catalog-integrity",
-        "source_sha256": "783b7055c1c879a7340cc9f4fe138076f46e1236a495bdce2e103c0fc9a36ad8",
-        "isolated_install": "refused",
-        "source_diagnostic": "Catalog installation requires reviewed current trigger baseline",
+        "source_sha256": "55ed8a06ecf05c71c6fb6e30e6facaa952045259ba9db00e908ed27c153464a3",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
         "server_diagnostic_sha256": null
       },
       {
         "candidate": "csv-product-import",
-        "source_sha256": "7d8d7760154f7fcd52eff36cf84250d6ca15cf745c4e10f12223fb36cc1778cb",
-        "isolated_install": "refused",
-        "source_diagnostic": "CSV installation requires reviewed current trigger baseline",
+        "source_sha256": "980cf89c94003db4d103d602f4135d5a5bfbf33ee2af5863fefe0b3c96be891b",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
         "server_diagnostic_sha256": null
       },
       {
@@ -166,7 +166,7 @@
     ],
     "coordinated_install": {
       "result": "refused_and_rolled_back",
-      "source_diagnostic": "Catalog installation requires reviewed current trigger baseline",
+      "source_diagnostic": "Unsupported purchase-plan policy/grant schema",
       "protected_schemas_remaining": 0,
       "schema_parity_restored": true
     },

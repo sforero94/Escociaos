@@ -28,7 +28,7 @@ class EntryGateBoundary(unittest.TestCase):
         for name in ('product-catalog-integrity', 'csv-product-import', 'hato-treatment-creation'):
             source = (g.ROOT / 'src/sql/security-candidates' / (name + '.sql')).read_text()
             gate = g.trigger_gate(source)
-            self.assertIn('WHERE NOT tgisinternal', gate)
+            self.assertRegex(gate, r'WHERE NOT (?:t\.)?tgisinternal')
             self.assertIn('RAISE EXCEPTION', gate)
             self.assertNotIn('CREATE SCHEMA', gate)
             self.assertNotIn('DROP TRIGGER', gate)
