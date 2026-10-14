@@ -41,3 +41,6 @@ October14 combined graph:31selected native assertions pass after all nine candid
 
 
 October14 effective local permission proof:44native assertions after nine candidates co-install reproduce direct stock UPDATE/ledger DELETE without trusted proof and old treatment RPC actor/source forgery (both authenticated and service) in rolled-back synthetic transactions. Authenticated inactive/missing-profile/missing-UID readers see populated product/treatment witnesses under captured policies. No hosted incident is inferred. Protected tables/helpers deny direct access; captured seven views are not automatically writable. Coordinated retirement and active-reader restriction remain open; see writer-reachability-checkpoint.md.
+
+
+October14 coordinated retirement prepared: native84assertions/nine observed lock races pass after denying ordinary/service stock table/column mutation and old treatment RPC EXECUTE. All nine protected protocols, financial preservation and invoker177 still operate. Closure/plan guards now require the complete retired boundary and refuse grant drift. Candidate remains unapplied; direct clinical creation/step/lifecycle writes, other cattle/financial writers, inactive/missing-profile readers and hosted/recovery gates remain open. See coordinated-writer-retirement-checkpoint.md.

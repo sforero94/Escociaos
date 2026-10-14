@@ -19,7 +19,7 @@ def js(value):return lit(json.dumps(value))+'::jsonb'
 def uuid_sql(value):return lit(value)+'::uuid'
 
 
-def run(catalog,rls,hashes,sql,followup=None):
+def run(catalog,rls,hashes,sql,followup=None,installation=None):
     checks=[]
     def check(value,label):
         if not value:raise AssertionError(label)
@@ -29,6 +29,8 @@ def run(catalog,rls,hashes,sql,followup=None):
     sources={name:(r.ROOT/'src/sql/security-candidates'/f'{name}.sql').read_text() for name in ORDER}
     sql('BEGIN;'+'\n'.join(r.transaction_body(s) for s in sources.values())+'COMMIT;')
     check(True,'all nine candidates installed together before any synthetic mutation')
+    if installation is not None:
+        installation(sql)
     tables=json.loads(sql("SELECT jsonb_agg(jsonb_build_array(schemaname,tablename) ORDER BY schemaname,tablename) FROM pg_tables WHERE schemaname IN('public','respaldos','purchase_integrity','manual_stock','product_catalog_integrity','csv_product_import','application_closure','application_plan_delete','ronda_stock_integrity','hato_undo','hato_treatment_creation');"))
     def state_query():
         return 'SELECT jsonb_object_agg(name,rows) FROM ('+' UNION ALL '.join('SELECT '+lit(s+'.'+t)+' name,(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text),\'[]\') FROM '+r.q(s)+'.'+r.q(t)+' x) rows' for s,t in tables)+') snapshot;'
