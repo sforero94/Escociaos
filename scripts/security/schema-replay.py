@@ -495,8 +495,6 @@ def probes(catalog, rls, keys, constraints, indexes, sql):
                         'source_diagnostic': max(messages, key=len) if messages else None,
                         'server_diagnostic_sha256': p.digest(result.stderr.encode()) if result.returncode and not messages else None})
     combined = sql('BEGIN;' + '\n'.join(transaction_body(source) for _, source in candidates) + 'ROLLBACK;', False)
-    if combined.returncode == 0:
-        raise ValueError('Expected reproduced current-baseline incompatibility was not observed')
     combined_messages = [r['source_diagnostic'] for r in results if r['source_diagnostic'] and r['source_diagnostic'] in combined.stderr]
     after = verify(catalog, rls, keys, constraints, indexes, sql)
     if not after['exported_property_parity_passed']:
@@ -509,10 +507,10 @@ def probes(catalog, rls, keys, constraints, indexes, sql):
     if rows:
         raise ValueError('Unexpected rows in structural rehearsal')
     return {'adversarial_catalog_probes': negative, 'isolated_installs': results,
-            'coordinated_install': {'result': 'refused_and_rolled_back',
+            'coordinated_install': {'result': 'refused_and_rolled_back' if combined.returncode else 'passed_then_rolled_back',
                                     'source_diagnostic': max(combined_messages,key=len) if combined_messages else None,
                                     'protected_schemas_remaining': remaining, 'schema_parity_restored': True},
-            'domain_rows_loaded': 0, 'mutation_protocol_rehearsal': 'not admitted while coordinated installation refuses'}
+            'domain_rows_loaded': 0, 'mutation_protocol_rehearsal': 'not admitted while coordinated installation refuses' if combined.returncode else 'DDL compatibility only; cross-domain mutation/concurrency remains separate'}
 
 
 def main():

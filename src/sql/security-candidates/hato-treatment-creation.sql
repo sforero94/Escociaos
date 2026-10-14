@@ -1,7 +1,8 @@
 -- LOCAL REVIEW FOUNDATION. No caller/cutover/production authorization.
--- Historical 055/140 baseline only; current hosted metadata parity remains blocked.
+-- Reconciled structure-only catalog baseline, verified on a disposable local replay.
+-- Hosted runtime, all competing writers and coordinated release remain separate.
 BEGIN;
-LOCK TABLE public.hato_tratamientos,public.hato_tratamiento_pasos IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE public.hato_tratamientos,public.hato_tratamiento_pasos,public.hato_animales,public.usuarios,public.telegram_usuarios IN SHARE ROW EXCLUSIVE MODE;
 DO $$
 DECLARE t regclass; cols text[]; expected text[];v_digest text;
 BEGIN
@@ -18,23 +19,50 @@ BEGIN
   SELECT array_agg(attname::text ORDER BY attnum) INTO cols FROM pg_attribute WHERE attrelid=t AND attnum>0 AND NOT attisdropped;
   IF cols IS DISTINCT FROM expected OR NOT EXISTS(SELECT 1 FROM pg_class WHERE oid=t AND relrowsecurity AND relowner=(SELECT oid FROM pg_roles WHERE rolname='postgres')) THEN RAISE EXCEPTION 'Unreviewed treatment schema/owner/RLS';END IF;
  END LOOP;
- IF EXISTS(SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN('public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass,'public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass)) THEN RAISE EXCEPTION 'Unreviewed treatment/identity/target trigger';END IF;
+ IF EXISTS(SELECT 1 FROM pg_inherits WHERE inhparent=ANY(ARRAY['public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass,'public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass]) OR inhrelid=ANY(ARRAY['public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass,'public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass]))
+ OR EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=ANY(ARRAY['public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass,'public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass])) THEN RAISE EXCEPTION 'Unsupported treatment inheritance/rewrite rule';END IF;
+ -- BEGIN REVIEWED TREATMENT TRIGGER BASELINE
+SELECT pg_catalog.md5(coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+ 'table',c.relname,'trigger',t.tgname,'definition',pg_catalog.pg_get_triggerdef(t.oid),
+ 'enabled',t.tgenabled,'type',t.tgtype,'deferrable',t.tgdeferrable,'initially_deferred',t.tginitdeferred,
+ 'constraint_trigger',t.tgconstraint<>0,
+ 'function',pg_catalog.jsonb_build_object('schema',n.nspname,'name',f.proname,
+  'arguments',pg_catalog.pg_get_function_identity_arguments(f.oid),'returns',pg_catalog.pg_get_function_result(f.oid),
+  'body_md5',pg_catalog.md5(f.prosrc),'owner',pg_catalog.pg_get_userbyid(f.proowner),
+  'language',l.lanname,'security_definer',f.prosecdef,'configuration',f.proconfig,
+  'volatile',f.provolatile,'strict',f.proisstrict,'parallel',f.proparallel,'leakproof',f.proleakproof,
+  'acl_is_null',f.proacl IS NULL,
+  'acl',(SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_array(
+    CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END,
+    pg_catalog.pg_get_userbyid(a.grantor),a.privilege_type,a.is_grantable)
+    ORDER BY CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END,
+    pg_catalog.pg_get_userbyid(a.grantor),a.privilege_type,a.is_grantable)
+   FROM pg_catalog.aclexplode(coalesce(f.proacl,pg_catalog.acldefault('f',f.proowner))) a)))
+ ORDER BY c.relname,t.tgname),'[]'::jsonb)::text)
+INTO v_digest
+FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
+JOIN pg_catalog.pg_proc f ON f.oid=t.tgfoid JOIN pg_catalog.pg_namespace n ON n.oid=f.pronamespace
+JOIN pg_catalog.pg_language l ON l.oid=f.prolang
+WHERE NOT t.tgisinternal AND t.tgrelid IN ('public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass,'public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass);
+
+ IF v_digest IS DISTINCT FROM '589b0bfd39d77f52c262cb2e63697ffa' THEN RAISE EXCEPTION 'Reviewed treatment trigger baseline drift';END IF;
+ -- END REVIEWED TREATMENT TRIGGER BASELINE
  IF NOT EXISTS(SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attname='telegram_id' WHERE i.indrelid='public.telegram_usuarios'::regclass AND i.indisunique AND i.indisvalid AND i.indimmediate AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnkeyatts=1 AND i.indkey[0]=a.attnum) THEN RAISE EXCEPTION 'Unique immediate sender index required';END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attname='id' WHERE i.indrelid='public.usuarios'::regclass AND i.indisunique AND i.indisvalid AND i.indimmediate AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnkeyatts=1 AND i.indkey[0]=a.attnum) THEN RAISE EXCEPTION 'Unique immediate profile identity required';END IF;
-SELECT md5(jsonb_agg(jsonb_build_object('table',c.relname,'owner',pg_get_userbyid(c.relowner),'kind',c.relkind,'rls',c.relrowsecurity,
+SELECT md5(jsonb_agg(jsonb_build_object('table',c.relname,'owner',pg_get_userbyid(c.relowner),'kind',c.relkind,'rls',c.relrowsecurity,'forceRls',c.relforcerowsecurity,
  'columns',(SELECT jsonb_agg(jsonb_build_object('name',a.attname,'type',format_type(a.atttypid,a.atttypmod),'notnull',a.attnotnull,'identity',a.attidentity,'generated',a.attgenerated,'default',pg_get_expr(d.adbin,d.adrelid)) ORDER BY a.attnum) FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped),
  'constraints',(SELECT jsonb_agg(jsonb_build_object('name',conname,'type',contype,'validated',convalidated,'deferred',condeferrable,'initiallyDeferred',condeferred,'definition',pg_get_constraintdef(oid)) ORDER BY conname) FROM pg_constraint WHERE conrelid=c.oid),
- 'policies',(SELECT jsonb_agg(jsonb_build_object('name',polname,'command',polcmd,'permissive',polpermissive,'roles',(SELECT jsonb_agg(rolname ORDER BY rolname) FROM pg_roles WHERE oid=ANY(polroles)),'using',pg_get_expr(polqual,polrelid),'check',pg_get_expr(polwithcheck,polrelid)) ORDER BY polname) FROM pg_policy WHERE polrelid=c.oid),
- 'grants',(SELECT jsonb_agg(jsonb_build_object('grantee',CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,'privilege',x.privilege_type,'grantable',x.is_grantable) ORDER BY x.grantee,x.privilege_type) FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) x)) ORDER BY c.relname)::text)
+ 'policies',(SELECT jsonb_agg(jsonb_build_object('name',polname,'command',polcmd,'permissive',polpermissive,'roles',(SELECT jsonb_agg(CASE WHEN role_id=0 THEN 'PUBLIC' ELSE pg_get_userbyid(role_id) END ORDER BY CASE WHEN role_id=0 THEN 'PUBLIC' ELSE pg_get_userbyid(role_id) END) FROM unnest(polroles) role_id),'using',pg_get_expr(polqual,polrelid),'check',pg_get_expr(polwithcheck,polrelid)) ORDER BY polname) FROM pg_policy WHERE polrelid=c.oid),
+ 'grants',(SELECT jsonb_agg(jsonb_build_object('grantee',CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,'grantor',pg_get_userbyid(x.grantor),'privilege',x.privilege_type,'grantable',x.is_grantable) ORDER BY CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,pg_get_userbyid(x.grantor),x.privilege_type,x.is_grantable) FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) x)) ORDER BY c.relname)::text)
  INTO v_digest FROM pg_class c WHERE c.oid IN('public.hato_tratamientos'::regclass,'public.hato_tratamiento_pasos'::regclass);
- IF v_digest IS DISTINCT FROM 'e8b52bbe0eb37228da562247013674c2' THEN RAISE EXCEPTION 'Unsupported historical treatment schema/default/constraint/policy/ACL fingerprint';END IF;
-SELECT md5(jsonb_agg(jsonb_build_object('table',c.relname,'owner',pg_get_userbyid(c.relowner),'kind',c.relkind,'rls',c.relrowsecurity,
+ IF v_digest IS DISTINCT FROM '23cb4a9df6fc50d057015f6d59a84dab' THEN RAISE EXCEPTION 'Unsupported reviewed treatment schema/default/constraint/policy/ACL fingerprint';END IF;
+SELECT md5(jsonb_agg(jsonb_build_object('table',c.relname,'owner',pg_get_userbyid(c.relowner),'kind',c.relkind,'rls',c.relrowsecurity,'forceRls',c.relforcerowsecurity,
  'columns',(SELECT jsonb_agg(jsonb_build_object('name',a.attname,'type',format_type(a.atttypid,a.atttypmod),'notnull',a.attnotnull,'identity',a.attidentity,'generated',a.attgenerated,'default',pg_get_expr(d.adbin,d.adrelid)) ORDER BY a.attnum) FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped),
  'constraints',(SELECT jsonb_agg(jsonb_build_object('name',conname,'type',contype,'validated',convalidated,'deferred',condeferrable,'initiallyDeferred',condeferred,'definition',pg_get_constraintdef(oid)) ORDER BY conname) FROM pg_constraint WHERE conrelid=c.oid),
- 'policies',(SELECT jsonb_agg(jsonb_build_object('name',polname,'command',polcmd,'permissive',polpermissive,'roles',(SELECT jsonb_agg(rolname ORDER BY rolname) FROM pg_roles WHERE oid=ANY(polroles)),'using',pg_get_expr(polqual,polrelid),'check',pg_get_expr(polwithcheck,polrelid)) ORDER BY polname) FROM pg_policy WHERE polrelid=c.oid),
- 'grants',(SELECT jsonb_agg(jsonb_build_object('grantee',CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,'privilege',x.privilege_type,'grantable',x.is_grantable) ORDER BY x.grantee,x.privilege_type) FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) x)) ORDER BY c.relname)::text)
+ 'policies',(SELECT jsonb_agg(jsonb_build_object('name',polname,'command',polcmd,'permissive',polpermissive,'roles',(SELECT jsonb_agg(CASE WHEN role_id=0 THEN 'PUBLIC' ELSE pg_get_userbyid(role_id) END ORDER BY CASE WHEN role_id=0 THEN 'PUBLIC' ELSE pg_get_userbyid(role_id) END) FROM unnest(polroles) role_id),'using',pg_get_expr(polqual,polrelid),'check',pg_get_expr(polwithcheck,polrelid)) ORDER BY polname) FROM pg_policy WHERE polrelid=c.oid),
+ 'grants',(SELECT jsonb_agg(jsonb_build_object('grantee',CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,'grantor',pg_get_userbyid(x.grantor),'privilege',x.privilege_type,'grantable',x.is_grantable) ORDER BY CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,pg_get_userbyid(x.grantor),x.privilege_type,x.is_grantable) FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) x)) ORDER BY c.relname)::text)
  INTO v_digest FROM pg_class c WHERE c.oid IN('public.hato_animales'::regclass,'public.usuarios'::regclass,'public.telegram_usuarios'::regclass);
- IF v_digest IS DISTINCT FROM '99394325a5b08cf6b420180b8ec0fc40' THEN RAISE EXCEPTION 'Unsupported synthetic animal/identity schema/default/constraint/ACL fingerprint';END IF;
+ IF v_digest IS DISTINCT FROM '57b8450fd225db5c20522b6edcfd4a06' THEN RAISE EXCEPTION 'Unsupported reviewed animal/identity schema/default/constraint/ACL fingerprint';END IF;
 END $$;
 CREATE SCHEMA hato_treatment_creation;
 REVOKE ALL ON SCHEMA hato_treatment_creation FROM PUBLIC,anon,authenticated,service_role;

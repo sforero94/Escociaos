@@ -36,9 +36,9 @@ def entry_gate(source):
 
 
 def trigger_gate(source):
-    reviewed = re.search(r'-- BEGIN REVIEWED PRODUCT TRIGGER BASELINE([\s\S]*?)-- END REVIEWED PRODUCT TRIGGER BASELINE', entry_gate(source))
+    reviewed = re.search(r'-- BEGIN REVIEWED (PRODUCT|TREATMENT) TRIGGER BASELINE([\s\S]*?)-- END REVIEWED \1 TRIGGER BASELINE', entry_gate(source))
     if reviewed:
-        return 'DO $$ BEGIN ' + reviewed[1] + ' END $$;'
+        return 'DO $$ DECLARE v_digest text; BEGIN ' + reviewed[2] + ' END $$;'
     matches = re.findall(r'IF EXISTS\(SELECT 1 FROM pg_trigger WHERE NOT tgisinternal[\s\S]*?END IF;', entry_gate(source))
     if len(matches) != 1:
         raise ValueError('Expected exactly one unconditional noninternal trigger gate')

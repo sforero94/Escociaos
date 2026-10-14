@@ -8,7 +8,7 @@
   "recreated_tables": 170,
   "runtime": "postgres (PostgreSQL) 17.6",
   "postgres_binary_sha256": "23cd174849b273064c47d581b55be596be2f5cf0ee5d3e76c0146e2464bf873a",
-  "runner_sha256": "fa85f8a168533c0c66a4b4915c0d215b74bcca479a30feb49a3d3ae2aaa0d53d",
+  "runner_sha256": "929b4a07ad541eb864362f2ce11f9664dfc27be91bc8c687458ba90a25477f82",
   "no_tcp_listener": true,
   "unix_socket_permissions": "0700",
   "recreated_constraints": 508,
@@ -158,20 +158,20 @@
       },
       {
         "candidate": "hato-treatment-creation",
-        "source_sha256": "1f2137277268037a73261a7b88a83e3cc30ca5bbcc5d42e7a563ed7c1387e557",
-        "isolated_install": "refused",
-        "source_diagnostic": "Unreviewed treatment/identity/target trigger",
+        "source_sha256": "27ca417e1c9162dedc090bbee9282d1dad0fe4b8626b7341d85f2cd070031169",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
         "server_diagnostic_sha256": null
       }
     ],
     "coordinated_install": {
-      "result": "refused_and_rolled_back",
-      "source_diagnostic": "Unreviewed treatment/identity/target trigger",
+      "result": "passed_then_rolled_back",
+      "source_diagnostic": null,
       "protected_schemas_remaining": 0,
       "schema_parity_restored": true
     },
     "domain_rows_loaded": 0,
-    "mutation_protocol_rehearsal": "not admitted while coordinated installation refuses"
+    "mutation_protocol_rehearsal": "DDL compatibility only; cross-domain mutation/concurrency remains separate"
   },
   "temporary_database_stopped_and_removed": true
 }

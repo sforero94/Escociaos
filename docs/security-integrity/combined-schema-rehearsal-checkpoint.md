@@ -63,3 +63,5 @@ python3 scripts/security/schema-replay.py \
   --private-diagnostics /tmp/escocia-schema-replay-diagnostics-private.txt \
   --output docs/security-integrity/combined-schema-replay.json
 ```
+
+October14 dependency reconciliation: product/CSV1840649, plan deletiond3044b3 and the reviewed treatment baseline supersede the three refusal checkpoints above. The current full report passes all nine isolated candidate installs and the ordered coordinated package, then restores full exported-property parity, zero candidate schemas and zero domain rows. Gates remain exact and observed triggers remain enabled. This report admits the next combined mutation/adversarial rehearsal; it does not itself execute protocol mutations or certify global writer retirement. Treatment-native proofs are separate in treatment-trigger-replay.json.
