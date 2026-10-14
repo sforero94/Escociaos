@@ -137,9 +137,9 @@
       },
       {
         "candidate": "application-plan-delete",
-        "source_sha256": "f20cfe9fb73a28bf7b305214662258b7bbdb22c93fbb4579e78270895f06267c",
-        "isolated_install": "refused",
-        "source_diagnostic": "Unsupported purchase-plan policy/grant schema",
+        "source_sha256": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+        "isolated_install": "passed_then_rolled_back",
+        "source_diagnostic": null,
         "server_diagnostic_sha256": null
       },
       {
@@ -166,7 +166,7 @@
     ],
     "coordinated_install": {
       "result": "refused_and_rolled_back",
-      "source_diagnostic": "Unsupported purchase-plan policy/grant schema",
+      "source_diagnostic": "Unreviewed treatment/identity/target trigger",
       "protected_schemas_remaining": 0,
       "schema_parity_restored": true
     },

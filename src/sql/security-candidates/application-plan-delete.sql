@@ -62,13 +62,14 @@ CREATE FUNCTION application_plan_delete.assert_graph() RETURNS void
 LANGUAGE plpgsql SET search_path=pg_catalog,public AS $guard$
 DECLARE r record; target text; source text; from_col text; to_col text; edge text[];
 BEGIN
- -- Purchase-plan boundary comes from local migrations 033/110; unsupported live
- -- variants fail rather than silently widening the captured role intersection.
+ -- Purchase-plan INSERT is restricted by migration133 to active Gerencia/Admin,
+ -- matching DELETE. Reject the former unrestricted INSERT and all other drift;
+ -- do not broaden the captured role intersection.
  IF NOT EXISTS(SELECT 1 FROM pg_class WHERE oid='public.aplicaciones_compras'::regclass AND relrowsecurity AND NOT relforcerowsecurity)
  OR NOT has_table_privilege('authenticated','public.aplicaciones_compras','SELECT') OR NOT has_table_privilege('authenticated','public.aplicaciones_compras','DELETE')
  OR (SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename='aplicaciones_compras')<>3
  OR NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='aplicaciones_compras' AND policyname='authenticated_select_aplicaciones_compras' AND cmd='SELECT' AND permissive='PERMISSIVE' AND roles=ARRAY['authenticated']::name[] AND qual='true' AND with_check IS NULL)
- OR NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='aplicaciones_compras' AND policyname='authenticated_insert_aplicaciones_compras' AND cmd='INSERT' AND permissive='PERMISSIVE' AND roles=ARRAY['authenticated']::name[] AND qual IS NULL AND with_check='true')
+ OR NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='aplicaciones_compras' AND policyname='authenticated_insert_aplicaciones_compras' AND cmd='INSERT' AND permissive='PERMISSIVE' AND roles=ARRAY['authenticated']::name[] AND qual IS NULL AND with_check='(( SELECT get_user_role() AS get_user_role) = ANY (ARRAY[''Gerencia''::rol_usuario, ''Administrador''::rol_usuario]))')
  OR NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='aplicaciones_compras' AND policyname='authenticated_delete_aplicaciones_compras' AND cmd='DELETE' AND permissive='PERMISSIVE' AND roles=ARRAY['authenticated']::name[]
  AND qual='(( SELECT get_user_role() AS get_user_role) = ANY (ARRAY[''Gerencia''::rol_usuario, ''Administrador''::rol_usuario]))' AND with_check IS NULL)
  THEN RAISE EXCEPTION 'Unsupported purchase-plan policy/grant schema'; END IF;
@@ -81,15 +82,22 @@ BEGIN
  IF cardinality(r.conkey)<>1 OR cardinality(r.confkey)<>1 OR to_col<>'id'
  OR NOT ((r.confrelid='public.aplicaciones'::regclass AND from_col='aplicacion_id' AND r.conrelid=ANY(ARRAY[
  'public.aplicaciones_lotes'::regclass,'public.aplicaciones_mezclas'::regclass,'public.aplicaciones_calculos'::regclass,
- 'public.aplicaciones_compras'::regclass,'public.aplicaciones_cierre'::regclass,'public.movimientos_diarios'::regclass,'public.movimientos_inventario'::regclass]))
+ 'public.aplicaciones_compras'::regclass,'public.aplicaciones_cierre'::regclass,'public.movimientos_diarios'::regclass,'public.movimientos_inventario'::regclass,
+ 'public.aplicaciones_lotes_planificado'::regclass,'public.focos'::regclass]))
  OR (r.confrelid='public.aplicaciones_mezclas'::regclass AND from_col='mezcla_id' AND r.conrelid=ANY(ARRAY[
- 'public.aplicaciones_productos'::regclass,'public.aplicaciones_calculos'::regclass])))
+ 'public.aplicaciones_productos'::regclass,'public.aplicaciones_calculos'::regclass,'public.aplicaciones_lotes_planificado'::regclass])))
  OR r.confupdtype<>'a' OR r.confdeltype NOT IN ('a','c') OR r.condeferrable OR NOT r.convalidated THEN
  RAISE EXCEPTION 'Unsupported plan-delete relationship: %.%',r.source,from_col; END IF;
  END LOOP;
  IF NOT EXISTS(SELECT 1 FROM pg_constraint c WHERE c.contype='f' AND c.conrelid='public.aplicaciones_lotes'::regclass
  AND c.confrelid='public.aplicaciones'::regclass AND c.confdeltype='c' AND c.conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=c.conrelid AND attname='aplicacion_id')])
  THEN RAISE EXCEPTION 'Verified application-lot cascade required'; END IF;
+ -- These references are recognized, never silently deleted: snapshot refuses
+ -- any linked row. Exact FKs and relation locks fence concurrent late writers.
+ IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.aplicaciones_lotes_planificado'::regclass AND confrelid='public.aplicaciones'::regclass AND contype='f' AND confdeltype='c' AND conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=conrelid AND attname='aplicacion_id')] AND confkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=confrelid AND attname='id')])
+ OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.aplicaciones_lotes_planificado'::regclass AND confrelid='public.aplicaciones_mezclas'::regclass AND contype='f' AND confdeltype='a' AND conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=conrelid AND attname='mezcla_id')] AND confkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=confrelid AND attname='id')])
+ OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.focos'::regclass AND confrelid='public.aplicaciones'::regclass AND contype='f' AND confdeltype='a' AND conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=conrelid AND attname='aplicacion_id')] AND confkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=confrelid AND attname='id')])
+ THEN RAISE EXCEPTION 'Unsupported retained plan reference FK'; END IF;
  -- Required FKs prevent delayed direct child writers creating orphans after commit.
  FOREACH edge SLICE 1 IN ARRAY ARRAY[
  ['aplicaciones_mezclas','aplicacion_id','aplicaciones'],['aplicaciones_calculos','aplicacion_id','aplicaciones'],
@@ -104,60 +112,24 @@ BEGIN
  -- Reject semantic application references even when no FK enforces them.
  FOR r IN SELECT n.nspname,c.relname,a.attname FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
  WHERE a.attnum>0 AND NOT a.attisdropped AND c.relkind IN ('r','p') AND a.attname IN ('aplicacion_id','application_id') AND n.nspname NOT IN ('pg_catalog','information_schema') LOOP
- IF NOT ((r.nspname='public' AND r.relname=ANY(ARRAY['aplicaciones_lotes','aplicaciones_mezclas','aplicaciones_calculos','aplicaciones_compras','aplicaciones_cierre','movimientos_diarios','movimientos_inventario','globalgap_correcciones']))
+ IF NOT ((r.nspname='public' AND r.relname=ANY(ARRAY['aplicaciones_lotes','aplicaciones_mezclas','aplicaciones_calculos','aplicaciones_compras','aplicaciones_cierre','movimientos_diarios','movimientos_inventario','globalgap_correcciones','aplicaciones_lotes_planificado','focos']))
+ -- Santiago Option1: these exact non-FK historical copies retain their
+ -- original IDs and never block deletion merely by matching that ID. The063
+ -- table's provenance is UNKNOWN. No other table or live FK is exempted.
+ OR (r.nspname='respaldos' AND r.attname='aplicacion_id' AND r.relname=ANY(ARRAY[
+ 'backup_063_movimiento_responsable','backup_107_responsable_movimientos','backup_118_entrada_duplicada',
+ 'backup_119_sulcamag_huerfana','backup_150_15_15_15_prueba']))
  OR (r.nspname=ANY(ARRAY['application_closure','application_plan_delete']) AND r.relname='requests' AND r.attname='application_id')) THEN
  RAISE EXCEPTION 'Unsupported application reference: %.%',r.nspname,r.relname; END IF;
  END LOOP;
  -- Only known DELETE triggers are permitted. Full bodies must match reviewed sources.
- FOR r IN SELECT t.tgname,t.tgrelid,t.tgtype,p.prosrc,p.prosecdef,p.proconfig FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+ FOR r IN SELECT t.tgname,t.tgrelid,t.tgtype,p.prosrc,p.prosecdef,p.proconfig,p.proowner FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
  WHERE NOT t.tgisinternal AND t.tgenabled<>'D' AND (t.tgtype::integer & 8)<>0 AND t.tgrelid=ANY(ARRAY[
  'public.aplicaciones'::regclass,'public.aplicaciones_lotes'::regclass,'public.aplicaciones_mezclas'::regclass,
  'public.aplicaciones_productos'::regclass,'public.aplicaciones_calculos'::regclass,'public.aplicaciones_compras'::regclass]) LOOP
  IF r.tgname='trg_globalgap_correccion' AND r.tgtype=25 AND r.prosecdef
- AND 'search_path=public, pg_temp'=ANY(coalesce(r.proconfig,ARRAY[]::text[])) AND md5(r.prosrc)=md5($gg$
-DECLARE
-  v_aplicacion_id UUID;
-BEGIN
-  -- Regla dura, idéntica a la 084: sólo sesiones humanas de navegador dejan
-  -- traza. auth.uid() es NULL para service_role (bot de Telegram, migraciones,
-  -- el commit de chequeo del hato) -- limitación conocida, misma que
-  -- 050/063/074 aceptaron para `created_by`.
-  IF auth.uid() IS NULL THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-
-  -- No-op: un UPDATE que reenvía el mismo valor no es una corrección real.
-  IF TG_OP = 'UPDATE' AND to_jsonb(OLD) = to_jsonb(NEW) THEN
-    RETURN NEW;
-  END IF;
-
-  -- `aplicacion_id`: sin SQL dinámico, `to_jsonb(...)->>'columna'` resuelve
-  -- columnas que no existen en todas las tablas (ej. aplicaciones_productos no
-  -- tiene aplicacion_id, sólo mezcla_id) sin romper la compilación de plpgsql
-  -- -- misma técnica que la 084 usó para animal_id.
-  IF TG_TABLE_NAME = 'aplicaciones' THEN
-    v_aplicacion_id := (to_jsonb(OLD) ->> 'id')::uuid;
-  ELSE
-    v_aplicacion_id := (to_jsonb(OLD) ->> 'aplicacion_id')::uuid;
-  END IF;
-
-  INSERT INTO public.globalgap_correcciones (
-    tabla, fila_id, operacion, datos_anteriores, datos_nuevos,
-    aplicacion_id, corregido_por
-  )
-  VALUES (
-    TG_TABLE_NAME,
-    (to_jsonb(OLD) ->> 'id')::uuid,
-    lower(TG_OP),
-    to_jsonb(OLD),
-    CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) END,
-    v_aplicacion_id,
-    auth.uid()
-  );
-
-  RETURN COALESCE(NEW, OLD);
-END;
-$gg$) THEN NULL;
+ AND r.proconfig=ARRAY['search_path=public, pg_temp'] AND r.proowner=(SELECT oid FROM pg_roles WHERE rolname='postgres')
+ AND encode(sha256(convert_to(r.prosrc,'UTF8')),'hex')='92aa2902200ffe89ce0cbd6fb50d08ee6cbc5723a2ae7e77f0f66490fc24c365' THEN NULL;
  ELSIF r.tgrelid='public.aplicaciones_lotes'::regclass AND r.tgname='trigger_sync_tarea_lotes_on_aplicaciones_lotes_change'
  AND r.tgtype=29 AND NOT r.prosecdef AND md5(r.prosrc)=md5($sync$
 DECLARE
@@ -213,9 +185,9 @@ $sync$) THEN NULL;
  OR r.confkey IS DISTINCT FROM ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=r.confrelid AND attname='id')] THEN
  RAISE EXCEPTION 'Unsupported correction foreign key'; END IF;
  END LOOP;
- IF EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=ANY(ARRAY['public.aplicaciones'::regclass,'public.aplicaciones_lotes'::regclass,'public.aplicaciones_mezclas'::regclass,'public.aplicaciones_productos'::regclass,'public.aplicaciones_calculos'::regclass,'public.aplicaciones_compras'::regclass,'public.globalgap_correcciones'::regclass,'application_plan_delete.requests'::regclass])) THEN RAISE EXCEPTION 'Unsupported plan-delete rewrite rule'; END IF;
+ IF EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=ANY(ARRAY['public.aplicaciones'::regclass,'public.aplicaciones_lotes'::regclass,'public.aplicaciones_mezclas'::regclass,'public.aplicaciones_productos'::regclass,'public.aplicaciones_calculos'::regclass,'public.aplicaciones_compras'::regclass,'public.globalgap_correcciones'::regclass,'public.aplicaciones_lotes_planificado'::regclass,'public.focos'::regclass,'application_plan_delete.requests'::regclass])) THEN RAISE EXCEPTION 'Unsupported plan-delete rewrite rule'; END IF;
  -- Drift in required relation columns must abort rather than dynamically deleting by inferred names.
- FOREACH target IN ARRAY ARRAY['aplicaciones','aplicaciones_lotes','aplicaciones_mezclas','aplicaciones_productos','aplicaciones_calculos','aplicaciones_compras','tareas','registros_trabajo','movimientos_diarios','movimientos_inventario','aplicaciones_cierre'] LOOP
+ FOREACH target IN ARRAY ARRAY['aplicaciones','aplicaciones_lotes','aplicaciones_mezclas','aplicaciones_productos','aplicaciones_calculos','aplicaciones_compras','tareas','registros_trabajo','movimientos_diarios','movimientos_inventario','aplicaciones_cierre','aplicaciones_lotes_planificado','focos'] LOOP
  IF NOT EXISTS(SELECT 1 FROM pg_class WHERE oid=('public.'||target)::regclass AND relkind='r') OR EXISTS(SELECT 1 FROM pg_inherits WHERE inhparent=('public.'||target)::regclass OR inhrelid=('public.'||target)::regclass) OR NOT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=('public.'||target)::regclass AND attname='id' AND atttypid='uuid'::regtype AND NOT attisdropped) THEN RAISE EXCEPTION 'Plan UUID schema prerequisite drift'; END IF;
  END LOOP;
 END $guard$;
@@ -225,6 +197,11 @@ CREATE FUNCTION application_plan_delete.snapshot(app uuid) RETURNS jsonb
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE result jsonb; closure_proof boolean:=false;
 BEGIN
+ -- Presence is checked before disclosure and again under relation locks before
+ -- deletion. Retain all planning/focus records; no empty-table assumption.
+ IF EXISTS(SELECT 1 FROM public.aplicaciones_lotes_planificado p WHERE p.aplicacion_id=app OR p.mezcla_id IN(SELECT id FROM public.aplicaciones_mezclas WHERE aplicacion_id=app))
+ OR EXISTS(SELECT 1 FROM public.focos WHERE aplicacion_id=app) THEN
+ RAISE EXCEPTION 'Solo puede eliminar un plan sin referencias de planificación ni focos. Sus registros se conservaron.'; END IF;
  IF to_regclass('application_closure.requests') IS NOT NULL THEN
  EXECUTE 'SELECT EXISTS(SELECT 1 FROM application_closure.requests WHERE application_id=$1 AND state<>''cancelled'')' INTO closure_proof USING app; END IF;
  SELECT jsonb_build_object(
@@ -271,9 +248,14 @@ CREATE FUNCTION application_plan_delete.retained() RETURNS jsonb
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE t text; result jsonb:='{}'; fingerprint text;
 BEGIN
- FOREACH t IN ARRAY ARRAY['productos','movimientos_inventario','tareas','registros_trabajo','movimientos_diarios','aplicaciones_cierre'] LOOP
+ FOREACH t IN ARRAY ARRAY['productos','movimientos_inventario','tareas','registros_trabajo','movimientos_diarios','aplicaciones_cierre','aplicaciones_lotes_planificado','focos'] LOOP
  EXECUTE format('SELECT md5(coalesce(jsonb_agg(to_jsonb(x) ORDER BY id)::text,''[]'')) FROM public.%I x',t) INTO fingerprint;
  result:=result||jsonb_build_object(t,fingerprint); END LOOP;
+ -- Preserve every row and original identifier, including copies that still
+ -- point to the deleted live plan. Full-row ordering requires no key assumption.
+ FOREACH t IN ARRAY ARRAY['backup_063_movimiento_responsable','backup_107_responsable_movimientos','backup_118_entrada_duplicada','backup_119_sulcamag_huerfana','backup_150_15_15_15_prueba'] LOOP
+ EXECUTE format('SELECT md5(coalesce(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text)::text,''[]'')) FROM respaldos.%I x',t) INTO fingerprint;
+ result:=result||jsonb_build_object('respaldos.'||t,fingerprint); END LOOP;
  IF to_regclass('application_closure.requests') IS NOT NULL THEN
  EXECUTE 'SELECT md5(coalesce(jsonb_agg(to_jsonb(x) ORDER BY actor,request_key)::text,''[]'')) FROM application_closure.requests x' INTO fingerprint;
  result:=result||jsonb_build_object('closure_proofs',fingerprint); END IF;
@@ -297,7 +279,9 @@ BEGIN
  IF r.state<>'committed' OR r.receipt IS NULL OR r.archive IS NULL THEN RAISE EXCEPTION 'Delete key cancelled or incomplete'; END IF;
  RETURN jsonb_build_object('request_key',p_request_key,'receipt',r.receipt); END IF;
  LOCK TABLE public.aplicaciones,public.aplicaciones_calculos,public.aplicaciones_cierre,public.aplicaciones_compras,public.aplicaciones_lotes,public.aplicaciones_mezclas,public.aplicaciones_productos,
- public.contratistas,public.empleados,public.globalgap_correcciones,public.lotes,public.movimientos_diarios,public.movimientos_diarios_productos,public.movimientos_inventario,public.productos,public.registros_trabajo,public.tareas IN SHARE ROW EXCLUSIVE MODE;
+ public.contratistas,public.empleados,public.globalgap_correcciones,public.lotes,public.movimientos_diarios,public.movimientos_diarios_productos,public.movimientos_inventario,public.productos,public.registros_trabajo,public.tareas,public.aplicaciones_lotes_planificado,public.focos IN SHARE ROW EXCLUSIVE MODE;
+ -- Read-only archive locks keep before/after preservation checks coherent.
+ LOCK TABLE respaldos.backup_063_movimiento_responsable,respaldos.backup_107_responsable_movimientos,respaldos.backup_118_entrada_duplicada,respaldos.backup_119_sulcamag_huerfana,respaldos.backup_150_15_15_15_prueba IN SHARE MODE;
  IF to_regclass('application_closure.requests') IS NOT NULL THEN EXECUTE 'LOCK TABLE application_closure.requests IN SHARE ROW EXCLUSIVE MODE'; END IF;
  -- Check again under schema-stable relation locks, before any business mutation.
  PERFORM application_plan_delete.assert_graph(); e:=application_plan_delete.snapshot(p_application_id);

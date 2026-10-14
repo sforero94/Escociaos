@@ -99,3 +99,13 @@ Final owned source SHA256:
 - `src/__tests__/AplicacionesListPlanDelete.test.tsx`: `1e8bf53d2dbf4e3fb6cc696954719acc74a20ea4b985c36f20260dcdb9f78af6`.
 
 Ownership is returned to root for review. No owned verification process remains active.
+
+## October14 — reconciled plan deletion and historical retention
+
+Supersedes the older repository-only graph admission above. Santiago chose Option1: matching references in the five named respaldos copies do not block an otherwise eligible unused plan, and every backup row/original ID remains unchanged. Provenance for063 is unknown. The candidate now admits only those exact non-FK columns, retains full-row fingerprints under read-only relation locks, and rejects additional columns/tables/live FKs. Actual planned-lot and focos references are recognized but block deletion; neither is cascaded or detached. The actual active Admin/Gerencia purchase-plan INSERT restriction is required without widening policies. The captured correction function differs from the repository template only in comments/whitespace; its reviewed exact body digest, owner, definer mode and configuration are pinned.
+
+The complete local replay passes31native assertions, including ordinary-role INSERT admission/refusal, graph/policy/function drift, late live references, trusted correction audit, post-delete audit failure with total rollback, backup full-row/original-ID preservation, lost-response replay and revoked/mismatched-owner receipt refusal. See plan-delete-replay.json and scripts/security/plan-delete-replay.py. Full reconstruction parity is restored after coordinated installation refuses solely at the separate treatment trigger gate. All nine installation attempts and cleanup remain recorded in combined-schema-replay.json.
+
+A separate pre-existing creation defect was reproduced locally: automatic task creation uses categoria_tarea literal `Aplicaciones`, absent from the captured enum. The deletion fixture uses a valid pre-linked task with all triggers enabled; it does not certify that unrelated creation path or silently repair it. No production/domain data was read.
+
+Fresh lint/typecheck PASS,250application test files/5,263cases PASS33.74s and29Python checks PASS; logs /tmp/escocia-plan-delete-{lint,typecheck,tests,python-tests}.log. Next unit: reviewed treatment animal/identity trigger/function/config/grant baseline and actual mutation/native recovery on the verified replay, then coordinated installation and remaining adversarial rehearsal. No hosted/global-writer/concurrency certificate, merge/deploy/live migration or private input publication.

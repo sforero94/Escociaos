@@ -1,0 +1,48 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "candidate_sha256": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+  "assertions": 31,
+  "checks": [
+    "initial complete exported-property parity",
+    "old unrestricted INSERT refuses boundary and rolls back",
+    "unrestricted DELETE refuses boundary and rolls back",
+    "extra permissive policy refuses boundary and rolls back",
+    "RLS disable refuses boundary and rolls back",
+    "missing DELETE grant refuses boundary and rolls back",
+    "unknown archive reference refuses graph and rolls back",
+    "unreviewed reference column refuses graph and rolls back",
+    "live FK from historical copy refuses graph and rolls back",
+    "changed correction body refuses graph and rolls back",
+    "ordinary active Verificador cannot INSERT purchase-plan row under actual tightened RLS",
+    "ordinary active Administrador can INSERT purchase-plan row under actual RLS",
+    "live planned/focus references block snapshot without changing records",
+    "late live references invalidate earlier original and preserve every row",
+    "active Gerencia obtains the same full original under preserved role intersection",
+    "Verificador cannot snapshot/delete through privileged protocol",
+    "mismatched expected owner cannot snapshot plan",
+    "null expected owner cannot snapshot plan",
+    "audit insertion fault after deletion starts rolls back every plan/archive/audit/receipt change",
+    "unused deletion preserves all stock/ledger/tasks/work/daily/closure fingerprints",
+    "actual parent and planned child deletion commits",
+    "backup_063_movimiento_responsable full rows and original deleted application ID remain intact",
+    "backup_107_responsable_movimientos full rows and original deleted application ID remain intact",
+    "backup_118_entrada_duplicada full rows and original deleted application ID remain intact",
+    "backup_119_sulcamag_huerfana full rows and original deleted application ID remain intact",
+    "backup_150_15_15_15_prueba full rows and original deleted application ID remain intact",
+    "actual globalgap trigger records trusted actor deletion corrections",
+    "lost deletion response returns original receipt without repeated deletes/audit",
+    "mismatched owner cannot disclose committed deletion",
+    "revoked actor cannot disclose/replay committed deletion",
+    "runtime graph drift refuses committed receipt and restores all state"
+  ],
+  "owner_contract": "Option1: five historical copies and original IDs retained unchanged;063 provenance unknown.",
+  "limits": [
+    "Synthetic data/Auth on local reconciled replay only; no hosted/global-writer/concurrency certificate."
+  ],
+  "temporary_database_stopped_and_removed": true
+}

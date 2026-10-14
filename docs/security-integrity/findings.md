@@ -34,3 +34,5 @@ October13 delta: published web treatment integration58badbc and bounded source-b
 
 
 SI-15 concrete follow-up: existing profile-first account deletion can partially remove identity when Auth refuses; local migrations also cascade conversations/messages/saved memories on Auth deletion. Hosted graph unverified. Requirement/design saved in user-deletion-requirement.md; deliberate erasure policy and provider/database reconciliation remain open.
+
+October14 exact local replay: unused-plan deletion preserves all five owner-authorized historical copies and their original IDs (063 provenance unknown); actual planned-lot/focos references block deletion.31native assertions cover permissions, audit-fault rollback, preservation and receipt recovery; hosted/global writers remain open. Separate reproduced creation defect: the captured auto-task trigger uses categoria_tarea `Aplicaciones`, absent from the captured enum. This unit preserves that trigger and uses a pre-linked task; creation repair requires a separate prospective review.
