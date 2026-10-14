@@ -26,19 +26,6 @@
 // primer argumento.
 //
 // ---------------------------------------------------------------------------
-// Por qué se lee con `xlsx.mjs` + `readFileSync` y no `XLSX.readFile()`
-// ---------------------------------------------------------------------------
-// A diferencia de `extract.ts` (que resuelve `xlsx` vía `require()` porque
-// ese runner SÍ tiene `xlsx` disponible como dependencia resoluble del
-// worktree), en este entorno `xlsx` no está en el `node_modules` de este
-// worktree en absoluto -- se importa directo desde el repo principal. El
-// build `.mjs` de esa ruta no tiene `fs` cableado (`XLSX.readFile()` lanza
-// "Cannot access file"), así que se leen los bytes con `node:fs` primero y
-// se decodifican con `XLSX.read(buffer, ...)`. Si en el futuro `xlsx` SÍ
-// queda instalado como dependencia normal de este worktree, el `require()`
-// de más abajo lo encuentra primero y este fallback nunca se usa.
-//
-// ---------------------------------------------------------------------------
 // Por qué NO se usa `.upsert()` de PostgREST (igual que `load.ts`)
 // ---------------------------------------------------------------------------
 // `hato_pesajes_leche` tiene `UNIQUE(animal_id, fecha)` sobre columnas
@@ -50,8 +37,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import type * as XLSXTypes from 'xlsx';
+import { readXlsx } from '../../src/utils/spreadsheet/index.ts';
 import { createClient } from '@supabase/supabase-js';
 import {
   procesarHojaLeche,
@@ -65,63 +51,6 @@ import type { HojaCruda } from '../../src/utils/importHato/tipos';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = resolvePath(__dirname, 'out');
-
-// Ruta absoluta al `xlsx` del REPO PRINCIPAL -- ver nota de cabecera. Solo se
-// usa como fallback si `require('xlsx')` no encuentra el paquete en este
-// worktree (ver `cargarXLSX`).
-const RUTA_XLSX_REPO_PRINCIPAL = '/Users/santiagoforero/Codigo/Escociaos/node_modules/xlsx/xlsx.mjs';
-
-function cargarXLSX(): typeof XLSXTypes {
-  const require = createRequire(import.meta.url);
-  try {
-    return require('xlsx') as typeof XLSXTypes;
-  } catch {
-    // `xlsx` no resuelve como dependencia normal de este worktree -- se
-    // importa directo desde el repo principal (ver cabecera del archivo).
-    // No se puede usar `require()` con una ruta a un `.mjs` (ESM puro), así
-    // que esto queda resuelto de forma síncrona antes de `main()` vía un
-    // `import()` dinámico esperado por el caller -- ver `main()`.
-    throw new Error('XLSX_FALLBACK_REPO_PRINCIPAL');
-  }
-}
-
-async function obtenerXLSX(): Promise<typeof XLSXTypes> {
-  try {
-    return cargarXLSX();
-  } catch {
-    const mod = (await import(RUTA_XLSX_REPO_PRINCIPAL)) as typeof XLSXTypes;
-    return mod;
-  }
-}
-
-/** Convierte una hoja del workbook en la matriz cruda `unknown[][]` que
- * espera `procesarHojaLeche` -- mismo criterio que `hojaAMatriz` de
- * `extract.ts` (celdas de error conservan su texto, nunca su código
- * numérico), aunque este archivo de leche no tiene celdas de error en el
- * corpus inspeccionado. */
-function hojaAMatriz(XLSX: typeof XLSXTypes, ws: XLSXTypes.WorkSheet): unknown[][] {
-  const ref = ws['!ref'];
-  if (!ref) return [];
-  const rango = XLSX.utils.decode_range(ref);
-  const filas: unknown[][] = [];
-  for (let r = rango.s.r; r <= rango.e.r; r++) {
-    const fila: unknown[] = [];
-    for (let c = rango.s.c; c <= rango.e.c; c++) {
-      const celda = ws[XLSX.utils.encode_cell({ r, c })] as XLSXTypes.CellObject | undefined;
-      if (celda === undefined || celda.v === undefined || celda.v === null) {
-        fila.push(null);
-        continue;
-      }
-      if (celda.t === 'e') {
-        fila.push(celda.w ?? '#VALUE!');
-        continue;
-      }
-      fila.push(celda.v);
-    }
-    filas.push(fila);
-  }
-  return filas;
-}
 
 function resolverRutaXlsx(argRuta: string | undefined): string {
   if (argRuta) return resolvePath(process.cwd(), argRuta);
@@ -156,14 +85,11 @@ async function main(): Promise<void> {
   const rutaXlsx = resolverRutaXlsx(argRuta);
   console.log(`Leyendo: ${rutaXlsx}`);
 
-  const XLSX = await obtenerXLSX();
-  const buf = readFileSync(rutaXlsx);
-  const wb = XLSX.read(buf, { type: 'buffer', cellDates: false, cellNF: false });
-
-  const hojasCrudas: HojaCruda[] = wb.SheetNames.map((nombreHoja) => ({
+  const wb = await readXlsx(readFileSync(rutaXlsx), { filename: rutaXlsx });
+  const hojasCrudas: HojaCruda[] = wb.sheets.map((sheet) => ({
     archivo: rutaXlsx.split('/').pop()!,
-    hoja: nombreHoja,
-    filas: hojaAMatriz(XLSX, wb.Sheets[nombreHoja]),
+    hoja: sheet.name,
+    filas: sheet.rows,
   }));
 
   let diaPesajeIso = diaPesajeIsoDryRun;

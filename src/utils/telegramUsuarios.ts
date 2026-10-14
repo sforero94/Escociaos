@@ -103,12 +103,16 @@ const VALID_ROLES = new Set<string>(ROLES_BOT.map((r) => r.key));
 // ---------------------------------------------------------------------------
 
 export function generarCodigoVinculacion(): string {
-  const array = new Uint8Array(6);
-  crypto.getRandomValues(array);
-  return Array.from(array, (b) => b.toString(36).padStart(2, '0'))
-    .join('')
-    .substring(0, 8)
-    .toUpperCase();
+  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let code = '';
+  while (code.length < 8) {
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    for (const byte of bytes) {
+      // Reject the incomplete final group so every symbol is equally likely.
+      if (byte < 252 && code.length < 8) code += alphabet[byte % 36];
+    }
+  }
+  return code;
 }
 
 export function calcularExpiracion(dias = 7): string {

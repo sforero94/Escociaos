@@ -1,3 +1,6 @@
+import { beginTelegramAdjustment, confirmTelegramAdjustment, recoverTelegramAdjustment, PendingRondaReview, escapeRondaReviewText, RONDA_FORCE, RONDA_REVIEW } from '../ronda-adjustment-confirmation.ts';
+import { esConsultaGrupoEsco } from './politicaGrupoEsco.ts';
+import { confirmarMemoriaTelegram } from '../memory-confirmation.ts';
 // telegram/bot.ts — Grammy bot setup with webhook handler for Escocia OS
 //
 // Uses grammy conversations for multi-step flows and the Esco AI engine
@@ -13,18 +16,16 @@ import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { Context as HonoContext } from "npm:hono";
 
 import type { BotContext, TelegramUsuario } from "./types.ts";
+import { cuentaActivaTelegram } from "./cuentaActivaTelegram.ts";
+import { vincularCuentaTelegram } from "./vincularCuentaTelegram.ts";
 import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
+import { handleTreatmentRecovery, renderTreatment } from './treatmentCreation.ts';
+import { recoverTelegramTreatment } from './treatmentCreationProtocol.ts';
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
-import {
-  elegirUsoIdParaDeshacer,
-  parsearCallbackDeshacerEvento,
-  parsearCallbackDeshacerTratamiento,
-  usoIdDesdeDatosEvento,
-} from "./eventoHatoUndo.ts";
-import { decidirDeshacerCria, type CriaParaDeshacer } from "../hato-cria-automatica.ts";
+import { handleHatoUndoReview } from "./hatoUndoReview.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
 import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 import {
@@ -145,20 +146,19 @@ function supabaseStorage<T>(
         .eq("key", key)
         .single();
       if (error && error.code !== "PGRST116") {
-        console.error("[Session] read error:", error.message);
+        throw new Error("No pude leer la sesión persistida.");
       }
-      console.log("[Session] read", key, data ? "found" : "not found");
+
       return data?.session as T | undefined;
     },
     async write(key: string, value: T) {
-      const { error } = await supabase
-        .from(table)
-        .upsert({ key, session: value }, { onConflict: "key" });
-      if (error) console.error("[Session] write error:", error.message);
-      else console.log("[Session] write", key, "ok");
+      const { data,error } = await supabase.from(table)
+        .upsert({key,session:value},{onConflict:'key'}).select('key').single();
+      if(error||data?.key!==key)throw new Error('No pude verificar la sesión persistida.');
     },
     async delete(key: string) {
-      await supabase.from(table).delete().eq("key", key);
+      const {error}=await supabase.from(table).delete().eq("key",key);
+      if(error)throw new Error("No pude borrar la sesión persistida.");
     },
   };
 }
@@ -182,6 +182,18 @@ function getBot(): Bot<BotContext> {
       can_read_all_group_messages: false,
       supports_inline_queries: false,
     },
+  });
+
+  // Group Esco never uses a shared chat session or emits private answers publicly.
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type === "private") return next();
+    if (!ctx.from || (ctx.chat?.type !== "group" && ctx.chat?.type !== "supergroup")) return;
+    if (!ctx.message?.text || ctx.message.text.startsWith("/")) {
+      await ctx.reply("Para registrar datos o usar botones, abre el chat privado con Esco.");
+      return;
+    }
+    if (!esConsultaGrupoEsco(ctx.message, ctx.me)) return;
+    await responderConsultaEsco(ctx, true);
   });
 
   // --- Session middleware (persisted in `telegram_sessions` table) -----------
@@ -226,6 +238,17 @@ function getBot(): Bot<BotContext> {
     }
 
     ctx.telegramUser = (user as TelegramUsuario) ?? null;
+    // Registered workers may remain unlinked; preserve that existing lane.
+    // A linked application account must be freshly active before any session
+    // conversation resumes or service-role workflow writes become reachable.
+    if (user?.usuario_id !== null && user?.usuario_id !== undefined) {
+      const { data: linkedProfile, error: linkedError } = await supabase
+        .from("usuarios").select("id,activo").eq("id", user.usuario_id).maybeSingle();
+      if (linkedError || linkedProfile?.id !== user.usuario_id || linkedProfile?.activo !== true) {
+        await ctx.reply("No pude verificar que tu cuenta vinculada esté activa. Habla con Gerencia.");
+        return;
+      }
+    }
     await next();
   });
 
@@ -237,6 +260,13 @@ function getBot(): Bot<BotContext> {
   );
 
   bot.use(conversations({ storage: conversationStorage }));
+
+  // Native message recovery must precede createConversation replay, including
+  // after a persisted conversation exits or its last response is lost.
+  bot.use(async (ctx,next)=>{
+    if(!ctx.callbackQuery?.data?.startsWith('htc:'))return next();
+    await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
+  });
 
   // --- SALIDA DE EMERGENCIA — va ANTES de los `createConversation` -----------
   //
@@ -261,6 +291,20 @@ function getBot(): Bot<BotContext> {
   // Va después del middleware de autenticación a propósito: cancelar sigue
   // siendo una acción de un usuario registrado.
   bot.command("cancelar", async (ctx) => {
+    let tratamientoRegistrado=false;
+    const pendiente=ctx.session.pendienteTratamiento;
+    if(pendiente){
+      try{
+        if(ctx.chat?.type!=='private'||ctx.from?.id!==pendiente.sender||ctx.chat.id!==pendiente.chatId)throw Error('Identidad privada inválida');
+        const result=await recoverTelegramTreatment(getSupabaseAdmin(),pendiente,'resolve');
+        if(result.state!=='committed'&&result.state!=='canceled')throw Error('Cancelación no verificable');
+        tratamientoRegistrado=result.state==='committed';
+        ctx.session.pendienteTratamiento=null;
+        try{await renderTreatment(ctx,pendiente,result);}catch{/* Proof is already durable; original buttons still recover it. */}
+      }catch{
+        await ctx.reply('No pude verificar la cancelación del tratamiento. Conserve el mensaje original y sus botones.');return;
+      }
+    }
     ctx.session.pendienteNotaRonda = null;
     // `exitAll()`, NUNCA `exit()`. La firma es `exit(name: string)`: con el
     // nombre de UNA conversación. Llamarla sin argumento no falla y no avisa —
@@ -268,7 +312,7 @@ function getBot(): Bot<BotContext> {
     // un no-op, y por eso nadie lo notó: sin conversación abierta el comando
     // igual contestaba «Operación cancelada» y pintaba el menú.
     await ctx.conversation.exitAll();
-    await ctx.reply("Operación cancelada.");
+    await ctx.reply(tratamientoRegistrado?"La conversación terminó; el tratamiento ya estaba registrado.":"Operación cancelada.");
     await sendMainMenu(ctx);
   });
 
@@ -338,56 +382,16 @@ function getBot(): Bot<BotContext> {
 
     // Deep-link vinculacion: /start <code>
     if (payload) {
-      const supabase = getSupabaseAdmin();
-      const { data: pendingUser, error } = await supabase
-        .from("telegram_usuarios")
-        .select("*")
-        .eq("codigo_vinculacion", payload)
-        .is("telegram_id", null)
-        .single();
-
-      if (error || !pendingUser) {
+      const linkedUser = await vincularCuentaTelegram(
+        getSupabaseAdmin(), payload, ctx.from?.id, ctx.from?.username,
+      );
+      if (!linkedUser) {
         await ctx.reply(
-          "Código inválido o ya utilizado. Pide un nuevo código a tu administrador.",
+          "No pudimos confirmar la vinculación. El código puede estar vencido, revocado o ya utilizado. Pide un nuevo código a Gerencia.",
         );
         return;
       }
-
-      // Check expiration
-      const expiry = new Date(pendingUser.codigo_expira_at);
-      if (expiry < new Date()) {
-        await ctx.reply(
-          "Este código ha expirado. Pide un nuevo código a tu administrador.",
-        );
-        return;
-      }
-
-      // Link the telegram account
-      const { error: updateError } = await supabase
-        .from("telegram_usuarios")
-        .update({
-          telegram_id: ctx.from!.id,
-          telegram_username: ctx.from!.username ?? null,
-          codigo_vinculacion: null,
-          codigo_expira_at: null,
-          activo: true,
-        })
-        .eq("id", pendingUser.id);
-
-      if (updateError) {
-        console.error("[Telegram] Vinculacion error:", updateError);
-        await ctx.reply("Error al vincular tu cuenta. Intenta de nuevo.");
-        return;
-      }
-
-      // Reload user into context
-      const { data: linkedUser } = await supabase
-        .from("telegram_usuarios")
-        .select("*")
-        .eq("id", pendingUser.id)
-        .single();
-
-      ctx.telegramUser = linkedUser as TelegramUsuario;
+      ctx.telegramUser = linkedUser;
 
       await ctx.reply(
         `¡Cuenta vinculada exitosamente! Bienvenido/a, ${linkedUser.nombre_display}.`,
@@ -1069,7 +1073,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx)) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
     const excepcionId = ctx.match?.[1];
     const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
     if (!excepcionId || !letraDecision) return;
@@ -1092,7 +1096,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D):c([1-7])$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx)) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
     const excepcionId = ctx.match?.[1];
     const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
     const indice = Number(ctx.match?.[3]);
@@ -1129,7 +1133,7 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D):c([1-7]):ok$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return;
+    if (!(await tieneAccesoAprobacionGerencia(ctx)) || !ctx.telegramUser) return;
     const excepcionId = ctx.match?.[1];
     const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
     const indice = Number(ctx.match?.[3]);
@@ -1174,53 +1178,71 @@ function getBot(): Bot<BotContext> {
     confirmarCambioTeorico: boolean,
   ) {
     if (!ctx.telegramUser) return;
-    const { data, error } = await sb.rpc("fn_ronda_aplicar_ajuste", {
-      payload: {
-        ...payloadActorTelegram(ctx.telegramUser.id),
-        excepcion_id: excepcionId,
-        fecha_movimiento: hoyBogota(),
-        confirmar_cambio_teorico: confirmarCambioTeorico,
-      },
-    });
-    if (error) {
-      await ctx.reply(`El ajuste quedó aprobado, pero no se pudo aplicar automáticamente: ${mensajeErrorRpc(error)}\n\nAvisa a un administrador -- queda pendiente de aplicar.`);
+    if (confirmarCambioTeorico) {
+      await ctx.reply("Ese botón antiguo requiere una nueva revisión privada del ajuste.");
       return;
     }
-    const resultado = data as {
-      aplicado?: boolean;
-      motivo?: string;
-      teorico_al_conteo?: number;
-      teorico_hoy?: number;
-      delta?: number;
-    } | null;
-
-    if (resultado?.aplicado === false && resultado.motivo === "teorico_cambio") {
-      const kb = new InlineKeyboard().text("⚠️ Aplicar de todas formas", `rda:${excepcionId}:forzar`);
-      const fmt = (n: number | undefined) => (n === undefined ? "—" : formatearCantidad(n));
-      await ctx.reply(
-        [
+    try {
+      const resultado = await beginTelegramAdjustment(sb, { sender: ctx.from?.id, chat: ctx.chat }, excepcionId, hoyBogota(), async (review, callback) => {
+        const fmt = (n: number | undefined) => n === undefined ? "—" : String(n);
+        return await ctx.reply([
           "El teórico del sistema cambió desde el conteo -- el ajuste NO se aplicó todavía:",
-          `Teórico al contar: ${fmt(resultado.teorico_al_conteo)}`,
-          `Teórico hoy: ${fmt(resultado.teorico_hoy)}`,
-          `El ajuste seguiría aplicando la misma diferencia (delta ${fmt(resultado.delta)}) sobre el saldo de HOY.`,
-          "",
+          `Producto: ${escapeRondaReviewText(review.producto_nombre)}`,
+          `Unidad: ${escapeRondaReviewText(review.unidad)}`,
+          `Cantidad física contada: ${fmt(review.cantidad_fisica)}`,
+          `Fecha del movimiento: ${escapeRondaReviewText(review.fecha_movimiento)}`,
+          `Teórico al contar: ${fmt(review.teorico_al_conteo)}`,
+          `Teórico revisado: ${fmt(review.teorico_hoy)}`,
+          `El ajuste aplicaría la misma diferencia (delta ${fmt(review.delta)}) sobre ese saldo revisado.`,
+          "Si el inventario cambia nuevamente, esta confirmación se rechazará.",
           "¿Lo aplico igual?",
-        ].join("\n"),
-        { reply_markup: kb },
-      );
-      return;
+        ].join("\n"), { parse_mode: "HTML", reply_markup: new InlineKeyboard().text("⚠️ Aplicar ajuste revisado", callback) });
+      });
+      if (resultado.aplicado) await ctx.reply("✅ Ajuste aplicado al inventario.");
+    } catch (error) {
+      await ctx.reply(`El ajuste sigue pendiente de verificación: ${error instanceof Error ? error.message : "No se pudo verificar el resultado."}`, error instanceof PendingRondaReview ? { reply_markup: new InlineKeyboard().text("Volver a mostrar esta revisión", `rda_review:${error.proposal}`) } : undefined);
     }
-
-    await ctx.reply("✅ Ajuste aplicado al inventario.");
   }
+
+  bot.callbackQuery(RONDA_FORCE, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
+    try {
+      await confirmTelegramAdjustment(getSupabaseAdmin(), { sender: ctx.from?.id, chat: ctx.chat, message: ctx.callbackQuery.message?.message_id }, ctx.callbackQuery.data);
+      await ctx.reply("✅ Ajuste aplicado al inventario.");
+    } catch (error) {
+      await ctx.reply(error instanceof Error ? error.message : "No se pudo verificar el resultado. Conserva el botón original para reintentar.", { reply_markup: new InlineKeyboard().text("Volver a mostrar esta revisión", `rda_review:${ctx.match?.[1]}`) });
+    }
+  });
+
+  bot.callbackQuery(RONDA_REVIEW, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) return;
+    try {
+      const resultado = await recoverTelegramAdjustment(getSupabaseAdmin(), { sender: ctx.from?.id, chat: ctx.chat }, ctx.callbackQuery.data, async (review, callback) => {
+        const fmt = (n: number | undefined) => n === undefined ? "—" : String(n);
+        return await ctx.reply([
+          "El teórico del sistema cambió desde el conteo -- el ajuste NO se aplicó todavía:",
+          `Producto: ${escapeRondaReviewText(review.producto_nombre)}`,
+          `Unidad: ${escapeRondaReviewText(review.unidad)}`,
+          `Cantidad física contada: ${fmt(review.cantidad_fisica)}`,
+          `Fecha del movimiento: ${escapeRondaReviewText(review.fecha_movimiento)}`,
+          `Teórico al contar: ${fmt(review.teorico_al_conteo)}`,
+          `Teórico revisado: ${fmt(review.teorico_hoy)}`,
+          `El ajuste aplicaría la misma diferencia (delta ${fmt(review.delta)}) sobre ese saldo revisado.`,
+          "Si el inventario cambia nuevamente, esta confirmación se rechazará.",
+          "¿Lo aplico igual?",
+        ].join("\n"), { parse_mode: "HTML", reply_markup: new InlineKeyboard().text("⚠️ Aplicar ajuste revisado", callback) });
+      });
+      if (resultado.aplicado) await ctx.reply("✅ Este ajuste ya fue aplicado; se verificó su recibo original.");
+    } catch (error) {
+      await ctx.reply(error instanceof Error ? error.message : "No se pudo verificar esta revisión original.", { reply_markup: new InlineKeyboard().text("Volver a mostrar esta revisión", `rda_review:${ctx.match?.[1]}`) });
+    }
+  });
 
   bot.callbackQuery(/^rda:([0-9a-f-]+):forzar$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return;
-    const excepcionId = ctx.match?.[1];
-    if (!excepcionId) return;
-    const sb = getSupabaseAdmin();
-    await aplicarAjusteRondaYResponder(ctx, sb, excepcionId, true);
+    await ctx.reply("Ese botón antiguo requiere una nueva revisión privada del ajuste.");
   });
 
   bot.command("ayuda", async (ctx) => {
@@ -1317,73 +1339,19 @@ function getBot(): Bot<BotContext> {
     await ctx.answerCallbackQuery();
     const token = ctx.match?.[1];
     if (!token) return;
-    const resueltoMem = exigirUsuarioIdVinculado(
-      await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
-    );
-    if (!resueltoMem.ok) {
-      await ctx.reply(mensajeResolverUsuarioTelegram(resueltoMem.motivo));
+    const cuentaMem = await cuentaActivaTelegram(getSupabaseAdmin(), ctx.from?.id, "consultas");
+    if (!cuentaMem || cuentaMem.rol !== "Gerencia") {
+      await ctx.reply("No pude verificar tu acceso actual a Esco.");
       return;
     }
-    const usuarioIdMem = resueltoMem.usuarioId;
-    const sb = getSupabaseAdmin();
-    // Reach into Esco directly via the in-process executor by calling the
-    // edge function endpoint? No — the proposal cache is in-memory inside
-    // chat.tsx. Sending another LLM message with the right tool call is the
-    // cleanest way; but for the contract we just need commit_memory_save to
-    // run. Since the cache is in-process and bot + chat live in the same
-    // edge function, we import the executor's behaviour by issuing a synthetic
-    // tool call through llmToolLoop with a forced tool_choice. Simpler: just
-    // call the dispatch directly via a fetch-less internal route.
-    //
-    // For Phase 3D, we keep it pragmatic: persist directly using the service
-    // role. The proposal token expires in 30 min and the service role bypass
-    // is acceptable here because the user just tapped ✅ on Telegram.
-    const conversationId = await getOrCreateTelegramConversation(usuarioIdMem);
-    // Rehydrate: find the most recent assistant message whose metadata.tool_interactions
-    // contains a propose_memory_save with this token
-    const { data: assistantMsgs } = await sb
-      .from("chat_messages")
-      .select("metadata")
-      .eq("conversation_id", conversationId)
-      .eq("role", "assistant")
-      .order("created_at", { ascending: false })
-      .limit(5);
-    type Interaction = { tool: string; args?: Record<string, unknown>; result_summary?: string };
-    let content: string | null = null;
-    for (const m of assistantMsgs ?? []) {
-      const meta = m.metadata as { tool_interactions?: Interaction[] } | null;
-      const hit = meta?.tool_interactions?.find((t) =>
-        t.tool === "propose_memory_save" && typeof t.result_summary === "string" && t.result_summary.includes(token)
-      );
-      if (hit?.result_summary) {
-        try {
-          const parsed = JSON.parse(hit.result_summary);
-          content = typeof parsed.content === "string" ? parsed.content : null;
-        } catch {
-          // result_summary is truncated to 500 chars in chat.tsx; if it cuts off
-          // mid-JSON, fall back to the original args.content
-          content = (hit.args?.content as string) ?? null;
-        }
-        break;
-      }
+    try {
+      const result = await confirmarMemoriaTelegram(getSupabaseAdmin(), ctx.from?.id, token);
+      // Plain text avoids Markdown fallback changing the confirmed payload.
+      await ctx.editMessageText(`✅ Guardado: ${result.content.slice(0, 200)}`);
+    } catch (error) {
+      console.error('[Telegram] Memory confirmation failed:', error instanceof Error ? error.message : 'unknown');
+      await ctx.reply('No pude confirmar la memoria. Puede estar expirada o tu acceso pudo cambiar. Intenta de nuevo.');
     }
-    if (!content) {
-      await ctx.editMessageText("No pude recuperar la memoria propuesta. Intenta de nuevo.");
-      return;
-    }
-    const { error } = await sb.from("esco_memorias").insert({
-      user_id: usuarioIdMem,
-      content: content.slice(0, 1000),
-      source_channel: "telegram",
-    });
-    if (error) {
-      console.error("[Telegram] Memory save error:", error.message);
-      await ctx.editMessageText(`No pude guardar la memoria: ${error.message}`);
-      return;
-    }
-    await ctx.editMessageText(`✅ Guardado: _${content.slice(0, 200)}_`, { parse_mode: "Markdown" }).catch(
-      () => ctx.editMessageText(`✅ Guardado: ${content.slice(0, 200)}`),
-    );
   });
 
   bot.callbackQuery(/^mem_cancel:(.+)$/, async (ctx) => {
@@ -1426,219 +1394,11 @@ function getBot(): Bot<BotContext> {
   // --------------------------------------------------------------------------
 
   bot.callbackQuery(/^hato_ev_undo:/, async (ctx) => {
-    const parsed = parsearCallbackDeshacerEvento(ctx.callbackQuery.data ?? "");
-    if (!parsed) {
-      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
-      return;
-    }
-    const eventoId = parsed.eventoId;
-
-    const sb = getSupabaseAdmin();
-    const { data: evento } = await sb
-      .from("hato_eventos")
-      .select("id, fuente, animal_id, fecha, created_at, datos, tipo, tipo_servicio, cria_id")
-      .eq("id", eventoId)
-      .maybeSingle();
-
-    if (!evento) {
-      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
-      return;
-    }
-    if (evento.fuente !== "telegram") {
-      await ctx.answerCallbackQuery({ text: "Ese registro no se puede deshacer desde aquí." });
-      return;
-    }
-
-    // ESCO-135: un parto con hembra retenida creó la ficha de la ternera.
-    // Deshacer el parto se la lleva SOLO si sigue intacta (la creó este
-    // flujo, para esta madre, sin nombre, activa y sin ningún registro
-    // propio). Si no, se rechaza el Deshacer COMPLETO antes de tocar nada:
-    // borrar el parto y dejar la ternera huérfana, o borrar una ternera en la
-    // que alguien ya trabajó, es peor que no deshacer. Se decide ANTES de
-    // devolver la pajilla, por el mismo motivo.
-    let criaABorrar: { id: string; numero: number | null } | null = null;
-    const criaId = (evento.cria_id as string | null) ?? null;
-    if (criaId) {
-      const { data: cria, error: errorCria } = await sb
-        .from("hato_animales")
-        .select("id, numero, madre_id, nombre, estado, import_meta")
-        .eq("id", criaId)
-        .maybeSingle();
-      if (errorCria) {
-        await ctx.answerCallbackQuery({ text: "No se pudo revisar la ternera. No borré nada." });
-        return;
-      }
-      // Toda fila que apunte a la cría cuenta. Una consulta que falla cuenta
-      // como referencia: ante la duda, no se borra (falla cerrado).
-      const conteos = await Promise.all([
-        sb.from("hato_eventos").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_eventos").select("id", { count: "exact", head: true }).eq("cria_id", criaId).neq("id", eventoId),
-        sb.from("hato_animales").select("id", { count: "exact", head: true }).eq("madre_id", criaId),
-        sb.from("hato_animales").select("id", { count: "exact", head: true }).eq("padre_id", criaId),
-        sb.from("hato_chequeo_vacas").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_pesajes_leche").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_tratamientos").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_pajillas_uso").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        sb.from("hato_alertas").select("id", { count: "exact", head: true }).eq("animal_id", criaId),
-        // Venta/muerte de la cría registrada en Finanzas: siempre una fila del
-        // Hato (`es_hato = true`, migración 059 agrega las dos columnas juntas).
-        sb
-          .from("fin_transacciones_ganado")
-          .select("id", { count: "exact", head: true })
-          .eq("es_hato", true)
-          .eq("hato_animal_id", criaId),
-      ]);
-      const referencias = conteos.reduce(
-        (total, r) => total + (r.error ? 1 : (r.count ?? 1)),
-        0,
-      );
-      const decision = decidirDeshacerCria({
-        cria: (cria ?? null) as CriaParaDeshacer | null,
-        madreId: evento.animal_id as string,
-        referencias,
-      });
-      if (decision.accion === "rechazar") {
-        await ctx.answerCallbackQuery({
-          text: `No se deshizo nada: ${decision.motivo}. Corrige el parto desde la app.`,
-          show_alert: true,
-        });
-        return;
-      }
-      if (decision.accion === "borrar") {
-        criaABorrar = { id: decision.criaId, numero: (cria?.numero as number | null) ?? null };
-      }
-    }
-
-    // El callback ya no lleva el usoId (límite de 64 bytes). Se busca por
-    // datos.pajilla_uso_id o, si falta, por vaca+fecha del mismo instante.
-    // Solo se listan usos cuando el evento es una inseminación: deshacer un
-    // parto o una monta del mismo día no puede devolver la pajilla de otra.
-    let usos: Array<{
-      id: string;
-      animal_id: string | null;
-      fecha_uso: string;
-      created_at: string;
-    }> = [];
-    const esInseminacion =
-      evento.tipo === "servicio" && evento.tipo_servicio === "inseminacion";
-    if (
-      esInseminacion &&
-      !parsed.usoId &&
-      !usoIdDesdeDatosEvento(evento.datos)
-    ) {
-      const { data: usosData } = await sb
-        .from("hato_pajillas_uso")
-        .select("id, animal_id, fecha_uso, created_at")
-        .eq("animal_id", evento.animal_id)
-        .eq("fecha_uso", evento.fecha);
-      usos = (usosData ?? []) as typeof usos;
-    }
-
-    const usoId = elegirUsoIdParaDeshacer({
-      usoIdCallback: parsed.usoId,
-      datosEvento: evento.datos,
-      evento: {
-        animal_id: evento.animal_id as string,
-        fecha: evento.fecha as string,
-        created_at: evento.created_at as string,
-      },
-      usos,
-    });
-
-    // El uso de pajilla se borra PRIMERO: si fallara después del evento, el
-    // inventario quedaría descontado por un servicio que ya no existe.
-    if (usoId) {
-      const { error: errorUso } = await sb.from("hato_pajillas_uso").delete().eq("id", usoId);
-      if (errorUso) {
-        await ctx.answerCallbackQuery({ text: "No se pudo devolver la pajilla. No borré nada." });
-        return;
-      }
-    }
-
-    const { error } = await sb.from("hato_eventos").delete().eq("id", eventoId);
-    if (error) {
-      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
-      return;
-    }
-
-    // La ficha de la ternera va DESPUÉS del parto: `hato_eventos.cria_id` la
-    // referencia (FK sin cascada), así que antes no se puede borrar.
-    if (criaABorrar) {
-      const { error: errorBorrarCria } = await sb.from("hato_animales").delete().eq("id", criaABorrar.id);
-      if (errorBorrarCria) {
-        console.error("[Telegram] Deshacer: parto borrado, ficha de ternera no:", errorBorrarCria.message);
-        await ctx.answerCallbackQuery({ text: "Parto deshecho, pero la ternera quedó." });
-        await ctx.editMessageText(
-          `↩️ Parto deshecho, pero la ficha de la ternera${criaABorrar.numero != null ? ` #${criaABorrar.numero}` : ""} NO se pudo borrar. Bórrala desde la app.`,
-        );
-        return;
-      }
-    }
-
-    await ctx.answerCallbackQuery({ text: "Deshecho." });
-    // Se edita el mensaje para quitar el botón: un segundo toque sobre un id
-    // ya borrado solo diría "ya no existe", pero deja al usuario dudando de
-    // si borró dos cosas.
-    await ctx.editMessageText(
-      criaABorrar
-        ? `↩️ Registro deshecho, con la ficha de la ternera${criaABorrar.numero != null ? ` #${criaABorrar.numero}` : ""}. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.`
-        : "↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.",
-    );
+    await handleHatoUndoReview(ctx, getSupabaseAdmin(), 'event');
   });
 
-  // --------------------------------------------------------------------------
-  // DESHACER un tratamiento recién registrado por /evento (138).
-  //
-  // Gemelo del de arriba, con la misma guarda y por el mismo motivo: un
-  // `callback_data` se puede reenviar, así que la autorización no está en el
-  // botón sino acá. `fuente = 'telegram'` es lo que impide que este camino
-  // borre un tratamiento que escribió Martha desde la Hoja de Vida.
-  //
-  // Segunda guarda, propia de esta tabla: si alguien ya marcó el paso como
-  // hecho (desde la alerta), el tratamiento dejó de ser "lo que acabo de
-  // registrar" y borrarlo se llevaría por delante ese trabajo. El paso cuelga
-  // con `ON DELETE CASCADE`, así que un DELETE de la cabecera lo arrastra.
-  // --------------------------------------------------------------------------
-
   bot.callbackQuery(/^hato_tr_undo:/, async (ctx) => {
-    const parsed = parsearCallbackDeshacerTratamiento(ctx.callbackQuery.data ?? "");
-    if (!parsed) {
-      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
-      return;
-    }
-
-    const sb = getSupabaseAdmin();
-    const { data: tratamiento } = await sb
-      .from("hato_tratamientos")
-      .select("id, fuente, hato_tratamiento_pasos(fecha_ejecutada)")
-      .eq("id", parsed.tratamientoId)
-      .maybeSingle();
-
-    if (!tratamiento) {
-      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
-      return;
-    }
-    if (tratamiento.fuente !== "telegram") {
-      await ctx.answerCallbackQuery({ text: "Ese tratamiento no se registró desde aquí." });
-      return;
-    }
-
-    const pasos = (tratamiento.hato_tratamiento_pasos ?? []) as Array<{ fecha_ejecutada: string | null }>;
-    if (pasos.some((paso) => paso.fecha_ejecutada != null)) {
-      await ctx.answerCallbackQuery({
-        text: "Ya marcaron un paso como hecho. Corrígelo desde la ficha de la vaca.",
-      });
-      return;
-    }
-
-    const { error } = await sb.from("hato_tratamientos").delete().eq("id", parsed.tratamientoId);
-    if (error) {
-      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
-      return;
-    }
-
-    await ctx.answerCallbackQuery({ text: "Deshecho." });
-    await ctx.editMessageText("↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.");
+    await handleHatoUndoReview(ctx, getSupabaseAdmin(), 'treatment');
   });
 
   bot.callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/, async (ctx) => {
@@ -2100,19 +1860,14 @@ function getBot(): Bot<BotContext> {
       if (t.tool !== "propose_memory_save") continue;
       try {
         const parsed = t.result_summary ? JSON.parse(t.result_summary) : null;
-        if (parsed?._memory_proposal && typeof parsed.token === "string") {
-          return {
-            token: parsed.token,
-            content: typeof parsed.content === "string"
-              ? parsed.content
-              : (t.args?.content as string) ?? "",
-          };
+        if (parsed?._memory_proposal === true && typeof parsed.token === "string"
+          && /^mem_[0-9a-z]{1,10}_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(parsed.token)
+          && typeof parsed.content === "string" && parsed.content.length > 0 && parsed.content.length <= 500
+          && parsed.content.trim() === parsed.content) {
+          return { token: parsed.token, content: parsed.content };
         }
       } catch {
-        // result_summary truncated mid-JSON; fall back to args
-        if (typeof t.args?.content === "string") {
-          return { token: "unknown", content: t.args.content };
-        }
+        // A missing durable result cannot prove which exact payload was registered.
       }
     }
     return null;
@@ -2487,30 +2242,40 @@ function getBot(): Bot<BotContext> {
   // FREE-TEXT FALLBACK — Esco AI engine with conversation persistence
   // ==========================================================================
 
-  bot.on("message:text", async (ctx) => {
-    if (!ctx.telegramUser) return;
+  async function responderConsultaEsco(ctx: BotContext, grupo = false) {
 
-    if (!ctx.telegramUser.modulos_permitidos?.includes("consultas")) {
+    const cuenta = await cuentaActivaTelegram(getSupabaseAdmin(), ctx.from?.id, "consultas");
+    if (!cuenta || cuenta.rol !== "Gerencia") {
       await ctx.reply(
         "No tienes acceso a consultas. Usa los comandos del menú.",
       );
       return;
     }
 
-    const userMessage = ctx.message.text;
+    const userMessage = ctx.message?.text;
     if (!userMessage?.trim()) return;
 
-    await ctx.replyWithChatAction("typing");
-
-    try {
-      const resueltoEsco = exigirUsuarioIdVinculado(
-        await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
-      );
-      if (!resueltoEsco.ok) {
-        await ctx.reply(mensajeResolverUsuarioTelegram(resueltoEsco.motivo));
+    const destino = grupo ? ctx.from!.id : ctx.chat!.id;
+    const reply = (text: string, options?: Parameters<typeof ctx.api.sendMessage>[2]) =>
+      ctx.api.sendMessage(destino, text, options);
+    if (grupo) {
+      try {
+        await reply("Recibí tu consulta del grupo. La respuesta se mostrará solo aquí.");
+      } catch {
+        await ctx.reply("Abre primero el chat privado con Esco y envía /start. Luego repite tu consulta.");
         return;
       }
-      const userId = resueltoEsco.usuarioId;
+      await ctx.reply("Te responderé en el chat privado con Esco.");
+    }
+    await ctx.api.sendChatAction(destino, "typing");
+
+    try {
+      const vigente = await cuentaActivaTelegram(getSupabaseAdmin(), ctx.from?.id, "consultas");
+      if (!vigente || vigente.rol !== "Gerencia" || vigente.usuarioId !== cuenta.usuarioId) {
+        await reply("No pude verificar tu acceso actual a Esco.");
+        return;
+      }
+      const userId = vigente.usuarioId;
 
       // Persist conversation
       const conversationId = await getOrCreateTelegramConversation(userId);
@@ -2529,19 +2294,16 @@ function getBot(): Bot<BotContext> {
 
       // If Esco proposed saving a memory, render inline confirmation buttons
       // before the regular response. The token roundtrips through callback_data
-      // back to commit_memory_save when the user taps ✅.
+      // back to the human-only confirmation RPC when the user taps ✅.
       const memoryProposal = findMemoryProposal(toolInteractions);
       if (memoryProposal) {
         const kb = new InlineKeyboard()
           .text("✅ Guardar", `mem_save:${memoryProposal.token}`)
           .text("❌ Cancelar", `mem_cancel:${memoryProposal.token}`);
-        const preview = memoryProposal.content.length > 200
-          ? memoryProposal.content.slice(0, 200) + "…"
-          : memoryProposal.content;
-        await ctx.reply(`📌 ¿Guardo esto para futuras conversaciones?\n\n_${preview}_`, {
-          parse_mode: "Markdown",
-          reply_markup: kb,
-        }).catch(() => ctx.reply(`📌 ¿Guardo esto para futuras conversaciones?\n\n${preview}`, { reply_markup: kb }));
+        // Show the entire <=500-character registered payload before approval.
+        const preview = memoryProposal.content;
+        // Plain text preserves every character, including Markdown syntax.
+        await reply(`📌 ¿Guardo esto para futuras conversaciones?\n\n${preview}`, { reply_markup: kb });
       }
 
       // Extract charts and send as images, text as messages
@@ -2551,15 +2313,13 @@ function getBot(): Bot<BotContext> {
       for (const part of textParts) {
         const formatted = formatForTelegram(part);
         if (formatted.length <= 4096) {
-          await ctx
-            .reply(formatted, { parse_mode: "Markdown" })
-            .catch(() => ctx.reply(formatted));
+          await reply(formatted, { parse_mode: "Markdown" })
+            .catch(() => reply(formatted));
         } else {
           const chunks = splitMessage(formatted, 4096);
           for (const chunk of chunks) {
-            await ctx
-              .reply(chunk, { parse_mode: "Markdown" })
-              .catch(() => ctx.reply(chunk));
+            await reply(chunk, { parse_mode: "Markdown" })
+              .catch(() => reply(chunk));
           }
         }
       }
@@ -2568,7 +2328,7 @@ function getBot(): Bot<BotContext> {
       for (const chart of charts) {
         try {
           const url = buildQuickChartUrl(chart);
-          await ctx.replyWithPhoto(url, {
+          await ctx.api.sendPhoto(destino, url, {
             caption: chart.title,
           });
         } catch (chartErr) {
@@ -2578,11 +2338,13 @@ function getBot(): Bot<BotContext> {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
       console.error("[Telegram] Esco AI error:", msg);
-      await ctx.reply(
+      await reply(
         "Hubo un error al procesar tu consulta. Intenta de nuevo.",
       );
     }
-  });
+  }
+
+  bot.on("message:text", (ctx) => responderConsultaEsco(ctx));
 
   // Set the "/" command menu (fire-and-forget, errors are non-fatal)
   bot.api.setMyCommands([

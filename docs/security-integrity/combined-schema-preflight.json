@@ -1,0 +1,380 @@
+{
+  "version": 1,
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "exported_at": "2026-10-13T19:06:45.019295-05:00",
+  "source": "Owner-provided structure-only exports; no production connection",
+  "minimum_metadata_admission_passed": true,
+  "blockers": [],
+  "counts": {
+    "relations": 186,
+    "columns": 2152,
+    "constraints": 510,
+    "indexes": 357,
+    "triggers": 85,
+    "functions": 72,
+    "views": 7,
+    "enums": 23,
+    "sequences": 1,
+    "migrations": 159
+  },
+  "policies": 343,
+  "target_matrix": [
+    {
+      "table": "productos",
+      "columns": 50,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 3,
+      "policy_count": 7,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "movimientos_inventario",
+      "columns": 17,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 0,
+      "policy_count": 3,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "compras",
+      "columns": 18,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 1,
+      "policy_count": 2,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "fin_gastos",
+      "columns": 18,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 2,
+      "policy_count": 4,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "fin_ingresos",
+      "columns": 22,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 3,
+      "policy_count": 4,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "aplicaciones",
+      "columns": 25,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 4,
+      "policy_count": 2,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "usuarios",
+      "columns": 8,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 0,
+      "policy_count": 2,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "telegram_usuarios",
+      "columns": 14,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 1,
+      "policy_count": 1,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "hato_animales",
+      "columns": 21,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 1,
+      "policy_count": 2,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "hato_tratamientos",
+      "columns": 11,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 0,
+      "policy_count": 2,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    },
+    {
+      "table": "hato_tratamiento_pasos",
+      "columns": 9,
+      "rls": true,
+      "force_rls": false,
+      "triggers": 0,
+      "policy_count": 2,
+      "explicit_dml_roles": [
+        "anon",
+        "authenticated",
+        "postgres",
+        "service_role"
+      ]
+    }
+  ],
+  "lexical_function_writers": [
+    {
+      "function": "public.fn_cerrar_aplicacion",
+      "definition_sha256": "9c54bc409496305b052d94ec26572264fd5c8d57c7a39f22fdbab81d5672ef59",
+      "body_md5": "ab733de8168be36f3a8f2f7a438469a3",
+      "static_dml_tables": [
+        "aplicaciones",
+        "movimientos_inventario",
+        "productos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_cleanup_compra_dependencies",
+      "definition_sha256": "c802f3bcf1e6c140c177044f1140bcad185a30340d6f7253e9a71aec6fce3e5f",
+      "body_md5": "90fc3ea6045da7ea44cba7e2d43873ed",
+      "static_dml_tables": [
+        "fin_gastos"
+      ],
+      "security_definer": true,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": true
+    },
+    {
+      "function": "public.fn_hato_confirmar_paso_tratamiento",
+      "definition_sha256": "1da4848bae4e877ceb2e14cac4abb7fa09dd1ef659d3e36505fee0fa819cd37b",
+      "body_md5": "ca3a7e740d6eeb20fe0c48c10531adf4",
+      "static_dml_tables": [
+        "hato_tratamiento_pasos",
+        "hato_tratamientos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_hato_eliminar_quincena_venta",
+      "definition_sha256": "2b1d5d0e828ee9e866871db5a1934b427ef1a2737d3557b894a8d88c1b9efabd",
+      "body_md5": "9db18b26b83a2c736784925cc73c70fc",
+      "static_dml_tables": [
+        "fin_ingresos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_hato_guardar_quincena_venta",
+      "definition_sha256": "a68a2823793e477cb018e15dd0063dcfa8f0427a6f8431b514281400ee58058e",
+      "body_md5": "9f854b0fd80f24507cf793da84d23910",
+      "static_dml_tables": [
+        "fin_ingresos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_hato_registrar_tratamiento",
+      "definition_sha256": "4d5fde812746d2efd25b7ece14440db7e4b512c4f8ca55891bda87c5071a8bb5",
+      "body_md5": "5504439a268818623461faa6ba669481",
+      "static_dml_tables": [
+        "hato_tratamiento_pasos",
+        "hato_tratamientos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_hato_registrar_venta_animales",
+      "definition_sha256": "976f814ec8af8ef89d7cd0252f61b0d4d089d7143f78596458cc89b9c33583eb",
+      "body_md5": "59631b2ebefe90520c16c1252fdf216d",
+      "static_dml_tables": [
+        "fin_ingresos",
+        "hato_animales"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_ronda_aplicar_ajuste",
+      "definition_sha256": "907f8ffdec8ed916b08e03ff2343df529e2d0b978a80b5dca48d13cddef013dc",
+      "body_md5": "b9e8e9d24585f571e1f9a2dd89d075b0",
+      "static_dml_tables": [
+        "movimientos_inventario",
+        "productos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.fn_ronda_resolver_con_captura",
+      "definition_sha256": "6dce23013bd9c3c0dff5aca253606173a50a1c19b8e556933a21218d1566150d",
+      "body_md5": "611a7d7b6ba8bc5e101e8782c0a40f49",
+      "static_dml_tables": [
+        "movimientos_inventario",
+        "productos"
+      ],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "authenticated",
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": false,
+      "expense_delete_token": false
+    },
+    {
+      "function": "public.po_sonda",
+      "definition_sha256": "189c0486ff406e4aaddd6d4bfbb984f785387125eac1e4b302f68ba4e0777182",
+      "body_md5": "aa3ff4f0d0302857da6c794ac3ccbb93",
+      "static_dml_tables": [],
+      "security_definer": false,
+      "explicit_execute_roles": [
+        "postgres",
+        "service_role"
+      ],
+      "public_execute_by_default": false,
+      "dynamic_sql_present": true,
+      "expense_delete_token": false
+    }
+  ],
+  "limits": [
+    "Explicit grants do not prove effective/inherited authorization or RLS access.",
+    "Static DML tokens are a review map, not exhaustive writer/call-graph or execution proof.",
+    "Passing admission is not schema parity, combined installation or runtime certification.",
+    "No row data, sequence state, production connection, generated schema or SQL execution."
+  ],
+  "supplement": {
+    "exported_at": "2026-10-13T20:26:15-05:00",
+    "base_columns_joined": 2041,
+    "roles": 32,
+    "memberships": 22,
+    "overlapping_structure_matches": true,
+    "limit": "Exporter attests no schema change; matching migration tips alone do not prove absence of manual DDL."
+  },
+  "catalog_state_admission_passed": true,
+  "addendum": {
+    "exported_at": "2026-10-13T21:24:24-05:00",
+    "indexes_joined": 357,
+    "constraints_joined": 510,
+    "user_rewrite_rules": 0,
+    "identity_sets_and_index_definitions_match": true,
+    "limit": "Catalog state reconciled for public/respaldos; not combined installation or hosted certification."
+  }
+}

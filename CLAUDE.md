@@ -809,7 +809,7 @@ See `src/guidelines/Guidelines.md` for the full design system.
 - Modifying table schemas may break triggers — check `src/sql/migrations/` for trigger definitions
 - See `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` for the sync architecture
 - **There is no purchases → expenses trigger.** `crear_gasto_pendiente_de_compra()` and `trigger_compra_a_gasto` were dropped from production on 2026-07-02 (migration 079); a compra posts nothing to `fin_gastos`. `src/sql/trigger_compra_a_gasto.sql`, `src/sql/update_trigger_compra_a_gasto.sql` and migration 038 are historical — do not re-run them. New triggers that touch cross-role tables should still use SECURITY DEFINER (the 038/039 precedent).
-- The `fn_cleanup_compra_dependencies()` RPC function uses SECURITY DEFINER for the same reason (migration 039). Purchase deletion calls this via `.rpc()` instead of direct `fin_gastos.delete()`.
+- The historical `fn_cleanup_compra_dependencies()` routine (migration 039) must not be used by new purchase callers. The security review branch uses `fn_purchase_post`, `fn_purchase_proof`, `fn_purchase_reverse` and `fn_purchase_resolve` from the unapplied `src/sql/security-candidates/purchase-integrity.sql` candidate. Reversal preserves every linked expense and invoice object; uncertain outcomes retain their original owner/key/payload until verified resolution. Install reviewed SQL dependencies before releasing these callers, with an approved coordinated stock-writer cutover. Do not run historical expense cleanup or use a direct-write fallback.
 
 ### ⚠️ "Hoy" siempre se toma en hora LOCAL, nunca en UTC
 

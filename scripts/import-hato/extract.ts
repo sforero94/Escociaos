@@ -15,29 +15,15 @@
 // script SOLO los lee.
 //
 // ---------------------------------------------------------------------------
-// Dos decisiones de lectura que NO son cosméticas:
-//
-// 1. `cellDates` queda en FALSE (el default). `celdas.ts` espera que una
-//    fecha bien tipada llegue como SERIAL de Excel y la convierte a texto
-//    `D/M/AAAA` con aritmética UTC. Si se leyera con `cellDates:true`
-//    llegarían objetos `Date` construidos en la zona horaria del proceso, y
-//    una fecha a medianoche puede correrse un día según dónde corra esto.
-//
-// 2. La grilla se arma celda por celda desde el worksheet, NO con
-//    `sheet_to_json`. Motivo: las celdas de ERROR de Excel. `sheet_to_json`
-//    con `raw:true` entrega el CÓDIGO NUMÉRICO del error (`#VALUE!` -> 15),
-//    que es indistinguible de un dato numérico real. Y `#VALUE!` es
-//    justamente el fenómeno central del corpus (doc S2 §4: siempre es
-//    derivado de un `F Servicio` roto, 69 celdas, 0 huérfanas). Leyendo la
-//    celda directa se conserva el texto `#VALUE!`, que es lo que
-//    `parseValorNumerico` de `calculosHato.ts` sabe reconocer.
+// El adaptador conserva fechas como seriales de Excel (normaliza 1904 a
+// 1900 con aritmética UTC), el texto de errores como #VALUE! y la geometría
+// completa con null en huecos. No convierte errores a códigos numéricos.
 // ---------------------------------------------------------------------------
 
-import { readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve as resolvePath, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import type * as XLSXTypes from 'xlsx';
+import { readXlsx } from '../../src/utils/spreadsheet/index.ts';
 import type { HatoConfig } from '@/utils/calculosHato';
 import type { HojaCruda } from '@/utils/importHato/tipos';
 import { normalizarHojas } from '@/utils/importHato/normalizar';
@@ -45,13 +31,6 @@ import { normalizarHojas } from '@/utils/importHato/normalizar';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolvePath(__dirname, '../..');
 const OUT_DIR = resolvePath(__dirname, 'out');
-
-// `xlsx@0.18.5` es CommonJS: bajo ESM el namespace que entrega
-// `import * as XLSX` no expone sus funciones (`XLSX.readFile is not a
-// function`). `createRequire` lo carga por la vía que la librería sí soporta.
-// El `import type` de arriba conserva los tipos sin cargar nada en runtime.
-const require = createRequire(import.meta.url);
-const XLSX = require('xlsx') as typeof XLSXTypes;
 
 /** Archivos fuera del alcance del módulo Hato Lechero, excluidos a nivel de
  * ARCHIVO (las hojas de leche se excluyen más adentro, en `clasificarHoja`).
@@ -87,37 +66,7 @@ const CONFIG: HatoConfig = {
   dias_rechequeo_due: 60,
 };
 
-/** Convierte una hoja del workbook en la matriz cruda que espera el
- * normalizador. Devuelve `unknown[][]` con `null` en las celdas vacías, el
- * valor crudo (número/texto/booleano) en las llenas, y el texto del error
- * (`'#VALUE!'`) en las celdas de error. */
-function hojaAMatriz(ws: XLSX.WorkSheet): unknown[][] {
-  const ref = ws['!ref'];
-  if (!ref) return [];
-  const rango = XLSX.utils.decode_range(ref);
-  const filas: unknown[][] = [];
-  for (let r = rango.s.r; r <= rango.e.r; r++) {
-    const fila: unknown[] = [];
-    for (let c = rango.s.c; c <= rango.e.c; c++) {
-      const celda = ws[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
-      if (celda === undefined || celda.v === undefined || celda.v === null) {
-        fila.push(null);
-        continue;
-      }
-      // Celda de error de Excel: conservar el TEXTO (`#VALUE!`), nunca el
-      // código numérico -- ver la nota 2 de la cabecera.
-      if (celda.t === 'e') {
-        fila.push(celda.w ?? '#VALUE!');
-        continue;
-      }
-      fila.push(celda.v);
-    }
-    filas.push(fila);
-  }
-  return filas;
-}
-
-function main(): void {
+async function main(): Promise<void> {
   // Orden determinístico: archivos alfabéticamente, hojas en el orden del
   // workbook. El dedupe (`dedupe.ts`) conserva la PRIMERA hoja que resuelve a
   // una fecha dada, así que este orden es parte del resultado -- no es un
@@ -135,13 +84,9 @@ function main(): void {
 
   const hojas: HojaCruda[] = [];
   for (const archivo of archivos) {
-    const wb = XLSX.readFile(resolvePath(RAIZ, archivo), { cellDates: false });
-    for (const nombreHoja of wb.SheetNames) {
-      hojas.push({
-        archivo: basename(archivo),
-        hoja: nombreHoja,
-        filas: hojaAMatriz(wb.Sheets[nombreHoja]),
-      });
+    const wb = await readXlsx(readFileSync(resolvePath(RAIZ, archivo)), { filename: archivo });
+    for (const sheet of wb.sheets) {
+      hojas.push({ archivo: basename(archivo), hoja: sheet.name, filas: sheet.rows });
     }
   }
 
@@ -175,4 +120,4 @@ function main(): void {
   console.log(`\nEscrito: ${destino}`);
 }
 
-main();
+main().catch((err) => { console.error(err instanceof Error ? err.message : String(err)); process.exitCode = 1; });

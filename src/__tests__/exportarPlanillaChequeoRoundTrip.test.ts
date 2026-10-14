@@ -21,7 +21,8 @@
 // que este test usa como "lo que hay en la base".
 
 import { describe, it, expect } from 'vitest';
-import * as XLSX from 'xlsx';
+import { writeXlsx } from '@/utils/spreadsheet';
+import { leerHojasCrudas } from '../supabase/functions/server/hato-chequeo-spreadsheet';
 import type { HatoConfig } from '@/utils/calculosHato';
 import {
   parseValorNumerico,
@@ -66,39 +67,6 @@ const CONFIG: HatoConfig = {
 
 const FECHA_CHEQUEO_ACTUAL = '2026-07-22';
 const ARCHIVO = 'chequeo-2026-07-22.xlsx';
-
-/**
- * Mismo lector celda-por-celda que `scripts/import-hato/extract.ts` y
- * `src/supabase/functions/server/hato-chequeo-preview.ts` -- `cellDates:
- * false`, error de Excel preservado como TEXTO (nunca su código numérico),
- * NUNCA `sheet_to_json`. Se reimplementa acá (no se extrae a un módulo
- * compartido nuevo): mismo patrón de pequeña duplicación ya existente entre
- * esos dos archivos, alcance de esta sesión es el exportador, no una tercera
- * abstracción de este lector.
- */
-function hojaAMatriz(ws: XLSX.WorkSheet): unknown[][] {
-  const ref = ws['!ref'];
-  if (!ref) return [];
-  const rango = XLSX.utils.decode_range(ref);
-  const filas: unknown[][] = [];
-  for (let r = rango.s.r; r <= rango.e.r; r++) {
-    const fila: unknown[] = [];
-    for (let c = rango.s.c; c <= rango.e.c; c++) {
-      const celda = ws[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
-      if (celda === undefined || celda.v === undefined || celda.v === null) {
-        fila.push(null);
-        continue;
-      }
-      if (celda.t === 'e') {
-        fila.push(celda.w ?? '#VALUE!');
-        continue;
-      }
-      fila.push(celda.v);
-    }
-    filas.push(fila);
-  }
-  return filas;
-}
 
 interface AnimalFixture {
   id: string;
@@ -176,8 +144,8 @@ function construirFixture(a: AnimalFixture): {
   };
 }
 
-describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo sin cambios produce diff vacío', () => {
-  it('LUCERO (servicio con toro por monta, estado ok) y ESTRELLA (sin servicio, estado rech) -- ambas sin_cambio', () => {
+describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo sin cambios produce diff vacío', async () => {
+  it('LUCERO (servicio con toro por monta, estado ok) y ESTRELLA (sin servicio, estado rech) -- ambas sin_cambio', async () => {
     const lucero = construirFixture({
       id: 'animal-lucero',
       numero: 101,
@@ -206,21 +174,14 @@ describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo s
     });
 
     // ---- exportar (B5.2) ----
-    const libro = construirLibroPlanillaChequeo(XLSX, {
+    const buf = await construirLibroPlanillaChequeo({
       tituloHoja: construirTituloHojaChequeo(FECHA_CHEQUEO_ACTUAL),
       nombreHoja: construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL),
       filas: [lucero.fila, estrella.fila],
     });
-    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 
     // ---- volver a "subir" (mismo lector que hato-chequeo-preview.ts) ----
-    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
-    const nombreHojaLeida = libroLeido.SheetNames[0];
-    const hojaCruda: HojaCruda = {
-      archivo: ARCHIVO,
-      hoja: nombreHojaLeida,
-      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
-    };
+    const hojaCruda: HojaCruda = (await leerHojasCrudas(buf, ARCHIVO))[0];
 
     const salida = normalizarHojas([hojaCruda], '2026-07-24T00:00:00.000Z', CONFIG);
     expect(salida.chequeos).toHaveLength(2);
@@ -257,7 +218,7 @@ describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo s
     }
   });
 
-  it('D-E/B5.4 -- "Estado registrado" (columna 13) round-tripea VERBATIM: exportar, re-leer, y compararlo contra lo que el sistema cree hoy detecta el conflicto explícito (N23)', () => {
+  it('D-E/B5.4 -- "Estado registrado" (columna 13) round-tripea VERBATIM: exportar, re-leer, y compararlo contra lo que el sistema cree hoy detecta el conflicto explícito (N23)', async () => {
     const vaca = construirFixture({
       id: 'animal-vaca',
       numero: 300,
@@ -276,19 +237,12 @@ describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo s
     // se exportó esta planilla.
     const filaImpresa: FilaPlanillaChequeo = { ...vaca.fila, estadoRegistrado: 'Servida' };
 
-    const libro = construirLibroPlanillaChequeo(XLSX, {
+    const buf = await construirLibroPlanillaChequeo({
       tituloHoja: construirTituloHojaChequeo(FECHA_CHEQUEO_ACTUAL),
       nombreHoja: construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL),
       filas: [filaImpresa],
     });
-    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
-    const nombreHojaLeida = libroLeido.SheetNames[0];
-    const hojaCruda: HojaCruda = {
-      archivo: ARCHIVO,
-      hoja: nombreHojaLeida,
-      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
-    };
+    const hojaCruda: HojaCruda = (await leerHojasCrudas(buf, ARCHIVO))[0];
 
     const salida = normalizarHojas([hojaCruda], '2026-08-20T00:00:00.000Z', CONFIG);
     expect(salida.chequeos).toHaveLength(1);
@@ -323,8 +277,8 @@ describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo s
   });
 });
 
-describe('Fase 3 (docs/hato/plan_chequeo_novedades_implementacion.md §7.2) -- round-trip de las 10 filas libres', () => {
-  it('las 10 filas libres exportadas vuelven como descartesPorMotivo.fantasma; el conteo de chequeos reales no cambia', () => {
+describe('Fase 3 (docs/hato/plan_chequeo_novedades_implementacion.md §7.2) -- round-trip de las 10 filas libres', async () => {
+  it('las 10 filas libres exportadas vuelven como descartesPorMotivo.fantasma; el conteo de chequeos reales no cambia', async () => {
     const lucero = construirFixture({
       id: 'animal-lucero',
       numero: 101,
@@ -339,19 +293,12 @@ describe('Fase 3 (docs/hato/plan_chequeo_novedades_implementacion.md §7.2) -- r
       tttoRaw: null,
     });
 
-    const libro = construirLibroPlanillaChequeo(XLSX, {
+    const buf = await construirLibroPlanillaChequeo({
       tituloHoja: construirTituloHojaChequeo(FECHA_CHEQUEO_ACTUAL),
       nombreHoja: construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL),
       filas: [lucero.fila],
     });
-    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
-    const nombreHojaLeida = libroLeido.SheetNames[0];
-    const hojaCruda: HojaCruda = {
-      archivo: ARCHIVO,
-      hoja: nombreHojaLeida,
-      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
-    };
+    const hojaCruda: HojaCruda = (await leerHojasCrudas(buf, ARCHIVO))[0];
 
     const salida = normalizarHojas([hojaCruda], '2026-07-24T00:00:00.000Z', CONFIG);
 
@@ -368,7 +315,7 @@ describe('Fase 3 (docs/hato/plan_chequeo_novedades_implementacion.md §7.2) -- r
     expect(salida.hojas[0].descartesPorMotivo.fantasma).toBe(FILAS_LIBRES_PLANILLA_CHEQUEO);
   });
 
-  it('diligenciar una fila libre (escribir número + nombre a mano) la hace parsear como una fila de animal normal', () => {
+  it('diligenciar una fila libre (escribir número + nombre a mano) la hace parsear como una fila de animal normal', async () => {
     // Se arma el AOA con la función pura real (nunca a mano): así, si el
     // orden de columnas o la posición de las filas libres cambia algún día,
     // este test las sigue encontrando en el lugar correcto.
@@ -396,18 +343,8 @@ describe('Fase 3 (docs/hato/plan_chequeo_novedades_implementacion.md §7.2) -- r
       null,
     ];
 
-    const hoja = XLSX.utils.aoa_to_sheet(aoa);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL));
-
-    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
-    const nombreHojaLeida = libroLeido.SheetNames[0];
-    const hojaCruda: HojaCruda = {
-      archivo: ARCHIVO,
-      hoja: nombreHojaLeida,
-      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
-    };
+    const buf = await writeXlsx([{ name: construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL), rows: aoa }]);
+    const hojaCruda: HojaCruda = (await leerHojasCrudas(buf, ARCHIVO))[0];
 
     const salida = normalizarHojas([hojaCruda], '2026-07-24T00:00:00.000Z', CONFIG);
 

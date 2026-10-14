@@ -1,9 +1,8 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { getSupabase, getCurrentUser, getUserProfile, signOut as supabaseSignOut } from '../utils/supabase/client';
+import { getSupabase, getUserProfile, signOut as supabaseSignOut } from '../utils/supabase/client';
 import { puedeAccederModulo } from '../utils/modulosAcceso';
 
-// Tipos
 interface UserProfile {
   id: string;
   nombre: string;
@@ -11,10 +10,8 @@ interface UserProfile {
   rol: string;
   modulos: string[];
   created_at?: string;
-  /** Ausente en el perfil temporal (rol ''). false = cuenta desactivada. */
   activo?: boolean | null;
 }
-
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -26,240 +23,115 @@ interface AuthContextType {
   hasRole: (allowedRoles: string[]) => boolean;
   hasModulo: (moduloKey: string) => boolean;
 }
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthState { session: Session | null; profile: UserProfile | null; isLoading: boolean; }
 
-// Provider
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  // Use ref instead of state to avoid stale closure issues in onAuthStateChange
-  const profileLoadedRef = useRef(false);
-
-  // Cargar sesión inicial
-  useEffect(() => {
-    console.log('🔐 AuthProvider: Iniciando verificación de usuario...');
-    checkUser();
-
-    // Escuchar cambios en la autenticación
-    const supabase = getSupabase();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔐 Auth state changed:', event, session ? 'con sesión' : 'sin sesión');
-
-        if (event === 'SIGNED_IN' && session) {
-          // Only show loading spinner if profile isn't loaded yet (initial login)
-          // This prevents the spinner from showing on tab switches
-          if (!profileLoadedRef.current) {
-            setIsLoading(true);
-            await loadUserData(session);
-          } else {
-            // Profile already loaded - just update session silently
-            setSession(session);
-            console.log('✅ Session refreshed silently (no profile reload)');
-          }
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setProfile(null);
-          setSession(null);
-          setIsLoading(false);
-          profileLoadedRef.current = false;
-        } else if (event === 'TOKEN_REFRESHED' && session) {
-          // Token refresh should NOT trigger loading spinner
-          setSession(session);
-          console.log('✅ Token refreshed silently');
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+  // One state transition keeps session/user/profile coherent for every render.
+  const [state, setState] = useState<AuthState>({ session: null, profile: null, isLoading: true });
+  const sessionRef = useRef<Session | null>(null);
+  const generation = useRef(0);
+  const invalidateGeneration = useCallback(() => ++generation.current, []);
+  const profileDeadline = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearDeadline = useCallback(() => {
+    if (profileDeadline.current !== null) clearTimeout(profileDeadline.current);
+    profileDeadline.current = null;
   }, []);
 
-  // Verificar usuario actual
-  const checkUser = async () => {
+  const loadProfile = useCallback(async (ownerId: string, request: number) => {
+    const current = () => generation.current === request && sessionRef.current?.user.id === ownerId;
+    if (!current()) return;
+    clearDeadline();
+    // Stop the spinner, but keep the request alive so late success can recover.
+    profileDeadline.current = setTimeout(() => {
+      if (current()) setState(prev => ({ ...prev, isLoading: false }));
+    }, 2000);
     try {
-      console.log('🔍 Verificando usuario actual...');
-      setIsLoading(true);
-      
-      const supabase = getSupabase();
-      
-      // Timeout de 10 segundos para evitar carga infinita
-      const timeoutPromise = new Promise<{ data: { session: null }, error: any }>((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout de autenticación (10s)')), 10000);
-      });
-      
-      const sessionPromise = supabase.auth.getSession();
-      
-      // Race entre la llamada real y el timeout
-      const { data: { session }, error } = await Promise.race([
-        sessionPromise,
-        timeoutPromise
-      ]);
-      
-      if (error) {
-        console.error('❌ Error obteniendo sesión:', error);
-        setUser(null);
-        setProfile(null);
-        setSession(null);
-        setIsLoading(false);
-        return;
-      }
-      
-      if (session) {
-        console.log('✅ Sesión encontrada, cargando usuario...');
-        await loadUserData(session);
-      } else {
-        console.log('ℹ️ No hay sesión activa');
-        setUser(null);
-        setProfile(null);
-        setSession(null);
-        setIsLoading(false);
-      }
-    } catch (error: any) {
-      console.error('❌ Error verificando usuario:', error);
-      // Si hay timeout o error, establecer como no autenticado
-      if (error.message?.includes('Timeout')) {
-        console.warn('⏱️ Timeout de autenticación alcanzado, continuando sin sesión');
-      }
-      setUser(null);
-      setProfile(null);
-      setSession(null);
-      setIsLoading(false);
+      const result = await getUserProfile(ownerId);
+      if (!current()) return;
+      clearDeadline();
+      const profile = result && result.id === ownerId ? result as UserProfile : null;
+      setState(prev => ({ ...prev, profile, isLoading: false }));
+    } catch {
+      if (!current()) return;
+      clearDeadline();
+      setState(prev => ({ ...prev, profile: null, isLoading: false }));
     }
-  };
+  }, [clearDeadline]);
 
-  // Cargar datos del usuario
-  const loadUserData = async (currentSession: Session) => {
-    try {
-      console.log('👤 Cargando datos del usuario...');
-      const currentUser = currentSession.user;
-
-      // Establecer user y session INMEDIATAMENTE
-      setUser(currentUser);
-      setSession(currentSession);
-
-      // Perfil temporal sin rol hasta confirmar con la base de datos
-      const temporalProfile = {
-        id: currentUser.id,
-        nombre: currentUser.email?.split('@')[0] || 'Usuario',
-        email: currentUser.email || '',
-        rol: '',
-        modulos: [],
-      };
-
-      // Establecer perfil temporal PRIMERO para que la app funcione de inmediato
-      setProfile(temporalProfile);
-      console.log('✅ Perfil temporal establecido (app lista):', temporalProfile);
-
-      // OPCIONAL: Intentar obtener perfil real de la tabla en background con timeout
-      // Si falla o tarda, no importa porque ya tenemos el temporal
-      console.log('📋 Intentando obtener perfil real de tabla usuarios (opcional, timeout 2s)...');
-      
-      try {
-        // Timeout de 2 segundos para obtener el perfil
-        const profilePromise = getUserProfile(currentUser.id);
-        const timeoutPromise = new Promise<null>((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout obteniendo perfil (2s)')), 2000);
-        });
-
-        const userProfile = await Promise.race([profilePromise, timeoutPromise]);
-
-        if (userProfile) {
-          console.log('✅ Perfil real encontrado, actualizando:', userProfile.nombre);
-          setProfile(userProfile as UserProfile);
-        } else {
-          console.log('ℹ️ Sin perfil en tabla, usando temporal (esto es normal)');
-        }
-      } catch (profileError: any) {
-        // No es crítico, ya tenemos perfil temporal
-        if (profileError.message?.includes('Timeout')) {
-          console.log('⏱️ Timeout obteniendo perfil, usando temporal (OK)');
-        } else {
-          console.log('ℹ️ No se pudo obtener perfil real, usando temporal (OK):', profileError?.message);
-        }
-      }
-
-    } catch (error) {
-      console.error('❌ Error cargando datos del usuario:', error);
-
-      const basicProfile = {
-        id: currentSession.user.id,
-        nombre: currentSession.user.email?.split('@')[0] || 'Usuario',
-        email: currentSession.user.email || '',
-        rol: '',
-        modulos: [],
-      };
-
-      setUser(currentSession.user);
-      setProfile(basicProfile);
-    } finally {
-      console.log('✅ AuthContext: Carga completada, isLoading = false');
-      setIsLoading(false);
-      profileLoadedRef.current = true;
+  const applySession = useCallback((next: Session | null) => {
+    const previousId = sessionRef.current?.user.id;
+    const nextId = next?.user.id;
+    sessionRef.current = next;
+    if (next && previousId === nextId) {
+      // Same-account token events keep a pending lookup and never flash a spinner.
+      setState(prev => ({ ...prev, session: next }));
+      return;
     }
-  };
-
-  // Refrescar perfil
-  const refreshProfile = async () => {
-    if (user) {
-      const userProfile = await getUserProfile(user.id);
-      if (userProfile) {
-        setProfile(userProfile as UserProfile);
-      }
+    const request = invalidateGeneration();
+    clearDeadline();
+    setState({ session: next, profile: null, isLoading: !!next });
+    if (next) {
+      // Do not await SDK work from onAuthStateChange: it runs under the auth lock.
+      void Promise.resolve().then(() => loadProfile(next.user.id, request));
     }
-  };
+  }, [clearDeadline, loadProfile, invalidateGeneration]);
 
-  // Cerrar sesión
-  const signOut = async () => {
-    try {
-      await supabaseSignOut();
-      setUser(null);
-      setProfile(null);
-      setSession(null);
-      profileLoadedRef.current = false;
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
-    }
-  };
-
-  // Verificar rol
-  const hasRole = (allowedRoles: string[]): boolean => {
-    if (!profile) return false;
-    return allowedRoles.includes(profile.rol);
-  };
-
-  // Verificar acceso a un módulo (aguacate | hato_lechero | ganado | finanzas)
-  const hasModulo = (moduloKey: string): boolean => {
-    return puedeAccederModulo(profile, moduloKey);
-  };
-
-  const value: AuthContextType = {
-    user,
-    profile,
-    session,
-    isLoading,
-    isAuthenticated: !!user && !!profile,
-    signOut,
-    refreshProfile,
-    hasRole,
-    hasModulo,
-  };
-
-  // Debug: Log del estado cada vez que cambia
   useEffect(() => {
-    console.log('🔐 AuthContext - Estado actualizado:', {
-      hasUser: !!user,
-      hasProfile: !!profile,
-      isLoading,
-      isAuthenticated: !!user && !!profile,
-      profileData: profile ? { nombre: profile.nombre, rol: profile.rol } : null,
+    const supabase = getSupabase();
+    const initialRequest = generation.current;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === 'SIGNED_OUT') applySession(null);
+      else if (next) applySession(next);
+      else if (event === 'INITIAL_SESSION') applySession(null);
     });
-  }, [user, profile, isLoading]);
+    const sessionDeadline = setTimeout(() => {
+      if (generation.current === initialRequest && !sessionRef.current) applySession(null);
+    }, 10000);
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (generation.current !== initialRequest) return;
+      clearTimeout(sessionDeadline);
+      applySession(error ? null : data.session);
+    }).catch(() => {
+      if (generation.current !== initialRequest) return;
+      clearTimeout(sessionDeadline);
+      applySession(null);
+    });
+    return () => {
+      invalidateGeneration();
+      sessionRef.current = null;
+      clearDeadline();
+      clearTimeout(sessionDeadline);
+      subscription.unsubscribe();
+    };
+  }, [applySession, clearDeadline, invalidateGeneration]);
 
+  const refreshProfile = useCallback(async () => {
+    const ownerId = sessionRef.current?.user.id;
+    if (!ownerId) return;
+    const request = invalidateGeneration();
+    clearDeadline();
+    setState(prev => ({ ...prev, profile: null, isLoading: true }));
+    await loadProfile(ownerId, request);
+  }, [clearDeadline, loadProfile, invalidateGeneration]);
+
+  const signOut = useCallback(async () => {
+    // Revoke local access before the SDK/network can finish or fail.
+    applySession(null);
+    try { await supabaseSignOut(); } catch (error) { console.error('Error al cerrar sesión:', error); }
+    // No completion write: a newer login may have occurred while signOut awaited.
+  }, [applySession]);
+
+  const user = state.session?.user ?? null;
+  const profile = state.profile;
+  const verified = !!user && profile?.id === user.id && profile.activo === true && !!profile.rol;
+  const value: AuthContextType = {
+    ...state, user,
+    isAuthenticated: !!user,
+    signOut, refreshProfile,
+    hasRole: roles => verified && roles.includes(profile!.rol),
+    hasModulo: modulo => verified && puedeAccederModulo(profile, modulo),
+  };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

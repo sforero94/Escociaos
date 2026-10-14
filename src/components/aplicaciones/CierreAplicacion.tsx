@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Check, RefreshCw } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
@@ -14,6 +14,7 @@ import {
   formatearListaConY,
   construirPayloadCierreAplicacion,
 } from '../../utils/calculosCierreAplicacion';
+import { draftStorageKey, CURRENT_VERSION } from '@/utils/draftStorage';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { AplicacionShell } from './shared/AplicacionShell';
@@ -38,6 +39,9 @@ import {
 import type { Aplicacion, RegistroTrabajoCierre, ResumenLaboresCierre } from '../../types/aplicaciones';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { closeApplication, resolveClosure, loadClosureExpected, hasPendingClosure, matchesClosureOriginal,
+  validateClosureWork, type ApplicationClosureClient, type ClosureExpected } from '@/utils/applicationClosureIntegrity';
 
 interface CierreAplicacionProps {
   aplicacion: Aplicacion;
@@ -89,6 +93,17 @@ interface DatosFinales {
 export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
   const supabase = getSupabase();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const owner = user?.id ?? '';
+  const [mountedScope] = useState(`${owner}:${aplicacion.id}`);
+  const liveScope = useRef(`${owner}:${aplicacion.id}`);
+  useLayoutEffect(() => { liveScope.current = `${owner}:${aplicacion.id}`; }, [owner, aplicacion.id]);
+  const current = useCallback(() => !!owner && liveScope.current === mountedScope && mountedScope === `${owner}:${aplicacion.id}`, [owner, mountedScope, aplicacion.id]);
+  const protocol = supabase as unknown as ApplicationClosureClient;
+  const loadGeneration = useRef(0);
+  const inFlight = useRef(false);
+  const [originalExpected, setOriginalExpected] = useState<ClosureExpected | null>(null);
+  const [pendingClosure, setPendingClosure] = useState(() => !!owner && hasPendingClosure(owner, aplicacion.id));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -134,11 +149,16 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
   });
 
   const cargarDatos = useCallback(async () => {
+    if (!current()) return;
+    const generation = ++loadGeneration.current;
+    const currentLoad = () => current() && generation === loadGeneration.current;
+    setOriginalExpected(null);
     setLoading(true);
     setError(null);
     try {
+      const expectedBefore = await loadClosureExpected(supabase as unknown as ApplicationClosureClient, owner, aplicacion.id, currentLoad);
       // 1. Cargar aplicación completa con lotes
-      const { data: appData } = await supabase
+      const { data: appData, error: appError } = await supabase
         .from('aplicaciones')
         .select(
           `
@@ -160,6 +180,8 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
         )
         .eq('id', aplicacion.id)
         .single();
+      if (!currentLoad()) return;
+      if (appError || !appData) throw new Error(appError?.message || 'La aplicación no está disponible');
 
       // Extraer lotes con árboles
       const lotesData: LoteConArboles[] =
@@ -172,10 +194,12 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
       setLotes(lotesData);
 
       // 2. Cargar canecas planeadas
-      const { data: calculos } = await supabase
+      const { data: calculos, error: calculosError } = await supabase
         .from('aplicaciones_calculos')
         .select('numero_canecas')
         .eq('aplicacion_id', aplicacion.id);
+      if (!currentLoad()) return;
+      if (calculosError) throw new Error(calculosError.message);
 
       const totalCanecasPlaneadas =
         calculos?.reduce((sum, calc) => sum + (calc.numero_canecas || 0), 0) || 0;
@@ -188,6 +212,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
         .eq('aplicacion_id', aplicacion.id)
         .order('fecha_movimiento', { ascending: true });
 
+      if (!currentLoad()) return;
       if (errorMovimientos) {
         throw new Error(`Error cargando movimientos: ${errorMovimientos.message}`);
       }
@@ -208,6 +233,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           .select('movimiento_diario_id, producto_id, producto_nombre, cantidad_utilizada, unidad')
           .in('movimiento_diario_id', movimientosIds);
 
+        if (!currentLoad()) return;
         if (errorProductosMovimientos) {
           throw new Error(`Error cargando productos de movimientos: ${errorProductosMovimientos.message}`);
         }
@@ -220,6 +246,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
             .select('id, precio_unitario')
             .in('id', productosIds);
 
+          if (!currentLoad()) return;
           if (errorProductos) {
             setError(
               `No se pudieron cargar los precios: ${errorProductos.message}. Verifica tus permisos o contacta al administrador.`,
@@ -236,6 +263,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
             return;
           }
 
+          if (productosIds.some(id => !productos.some(producto => producto.id === id))) throw new Error('No se pudieron verificar todos los precios de los productos utilizados');
           const productosSinPrecio = productos.filter((p) => !p.precio_unitario || p.precio_unitario === 0);
           if (productosSinPrecio.length > 0) {
             setError(
@@ -279,10 +307,12 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
       }
 
       // 4. Cargar productos planeados
-      const { data: mezclas } = await supabase
+      const { data: mezclas, error: mezclasError } = await supabase
         .from('aplicaciones_mezclas')
         .select('id')
         .eq('aplicacion_id', aplicacion.id);
+      if (!currentLoad()) return;
+      if (mezclasError) throw new Error(mezclasError.message);
 
       let productosPlaneados = null;
 
@@ -296,6 +326,8 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           )
           .in('mezcla_id', mezclasIds);
 
+        if (!currentLoad()) return;
+        if (result.error) throw new Error(result.error.message);
         productosPlaneados = result.data;
 
         const hasCalcData = appData?.aplicaciones_calculos && appData.aplicaciones_calculos.length > 0;
@@ -355,15 +387,18 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
         setTieneTarea(true);
         try {
           const resumen = await fetchRegistrosTrabajoParaCierre(supabase, appData.tarea_id);
+          if (!currentLoad()) return;
+          validateClosureWork(expectedBefore, resumen.registros);
           setResumenLabores(resumen);
           setRegistrosEditados(resumen.registros.map((r) => ({ ...r })));
           fechasRegistros = resumen.registros.map((r) => r.fecha_trabajo);
         } catch (err: any) {
-          console.error('Error cargando registros de trabajo:', err);
-          // Non-blocking: labor data is optional
+          throw new Error('No se pudieron verificar los registros de trabajo: ' + err.message);
         }
       } else {
         setTieneTarea(false);
+        setResumenLabores(null);
+        setRegistrosEditados([]);
       }
 
       // Derivar Fecha Inicio/Fin Real de forma robusta y simétrica (W03-cierre-v2.md §1/§5):
@@ -379,12 +414,16 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           fechaFinReal: derivadas.fechaFin!,
         }));
       }
+      const expectedAfter = await loadClosureExpected(supabase as unknown as ApplicationClosureClient, owner, aplicacion.id, currentLoad);
+      if (!matchesClosureOriginal(expectedBefore, expectedAfter)) throw new Error('Los datos cambiaron durante la carga. Vuelva a revisar el cierre.');
+      if (!currentLoad()) return;
+      setOriginalExpected(expectedBefore);
     } catch (err: any) {
-      setError('Error al cargar los datos: ' + err.message);
+      if (currentLoad()) setError('Error al cargar los datos: ' + err.message);
     } finally {
-      setLoading(false);
+      if (currentLoad()) setLoading(false);
     }
-  }, [aplicacion.id, supabase]);
+  }, [aplicacion.id, supabase, owner, current]);
 
   useEffect(() => {
     cargarDatos();
@@ -402,16 +441,18 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
   // ---------------------------------------------------------------------------------------------
   const draft = useFormDraft(
     `cierre-aplicacion-${aplicacion.id}-v1`,
-    { registrosEditados, datosFinales },
-    { enabled: !loading, debounceMs: 1500 },
+    { registrosEditados, datosFinales, originalExpected },
+    { enabled: !loading && current(), debounceMs: 1500 },
   );
 
   const handleRestoreDraft = useCallback(() => {
-    if (!draft.draftData) return;
+    if (!draft.draftData || !current()) return;
+    if (!draft.draftData.originalExpected) { setError('Este borrador no incluye la versión original. Conserve los datos y revise el cierre antes de recuperar las ediciones.'); return; }
+    setOriginalExpected(draft.draftData.originalExpected);
     setRegistrosEditados(draft.draftData.registrosEditados);
     setDatosFinales(draft.draftData.datosFinales);
     draft.acceptDraft();
-  }, [draft]);
+  }, [draft, current]);
 
   /**
    * Cargar trabajadores disponibles para agregar registros
@@ -422,9 +463,11 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
       supabase
         .from('empleados')
         .select('id, nombre, salario, prestaciones_sociales, auxilios_no_salariales, horas_semanales')
-        .eq('activo', true),
-      supabase.from('contratistas').select('id, nombre, tarifa_jornal').eq('activo', true),
+        .eq('estado', 'Activo'),
+      supabase.from('contratistas').select('id, nombre, tarifa_jornal').eq('estado', 'Activo'),
     ]);
+    if (!current()) return;
+    if (empRes.error || contRes.error) { setError(empRes.error?.message || contRes.error?.message || 'No se pudieron verificar los trabajadores'); return; }
     const trabajadores: TrabajadorDisponible[] = [];
     (empRes.data || []).forEach((e: any) =>
       trabajadores.push({
@@ -518,44 +561,54 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
     });
   };
 
-  /**
-   * CERRAR APLICACIÓN — una sola escritura transaccional vía `.rpc('fn_cerrar_aplicacion', …)`
-   * (migración 106). El payload lo arma `construirPayloadCierreAplicacion` (función pura,
-   * testeada), con la MISMA aritmética que esta función calculaba inline antes de la migración
-   * 106 — el RPC no recalcula nada, solo persiste las 8 escrituras en el orden documentado ahí.
-   * Si cualquiera de las 8 falla (incluida la nueva guarda de inventario negativo o de doble
-   * cierre), Postgres revierte TODO — nunca queda un cierre a medias.
-   */
+  const liveInputs = useRef({ registrosEditados, datosFinales, lotes, movimientos, originalExpected });
+  useLayoutEffect(() => { liveInputs.current = { registrosEditados, datosFinales, lotes, movimientos, originalExpected }; }, [registrosEditados, datosFinales, lotes, movimientos, originalExpected]);
+  const currentPayload = () => construirPayloadCierreAplicacion({ aplicacionId: aplicacion.id, ...liveInputs.current });
+  const preserveReview = () => {
+    if (!current()) return;
+    const key = draftStorageKey(owner, `cierre-aplicacion-${aplicacion.id}-v1`);
+    if (!key) throw new Error('No se pudo conservar el borrador del cierre');
+    const { registrosEditados: rows, datosFinales: dates, originalExpected: revision } = liveInputs.current;
+    localStorage.setItem(key, JSON.stringify({ ownerId: owner, version: CURRENT_VERSION, timestamp: new Date().toISOString(), data: { registrosEditados: rows, datosFinales: dates, originalExpected: revision } }));
+  };
+  const confirmed = (posted: ReturnType<typeof construirPayloadCierreAplicacion>) => {
+    if (!current()) return;
+    if (!matchesClosureOriginal(posted, currentPayload())) {
+      preserveReview();
+      setError('El cierre original se confirmó. Las ediciones posteriores se conservaron y no se aplicaron. Revise el reporte antes de continuar.');
+      return;
+    }
+    draft.clearDraft(); setConfirmDialogOpen(false); navigate('/aplicaciones');
+  };
   const cerrarAplicacion = async () => {
+    if (inFlight.current || !current() || !originalExpected) return;
+    inFlight.current = true; setProcesando(true);
     try {
-      setProcesando(true);
-
-      const payload = construirPayloadCierreAplicacion({
-        aplicacionId: aplicacion.id,
-        registrosEditados,
-        datosFinales,
-        lotes,
-        movimientos,
-      });
-
-      // `fn_cerrar_aplicacion` (migración 106) todavía no existe en el `database.ts` generado
-      // (desactualizado, ver root CLAUDE.md) — mismo cast puntual que otros RPC nuevos ya usan
-      // en el resto del repo (p.ej. `useGanadoInventario.ts`, `useProduccionHato.ts`), acotado
-      // acá a esta sola llamada para no perder el tipado del resto del archivo.
-      const { error: errorRpc } = await (supabase as any).rpc('fn_cerrar_aplicacion', { payload }); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-      if (errorRpc) {
-        throw new Error(errorRpc.message);
-      }
-
-      draft.clearDraft();
-      setConfirmDialogOpen(false);
-      navigate('/aplicaciones');
-    } catch (err: any) {
-      setError('Error al cerrar la aplicación: ' + err.message);
-      setConfirmDialogOpen(false);
+      const posted = currentPayload();
+      preserveReview();
+      await closeApplication(protocol, owner, posted, originalExpected, current);
+      confirmed(posted);
+    } catch (err: unknown) {
+      if (current()) { setError('Error al cerrar la aplicación: ' + (err instanceof Error ? err.message : String(err))); setConfirmDialogOpen(false); }
     } finally {
-      setProcesando(false);
+      inFlight.current = false;
+      if (current()) { setProcesando(false); setPendingClosure(hasPendingClosure(owner, aplicacion.id)); }
+    }
+  };
+  const verificarCierre = async () => {
+    if (inFlight.current || !current()) return;
+    inFlight.current = true; setProcesando(true);
+    try {
+      preserveReview();
+      const resolved = await resolveClosure(protocol, owner, aplicacion.id, current);
+      if (!current()) return;
+      if (resolved.state === 'committed') confirmed(resolved.payload);
+      else { setError('El intento original no se aplicó. Las ediciones se conservaron. Vuelva a cargar y revisar los datos antes de cerrar.'); }
+    } catch (err: unknown) {
+      if (current()) setError('No se pudo verificar el cierre pendiente: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      inFlight.current = false;
+      if (current()) { setProcesando(false); setPendingClosure(hasPendingClosure(owner, aplicacion.id)); }
     }
   };
 
@@ -649,6 +702,8 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
     );
   }
 
+  if (!current()) return <p>La sesión cambió. Vuelva a abrir el cierre con su cuenta.</p>;
+
   if (error) {
     return (
       <AplicacionShell titulo="Cerrar Aplicación" subtitulo={aplicacion.nombre_aplicacion ?? undefined} estado={aplicacion.estado}>
@@ -660,7 +715,8 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           <EmptyDescription>{error}</EmptyDescription>
           <EmptyContent>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button onClick={cargarDatos}>
+              {pendingClosure && <Button disabled={procesando} onClick={verificarCierre}>Verificar cierre pendiente</Button>}
+              <Button disabled={procesando} onClick={cargarDatos}>
                 <RefreshCw className="size-4" />
                 Reintentar
               </Button>
@@ -681,6 +737,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
       estado={aplicacion.estado}
     >
       <div className="space-y-6 pb-6">
+        {pendingClosure && <Button disabled={procesando} onClick={verificarCierre}>Verificar cierre pendiente</Button>}
         <FormDraftBanner
           variant="available"
           show={draft.hasDraft}

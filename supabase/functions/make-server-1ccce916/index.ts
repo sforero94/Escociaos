@@ -1,3 +1,4 @@
+import { handleInvoiceUpload } from './invoice-upload.ts';
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -44,6 +45,10 @@ app.use(
     maxAge: 600,
   }),
 );
+
+app.post('/make-server-1ccce916/facturas/upload', c => handleInvoiceUpload(c,'upload'));
+app.post('/make-server-1ccce916/facturas/upload/status', c => handleInvoiceUpload(c,'status'));
+app.post('/make-server-1ccce916/facturas/upload/target', c => handleInvoiceUpload(c,'target'));
 
 // Health check endpoint
 app.get("/make-server-1ccce916/health", (c) => {

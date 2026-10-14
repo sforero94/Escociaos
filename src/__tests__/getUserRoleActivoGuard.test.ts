@@ -75,7 +75,7 @@ describe('migración 137: get_user_role respeta usuarios.activo', () => {
 describe('capa app: cuenta desactivada', () => {
   it('ProtectedRoute muestra cuenta desactivada cuando activo === false, antes del branch Monitor', () => {
     const fuente = leer('src/components/auth/ProtectedRoute.tsx');
-    const posActivo = fuente.indexOf('profile?.activo === false');
+    const posActivo = fuente.indexOf('profile.activo === false');
     const posMonitor = fuente.indexOf("profile?.rol === 'Monitor'");
     expect(posActivo).toBeGreaterThan(-1);
     expect(posMonitor).toBeGreaterThan(posActivo);

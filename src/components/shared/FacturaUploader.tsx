@@ -1,4 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { uploadInvoice,resolveInvoice,pendingInvoice,invalidateInvoiceTarget,type InvoiceClient } from '@/utils/invoiceUpload';
+import { FACTURA_ACCEPT, validarArchivoFactura,normalizarRutaFactura } from '@/utils/archivoFactura';
+import { useState, useRef, useLayoutEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -26,6 +29,8 @@ interface FacturaUploaderProps {
    * Deshabilitar el componente
    */
   disabled?: boolean;
+  targetIdentity?: string;
+  open?: boolean;
 }
 
 // Helper function to check if a path is an image
@@ -39,106 +44,86 @@ export function FacturaUploader({
   onUploadSuccess,
   onRemove,
   disabled = false,
+  targetIdentity = 'invoice-draft',
+  open = true,
 }: FacturaUploaderProps) {
+  const {user}=useAuth();const owner=user?.id??'';
+  const scope=`${tipo}:${targetIdentity}`;
+  const target=useRef('');
+  const [pending,setPending]=useState(false);
   const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ path: string; url: string } | null>(null);
+  const generation = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const folder = tipo === 'compra' ? 'facturas_compra' : 'facturas_venta';
-
-  // Load preview for existing files
-  useEffect(() => {
-    const loadPreview = async () => {
-      if (currentUrl && isImage(currentUrl)) {
+  // Invalidate every request on path changes, including A → B → A and unmount.
+  useLayoutEffect(() => {
+    const operationGeneration=generation;
+    const request = ++operationGeneration.current;
+    const targetKey=crypto.randomUUID();target.current=targetKey;
+    try{setPending(Boolean(owner&&pendingInvoice(owner,scope)));}catch{setPending(true);}
+    setPreview(null);
+    setUploading(false);
+    if (open && owner && currentUrl && isImage(currentUrl)) {
+      const path = currentUrl;
+      void (async () => {
         try {
-          const supabase = getSupabase();
-          const { data } = await supabase.storage
-            .from('facturas')
-            .createSignedUrl(currentUrl, 60 * 60); // 1 hour
-
-          if (data?.signedUrl) {
-            setPreviewUrl(data.signedUrl);
+          const { data, error } = await getSupabase().storage
+            .from('facturas').createSignedUrl(normalizarRutaFactura(path), 60 * 60);
+          if (request === generation.current && !error && data?.signedUrl) {
+            setPreview({ path, url: data.signedUrl });
           }
-        } catch (error) {
-          console.error('Failed to load invoice preview:', error);
+        } catch {
+          // A failed preview must never restore an older object's URL.
         }
-      }
+      })();
+    }
+    return () => {
+      ++operationGeneration.current;
+      if(owner)void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,targetKey).catch(()=>undefined);
     };
-
-    loadPreview();
-  }, [currentUrl]);
+  }, [currentUrl,owner,scope,open]);
 
   const handleFileSelect = async (event: { target: { files: FileList | null; value: string } }) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || disabled || uploading || !open || !owner) return;
 
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Solo se permiten archivos de imagen (JPG, PNG, GIF) o PDF');
+    const validationError = validarArchivoFactura(file);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
-
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      toast.error('El archivo es muy grande. El tamaño máximo es 5MB');
-      return;
-    }
+    const request = generation.current;
 
     try {
       setUploading(true);
 
-      // Create a unique filename with timestamp
-      const timestamp = Date.now();
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${folder}/${timestamp}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-      // Upload to Supabase Storage (private bucket)
-      const supabase = getSupabase();
-      const { data, error } = await supabase.storage
-        .from('facturas')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (error) throw error;
-
-      // Store only the path (not a public URL)
-      // We'll generate signed URLs on-demand when viewing
-      const storagePath = data.path;
-
-      // For preview, generate a temporary signed URL for images
-      if (file.type.startsWith('image/')) {
-        const { data: signedUrlData } = await supabase.storage
-          .from('facturas')
-          .createSignedUrl(storagePath, 60 * 60); // 1 hour expiry for preview
-
-        if (signedUrlData) {
-          setPreviewUrl(signedUrlData.signedUrl);
-        }
-      } else {
-        setPreviewUrl(null);
-      }
+      const receipt=await uploadInvoice(getSupabase() as unknown as InvoiceClient,owner,scope,target.current,tipo,file,()=>request===generation.current);
+      const storagePath=receipt.path;
+      if (request !== generation.current) return;
 
       // Call success callback with storage path (not URL)
+      setPending(false);
+      event.target.value='';
+      if(fileInputRef.current)fileInputRef.current.value='';
       onUploadSuccess(storagePath);
 
       toast.success('Factura subida exitosamente');
-    } catch (error: any) {
-      toast.error('Error al subir la factura: ' + error.message);
-    } finally {
-      setUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+    } catch (error: unknown) {
+      if (request === generation.current) {
+        try{setPending(Boolean(pendingInvoice(owner,scope)));}catch{setPending(true);}
+        toast.error('Error al subir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
       }
+    } finally {
+      if (request === generation.current) setUploading(false);
+      // Preserve the selected file after refusal or uncertain transport.
     }
   };
 
   const handleRemove = () => {
-    setPreviewUrl(null);
+    ++generation.current;
+    setPreview(null);
+    if(owner)void invalidateInvoiceTarget(getSupabase() as unknown as InvoiceClient,owner,target.current).catch(()=>undefined);
     onRemove();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -146,7 +131,9 @@ export function FacturaUploader({
   };
 
   const handleViewFile = async () => {
-    if (!currentUrl) return;
+    if (!currentUrl || !open || !owner) return;
+    const request = generation.current;
+    const path = currentUrl;
 
     try {
       const supabase = getSupabase();
@@ -154,14 +141,14 @@ export function FacturaUploader({
       // Generate a signed URL valid for 1 hour
       const { data, error } = await supabase.storage
         .from('facturas')
-        .createSignedUrl(currentUrl, 60 * 60); // 1 hour
+        .createSignedUrl(normalizarRutaFactura(path), 60 * 60, isImage(path)?undefined:{download:'factura.pdf'}); // Hosted disposition/header enforcement remains a release gate.
 
       if (error) throw error;
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
+      if (request === generation.current && data?.signedUrl) {
+        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
       }
-    } catch (error: any) {
-      toast.error('Error al abrir la factura: ' + error.message);
+    } catch (error: unknown) {
+      if (request === generation.current) toast.error('Error al abrir la factura: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     }
   };
 
@@ -169,15 +156,24 @@ export function FacturaUploader({
 
   return (
     <div className="space-y-2">
+      {pending && <Button type="button" disabled={uploading||disabled||!open} onClick={async()=>{
+        const request=generation.current;
+        try{const r=await resolveInvoice(getSupabase() as unknown as InvoiceClient,owner,scope,()=>request===generation.current);
+          if(request!==generation.current)return;
+          if(r){setPending(false);toast.success('Subida anterior verificada; seleccione la factura para el destino actual');}
+          else if(!pendingInvoice(owner,scope)){setPending(false);toast.success('Factura anterior en cuarentena; puede seleccionar otra factura.');}
+          else toast.error('Factura pendiente. Conserve el intento.');
+        }catch(error:unknown){if(request===generation.current)toast.error(error instanceof Error?error.message:'Factura no verificable');}
+      }}>Verificar factura pendiente</Button>}
       <Label>Factura {tipo === 'compra' ? 'de Compra' : 'de Venta'} (Opcional)</Label>
 
       {hasFile ? (
         <div className="border rounded-lg p-4 space-y-3">
           {/* Preview for images */}
-          {currentUrl && isImage(currentUrl) && previewUrl && (
+          {currentUrl && isImage(currentUrl) && preview?.path === currentUrl && (
             <div className="flex justify-center">
               <img
-                src={previewUrl}
+                src={preview.url}
                 alt="Preview de factura"
                 className="max-h-48 rounded border object-contain"
               />
@@ -226,7 +222,7 @@ export function FacturaUploader({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/jpg,image/png,image/gif,application/pdf"
+            accept={FACTURA_ACCEPT}
             onChange={handleFileSelect}
             disabled={disabled || uploading}
             className="hidden"

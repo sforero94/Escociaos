@@ -243,10 +243,10 @@ describe('regla: nunca ctx.telegramUser.usuario_id en escrituras ni write-gates'
       expect(fuente).toContain('exigirUsuarioIdVinculado');
       const idxMem = fuente.indexOf('mem_save:');
       expect(idxMem).toBeGreaterThan(-1);
-      expect(fuente.slice(idxMem, idxMem + 2500)).toContain('resolverUsuarioTelegram');
-      const idxEsco = fuente.lastIndexOf('bot.on("message:text"');
+      expect(fuente.slice(idxMem, idxMem + 2500)).toContain('confirmarMemoriaTelegram');
+      const idxEsco = fuente.indexOf('async function responderConsultaEsco');
       expect(idxEsco).toBeGreaterThan(-1);
-      expect(fuente.slice(idxEsco)).toContain('resolverUsuarioTelegram');
+      expect(fuente.slice(idxEsco)).toContain('cuentaActivaTelegram');
     });
   }
 });

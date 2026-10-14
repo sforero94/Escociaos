@@ -1,5 +1,6 @@
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 
 // ---------------------------------------------------------------------------
 // Auth: la administración de usuarios (crear/editar/eliminar) es una acción
@@ -9,7 +10,18 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // `usuarios`), repetido en vez de importado por el mismo motivo: cada
 // endpoint de este árbol es autocontenido en su propio I/O.
 // ---------------------------------------------------------------------------
-const ROLES_PERMITIDOS = new Set(['Gerencia']);
+const ROLES_PERMITIDOS = ['Gerencia'];
+const MODULOS_VALIDOS = new Set(['aguacate', 'hato_lechero', 'ganado', 'finanzas']);
+
+function camposAccesoValidos(body: Record<string, unknown>): boolean {
+  return (!Object.hasOwn(body, 'activo') || typeof body.activo === 'boolean')
+    && (!Object.hasOwn(body, 'modulos_acceso') || (Array.isArray(body.modulos_acceso)
+      && body.modulos_acceso.every(modulo => typeof modulo === 'string' && MODULOS_VALIDOS.has(modulo))));
+}
+
+function perfilDevueltoValido(data: unknown, id: string): boolean {
+  return Array.isArray(data) && data.length === 1 && data[0]?.id === id;
+}
 
 function respuestaError(c: Context, status: 401 | 403 | 500, body: Record<string, unknown>) {
   return c.json({ success: false, ...body }, status);
@@ -32,13 +44,13 @@ async function verificarAccesoGerencia(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, { error: `No se pudo verificar el rol del usuario: ${usuarioError.message}` });
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, ROLES_PERMITIDOS)) {
     return respuestaError(c, 403, {
       error: 'Acceso restringido a Gerencia -- la administración de usuarios es una acción exclusiva de ese rol.',
     });
@@ -62,10 +74,13 @@ export async function crearUsuario(c: Context): Promise<Response> {
 
   try {
     const body = await c.req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !camposAccesoValidos(body)) {
+      return c.json({ success: false, error: 'Activo debe ser booleano y módulos debe ser una lista de módulos válidos' }, 400);
+    }
     const { email, password, nombre_completo, rol, activo, modulos_acceso } = body;
 
     // Validaciones
-    if (!email || !password || !nombre_completo || !rol) {
+    if (![email, password, nombre_completo, rol].every(value => typeof value === 'string' && value.trim())) {
       return c.json({
         success: false,
         error: 'Email, contraseña, nombre completo y rol son obligatorios'
@@ -99,16 +114,16 @@ export async function crearUsuario(c: Context): Promise<Response> {
       },
     });
 
-    if (authError) {
+    if (authError || typeof authData?.user?.id !== 'string') {
       console.error('Error creando usuario en auth:', authError);
       return c.json({
         success: false,
-        error: `Error creando usuario: ${authError.message}`
+        error: `Error creando usuario: ${authError?.message ?? 'Auth no confirmó un usuario'}`
       }, 500);
     }
 
     // Insertar en tabla usuarios
-    const { error: dbError } = await supabase
+    const { data: perfilCreado, error: dbError } = await supabase
       .from('usuarios')
       .insert({
         id: authData.user.id,
@@ -116,30 +131,25 @@ export async function crearUsuario(c: Context): Promise<Response> {
         nombre_completo,
         rol,
         activo: activo !== undefined ? activo : true,
-        modulos_acceso: Array.isArray(modulos_acceso) ? modulos_acceso : [],
-      });
+        modulos_acceso: modulos_acceso ?? [],
+      })
+      .select('id,email,nombre_completo,rol,activo,modulos_acceso');
 
-    if (dbError) {
+    if (dbError || !perfilDevueltoValido(perfilCreado, authData.user.id)) {
       console.error('Error insertando usuario en tabla:', dbError);
 
       // Si falla la inserción en la tabla, eliminar el usuario de auth
-      await supabase.auth.admin.deleteUser(authData.user.id);
+      if (dbError) await supabase.auth.admin.deleteUser(authData.user.id);
 
       return c.json({
         success: false,
-        error: `Error registrando usuario: ${dbError.message}`
+        error: `Error registrando usuario: ${dbError?.message ?? 'No se confirmó exactamente un perfil creado'}`
       }, 500);
     }
 
     return c.json({
       success: true,
-      data: {
-        id: authData.user.id,
-        email,
-        nombre_completo,
-        rol,
-        activo: activo !== undefined ? activo : true,
-      }
+      data: perfilCreado[0]
     });
 
   } catch (error: any) {
@@ -166,10 +176,13 @@ export async function editarUsuario(c: Context): Promise<Response> {
 
   try {
     const body = await c.req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !camposAccesoValidos(body)) {
+      return c.json({ success: false, error: 'Activo debe ser booleano y módulos debe ser una lista de módulos válidos' }, 400);
+    }
     const { id, email, password, nombre_completo, rol, activo, modulos_acceso } = body;
 
     // Validaciones
-    if (!id || !email || !nombre_completo || !rol) {
+    if (![id, email, nombre_completo, rol].every(value => typeof value === 'string' && value.trim())) {
       return c.json({
         success: false,
         error: 'ID, email, nombre completo y rol son obligatorios'
@@ -183,6 +196,10 @@ export async function editarUsuario(c: Context): Promise<Response> {
         success: false,
         error: 'Rol no válido'
       }, 400);
+    }
+
+    if (password !== undefined && password !== null && typeof password !== 'string') {
+      return c.json({ success: false, error: 'Contraseña inválida' }, 400);
     }
 
     // Auth session: desactivar banea (~100 años); reactivar quita el baneo.
@@ -242,33 +259,28 @@ export async function editarUsuario(c: Context): Promise<Response> {
     }
 
     // Actualizar en tabla usuarios
-    const { error: dbError } = await supabase
+    const { data: perfilActualizado, error: dbError } = await supabase
       .from('usuarios')
       .update({
         nombre_completo,
         rol,
-        activo: activo !== undefined ? activo : true,
-        modulos_acceso: Array.isArray(modulos_acceso) ? modulos_acceso : [],
+        ...(Object.hasOwn(body, 'activo') ? { activo } : {}),
+        ...(Object.hasOwn(body, 'modulos_acceso') ? { modulos_acceso } : {}),
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select('id,email,nombre_completo,rol,activo,modulos_acceso');
 
-    if (dbError) {
+    if (dbError || !perfilDevueltoValido(perfilActualizado, id)) {
       console.error('Error actualizando usuario en tabla:', dbError);
       return c.json({
         success: false,
-        error: `Error actualizando datos: ${dbError.message}`
+        error: `Error actualizando datos: ${dbError?.message ?? 'No se confirmó exactamente un perfil actualizado'}. Auth puede haber cambiado.`
       }, 500);
     }
 
     return c.json({
       success: true,
-      data: {
-        id,
-        email,
-        nombre_completo,
-        rol,
-        activo: activo !== undefined ? activo : true,
-      }
+      data: perfilActualizado[0]
     });
 
   } catch (error: any) {
@@ -295,6 +307,9 @@ export async function eliminarUsuario(c: Context): Promise<Response> {
 
   try {
     const body = await c.req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !camposAccesoValidos(body)) {
+      return c.json({ success: false, error: 'Activo debe ser booleano y módulos debe ser una lista de módulos válidos' }, 400);
+    }
     const { id } = body;
 
     if (!id) {

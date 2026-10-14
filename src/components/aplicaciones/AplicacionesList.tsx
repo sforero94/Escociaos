@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -44,6 +44,10 @@ import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
 import { formatearNumero, formatShortDate } from '@/utils/format';
 import { cn } from '@/components/ui/utils';
 
+import { useAuth } from '@/contexts/AuthContext';
+import { loadPlanDeleteExpected, deleteUnusedPlan, resolvePlanDelete, hasPendingPlanDelete, type PlanDeleteExpected } from '@/utils/applicationPlanDelete';
+import type { ApplicationClosureClient } from '@/utils/applicationClosureIntegrity';
+
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   'Fumigación': 'Fumigación',
   'Fertilización': 'Fertilización',
@@ -62,6 +66,21 @@ export function AplicacionesList() {
   const [filtroEstado, setFiltroEstado] = useState<EstadoAplicacion | 'todos'>('todos');
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  const { user } = useAuth();
+  const owner = user?.id ?? '';
+  const deleteScope = useRef({ owner, generation: 0 });
+  useLayoutEffect(() => {
+    if (deleteScope.current.owner !== owner) {
+      deleteScope.current = { owner, generation: deleteScope.current.generation + 1 };
+      setDeleteExpected(null); setPendingDelete(null); setDeleteError(null); setEliminando(null); setDeleteBusy(false);
+    }
+  }, [owner]);
+  useLayoutEffect(() => () => { deleteScope.current = { ...deleteScope.current, generation: deleteScope.current.generation + 1 }; }, []);
+  const deleting = useRef(false);
+  const [deleteExpected, setDeleteExpected] = useState<{ application: string; owner: string; expected: PlanDeleteExpected } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [iniciarEjecucionId, setIniciarEjecucionId] = useState<string | null>(null);
   const [aplicacionDetalle, setAplicacionDetalle] = useState<Aplicacion | null>(null);
 
@@ -221,113 +240,58 @@ export function AplicacionesList() {
   /**
    * ELIMINAR APLICACIÓN
    */
-  const handleEliminar = async (aplicacionId: string) => {
+  const prepareEliminar = async (aplicacionId: string) => {
+    if (deleting.current || !owner) return;
+    const generation = deleteScope.current.generation;
+    const current = () => deleteScope.current.owner === owner && deleteScope.current.generation === generation;
+    deleting.current = true; setDeleteBusy(true); setDeleteError(null); setDeleteExpected(null);
     try {
-      // 1. Verificar y eliminar movimientos de inventario primero
-      const { data: movimientos, error: errorCheckMovimientos } = await supabase
-        .from('movimientos_inventario')
-        .select('id')
-        .eq('aplicacion_id', aplicacionId);
-
-      if (errorCheckMovimientos) {
-        throw errorCheckMovimientos;
+      if (hasPendingPlanDelete(owner, aplicacionId)) {
+        setPendingDelete(aplicacionId);
+        setDeleteError('Hay una eliminación pendiente de verificar. Verifique su resultado antes de eliminar otro plan.');
+        return;
       }
-
-      if (movimientos && movimientos.length > 0) {
-        const { error: errorDeleteMovimientos } = await supabase
-          .from('movimientos_inventario')
-          .delete()
-          .eq('aplicacion_id', aplicacionId);
-
-        if (errorDeleteMovimientos) {
-          throw errorDeleteMovimientos;
-        }
-      } else {
-        /* no inventory movements to delete — proceed */
-      }
-
-      // 2. Eliminar relaciones con lotes
-      const { error: errorLotes } = await supabase
-        .from('aplicaciones_lotes')
-        .delete()
-        .eq('aplicacion_id', aplicacionId);
-
-      if (errorLotes) {
-        throw errorLotes;
-      }
-
-      // 3. Obtener IDs de mezclas
-      const { data: mezclas, error: errorMezclas } = await supabase
-        .from('aplicaciones_mezclas')
-        .select('id')
-        .eq('aplicacion_id', aplicacionId);
-
-      if (errorMezclas) {
-        throw errorMezclas;
-      }
-
-      // 4. Eliminar productos de las mezclas
-      if (mezclas && mezclas.length > 0) {
-        const mezclaIds = mezclas.map(m => m.id);
-
-        const { error: errorProductosMezcla } = await supabase
-          .from('aplicaciones_productos')
-          .delete()
-          .in('mezcla_id', mezclaIds);
-
-        if (errorProductosMezcla) {
-          throw errorProductosMezcla;
-        }
-
-        // 5. Eliminar mezclas
-        const { error: errorDeleteMezclas } = await supabase
-          .from('aplicaciones_mezclas')
-          .delete()
-          .in('id', mezclaIds);
-
-        if (errorDeleteMezclas) {
-          throw errorDeleteMezclas;
-        }
-      }
-
-      // 6. Eliminar cálculos
-      const { error: errorCalculos } = await supabase
-        .from('aplicaciones_calculos')
-        .delete()
-        .eq('aplicacion_id', aplicacionId);
-
-      if (errorCalculos) {
-        throw errorCalculos;
-      }
-
-      // 7. Eliminar lista de compras
-      const { error: errorCompras } = await supabase
-        .from('aplicaciones_compras')
-        .delete()
-        .eq('aplicacion_id', aplicacionId);
-
-      if (errorCompras) {
-        throw errorCompras;
-      }
-
-      // 8. Finalmente, eliminar la aplicación
-      const { error: errorAplicacion } = await supabase
-        .from('aplicaciones')
-        .delete()
-        .eq('id', aplicacionId);
-
-      if (errorAplicacion) {
-        throw errorAplicacion;
-      }
-
-      // Actualizar lista local
-      setAplicaciones(aplicaciones.filter(a => a.id !== aplicacionId));
-      setEliminando(null);
-
-      toast.success('Aplicación eliminada exitosamente');
+      const expected = await loadPlanDeleteExpected(supabase as unknown as ApplicationClosureClient, owner, aplicacionId, current);
+      if (!current()) return;
+      setDeleteExpected({ application: aplicacionId, owner, expected }); setEliminando(aplicacionId);
     } catch (error) {
-      toast.error('Error al eliminar la aplicación. Por favor intenta nuevamente.');
-    }
+      if (current()) setDeleteError(error instanceof Error ? error.message : 'No se pudo revisar el plan.');
+    } finally { deleting.current = false; if (current()) setDeleteBusy(false); }
+  };
+  const handleEliminar = async (aplicacionId: string) => {
+    if (deleting.current || !deleteExpected || deleteExpected.application !== aplicacionId || deleteExpected.owner !== owner) return;
+    const generation = deleteScope.current.generation;
+    const current = () => deleteScope.current.owner === owner && deleteScope.current.generation === generation;
+    deleting.current = true; setDeleteBusy(true); setDeleteError(null);
+    try {
+      await deleteUnusedPlan(supabase as unknown as ApplicationClosureClient, owner, aplicacionId, deleteExpected.expected, current);
+      if (!current()) return;
+      setAplicaciones(rows => rows.filter(a => a.id !== aplicacionId));
+      setEliminando(null); setDeleteExpected(null); setPendingDelete(null);
+      toast.success('Plan eliminado. La tarea y el historial se conservaron.');
+    } catch (error) {
+      if (current()) {
+        setDeleteError(error instanceof Error ? error.message : 'No se pudo verificar la eliminación.');
+        if (hasPendingPlanDelete(owner, aplicacionId)) setPendingDelete(aplicacionId);
+      }
+    } finally { deleting.current = false; if (current()) setDeleteBusy(false); }
+  };
+  const verificarEliminacion = async () => {
+    if (deleting.current || !pendingDelete || !owner) return;
+    const application = pendingDelete, generation = deleteScope.current.generation;
+    const current = () => deleteScope.current.owner === owner && deleteScope.current.generation === generation;
+    deleting.current = true; setDeleteBusy(true);
+    try {
+      const state = await resolvePlanDelete(supabase as unknown as ApplicationClosureClient, owner, application, current);
+      if (!current()) return;
+      if (state === 'committed') {
+        setAplicaciones(rows => rows.filter(a => a.id !== application));
+        toast.success('El plan original se eliminó. La tarea y el historial se conservaron.');
+        setDeleteError(null);
+      } else setDeleteError('El plan no se eliminó. Vuelva a revisarlo antes de eliminar.');
+      setPendingDelete(null); setDeleteExpected(null); setEliminando(null);
+    } catch (error) { if (current()) setDeleteError(error instanceof Error ? error.message : 'No se pudo verificar la eliminación.'); }
+    finally { deleting.current = false; if (current()) setDeleteBusy(false); }
   };
 
   return (
@@ -647,7 +611,7 @@ export function AplicacionesList() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
+                            <DropdownMenuItem variant="destructive" disabled={deleteBusy} onClick={() => prepareEliminar(aplicacion.id)}>
                               <Trash2 className="size-4" aria-hidden="true" />
                               Eliminar
                             </DropdownMenuItem>
@@ -706,7 +670,7 @@ export function AplicacionesList() {
                             Editar
                           </DropdownMenuItem>
 
-                          <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
+                          <DropdownMenuItem variant="destructive" disabled={deleteBusy} onClick={() => prepareEliminar(aplicacion.id)}>
                             <Trash2 className="size-4" aria-hidden="true" />
                             Eliminar
                           </DropdownMenuItem>
@@ -721,15 +685,19 @@ export function AplicacionesList() {
         )}
       </Card>
 
+      {deleteError && <div role="alert" className="rounded-lg border p-4">
+        <p>{deleteError}</p>
+        {pendingDelete && <Button disabled={deleteBusy} onClick={verificarEliminacion}>Verificar eliminación pendiente</Button>}
+      </div>}
       {/* Confirmación de eliminación — AlertDialog (ConfirmDialog ya lo envuelve), nunca un
           <div fixed inset-0> a mano: foco atrapado, cierre con Escape, accesible por defecto. */}
       <ConfirmDialog
-        open={!!eliminando}
+        open={!!eliminando && deleteExpected?.owner === owner}
         onOpenChange={(open) => {
           if (!open) setEliminando(null);
         }}
         title="Eliminar Aplicación"
-        description={`¿Deseas eliminar «${aplicacionAEliminar?.nombre_aplicacion ?? 'esta aplicación'}»? Se eliminarán todos los datos asociados: mezclas, cálculos y relaciones con lotes. Esta acción no se puede deshacer.`}
+        description={`¿Deseas eliminar el plan «${typeof (deleteExpected?.expected.aplicaciones as Record<string, unknown> | undefined)?.nombre_aplicacion === 'string' ? (deleteExpected!.expected.aplicaciones as Record<string, unknown>).nombre_aplicacion : aplicacionAEliminar?.nombre_aplicacion ?? 'esta aplicación'}»? Solo puede eliminar un plan sin ejecución, trabajo ni movimientos de inventario. La tarea y el historial se conservarán. Esta acción no se puede deshacer.`}
         confirmLabel="Eliminar"
         onConfirm={() => {
           if (eliminando) handleEliminar(eliminando);

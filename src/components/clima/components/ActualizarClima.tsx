@@ -65,7 +65,7 @@ export function ActualizarClima() {
     setError(null);
     setResultado(null);
     try {
-      const { projectId } = await import('@/utils/supabase/info');
+      const { getSupabaseConfig } = await import('@/utils/supabase/config');
       const { data: { session } } = await getSupabase().auth.getSession();
       if (!session?.access_token) {
         setError('Sesión no válida — vuelve a iniciar sesión e intenta de nuevo.');
@@ -73,7 +73,7 @@ export function ActualizarClima() {
       }
 
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/clima/actualizar`,
+        `${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/clima/actualizar`,
         { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } },
       );
       const cuerpo: RespuestaActualizar = await res.json().catch(() => ({}));

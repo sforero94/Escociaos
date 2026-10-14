@@ -1,3 +1,5 @@
+import { FACTURA_ACCEPT, validarArchivoFactura } from '@/utils/archivoFactura';
+import { toast } from 'sonner';
 import { useRef } from 'react';
 import { Upload, CheckCircle, X } from 'lucide-react';
 import type { BatchRowData } from '@/types/finanzas';
@@ -171,11 +173,13 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,.pdf"
+          accept={FACTURA_ACCEPT}
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0] || null;
-            onChange(index, 'factura_file', file);
+            const error = file && validarArchivoFactura(file);
+            if (error) toast.error(error);
+            else if (file) onChange(index, 'factura_file', file);
             if (fileRef.current) fileRef.current.value = '';
           }}
         />

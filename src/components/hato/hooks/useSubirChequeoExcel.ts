@@ -24,7 +24,7 @@
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { projectId } from '@/utils/supabase/info.tsx';
+import { getSupabaseConfig } from '@/utils/supabase/config';
 import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 import type { ResultadoDiffChequeo } from '@/utils/importHato/diffChequeo';
 import type { FilaChequeoNormalizada, ManifiestoHoja, FilaTerneraNormalizada, FilaSubtablaNormalizada } from '@/utils/importHato/tipos';
@@ -32,7 +32,7 @@ import type { FilaRechazadaCommit } from '@/utils/importHato/commitChequeo';
 import type { AnimalFueraDelRoster } from '@/utils/importHato/ocrChequeo';
 import { verificarReemplazoChequeo, ErrorConfirmacionReemplazoChequeo, type ReemplazoChequeo } from '@/utils/hato/reemplazoChequeo';
 
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 export interface PreviewChequeoRespuesta {
   success: true;
@@ -175,7 +175,7 @@ export function useSubirChequeoExcel() {
       const formData = new FormData();
       formData.append('archivo', archivo);
 
-      const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/preview`, {
+      const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/chequeo/preview`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -233,7 +233,7 @@ export function useSubirChequeoExcel() {
       fotos.forEach((f) => formData.append('fotos', f));
       if (fecha) formData.append('fecha', fecha);
 
-      const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/foto`, {
+      const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/chequeo/foto`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -304,7 +304,7 @@ export function useSubirChequeoExcel() {
       try {
         await verificarReemplazoChequeo(fechaChequeo, opciones?.reemplazoConfirmado);
         const token = await obtenerTokenSesion();
-        const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/commit`, {
+        const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/chequeo/commit`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({

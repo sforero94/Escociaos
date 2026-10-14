@@ -36,18 +36,9 @@
 // SU PROPIO formato (B5.3) sin tocar los alias de las 3 generaciones
 // históricas -- ver la nota en ese archivo.
 //
-// Arquitectura: todo lo de este archivo es PURO salvo las dos funciones que
-// reciben el módulo `xlsx` ya cargado por el llamador (`XLSXModule = typeof
-// import('xlsx')`, NUNCA un `import` estático de la librería -- mismo patrón
-// de inyección que `src/utils/exportarExcelReportes.ts`). Así:
-//   - Los componentes (`ChequeosList.tsx`, `ChequeoDetalle.tsx`) hacen el
-//     `await import('xlsx')` real y llaman `descargarPlanillaChequeo` (la
-//     única función que además dispara la descarga vía `XLSX.writeFile`).
-//   - El test de round-trip (B5.3, `src/__tests__/`) puede importar `xlsx`
-//     directamente (no está sujeto a la restricción de tamaño de bundle del
-//     navegador) y llamar `construirLibroPlanillaChequeo` para obtener los
-//     bytes reales y volver a leerlos con el mismo lector celda-por-celda
-//     que usa `extract.ts`/`hato-chequeo-preview.ts`.
+// El AOA es puro; el constructor async serializa con el adaptador compartido.
+// La descarga espera los bytes y propaga errores a los componentes.
+// Los tests verifican XML, lectura de bytes y normalización/diff de extremo a extremo.
 //
 // Nunca repite la fila de encabezado a mitad de hoja -- estructura fija:
 // fila 0 = título (fecha del chequeo, la MISMA lógica que `parseFechaChequeo`
@@ -325,76 +316,31 @@ export function textoCeldaEstadoRegistrado(
  * presupuesto físico como el de `exportarPlanillaChequeoPDF.ts`. */
 const ANCHOS_COLUMNAS_PLANILLA: readonly number[] = [6, 20, 6, 8, 11, 12, 13, 14, 18, 9, 11, 13, 18];
 
-export type XLSXModule = typeof import('xlsx');
-
 export interface OpcionesLibroPlanillaChequeo {
   tituloHoja: string;
   nombreHoja: string;
   filas: FilaPlanillaChequeo[];
 }
 
-/**
- * Ensambla el `WorkBook` completo: hoja con el AOA de
- * `construirAOAPlanillaChequeo`, anchos de columna, márgenes de impresión
- * angostos y "Print Titles" (repetir la fila de encabezado en cada página
- * impresa).
- *
- * Paginado para impresión -- limitación real y verificada de la librería
- * `xlsx` (SheetJS Community Edition, la que usa este repo, `node_modules`):
- * NO soporta escribir paneles congelados de PANTALLA (`freeze panes`) ni
- * saltos de página manuales (`rowBreaks`/`colBreaks`/`pageSetup`) -- son
- * tokens reconocidos pero ignorados por su escritor (`case 'pane': break`,
- * `case 'orientation': break`, verificado contra `node_modules/xlsx/xlsx.js`
- * y confirmado escribiendo un libro de prueba y leyendo el XML resultante).
- * Lo que SÍ escribe, y es lo que de verdad gobierna "se ve bien impreso en
- * varias páginas" para una tabla de columnas fijas y muchas filas (pagina
- * SOLO verticalmente): "Print Titles" -- `wb.Workbook.Names` con
- * `_xlnm.Print_Titles` apuntando a la fila de encabezado, que Excel repite
- * en cada página al imprimir (verificado contra el XML real:
- * `<definedNames>` sale en `xl/workbook.xml`) -- más anchos de columna
- * angostos y márgenes reducidos para que Excel autopagine limpio sin
- * necesitar saltos manuales. Esto NUNCA duplica la fila de encabezado en
- * los DATOS de la hoja (sigue apareciendo una sola vez) -- es una
- * instrucción de impresión, no una fila adicional, así que no interfiere
- * con el parser de subida.
- */
-export function construirLibroPlanillaChequeo(XLSX: XLSXModule, opciones: OpcionesLibroPlanillaChequeo) {
-  const aoa = construirAOAPlanillaChequeo(opciones.tituloHoja, opciones.filas);
-  const hoja = XLSX.utils.aoa_to_sheet(aoa);
-  hoja['!cols'] = ANCHOS_COLUMNAS_PLANILLA.map((wch) => ({ wch }));
-  hoja['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
-
-  const libro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(libro, hoja, opciones.nombreHoja);
-
-  const filaExcelEncabezado = FILA_ENCABEZADO_PLANILLA + 1; // A1 es 1-indexado
-  libro.Workbook = libro.Workbook ?? {};
-  libro.Workbook.Names = [
-    ...(libro.Workbook.Names ?? []),
-    {
-      Sheet: 0,
-      Name: '_xlnm.Print_Titles',
-      Ref: `'${opciones.nombreHoja}'!$${filaExcelEncabezado}:$${filaExcelEncabezado}`,
-    },
-  ];
-
-  return libro;
+/** Serializa el AOA sin alterar códigos crudos, filas libres ni datos de impresión. */
+export async function construirLibroPlanillaChequeo(opciones: OpcionesLibroPlanillaChequeo): Promise<Uint8Array> {
+  const { writeXlsx } = await import('../spreadsheet');
+  const filaExcelEncabezado = FILA_ENCABEZADO_PLANILLA + 1;
+  return writeXlsx([{
+    name: opciones.nombreHoja,
+    rows: construirAOAPlanillaChequeo(opciones.tituloHoja, opciones.filas),
+    widths: ANCHOS_COLUMNAS_PLANILLA,
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+    printTitlesRow: `${filaExcelEncabezado}:${filaExcelEncabezado}`,
+  }]);
 }
 
-/**
- * Construye el libro y dispara la descarga (`XLSX.writeFile`). Única
- * función de este archivo que hace I/O real -- `await import('xlsx')`
- * dinámico, mismo patrón que `exportarExcelReportes.ts`, para no meter la
- * librería en el bundle inicial. Los componentes (`ChequeosList.tsx`,
- * `ChequeoDetalle.tsx`) llaman esta función; el test de round-trip llama
- * `construirLibroPlanillaChequeo` directo (necesita los bytes en memoria,
- * no un archivo descargado por el navegador).
- */
+/** Espera la serialización antes de descargar y deja propagar los errores al llamador. */
 export async function descargarPlanillaChequeo(
   opciones: OpcionesLibroPlanillaChequeo,
   nombreArchivo: string,
 ): Promise<void> {
-  const XLSX = await import('xlsx');
-  const libro = construirLibroPlanillaChequeo(XLSX, opciones);
-  XLSX.writeFile(libro, nombreArchivo);
+  const { downloadXlsx } = await import('../spreadsheet');
+  const bytes = await construirLibroPlanillaChequeo(opciones);
+  downloadXlsx(bytes, nombreArchivo);
 }

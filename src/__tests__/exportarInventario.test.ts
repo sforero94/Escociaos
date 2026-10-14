@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+import { readXlsx } from '@/utils/spreadsheet';
 import {
   COLUMNAS_INVENTARIO,
   FILA_TITULOS_EXCEL,
@@ -186,22 +187,18 @@ describe('excel', () => {
     expect(COLUMNAS_INVENTARIO).toHaveLength(4);
 
     const blob = await blobExcelInventario(reporte, CORTE);
-    const libro = XLSX.read(await blob.arrayBuffer(), { type: 'array' });
-    const hoja = libro.Sheets[libro.SheetNames[0]];
-    const ref = XLSX.utils.decode_range(hoja['!ref'] ?? 'A1');
-    const cantidades: { v: unknown; t: string }[] = [];
-    for (let fila = FILA_TITULOS_EXCEL + 1; fila <= ref.e.r; fila++) {
-      const celda = hoja[XLSX.utils.encode_cell({ r: fila, c: 1 })];
-      cantidades.push({ v: celda?.v, t: celda?.t });
-      const productoCelda = hoja[XLSX.utils.encode_cell({ r: fila, c: 0 })];
-      expect(typeof productoCelda?.v).toBe('string');
-    }
-    expect(cantidades.length).toBe(reporte.filas.length);
-    expect(cantidades.every((celda) => celda.t === 'n' && typeof celda.v === 'number')).toBe(true);
-    const boro = cantidades.find((celda) => celda.v === 198);
-    expect(boro).toBeDefined();
-    const texto = XLSX.utils.sheet_to_csv(hoja);
-    expect(texto).not.toMatch(/precio|valor/i);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const sheet = (await readXlsx(bytes)).sheets[0];
+    const rows = sheet.rows.slice(FILA_TITULOS_EXCEL + 1);
+    expect(sheet.name).toBe('Inventario');
+    expect(rows).toHaveLength(reporte.filas.length);
+    expect(rows.every(row => typeof row[0] === 'string' && typeof row[1] === 'number')).toBe(true);
+    expect(rows.some(row => row[1] === 198)).toBe(true);
+    expect(sheet.rows.flat().join(' ')).not.toMatch(/precio|valor/i);
+    const zip = await JSZip.loadAsync(bytes);
+    const styles = await zip.file('xl/styles.xml')!.async('string');
+    expect(styles).toContain('#,##0.####');
+    expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   });
 });
 

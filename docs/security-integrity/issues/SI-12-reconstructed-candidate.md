@@ -1,0 +1,70 @@
+# SI-12 — Prospective purchase posting and reversal candidate
+
+Status: review candidate only. No numbered migration, production mutation, historical repair, frontend integration, or release authorization is included.
+
+The current purchase form inserts a purchase, reads and overwrites product stock, then inserts an inventory movement through separate requests. Reversal similarly writes several requests and calls a cleanup function whose current definition deletes every linked expense. A network failure or concurrent writer can therefore leave a purchase, stock balance, movement and expense history inconsistent. The owner requires every expense to remain available for management review.
+
+The candidate is [purchase-integrity.sql](../../../src/sql/security-candidates/purchase-integrity.sql). Its independent synthetic verifier is [purchase-integrity-postgres.py](../../../scripts/security/purchase-integrity-postgres.py). The SQL must not be run automatically.
+
+## Authorization and transaction contract
+
+`fn_purchase_post(request_key uuid, payload jsonb)` and `fn_purchase_reverse(request_key uuid, payload jsonb)` derive the actor exclusively from `auth.uid()`. They read and hold a share lock on that actor's current application profile and require `activo = true` with the existing Administrador or Gerencia role. Successful receipt replays reauthorize first. Neither an actor argument, Auth metadata, service-role caller nor a historical purchase email supplies authority.
+
+The security-definer routines use a fixed `pg_catalog` search path and fully qualified application objects. Private proof, receipt and expense-association tables have RLS enabled, no ordinary policies, and explicit revocation from PUBLIC, anon, authenticated and service_role. Their helpers are not executable by ordinary callers. Only the two public mutation entry points and the minimal proof reader grant authenticated execution. The future deployment must establish a trusted function/table owner and retain the normal Supabase JWT-to-`auth.uid()` chain; direct SQL sessions with permission to set arbitrary JWT GUCs are outside that trust model.
+
+An actor plus request key identifies one operation and exact JSONB payload. Object key order and equivalent JSON numeric notation follow PostgreSQL JSONB equality; array order, extra fields and different unrounded numeric values remain significant. Transaction-scoped advisory locks serialize same-key attempts. Completed matching requests return their original receipt without writing stock again; conflicts fail. An exception rolls back the request record and every business/proof/audit write made by that invocation, so retrying an uncommitted request cannot produce a partial committed posting.
+
+All prospective affected products lock in UUID order before business writes, independent of client array order. Posting then applies each line in explicit array order using the current locked stock. Reversal takes the same product-first order, then locks the protected posting, original purchase, original movement and associated expenses. It also locks the selected surviving purchase while reading the restored price. Suppressed or mismatched `RETURNING` results fail; post-write reads detect relevant AFTER-trigger changes. Implicit expense FK updates are checked against locked before snapshots.
+
+## Posting payload and proof
+
+Posting accepts a nonempty `lines` array of purchase fields already used by the current form: producto_id, fecha_compra, proveedor, optional proveedor_id/numero_factura/numero_lote_producto/fecha_vencimiento/link_factura/url_factura, and cantidad/unidad/costo_unitario/costo_total. Unknown fields are rejected; numeric amounts must be JSON numbers and text/date/UUID/enum inputs must have the appropriate textual shape. User attribution comes from the trusted profile email.
+
+Every line's basic types and numeric values are checked before business writes. Cast, constraint, overflow or other failures on a later line still roll back earlier lines. A successful posting writes the purchase, increases stock by its stored quantity, sets the purchase's stored unit cost as the product price, activates the now-stocked product, and inserts the corresponding Entrada movement in the same transaction.
+
+The protected posting binds the generated purchase ID, trusted actor/request/line index, full returned purchase snapshot and original movement ID/snapshot. No legacy purchase is backfilled or declared proven from its quantity, timestamp, invoice text, apparent matching movement or current stock. New line timestamps use `clock_timestamp()` so repeated products inside one transaction retain their actual posting order when restoring a surviving price. A final UUID tie-break makes an existing equal-date/equal-time price selection deterministic.
+
+The posting receipt returns each purchase's ID, canonical `expected` snapshot and movement ID. An authorized history session can call `fn_purchase_proof(purchase_id uuid)` to retrieve only `{purchase_id, expected}`. The reader rechecks a fresh active Admin/Gerencia profile, takes product-first share locks, and verifies the purchase and movement against protected proof. Missing, legacy, edited or reversed purchases fail. Cross-manager access preserves the existing catalog administration permission; it does not grant access to expense snapshots. Clients use that canonical snapshot directly rather than reconstructing proof from display values or rounded labels.
+
+## Numeric compatibility decisions
+
+The inspected schema uses `numeric(12,2)` for purchase quantity/unit cost/total, product stock/price, and inventory movement quantity/balances/value. The candidate checks these typmods before installation, as well as the purchase expense FK's `ON DELETE SET NULL` behavior.
+
+Quantity, unit cost and total round independently to two decimal places using PostgreSQL numeric rounding, matching the existing column casts. Values must remain positive and representable after rounding. Ordinary derived fractional unit prices are therefore accepted; the routine does not require the caller to provide exactly two decimal places. A value which rounds to zero or overflows the existing column range is rejected. Existing null stock means zero, matching the current application. Nonfinite or negative existing stock requires review rather than being silently repaired.
+
+No new financial identity such as `rounded quantity × rounded unit cost = rounded total` is imposed. The current form derives unit cost by division while the invoice line total is independently stored; rounding can legitimately prevent that identity. The stored purchase quantity, stock delta and movement quantity are identical, and the movement value matches the stored purchase total. Invoice discounts, taxes, unit conversion and historical valuation policy are not redesigned here. Financial consistency between the unrounded quantity, unit cost and authoritative invoice total remains an explicit business decision for review; this candidate does not claim to validate that equation or silently introduce a new pricing rule.
+
+## Reversal and expense preservation
+
+Reversal requires `{purchase_id, expected}`. The supplied snapshot must equal the protected original purchase snapshot, and the current purchase and original Entrada movement must still equal their protected snapshots. An edited purchase, missing/edited movement, unproven legacy purchase or already reversed posting fails before the debit. This full snapshot is the optimistic version condition; a mutable timestamp alone is insufficient.
+
+The routine subtracts the protected stored quantity from current locked stock, rejecting insufficient stock. It writes one Salida Otros reversal movement, with the operational date in America/Bogota, and restores the most recent surviving purchase's unit price ordered by purchase date, creation time and ID. If none survives, the price becomes null (unknown); the removed purchase's price is not retained. An invalid surviving price fails rather than fabricating a value. Active state is not explicitly changed by reversal, consistent with the existing update payload.
+
+Every linked `fin_gastos` row is locked and snapshotted, regardless of Pendiente, Confirmado or null state. Its protected durable association retains the deleted purchase ID, expense ID, reversing actor/key, before snapshot and post-FK snapshot. Deleting the purchase invokes the existing SET NULL FK. Each expense must still exist with only its purchase link detached, allowing the normal updated_at/updated_by attribution changes. An unexpected expense deletion, suppressed FK update or financial-field mutation raises and rolls back the reversal. The original posting, original movement snapshot, reversal movement and receipt remain durable evidence after purchase deletion.
+
+Purchase requests, posting proof and expense associations have no automatic expiry or pruning job in this candidate. They are purchase audit and idempotency evidence, scoped separately from Esco memory confirmations. The owner's seven-day memory-receipt decision does not imply seven-day purchase retention. Unlimited growth is not an approved organization-wide retention policy: capacity, access, audit retention and a safe archival plan that preserves replay uniqueness/outcomes remain a release gate. No evidence is silently expired.
+
+There is no Storage deletion, invoice path removal, expense deletion or historical expense repair. Both invoice URL columns and expense invoice references survive in protected snapshots. The old `fn_cleanup_compra_dependencies(uuid)` body is replaced by a refusal that cannot delete expenses, and its execute privileges are revoked from ordinary/public/service callers. This defense does not authorize deploying the candidate now.
+
+## Verification
+
+Run locally with the already-present pinned image:
+
+```sh
+python3 scripts/security/purchase-integrity-postgres.py
+```
+
+The harness explicitly selects the local Docker Unix socket after clearing endpoint/context/TLS selectors. It uses the pinned PostgreSQL 17.6 digest, `--pull=never`, `--network=none`, a read-only container filesystem, tmpfs database/runtime directories, no bind mounts and no published ports. Fixtures are synthetic and contain no production rows, credentials or private catalog metadata. It waits for completed initialization, runs independent backend sessions for concurrency tests, and removes its own container and tmpfs in `finally`, then verifies absence.
+
+The executable checks cover fresh authorization, canonical proof reads across authorized managers, revoked/missing/legacy proof-reader targets, revoked cleanup and proof-write permissions, complete numeric preflight, late FK/overflow rollback, every explicit posting and reversal write suppressed by a trigger, altered returned stock, AFTER-trigger purchase/receipt changes, edited purchase/movement snapshots, insufficient stock, expense mutation/deletion during FK detachment, all expense states, exact replay/conflict/reauthorization, deterministic product lock ordering, same-key concurrent retries, different actors racing a reversal, repeated-product price restoration and profile demotion blocking until transaction completion. These are synthetic database tests, not a production-schema rehearsal or proof of the final app release graph.
+
+## Release gates and order
+
+1. Stop all expense cleanup and invoice Storage deletion paths in the proposed application release. Verify background cleanup also retains invoices referenced by surviving expenses and protected associations. The owner's preserve-all decision must hold before deletion becomes available.
+2. Inventory every direct purchase insert/update/delete, product balance writer and movement writer across browsers, bots, RPCs and privileged services. Design and test their coordinated permission transition. This candidate deliberately does **not** revoke shared business-table writers: doing so without migrating their other workflows would break authorized work. Their bypass paths remain an open gate; this candidate alone does not close SI-12.
+3. Rehearse the candidate on a protected staging copy of the actual schema, triggers, roles, grants and RLS. The offline catalog used here established columns/constraints/functions, not exhaustive live trigger compatibility. Verify the definer owner, numeric/FK guards, existing audit hooks, both invoice fields, date/unit behavior, Supabase RPC transaction behavior and expense attribution. No production data is needed in the published harness.
+4. Prepare creation RPC wiring and durable client request keys/receipts together with the writer cutover. Retire multi-request absolute-stock posting. Prospective posting proof must exist before any corresponding reversal path is enabled. An old cached client or privileged stale writer must not retain permission to bypass that posting contract.
+5. Enable reversal only for canonical prospective proof after creation/cutover verification. Keep legacy purchases and edited proofs on a management-review path; do not backfill inferred stock provenance. Retire the old multi-request reversal and any silent fallback to direct deletion. The minimal proof-read RPC supplies a canonical reversal snapshot, but a management-only review/read path for durable expense associations and orphaned invoice references is still required; this candidate does not add that financial review UI/API. Agree the purchase audit capacity/retention/archival plan without reusing the unrelated memory-receipt expiry.
+6. Reserve a numbered migration and schedule an approved release only after those gates are concrete and verified. Obtain the owner's separate authorization for production deployment/migrations/settings. The preferred maintenance window is planning context, not deployment permission.
+
+No historical provenance is invented, no expense is silently removed, and no claim is made that ordinary writer bypasses or the production release are already solved.

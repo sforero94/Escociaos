@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Package, Search, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { buildManualMovementPayload, normalizeManualQuantity, postManualMovement, type ManualStockClient } from '@/utils/manualStockMovement';
 
 interface Product {
   id: string;
@@ -16,6 +17,7 @@ interface Product {
   cantidad_actual: number | null;
   precio_unitario: number | null;
   activo: boolean | null;
+  updated_at: string | null;
 }
 
 interface NuevoMovimientoModalProps {
@@ -26,6 +28,16 @@ interface NuevoMovimientoModalProps {
 
 export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimientoModalProps) {
   const { user } = useAuth();
+  const lifecycle = useRef({ owner: user?.id, open: isOpen, generation: 0 });
+  const observedProps = useRef({ owner: user?.id, open: isOpen });
+  if (observedProps.current.owner !== user?.id || observedProps.current.open !== isOpen) {
+    observedProps.current = { owner: user?.id, open: isOpen };
+    lifecycle.current = { owner: user?.id, open: isOpen, generation: lifecycle.current.generation + 1 };
+  }
+  const renderGeneration = lifecycle.current.generation;
+  const searchGeneration = useRef(0);
+  const submitting = useRef(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -36,8 +48,31 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [noOp, setNoOp] = useState(false);
+
+  useEffect(() => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    searchGeneration.current += 1;
+    setSearchTerm(''); setProducts([]); setSelectedProduct(null);
+    setTipoMovimiento('Entrada'); setCantidad(''); setObservaciones('');
+    setError(null); setSuccess(false); setNoOp(false); setLoading(false);
+    submitting.current = false;
+  }, [user?.id, isOpen]);
+
+  useEffect(() => () => {
+    lifecycle.current.open = false;
+    lifecycle.current.generation += 1;
+    searchGeneration.current += 1;
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  }, []);
 
   const draft = useFormDraft('movimiento-new-v1', { tipoMovimiento, cantidad, observaciones });
+  const previewQuantity = (() => {
+    try { return normalizeManualQuantity(cantidad, tipoMovimiento === 'Ajuste'); }
+    catch { return null; }
+  })();
+
 
   function handleRestoreDraft() {
     if (!draft.draftData) return;
@@ -47,35 +82,35 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
     draft.acceptDraft();
   }
 
-  // Buscar productos al escribir
   useEffect(() => {
-    if (searchTerm.length >= 2) {
-      searchProducts();
-    } else {
-      setProducts([]);
+    const request = ++searchGeneration.current;
+    const generation = lifecycle.current.generation;
+    const owner = user?.id;
+    const controller = new AbortController();
+    const current = () => lifecycle.current.open && lifecycle.current.owner === owner
+      && lifecycle.current.generation === generation && searchGeneration.current === request;
+    if (!isOpen || !owner || searchTerm.length < 2 || selectedProduct) {
+      setProducts([]); setSearching(false);
+      return () => { controller.abort(); };
     }
-  }, [searchTerm]);
-
-  const searchProducts = async () => {
-    setSearching(true);
-    try {
-      const supabase = getSupabase();
-      const { data, error } = await supabase
-        .from('productos')
-        .select('id, nombre, unidad_medida, cantidad_actual, precio_unitario, activo')
-        .eq('activo', true)
-        .ilike('nombre', `%${searchTerm}%`)
-        .order('nombre')
-        .limit(10);
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (err: any) {
-      console.error('Failed to search products:', err);
-    } finally {
-      setSearching(false);
-    }
-  };
+    setProducts([]); setSearching(true);
+    void (async () => {
+      try {
+        const { data, error } = await getSupabase().from('productos')
+          .select('id, nombre, unidad_medida, cantidad_actual, precio_unitario, activo, updated_at')
+          .eq('activo', true).ilike('nombre', `%${searchTerm}%`).order('nombre').limit(10)
+          .abortSignal(controller.signal);
+        if (!current()) return;
+        if (error) throw error;
+        setProducts(data || []);
+      } catch (err: unknown) {
+        if (current()) console.error('Failed to search products:', err);
+      } finally {
+        if (current()) setSearching(false);
+      }
+    })();
+    return () => { searchGeneration.current += 1; controller.abort(); };
+  }, [searchTerm, selectedProduct, user?.id, isOpen]);
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -85,6 +120,10 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const owner = user?.id;
+    const current = () => lifecycle.current.open && lifecycle.current.owner === owner
+      && lifecycle.current.generation === renderGeneration;
+    if (!current() || submitting.current) return;
     setError(null);
 
     // Validaciones
@@ -93,94 +132,44 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       return;
     }
 
-    const cantidadNum = parseFloat(cantidad);
-    if (isNaN(cantidadNum) || cantidadNum < 0) {
-      setError('La cantidad debe ser mayor o igual a 0');
-      return;
-    }
-
+    if (!owner) { setError('Debe iniciar sesión'); return; }
+    submitting.current = true;
     setLoading(true);
-
+    let completed = false;
     try {
-      const supabase = getSupabase();
-
-      // Calcular nuevo saldo según tipo de movimiento
-      const saldoAnterior = selectedProduct.cantidad_actual ?? 0;
-      let cantidadMovimiento = 0;
-      let nuevoSaldo = 0;
-
-      switch (tipoMovimiento) {
-        case 'Entrada':
-          // Para entrada: sumar al stock actual
-          cantidadMovimiento = cantidadNum;
-          nuevoSaldo = saldoAnterior + cantidadMovimiento;
-          break;
-        case 'Salida Otros':
-          // Para salida: restar del stock actual
-          if (cantidadNum > saldoAnterior) {
-            setError(`La cantidad no puede ser mayor al stock actual (${saldoAnterior} ${selectedProduct.unidad_medida})`);
-            setLoading(false);
-            return;
-          }
-          cantidadMovimiento = -cantidadNum; // Negativo para salidas
-          nuevoSaldo = saldoAnterior + cantidadMovimiento;
-          break;
-        case 'Ajuste':
-          // Para ajuste: la cantidad ingresada ES el nuevo saldo deseado
-          nuevoSaldo = cantidadNum;
-          cantidadMovimiento = nuevoSaldo - saldoAnterior; // Puede ser positivo o negativo
-          break;
-      }
-
-      // 1. Registrar movimiento en movimientos_inventario
-      const { error: movError } = await supabase
-        .from('movimientos_inventario')
-        .insert({
-          fecha_movimiento: obtenerFechaHoy(),
-          producto_id: selectedProduct.id,
-          tipo_movimiento: tipoMovimiento,
-          cantidad: cantidadMovimiento,
-          unidad: selectedProduct.unidad_medida,
-          saldo_anterior: saldoAnterior,
-          saldo_nuevo: nuevoSaldo,
-          // `movimientos_inventario` no tiene trigger de atribución: si el escritor no
-          // estampa el responsable, la fila queda sin autor para siempre. Email, igual
-          // que NewPurchase y que `fn_cerrar_aplicacion` (auth.jwt() ->> 'email').
-          responsable: user?.email || null,
-          observaciones: observaciones || null,
-          provisional: false
-        } as any);
-
-      if (movError) throw movError;
-
-      // 2. Actualizar cantidad_actual en productos
-      const { error: prodError } = await supabase
-        .from('productos')
-        .update({ 
-          cantidad_actual: nuevoSaldo,
-          // REGLA DE NEGOCIO: Si después del movimiento la cantidad > 0, activar automáticamente
-          activo: nuevoSaldo > 0 ? true : selectedProduct.activo
-        })
-        .eq('id', selectedProduct.id);
-
-      if (prodError) throw prodError;
+      const payload = buildManualMovementPayload(selectedProduct, tipoMovimiento, cantidad, obtenerFechaHoy(), observaciones);
+      const result = await postManualMovement(getSupabase() as unknown as ManualStockClient, owner, payload, current);
+      if (!current()) return;
 
       // Success
       draft.clearDraft();
+      setNoOp(result.noop);
       setSuccess(true);
-      setTimeout(() => {
+      completed = true;
+      closeTimer.current = setTimeout(() => {
+        if (!current()) return;
         onSuccess();
         handleClose();
       }, 1500);
 
-    } catch (err: any) {
-      setError(err.message || 'Error al registrar el movimiento');
+    } catch (err: unknown) {
+      if (current()) setError(err instanceof Error ? err.message : 'Error al registrar el movimiento');
     } finally {
-      setLoading(false);
+      if (current()) {
+        submitting.current = completed;
+        setLoading(false);
+      }
     }
   };
 
   const handleClose = () => {
+    if (!lifecycle.current.open || lifecycle.current.generation !== renderGeneration) return;
+    lifecycle.current.open = false;
+    lifecycle.current.generation += 1;
+    searchGeneration.current += 1;
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    submitting.current = false;
     draft.clearDraft();
     setSearchTerm('');
     setProducts([]);
@@ -190,6 +179,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
     setObservaciones('');
     setError(null);
     setSuccess(false);
+    setNoOp(false);
     onClose();
   };
 
@@ -208,7 +198,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
         type="submit"
         form="movimiento-form"
         className="flex-1 bg-primary hover:bg-primary-dark text-white"
-        disabled={loading || !selectedProduct || !cantidad}
+        disabled={loading || success || !selectedProduct || !cantidad}
       >
         {loading ? (
           <>
@@ -249,7 +239,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
           {success && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
               <CheckCircle className="w-5 h-5 text-green-600" />
-              <p className="text-green-800">Movimiento registrado exitosamente</p>
+              <p className="text-green-800">{noOp ? 'El stock ya coincide. No se creó un movimiento.' : 'Movimiento registrado exitosamente'}</p>
             </div>
           )}
 
@@ -266,6 +256,8 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                     type="text"
                     value={searchTerm}
                     onChange={(e) => {
+                      searchGeneration.current += 1;
+                      setProducts([]);
                       setSearchTerm(e.target.value);
                       if (selectedProduct && e.target.value !== selectedProduct.nombre) {
                         setSelectedProduct(null);
@@ -373,7 +365,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                     onChange={(e) => setCantidad(e.target.value)}
                     placeholder="0.00"
                     step="0.01"
-                    min="0"
+                    min={tipoMovimiento === 'Ajuste' ? '0' : '0.01'}
                     className="flex-1 rounded-xl border-primary/20 focus:ring-primary focus:border-primary"
                     disabled={loading || !selectedProduct}
                   />
@@ -385,7 +377,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                 </div>
 
                 {/* Preview del nuevo saldo */}
-                {selectedProduct && cantidad && parseFloat(cantidad) >= 0 && (
+                {selectedProduct && selectedProduct.cantidad_actual !== null && previewQuantity !== null && (
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Saldo anterior:</span>
@@ -397,14 +389,14 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                         tipoMovimiento === 'Entrada' ? 'text-green-600' :
                         tipoMovimiento === 'Salida Otros' ? 'text-red-600' :
                         (() => {
-                          const diff = parseFloat(cantidad) - (selectedProduct.cantidad_actual ?? 0);
+                          const diff = previewQuantity - (selectedProduct.cantidad_actual ?? 0);
                           return diff >= 0 ? 'text-green-600' : 'text-red-600';
                         })()
                       }`}>
-                        {tipoMovimiento === 'Entrada' && `+${parseFloat(cantidad)} ${selectedProduct.unidad_medida}`}
-                        {tipoMovimiento === 'Salida Otros' && `-${parseFloat(cantidad)} ${selectedProduct.unidad_medida}`}
+                        {tipoMovimiento === 'Entrada' && `+${previewQuantity} ${selectedProduct.unidad_medida}`}
+                        {tipoMovimiento === 'Salida Otros' && `-${previewQuantity} ${selectedProduct.unidad_medida}`}
                         {tipoMovimiento === 'Ajuste' && (() => {
-                          const diff = parseFloat(cantidad) - (selectedProduct.cantidad_actual ?? 0);
+                          const diff = previewQuantity - (selectedProduct.cantidad_actual ?? 0);
                           const sign = diff >= 0 ? '+' : '';
                           return `${sign}${diff.toFixed(2)} ${selectedProduct.unidad_medida}`;
                         })()}
@@ -414,10 +406,10 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                       <span className="font-medium text-gray-900">Nuevo saldo:</span>
                       <span className="font-bold text-primary">
                         {tipoMovimiento === 'Entrada'
-                          ? (selectedProduct.cantidad_actual ?? 0) + parseFloat(cantidad)
+                          ? (selectedProduct.cantidad_actual ?? 0) + previewQuantity
                           : tipoMovimiento === 'Salida Otros'
-                          ? (selectedProduct.cantidad_actual ?? 0) - parseFloat(cantidad)
-                          : parseFloat(cantidad)
+                          ? (selectedProduct.cantidad_actual ?? 0) - previewQuantity
+                          : previewQuantity
                         } {selectedProduct.unidad_medida}
                       </span>
                     </div>
@@ -435,6 +427,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                   onChange={(e) => setObservaciones(e.target.value)}
                   placeholder="Ej: Pérdida por daño, ajuste por inventario físico, etc."
                   rows={3}
+                  maxLength={2000}
                   className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                   disabled={loading}
                 />

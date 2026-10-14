@@ -1,3 +1,8 @@
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { readChatRequest, ChatRequestError } from './chat-request.ts';
+import { validateToolRound } from './esco-tool-request.ts';
+import { registrarPropuestaMemoria } from './memory-confirmation.ts';
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, type FilaEsco } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
@@ -14,7 +19,6 @@ import {
   parseOpenWeatherForecast,
 } from './external-tools.ts';
 import {
-  makeMemoryProposal,
   renderMemoriasBlock,
   type PersistedMemory,
 } from './memory.ts';
@@ -70,10 +74,7 @@ import { formatearRespuestaEsco } from './informes-visita.ts';
 // TIPOS
 // ============================================================================
 
-interface ChatRequest {
-  conversation_id?: string;
-  message: string;
-}
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ToolDefinition {
   name: string;
@@ -243,13 +244,19 @@ async function authenticateUser(c: Context): Promise<{ userId: string } | Respon
   }
 
   const userData = await userRes.json();
-  const userId = userData.id;
+  const userId = userData?.id;
+  if (typeof userId !== 'string' || !UUID.test(userId)) {
+    return c.json({ error: 'Token invalido' }, 401);
+  }
 
-  // Check Gerencia role
-  const usuarios = await supabaseQuery('usuarios', `select=rol&id=eq.${userId}`);
-  const user = (usuarios as Array<{ rol: string }>)[0];
-  if (!user || user.rol !== 'Gerencia') {
-    return c.json({ error: 'Acceso restringido a rol Gerencia' }, 403);
+  // El perfil vigente debe seguir activo y conservar Gerencia.
+  try {
+    const usuarios = await supabaseQuery('usuarios', `select=id,rol,activo&id=eq.${userId}&limit=2`);
+    if (!perfilAplicacionActivo(usuarios, userId, ['Gerencia'])) {
+      return c.json({ error: 'Acceso restringido a Gerencia activa' }, 403);
+    }
+  } catch {
+    return c.json({ error: 'No se pudo verificar el perfil de acceso' }, 500);
   }
 
   return { userId };
@@ -487,12 +494,11 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'commit_memory_save',
-    description: 'Confirma e inserta una memoria propuesta previamente. Solo se llama tras la aprobacion del usuario en el cliente; el cliente provee el token recibido en propose_memory_save.',
+    description: 'No guarda memorias: la confirmación requiere que el humano pulse el botón de Telegram. Esta herramienta devuelve un error sin escribir.',
     parameters: {
       type: 'object',
       properties: {
         token: { type: 'string', description: 'Token unico devuelto por propose_memory_save' },
-        final_content: { type: 'string', description: 'Contenido final (puede haber sido editado por el usuario)' },
       },
       required: ['token'],
     },
@@ -717,6 +723,13 @@ function validateDates(args: Record<string, unknown>): { date_from?: string; dat
 }
 
 async function executeTool(name: string, args: Record<string, unknown>, userId?: string): Promise<string> {
+  // Authorization failure aborts the turn, rather than becoming model-visible
+  // tool data from which a revoked account could receive another answer.
+  if (!userId || !UUID.test(userId)) throw new Error('Cuenta de Esco no verificada');
+  const perfiles = await supabaseQuery('usuarios', `select=id,rol,activo&id=eq.${userId}&limit=2`);
+  if (!perfilAplicacionActivo(perfiles, userId, ['Gerencia'])) {
+    throw new Error('Acceso actual a Esco no disponible');
+  }
   try {
     let result: string;
     switch (name) {
@@ -761,7 +774,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_cost_by_lote': result = await execCostByLote(args); break;
       case 'web_search_agronomic': result = await execWebSearchAgronomic(args); break;
       case 'get_weather_forecast': result = await execWeatherForecast(args); break;
-      case 'propose_memory_save': result = await execProposeMemorySave(args); break;
+      case 'propose_memory_save': result = await execProposeMemorySave(args, userId); break;
       case 'commit_memory_save': result = await execCommitMemorySave(args, userId); break;
       case 'forget_memory': result = await execForgetMemory(args, userId); break;
       case 'get_weekly_overview': result = await execWeeklyOverview(args); break;
@@ -2129,58 +2142,28 @@ async function execWeatherForecast(args: Record<string, unknown>): Promise<strin
 // LONG-TERM MEMORY TOOLS
 //
 // "Save this for later" flow:
-//   user says "guarda esto" → Esco calls propose_memory_save (no DB write)
-//   → client (Telegram/web) renders inline confirmation buttons with the token
-//   → on ✅ tap, client calls commit_memory_save with the token + final content
-//   → row inserted into esco_memorias.
+//   user says "guarda esto" → owner-bound durable proposal (30-minute TTL)
+//   → Telegram renders inline human confirmation buttons with the exact token
+//   → callback consumes proposal + writes memory + 168-hour receipt atomically.
+//   Web currently has no human confirmation route; model commit is disabled.
 //
 // At conversation start, handleChatMessage loads the user's active memorias
 // and injects them into the system prompt via renderMemoriasBlock.
 // ----------------------------------------------------------------------------
 
-const memoryProposalCache = new Map<string, { content: string; reason?: string; createdAt: number }>();
-
-async function execProposeMemorySave(args: Record<string, unknown>): Promise<string> {
-  const { content, reason } = args as { content?: string; reason?: string };
-  if (!content || typeof content !== 'string' || !content.trim()) {
-    return JSON.stringify({ error: 'content es requerido' });
-  }
-  const proposal = makeMemoryProposal({ content, reason });
-  memoryProposalCache.set(proposal.token, {
-    content: proposal.content,
-    reason: proposal.reason,
-    createdAt: Date.now(),
-  });
-  // Best-effort GC: drop tokens older than 30 minutes
-  for (const [t, v] of memoryProposalCache) {
-    if (Date.now() - v.createdAt > 30 * 60 * 1000) memoryProposalCache.delete(t);
-  }
-  return JSON.stringify(proposal);
+async function execProposeMemorySave(args: Record<string, unknown>, userId?: string): Promise<string> {
+  const { content, reason } = args;
+  if (typeof content !== 'string' || !content.trim()) return JSON.stringify({ error: 'content es requerido' });
+  const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  return JSON.stringify(await registrarPropuestaMemoria(client, userId, {
+    content, reason: typeof reason === 'string' ? reason : undefined,
+  }));
 }
 
-async function execCommitMemorySave(args: Record<string, unknown>, userId?: string): Promise<string> {
-  const { token, final_content } = args as { token?: string; final_content?: string };
-  if (!userId) return JSON.stringify({ error: 'No hay usuario autenticado' });
-  if (!token) return JSON.stringify({ error: 'token es requerido' });
-
-  const cached = memoryProposalCache.get(token);
-  if (!cached) return JSON.stringify({ error: 'Token invalido o expirado' });
-
-  const content = (final_content && final_content.trim()) || cached.content;
-  const inserted = (await supabaseInsert('esco_memorias', {
-    user_id: userId,
-    content: content.slice(0, 1000),
-    source_channel: 'telegram',
-  })) as { id?: string; created_at?: string } | null;
-
-  memoryProposalCache.delete(token);
-
-  return JSON.stringify({
-    saved: true,
-    id: inserted?.id,
-    saved_at: inserted?.created_at,
-    content,
-  });
+async function execCommitMemorySave(_args: Record<string, unknown>, _userId?: string): Promise<string> {
+  // An LLM tool call is never evidence of human confirmation, even if its
+  // arguments claim approval. Only the Telegram callback owns the confirm RPC.
+  return JSON.stringify({ saved: false, error: 'Se requiere confirmar con el botón de Telegram. El modelo no puede guardar memorias.' });
 }
 
 async function execForgetMemory(args: Record<string, unknown>, userId?: string): Promise<string> {
@@ -3864,6 +3847,7 @@ export async function llmToolLoop(
     const timeoutId = setTimeout(() => controller.abort(), 55_000);
 
     let response: Response;
+    let result: Awaited<ReturnType<Response['json']>>;
     try {
       response = await fetch(OPENROUTER_URL, {
         method: 'POST',
@@ -3878,22 +3862,23 @@ export async function llmToolLoop(
         }),
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.error('OpenRouter error:', response.status, errText.slice(0, 500));
+        throw new Error(`Error OpenRouter: ${response.status}`);
+      }
+      // Keep the deadline active while receiving/parsing the response body.
+      result = await response.json();
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('Timeout en la llamada al LLM');
       }
       throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error('OpenRouter error:', response.status, errText.slice(0, 500));
-      throw new Error(`Error OpenRouter: ${response.status}`);
-    }
-
-    const result = await response.json();
     const choice = result.choices?.[0];
     if (!choice) throw new Error('Sin respuesta del LLM');
 
@@ -3901,21 +3886,20 @@ export async function llmToolLoop(
     console.log(`[Esco] Round ${round}: tool_calls=${msg.tool_calls?.length || 0}, has_content=${!!msg.content}, finish_reason=${choice.finish_reason}`);
 
     // If the model wants to call tools
+    if (msg.tool_calls !== undefined && msg.tool_calls !== null && !Array.isArray(msg.tool_calls)) {
+      throw new Error('Esco devolvió una lista de herramientas inválida.');
+    }
     if (msg.tool_calls && msg.tool_calls.length > 0) {
+      const roundCalls = validateToolRound(msg.tool_calls, new Set(TOOLS.map(tool => tool.name)), toolIndex);
       // Add assistant message with tool calls
       messages.push(msg);
 
       // Execute each tool call
-      for (const tc of msg.tool_calls) {
+      for (const tc of roundCalls) {
         const fnName = tc.function?.name;
-        let fnArgs: Record<string, unknown> = {};
-        try {
-          fnArgs = JSON.parse(tc.function?.arguments || '{}');
-        } catch {
-          fnArgs = {};
-        }
+        const fnArgs = tc.args;
 
-        console.log(`[Esco] Tool call: ${fnName}`, JSON.stringify(fnArgs).slice(0, 200));
+        console.log(`[Esco] Tool call: ${fnName}`);
 
         const index = toolIndex++;
         onEvent?.({ type: 'tool_start', tool: fnName, index, args: fnArgs });
@@ -3976,6 +3960,7 @@ export async function llmToolLoop(
   const finalRes = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers,
+    signal: AbortSignal.timeout(55_000),
     body: JSON.stringify({
       model: MODEL,
       messages: [
@@ -4014,6 +3999,7 @@ async function generateTitle(userMessage: string): Promise<string> {
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers,
+      signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
         model: MODEL,
         messages: [
@@ -4043,27 +4029,48 @@ export async function handleChatMessage(c: Context) {
   const { userId } = authResult;
 
   // Parse body
-  let body: ChatRequest;
+  let body: { message: string; conversation_id?: string | null };
   try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: 'Body invalido' }, 400);
+    body = await readChatRequest(c.req.raw);
+  } catch (error) {
+    return c.json({ error: error instanceof ChatRequestError ? error.message : 'Body invalido' },
+      error instanceof ChatRequestError ? error.status : 400);
   }
 
-  const { message } = body;
-  if (!message?.trim()) {
+  const message = body?.message;
+  if (typeof message !== 'string' || !message.trim()) {
     return c.json({ error: 'Mensaje vacio' }, 400);
   }
 
   let conversationId = body.conversation_id;
   let isNew = false;
 
+  // Los filtros usan UUID validado; el id del dueño viene de Auth, no del body.
+  if (conversationId !== undefined && conversationId !== null) {
+    if (typeof conversationId !== 'string' || !UUID.test(conversationId)) {
+      return c.json({ error: 'Conversación inválida' }, 400);
+    }
+    try {
+      const conversaciones = await supabaseQuery('chat_conversations',
+        `select=id,user_id&id=eq.${conversationId}&user_id=eq.${userId}&limit=2`);
+      if (conversaciones.length !== 1 || (conversaciones[0] as { id?: string; user_id?: string }).id !== conversationId
+        || (conversaciones[0] as { user_id?: string }).user_id !== userId) {
+        return c.json({ error: 'Conversación no disponible' }, 404);
+      }
+    } catch {
+      return c.json({ error: 'No se pudo verificar la conversación' }, 500);
+    }
+  }
+
   // Create conversation if needed
   if (!conversationId) {
     const conv = await supabaseInsert('chat_conversations', {
       user_id: userId,
       title: null,
-    }) as { id: string };
+    }) as { id: string; user_id: string };
+    if (!conv || !UUID.test(conv.id) || conv.user_id !== userId) {
+      return c.json({ error: 'No se confirmó la conversación creada' }, 500);
+    }
     conversationId = conv.id;
     isNew = true;
   }
@@ -4138,7 +4145,7 @@ export async function handleChatMessage(c: Context) {
         if (isNew) {
           title = await generateTitle(message);
           const { url, headers } = getAdminHeaders();
-          await fetch(`${url}/rest/v1/chat_conversations?id=eq.${conversationId}`, {
+          await fetch(`${url}/rest/v1/chat_conversations?id=eq.${conversationId}&user_id=eq.${userId}`, {
             method: 'PATCH',
             headers: { ...headers, 'Prefer': 'return=minimal' },
             body: JSON.stringify({ title }),

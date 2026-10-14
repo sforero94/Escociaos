@@ -7,7 +7,8 @@
 // subir -> diff vacío) vive en `exportarPlanillaChequeoRoundTrip.test.ts`.
 
 import { describe, it, expect } from 'vitest';
-import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+import { readXlsx } from '@/utils/spreadsheet';
 import { construirColmapConEncabezado } from '@/utils/importHato/grilla';
 import { parseEstado } from '@/utils/calculosHato';
 import {
@@ -176,39 +177,30 @@ describe('construirAOAPlanillaChequeo', () => {
   });
 });
 
-describe('construirLibroPlanillaChequeo -- ensamblado real con xlsx', () => {
-  it('escribe anchos de columna, márgenes angostos y Print Titles apuntando a la fila de encabezado (paginado de impresión)', () => {
-    const filas = [filaVacia({ numero: 101, nombre: 'LUCERO' })];
-    const libro = construirLibroPlanillaChequeo(XLSX, {
-      tituloHoja: 'CHEQUEO 22 JULIO 2026',
-      nombreHoja: 'CHEQUEO JULIO 2026',
-      filas,
+describe('construirLibroPlanillaChequeo -- bytes reales y metadatos XML', () => {
+  it('escribe anchos de columna, márgenes angostos y Print Titles apuntando a la fila de encabezado (paginado de impresión)', async () => {
+    const buf = await construirLibroPlanillaChequeo({
+      tituloHoja: 'CHEQUEO 22 JULIO 2026', nombreHoja: 'CHEQUEO JULIO 2026',
+      filas: [filaVacia({ numero: 101, nombre: 'LUCERO' })],
     });
-
-    const hoja = libro.Sheets['CHEQUEO JULIO 2026'];
-    expect(hoja['!cols']).toBeDefined();
-    expect(hoja['!cols']).toHaveLength(ENCABEZADOS_PLANILLA_CHEQUEO.length);
-    expect(hoja['!margins']).toMatchObject({ left: 0.4, right: 0.4 });
-
-    const printTitles = libro.Workbook?.Names?.find((n) => n.Name === '_xlnm.Print_Titles');
-    expect(printTitles).toBeDefined();
-    expect(printTitles?.Sheet).toBe(0);
-    // Fila de encabezado 0-based = 1 -> fila de Excel (1-indexada) = 2.
-    expect(printTitles?.Ref).toBe("'CHEQUEO JULIO 2026'!$2:$2");
+    const zip = await JSZip.loadAsync(buf);
+    const sheet = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+    expect(sheet.match(/<col /g)).toHaveLength(ENCABEZADOS_PLANILLA_CHEQUEO.length);
+    expect(sheet).toContain('<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>');
+    const workbook = (await zip.file('xl/workbook.xml')!.async('string')).replace(/&apos;/g, "'");
+    expect(workbook).toContain('name="_xlnm.Print_Titles" localSheetId="0"');
+    expect(workbook).toContain("'CHEQUEO JULIO 2026'!$2:$2");
   });
 
-  it('el libro escrito a bytes y vuelto a leer conserva el encabezado exactamente una vez (round-trip estructural)', () => {
+  it('el libro escrito a bytes y vuelto a leer conserva el encabezado exactamente una vez (round-trip estructural)', async () => {
     const filas = [filaVacia({ numero: 101, nombre: 'LUCERO' }), filaVacia({ numero: 205, nombre: 'ESTRELLA' })];
-    const libro = construirLibroPlanillaChequeo(XLSX, {
+    const buf = await construirLibroPlanillaChequeo({
       tituloHoja: 'CHEQUEO 22 JULIO 2026',
       nombreHoja: 'CHEQUEO JULIO 2026',
       filas,
     });
 
-    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
-    const hojaLeida = libroLeido.Sheets[libroLeido.SheetNames[0]];
-    const aoaLeido = XLSX.utils.sheet_to_json(hojaLeida, { header: 1, defval: null }) as unknown[][];
+    const aoaLeido = (await readXlsx(buf)).sheets[0].rows;
 
     expect(aoaLeido[0][0]).toBe('CHEQUEO 22 JULIO 2026');
     expect(aoaLeido[1].slice(0, 2)).toEqual(['#', 'Nombre']);

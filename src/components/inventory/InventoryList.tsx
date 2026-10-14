@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Filter, Upload, Download } from 'lucide-react';
+import { useEffect, useState, useRef, useLayoutEffect } from 'react';
+import { Search, Plus, Package, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Upload, Download } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getSupabase } from '../../utils/supabase/client';
@@ -11,6 +10,9 @@ import { ExportarInventarioDialog } from './ExportarInventarioDialog';
 import { useNavigate } from 'react-router-dom';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { toast } from 'sonner';
+import {useAuth} from '../../contexts/AuthContext';
+import {postActivation,pendingCatalog,type CatalogRow} from '../../utils/productCatalogIntegrity';
+import {getSupabaseConfig} from '../../utils/supabase/config';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: string) => void;
@@ -35,7 +37,19 @@ interface Product {
   permitido_gerencia: boolean | null;
 }
 
-export function InventoryList({ onNavigate, productosIniciales }: InventoryListProps) {
+export function InventoryList(props:InventoryListProps) {
+ const {user}=useAuth();
+ return <InventoryListSession key={user?.id??'none'} {...props}/>;
+}
+function InventoryListSession({ onNavigate, productosIniciales }: InventoryListProps) {
+  const {user,profile}=useAuth();const owner=user?.id??'';
+  const permitted=!!owner&&profile?.id===owner&&profile.activo===true&&['Administrador','Gerencia'].includes(profile.rol??'');
+  const authority=useRef(permitted);
+  useLayoutEffect(()=>{authority.current=permitted;},[permitted]);
+  const live=useRef(true);const loadGeneration=useRef(0);const operation=useRef(0);
+  const [pendingIds,setPendingIds]=useState<string[]>([]);const [busy,setBusy]=useState<string|null>(null);
+  useEffect(()=>{if(!permitted){operation.current++;setBusy(null);}},[permitted]);
+  useLayoutEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
   const navigate = useNavigate();
   const { isSafeModeEnabled } = useSafeMode();
   const [products, setProducts] = useState<Product[]>(productosIniciales ?? []);
@@ -73,9 +87,11 @@ export function InventoryList({ onNavigate, productosIniciales }: InventoryListP
 
   useEffect(() => {
     filterProducts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- this effect recomputes filters only when their actual inputs change.
   }, [searchQuery, categoryFilter, products, sortColumn, sortDirection, columnFilters]);
 
   const loadProducts = async () => {
+    const generation=++loadGeneration.current;
     try {
       const supabase = getSupabase();
       const { data, error } = await supabase
@@ -86,12 +102,12 @@ export function InventoryList({ onNavigate, productosIniciales }: InventoryListP
       if (error) {
         console.error('Failed to query productos:', error);
       } else if (data) {
-        setProducts(data);
+        if(live.current&&generation===loadGeneration.current)setProducts(data);
       }
     } catch (error) {
       console.error('Failed to load inventory products:', error);
     } finally {
-      setIsLoading(false);
+      if(live.current&&generation===loadGeneration.current)setIsLoading(false);
     }
   };
 
@@ -176,48 +192,31 @@ export function InventoryList({ onNavigate, productosIniciales }: InventoryListP
     setIsProductFormOpen(true);
   };
 
-  const handleToggleActivo = async (productId: string, activo: boolean | null, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
+  useEffect(()=>{
+    if(!owner)return;
+    const ids:string[]=[];
+    for(const product of products){try{if(pendingCatalog(owner,product.id)?.payload.mode==='activation')ids.push(product.id);}catch{ids.push(product.id);}}
+    setPendingIds(ids);
+  },[owner,products,permitted]);
+  const activation=async(product:Product,action:'post'|'retry'|'resolve')=>{
+    if(!permitted||!owner){toast.error('Solo Administrador o Gerencia activo puede cambiar productos.');return;}
+    const generation=++operation.current;setBusy(product.id);
+    const current=()=>live.current&&authority.current&&operation.current===generation;
     try {
-      const { projectId } = await import('../../utils/supabase/info.tsx');
-
-      // El endpoint exige el JWT de sesion del usuario (rol Administrador o
-      // Gerencia), no el anon key -- mismo patron que UsuariosConfig.tsx y
-      // chatService.ts.
-      const { data: { session } } = await getSupabase().auth.getSession();
-      if (!session?.access_token) {
-        toast.error('Sesion no valida -- vuelve a iniciar sesion e intenta de nuevo.');
-        return;
-      }
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/inventario/toggle-producto-activo`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            productoId: productId,
-            activo: !activo,
-          }),
-        }
-      );
-
-      const resultado = await response.json();
-
-      if (resultado.success) {
-        // Recargar productos para reflejar el cambio
-        await loadProducts();
-      } else {
-        toast.error(`Error: ${resultado.error}`);
-      }
-    } catch (error) {
-      toast.error('Error al cambiar el estado del producto');
-    }
+      const result=await postActivation(getSupabase(),`${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/inventario/toggle-producto-activo`,owner,product.id,
+       action==='post'?{...product} as CatalogRow:null,action==='post'?(product.activo===true?false:true):null,action==='resolve'?'resolve':'post',current);
+      if(!current())return;
+      setPendingIds(ids=>ids.filter(id=>id!==product.id));
+      if(result){setProducts(rows=>rows.map(p=>p.id===product.id?result.product as unknown as Product:p));toast.success('Estado del producto verificado.');}
+      else toast.info('El intento anterior no se registró. Puede revisar el producto y volver a intentar.');
+    }catch(error:unknown){if(current()){
+      let uncertain=false;try{uncertain=pendingCatalog(owner,product.id)?.payload.mode==='activation';}catch{uncertain=true;}
+      setPendingIds(ids=>uncertain?(ids.includes(product.id)?ids:[...ids,product.id]):ids.filter(id=>id!==product.id));
+      toast.error(error instanceof Error?error.message:'Conserve el intento pendiente.');
+    }}
+    finally{if(current())setBusy(null);}
   };
+  const handleToggleActivo=(product:Product,e:React.MouseEvent)=>{e.stopPropagation();void activation(product,'post');};
 
   const handleSort = (column: keyof Product) => {
     if (sortColumn === column) {
@@ -451,11 +450,12 @@ export function InventoryList({ onNavigate, productosIniciales }: InventoryListP
                     </td>
                     <td className="px-6 py-1.5 text-center">
                       <button
-                        onClick={(e) => handleToggleActivo(product.id, product.activo, e)}
+                        onClick={(e) => handleToggleActivo(product, e)}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
                           product.activo ? 'bg-primary' : 'bg-brand-brown/20'
                         }`}
-                        title={product.activo ? 'Desactivar producto' : 'Activar producto'}
+                        disabled={!permitted||busy!==null||pendingIds.includes(product.id)}
+                        title={product.activo===null?'Estado sin definir: Activar producto':product.activo?'Desactivar producto':'Activar producto'}
                       >
                         <span
                           className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
@@ -463,6 +463,11 @@ export function InventoryList({ onNavigate, productosIniciales }: InventoryListP
                           }`}
                         />
                       </button>
+                      {product.activo===null&&<span>Estado sin definir</span>}
+                      {pendingIds.includes(product.id)&&<div>
+                        <button type="button" disabled={!permitted||busy!==null} onClick={e=>{e.stopPropagation();void activation(product,'retry');}}>Reintentar estado pendiente</button>
+                        <button type="button" disabled={!permitted||busy!==null} onClick={e=>{e.stopPropagation();void activation(product,'resolve');}}>Verificar estado pendiente</button>
+                      </div>}
                     </td>
                     <td className="px-6 py-1.5 text-center">
                       <div className="flex items-center justify-center gap-2">

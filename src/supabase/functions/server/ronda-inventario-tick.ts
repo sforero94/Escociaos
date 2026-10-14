@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // ronda-inventario-tick.ts — Fase 5 (recordatorio, alerta del día 15,
 // reporte de cierre) de docs/brief_tecnico_verificacion_inventario.md
 // §8/§13: `POST /make-server-1ccce916/inventario/ronda/tick`.
@@ -103,13 +104,13 @@ async function verificarAuth(
     }
     const { data: usuario, error: usuarioError } = await supabase
       .from('usuarios')
-      .select('rol')
+      .select('id,rol,activo')
       .eq('id', userData.user.id)
       .maybeSingle();
     if (usuarioError) {
       return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
     }
-    if (!usuario || !ROLES_DISPARO_MANUAL.has(usuario.rol as string)) {
+    if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_DISPARO_MANUAL])) {
       return respuestaError(c, 403, 'El disparo manual está restringido a Gerencia.');
     }
     return { disparo: 'manual' };

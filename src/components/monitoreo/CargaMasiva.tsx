@@ -6,6 +6,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { readImportFile } from '@/utils/spreadsheet/importFile';
 
 interface ResultadoCarga {
   exito: boolean;
@@ -35,7 +36,7 @@ export function CargaMasiva() {
   // sin manejar: el usuario hacía clic y no pasaba nada, ni archivo ni
   // mensaje.
   const construirYDescargarPlantilla = async () => {
-    const XLSX = await import('xlsx');
+    const { writeXlsx, downloadXlsx } = await import('@/utils/spreadsheet');
 
     // Crear datos de ejemplo para la plantilla
     const data = [
@@ -63,11 +64,6 @@ export function CargaMasiva() {
       }
     ];
 
-    // Crear un libro de trabajo
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Monitoreos');
-
     // Ajustar el ancho de las columnas
     const columnWidths = [
       { wch: 18 }, // Fecha
@@ -80,11 +76,11 @@ export function CargaMasiva() {
       { wch: 20 }, // Monitor
       { wch: 35 }  // Observaciones
     ];
-    worksheet['!cols'] = columnWidths;
 
     // Generar el archivo y descargarlo
     const fecha = obtenerFechaHoy();
-    XLSX.writeFile(workbook, `plantilla_monitoreos_${fecha}.xlsx`);
+    const bytes = await writeXlsx([{ name: 'Monitoreos', rows: [Object.keys(data[0]), ...data.map(row => Object.values(row))], widths: columnWidths.map(column => column.wch) }]);
+    downloadXlsx(bytes, `plantilla_monitoreos_${fecha}.xlsx`);
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,12 +252,7 @@ export function CargaMasiva() {
   };
 
   const leerArchivo = async (file: File): Promise<any[]> => {
-    const XLSX = await import('xlsx');
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    return XLSX.utils.sheet_to_json(worksheet);
+    return readImportFile(file, { allowCsv: true });
   };
 
   const normalizarFecha = (fecha: any): string | null => {
@@ -276,9 +267,9 @@ export function CargaMasiva() {
       }
 
       // Formatear como YYYY-MM-DD
-      const year = fechaJS.getFullYear();
-      const month = String(fechaJS.getMonth() + 1).padStart(2, '0');
-      const day = String(fechaJS.getDate()).padStart(2, '0');
+      const year = fechaJS.getUTCFullYear();
+      const month = String(fechaJS.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(fechaJS.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
 
@@ -362,7 +353,7 @@ export function CargaMasiva() {
                 <div className="cursor-pointer border-2 border-dashed border-primary/30 rounded-xl p-6 hover:border-primary hover:bg-primary/5 transition-all duration-200">
                   <input
                     type="file"
-                    accept=".csv,.xlsx,.xls"
+                    accept=".csv,.xlsx"
                     onChange={handleFileSelect}
                     className="hidden"
                   />
@@ -382,7 +373,7 @@ export function CargaMasiva() {
                           Haz clic para seleccionar un archivo
                         </p>
                         <p className="text-xs text-brand-brown/50 mt-1">
-                          CSV, XLSX o XLS
+                          CSV o XLSX (máximo 20 MiB). Para .xls, convierta a .xlsx en Excel o LibreOffice.
                         </p>
                       </>
                     )}

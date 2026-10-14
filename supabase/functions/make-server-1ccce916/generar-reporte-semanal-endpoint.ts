@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // generar-reporte-semanal-endpoint.ts — la puerta HTTP de
 // `POST /make-server-1ccce916/reportes/generar-semanal`.
 //
@@ -59,13 +60,13 @@ async function verificarAcceso(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol as string)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_PERMITIDOS])) {
     return respuestaError(c, 403, 'Acceso restringido a Administrador o Gerencia.');
   }
 

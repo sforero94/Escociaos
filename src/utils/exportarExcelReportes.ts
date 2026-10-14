@@ -4,10 +4,11 @@
 // bajar a Excel es poder sumar, filtrar y graficar. El formato colombiano se
 // aplica con `numFmt`, así se ve igual que en pantalla y sigue siendo numérico.
 //
-// `xlsx` se importa dinámicamente (mismo patrón que `CargaMasivaGastos.tsx`)
+// El adaptador se importa dinámicamente (mismo patrón que `CargaMasivaGastos.tsx`)
 // para no cargarlo en el bundle inicial.
 
 import type { ReporteFlujoCaja, ReportePyG } from '@/types/reportesFinancieros';
+import type { SheetSpec } from './spreadsheet';
 
 /** Formato colombiano: punto de miles, sin decimales. */
 const FORMATO_PESOS = '#,##0';
@@ -17,20 +18,13 @@ export async function exportarExcelReportes(
   pyg: ReportePyG,
   flujo: ReporteFlujoCaja
 ): Promise<void> {
-  const XLSX = await import('xlsx');
-
-  const libro = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(libro, hojaPyG(XLSX, pyg), 'P&G');
-  XLSX.utils.book_append_sheet(libro, hojaFlujo(XLSX, flujo), 'Flujo de Caja');
-
+  const { writeXlsx, downloadXlsx } = await import('./spreadsheet');
+  const bytes = await writeXlsx([hojaPyG(pyg), hojaFlujo(flujo)]);
   const nombre = `reportes-${pyg.vista_nombre.toLowerCase().replace(/\s+/g, '-')}-${pyg.anio}.xlsx`;
-  XLSX.writeFile(libro, nombre);
+  downloadXlsx(bytes, nombre);
 }
 
-type XLSXModule = typeof import('xlsx');
-
-function hojaPyG(XLSX: XLSXModule, pyg: ReportePyG) {
+function hojaPyG(pyg: ReportePyG): SheetSpec {
   const filas: (string | number | null)[][] = [];
 
   filas.push([`Estado de Resultados — ${pyg.vista_nombre} ${pyg.anio}`]);
@@ -56,19 +50,13 @@ function hojaPyG(XLSX: XLSXModule, pyg: ReportePyG) {
   filas.push(['La compra de ganado no es gasto: es inversión en inventario.']);
   for (const adv of pyg.advertencias) filas.push([adv.mensaje]);
 
-  const hoja = XLSX.utils.aoa_to_sheet(filas);
-  aplicarFormatoNumerico(
-    XLSX,
-    hoja,
-    filas,
-    (i) => (pyg.lineas[i]?.formato === 'porcentaje' ? FORMATO_PORCENTAJE : FORMATO_PESOS),
-    4
-  );
-  hoja['!cols'] = [{ wch: 42 }, ...pyg.periodos.map(() => ({ wch: 16 }))];
-  return hoja;
+  return { name: 'P&G', rows: filas,
+    formats: formatoNumerico(filas, i => pyg.lineas[i]?.formato === 'porcentaje' ? FORMATO_PORCENTAJE : FORMATO_PESOS, 4),
+    widths: [42, ...pyg.periodos.map(() => 16)],
+  };
 }
 
-function hojaFlujo(XLSX: XLSXModule, flujo: ReporteFlujoCaja) {
+function hojaFlujo(flujo: ReporteFlujoCaja): SheetSpec {
   const filas: (string | number | null)[][] = [];
 
   filas.push([`Flujo de Caja — ${flujo.vista_nombre} ${flujo.anio}`]);
@@ -93,11 +81,10 @@ function hojaFlujo(XLSX: XLSXModule, flujo: ReporteFlujoCaja) {
   }
   for (const adv of flujo.advertencias) filas.push([adv.mensaje]);
 
-  const hoja = XLSX.utils.aoa_to_sheet(filas);
-  // El flujo de caja es todo pesos: no hay líneas de porcentaje.
-  aplicarFormatoNumerico(XLSX, hoja, filas, () => FORMATO_PESOS, 4);
-  hoja['!cols'] = [{ wch: 42 }, ...flujo.meses_label.map(() => ({ wch: 14 })), { wch: 16 }];
-  return hoja;
+  return { name: 'Flujo de Caja', rows: filas,
+    formats: formatoNumerico(filas, () => FORMATO_PESOS, 4),
+    widths: [42, ...flujo.meses_label.map(() => 14), 16],
+  };
 }
 
 /**
@@ -107,21 +94,16 @@ function hojaFlujo(XLSX: XLSXModule, flujo: ReporteFlujoCaja) {
  * y decide el formato. Es un callback en vez de un campo porque `LineaPyG`
  * tiene `formato` y `LineaFlujo` no: el flujo siempre son pesos.
  */
-function aplicarFormatoNumerico(
-  XLSX: XLSXModule,
-  hoja: Record<string, unknown>,
+function formatoNumerico(
   filas: (string | number | null)[][],
   formatoDeFila: (indiceLinea: number) => string,
   filaInicioDatos: number
-): void {
-  for (let f = filaInicioDatos; f < filas.length; f += 1) {
-    const formato = formatoDeFila(f - filaInicioDatos);
-
-    for (let c = 1; c < filas[f].length; c += 1) {
-      const ref = XLSX.utils.encode_cell({ r: f, c });
-      const celda = hoja[ref] as { t?: string; z?: string } | undefined;
-      if (!celda || celda.t !== 'n') continue;
-      celda.z = formato;
+): NonNullable<SheetSpec['formats']> {
+  const formats: { row: number; column: number; format: string }[] = [];
+  for (let f = filaInicioDatos; f < filas.length; f++) {
+    for (let c = 1; c < filas[f].length; c++) {
+      if (typeof filas[f][c] === 'number') formats.push({ row: f + 1, column: c + 1, format: formatoDeFila(f - filaInicioDatos) });
     }
   }
+  return formats;
 }

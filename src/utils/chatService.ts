@@ -1,8 +1,8 @@
 import { getSupabase } from './supabase/client';
-import { projectId, publicAnonKey } from './supabase/info.tsx';
+import { getSupabaseConfig } from './supabase/config';
 import type { ChatConversation, ChatMessage, ChatStreamEvent } from '@/types/chat';
 
-const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
 export async function sendChatMessage(
   conversationId: string | null,
@@ -19,7 +19,7 @@ export async function sendChatMessage(
   }
 
   const response = await fetch(
-    `${EDGE_FUNCTION_BASE}/make-server-1ccce916/chat/message`,
+    `${edgeFunctionBase()}/make-server-1ccce916/chat/message`,
     {
       method: 'POST',
       headers: {

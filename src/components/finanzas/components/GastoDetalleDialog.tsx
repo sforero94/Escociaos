@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useScopedStorageOpen } from '@/hooks/useScopedStorageOpen';
 import { CheckCircle2, Clock, Edit2, Trash2, AlertTriangle, FileText, Loader2 } from 'lucide-react';
-import { getSupabase } from '../../../utils/supabase/client';
 import { formatNumber } from '../../../utils/format';
 import { formatearFechaLarga } from '../../../utils/fechas';
 import { Button } from '../../ui/button';
@@ -46,7 +45,8 @@ export function GastoDetalleDialog({
   onEliminar,
   onCompletar,
 }: GastoDetalleDialogProps) {
-  const [abriendoFactura, setAbriendoFactura] = useState(false);
+  const urlFactura = item?.source === 'ganado' ? undefined : (item?.raw as Gasto | undefined)?.url_factura;
+  const { opening: abriendoFactura, openFile } = useScopedStorageOpen('facturas', urlFactura ?? undefined, item?.id ?? '', open);
 
   if (!item) return null;
 
@@ -56,23 +56,14 @@ export function GastoDetalleDialog({
   // El query de GastosList trae los catálogos como joins anidados (fin_negocios, etc.),
   // que no están declarados en el tipo Gasto.
   const relaciones = (item.raw ?? {}) as unknown as Record<string, { nombre?: string } | undefined>;
-  const urlFactura = gasto?.url_factura;
   const esPendiente = gasto?.estado === 'Pendiente';
 
   const verFactura = async () => {
     if (!urlFactura) return;
     try {
-      setAbriendoFactura(true);
-      const { data, error } = await getSupabase()
-        .storage
-        .from('facturas')
-        .createSignedUrl(urlFactura, 60 * 60);
-      if (error || !data?.signedUrl) throw error ?? new Error('No se pudo generar el enlace');
-      window.open(data.signedUrl, '_blank');
+      await openFile();
     } catch {
       toast.error('No se pudo abrir la factura');
-    } finally {
-      setAbriendoFactura(false);
     }
   };
 

@@ -1,0 +1,528 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "candidate_hashes": {
+    "purchase-integrity": "70b155aa8a80e373948b2b5082772055cbd95cf0e4d3336a989f7a8d83c3c941",
+    "manual-stock-movement": "d2b96e3f245e867d4bf71510c61aa86b5a8655e96e80df5f15dffb18fc0590a4",
+    "product-catalog-integrity": "55ed8a06ecf05c71c6fb6e30e6facaa952045259ba9db00e908ed27c153464a3",
+    "csv-product-import": "980cf89c94003db4d103d602f4135d5a5bfbf33ee2af5863fefe0b3c96be891b",
+    "application-closure": "9369d7e2d4c19c0b5b53569e74fad185be4c13a667c44ce6eb54a444c95c348f",
+    "application-plan-delete": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+    "ronda-stock-integrity": "27c42a1fb7846ec2ff16ec78e63fa1b798132375c183d70be47ec2d791170c75",
+    "hato-undo": "aaf13fcfc2bb460d8e1acedfb3fe4848f32c73b102ccdc3ac117ed30d3364ad3",
+    "hato-treatment-creation": "27ca417e1c9162dedc090bbee9282d1dad0fe4b8626b7341d85f2cd070031169"
+  },
+  "runner_sha256": "aeb28841ccdb370c0a2e28cac5f244077b951d43d4c7ca6f811d63b6cfbcf813",
+  "assertions": 84,
+  "checks": [
+    "initial complete exported-property parity",
+    "all nine candidates installed together before any synthetic mutation",
+    "catalog creates one trusted opening on coordinated graph",
+    "catalog lost-response recovery preserves entire combined database",
+    "manual entry and captured actor/timestamp triggers coexist with catalog opening",
+    "manual lost response adds no domain/financial/cattle/proof rows",
+    "purchase adds to current manual/catalog stock with actual purchase triggers",
+    "purchase lost-response replay preserves complete combined state",
+    "late financial association fault rolls back entire combined database",
+    "reversal preserves pending and confirmed expenses and exact retained financial fields",
+    "reversal removes only its posted stock and records both durable expense associations",
+    "lost reversal response never repeats ledger/deletion/expense detachment",
+    "retired legacy cleanup cannot delete preserved expenses",
+    "concurrent purchase/manual writers serialize on current shared product without lost stock",
+    "original stock revision refuses after competing purchase/manual writes with full rollback",
+    "CSV trusted-parser/human posting creates exact durable opening on coordinated graph",
+    "CSV original-key recovery preserves complete combined state",
+    "late closure receipt fault restores all stock/work/financial/audit/proof state",
+    "actual closure debits shared stock once with exact source costs and correction audit",
+    "closure retry preserves whole combined database and its original receipt",
+    "closed application and committed closure proof block unused-plan deletion",
+    "Ronda adjustment preserves actual provenance constraints and posts once on shared product",
+    "Ronda original exception proof replays without changing prior combined ledger",
+    "co-installed deletion preserves all five historical copies and original application IDs",
+    "co-installed deletion retry preserves all stock/financial/cattle state",
+    "co-installed Telegram creation binds Gerencia and exact pending step",
+    "retired direct undo core refuses service caller",
+    "native undo removes only exact prospective treatment and pending step with audit",
+    "creation and undo retries preserve both immutable receipts without recreating clinical rows",
+    "revoked Gerencia cannot disclose committed treatment creation",
+    "revoked Gerencia cannot replay undo receipt",
+    "anon direct productos UPDATE refuses without state changes",
+    "anon direct movimientos_inventario UPDATE refuses without state changes",
+    "anon direct compras UPDATE refuses without state changes",
+    "anon legacy treatment RPC EXECUTE refuses without state changes",
+    "authenticated direct productos UPDATE refuses without state changes",
+    "authenticated direct movimientos_inventario UPDATE refuses without state changes",
+    "authenticated direct compras UPDATE refuses without state changes",
+    "authenticated legacy treatment RPC EXECUTE refuses without state changes",
+    "service_role direct productos UPDATE refuses without state changes",
+    "service_role direct movimientos_inventario UPDATE refuses without state changes",
+    "service_role direct compras UPDATE refuses without state changes",
+    "service_role legacy treatment RPC EXECUTE refuses without state changes",
+    "all63 effective table writer privileges and27 column writer combinations denied",
+    "application_closure detects and rolls back GRANT UPDATE ON productos TO authenticated",
+    "application_plan_delete detects and rolls back GRANT UPDATE ON productos TO authenticated",
+    "application_closure detects and rolls back GRANT UPDATE(cantidad_actual) ON productos TO authenticated",
+    "application_plan_delete detects and rolls back GRANT UPDATE(cantidad_actual) ON productos TO authenticated",
+    "application_closure detects and rolls back GRANT MAINTAIN ON compras TO service_role",
+    "application_plan_delete detects and rolls back GRANT MAINTAIN ON compras TO service_role",
+    "application_closure detects and rolls back GRANT EXECUTE ON FUNCTION public.fn_hato_registrar_tratamiento(uuid,text,date,text,date,text,text,uuid) TO authenticated",
+    "application_plan_delete detects and rolls back GRANT EXECUTE ON FUNCTION public.fn_hato_registrar_tratamiento(uuid,text,date,text,date,text,text,uuid) TO authenticated",
+    "application_closure detects and rolls back REVOKE SELECT ON productos FROM anon",
+    "application_plan_delete detects and rolls back REVOKE SELECT ON productos FROM anon",
+    "application_closure detects and rolls back REVOKE INSERT ON tareas FROM authenticated",
+    "application_plan_delete detects and rolls back REVOKE INSERT ON tareas FROM authenticated",
+    "application_closure detects and rolls back ALTER TABLE movimientos_inventario DISABLE ROW LEVEL SECURITY",
+    "application_plan_delete detects and rolls back ALTER TABLE movimientos_inventario DISABLE ROW LEVEL SECURITY",
+    "service-only invoker177 still executes step/header updates after coordinated retirement",
+    "clinical177 same-date retry preserves complete combined state",
+    "purchase versus original stock adjustment refuses after observed lock wait",
+    "purchase versus original stock adjustment preserves exact winning state across all captured tables",
+    "manual stock write versus original catalog edit refuses after observed lock wait",
+    "manual stock write versus original catalog edit preserves exact winning state across all captured tables",
+    "daily source edit versus closure original refuses after observed lock wait",
+    "daily source edit versus closure original preserves exact winning state across all captured tables",
+    "late planned reference versus unused deletion original refuses after observed lock wait",
+    "late planned reference versus unused deletion original preserves exact winning state across all captured tables",
+    "animal source edit versus pending treatment post refuses after observed lock wait",
+    "animal source edit versus pending treatment post preserves exact winning state across all captured tables",
+    "registration relink versus committed native recovery refuses after observed lock wait",
+    "registration relink versus committed native recovery preserves exact winning state across all captured tables",
+    "profile deactivation versus committed stock receipt recovery refuses after observed lock wait",
+    "profile deactivation versus committed stock receipt recovery preserves exact winning state across all captured tables",
+    "direct step execution versus original undo review refuses after observed lock wait",
+    "direct step execution versus original undo review preserves exact winning state across all captured tables",
+    "confirmed undo versus delayed direct child insertion refuses after observed lock wait",
+    "confirmed undo versus delayed direct child insertion preserves exact winning state across all captured tables"
+  ],
+  "limits": [
+    "Disposable local replay and synthetic Auth only; no hosted/release certification.",
+    "Stock mutation grants and legacy treatment RPC only: clinical direct writers, inactive-reader restriction and other financial/cattle writers remain separate.",
+    "Nine observed competing-writer races rerun after retirement; this is not every writer/resource/hosted path."
+  ],
+  "installation_checks": [
+    "guard configuration drift refuses installation with full catalog rollback",
+    "stock RLS drift refuses installation with full catalog rollback",
+    "inherited writer grant refuses installation with full catalog rollback",
+    "updatable view writer refuses installation with full catalog rollback",
+    "all captured domain and view effective SELECT privileges preserved exactly",
+    "every non-stock relation/column ACL including clinical writers remains unchanged"
+  ],
+  "all_domain_read_privileges_preserved": true,
+  "non_stock_relation_column_acls_preserved": true,
+  "denied_direct_updates": [
+    "anon:productos",
+    "anon:movimientos_inventario",
+    "anon:compras",
+    "authenticated:productos",
+    "authenticated:movimientos_inventario",
+    "authenticated:compras",
+    "service_role:productos",
+    "service_role:movimientos_inventario",
+    "service_role:compras"
+  ],
+  "table_writer_matrix": [
+    [
+      "anon",
+      "compras",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "compras",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "compras",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "compras",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "compras",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "compras",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "anon",
+      "compras",
+      "UPDATE",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "anon",
+      "movimientos_inventario",
+      "UPDATE",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "anon",
+      "productos",
+      "UPDATE",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "compras",
+      "UPDATE",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "movimientos_inventario",
+      "UPDATE",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "productos",
+      "UPDATE",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "compras",
+      "UPDATE",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "movimientos_inventario",
+      "UPDATE",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "productos",
+      "UPDATE",
+      false
+    ]
+  ],
+  "column_writer_denial_passed": true,
+  "clinical177_preserved": true,
+  "observed_lock_races_after_retirement": [
+    "purchase versus original stock adjustment",
+    "manual stock write versus original catalog edit",
+    "daily source edit versus closure original",
+    "late planned reference versus unused deletion original",
+    "animal source edit versus pending treatment post",
+    "registration relink versus committed native recovery",
+    "profile deactivation versus committed stock receipt recovery",
+    "direct step execution versus original undo review",
+    "confirmed undo versus delayed direct child insertion"
+  ],
+  "race_extension_sha256": "5c9a40443482a923af6458654dd09fec5484f6e774870b03838e7b3fba7bba20",
+  "installed_guard_body_md5": {
+    "application_closure": "c452c5260e558763219b4e9bd2dade66",
+    "application_plan_delete": "1c5b00a53165081442376c0ebe5a0a55"
+  },
+  "retirement_candidate_sha256": "dfe036ad5ca22c3d85b398e6ece3c20274bc58dc44986630b361c68e9eac4f81",
+  "extension_sha256": "b93729a58a4db87a79bb9498a5150d2857af6e25cc11ecb039e4877e9d8b35e7",
+  "temporary_database_stopped_and_removed": true
+}

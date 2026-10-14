@@ -1,3 +1,4 @@
+import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // hato-chequeo-preview.ts — endpoint B0/V10 del plan (§7.4 "Import recurrente
 // por chequeo"): `POST /make-server-1ccce916/hato/chequeo/preview`.
 //
@@ -23,7 +24,7 @@
 
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import * as XLSX from 'npm:xlsx@0.18.5';
+import { leerHojasCrudas } from './hato-chequeo-spreadsheet.ts';
 import { normalizarHojas } from './importHato/normalizar.ts';
 import { construirDiffChequeo, seleccionarUltimoChequeoPorAnimal } from './importHato/diffChequeo.ts';
 import type {
@@ -73,68 +74,17 @@ async function verificarAcceso(
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
-    .select('rol')
+    .select('id,rol,activo')
     .eq('id', userData.user.id)
     .maybeSingle();
   if (usuarioError) {
     return respuestaError(c, 500, `No se pudo verificar el rol del usuario: ${usuarioError.message}`);
   }
-  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol)) {
+  if (!perfilAplicacionActivo(usuario ? [usuario] : [], userData.user.id, [...ROLES_PERMITIDOS])) {
     return respuestaError(c, 403, 'Acceso restringido a Administrador o Gerencia (mismo permiso de escritura del módulo Hato Lechero).');
   }
 
   return { userId: userData.user.id };
-}
-
-// ---------------------------------------------------------------------------
-// Lectura del .xlsx -- dos reglas NO cosméticas, copiadas de
-// `scripts/import-hato/extract.ts` (mismo motivo, ver ahí el detalle):
-//
-// 1. `cellDates` queda en FALSE. Los parsers de `celdas.ts` esperan un
-//    SERIAL de Excel para las fechas bien tipadas y lo convierten a texto
-//    D/M/AAAA con aritmética UTC; `cellDates:true` entregaría objetos `Date`
-//    construidos en la zona horaria del proceso, y una fecha a medianoche
-//    puede correrse un día según dónde corra esto.
-//
-// 2. La grilla se arma celda por celda, NUNCA con `sheet_to_json`:
-//    `sheet_to_json` con `raw:true` entrega el CÓDIGO NUMÉRICO de una celda
-//    de error (`#VALUE!` -> 15), indistinguible de un dato numérico real. Y
-//    `#VALUE!` es la señal más importante de este corpus (siempre deriva de
-//    un `F Servicio` roto). Leyendo la celda directo se conserva el texto.
-// ---------------------------------------------------------------------------
-function hojaAMatriz(ws: XLSX.WorkSheet): unknown[][] {
-  const ref = ws['!ref'];
-  if (!ref) return [];
-  const rango = XLSX.utils.decode_range(ref);
-  const filas: unknown[][] = [];
-  for (let r = rango.s.r; r <= rango.e.r; r++) {
-    const fila: unknown[] = [];
-    for (let c = rango.s.c; c <= rango.e.c; c++) {
-      const celda = ws[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
-      if (celda === undefined || celda.v === undefined || celda.v === null) {
-        fila.push(null);
-        continue;
-      }
-      // Celda de error de Excel: conservar el TEXTO (`#VALUE!`), nunca el
-      // código numérico -- ver la regla 2 de arriba.
-      if (celda.t === 'e') {
-        fila.push(celda.w ?? '#VALUE!');
-        continue;
-      }
-      fila.push(celda.v);
-    }
-    filas.push(fila);
-  }
-  return filas;
-}
-
-function leerHojasCrudas(bytes: Uint8Array, nombreArchivo: string): HojaCruda[] {
-  const wb = XLSX.read(bytes, { type: 'array', cellDates: false });
-  return wb.SheetNames.map((nombreHoja) => ({
-    archivo: nombreArchivo,
-    hoja: nombreHoja,
-    filas: hojaAMatriz(wb.Sheets[nombreHoja]),
-  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -168,14 +118,17 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
   if (archivo.size > TAMANO_MAXIMO_BYTES) {
     return respuestaError(c, 400, `El archivo supera el tamaño máximo permitido (${TAMANO_MAXIMO_BYTES / 1024 / 1024} MB).`);
   }
-  if (!/\.xlsx?$/i.test(archivo.name)) {
-    return respuestaError(c, 400, `Extensión no soportada ('${archivo.name}') -- se espera .xlsx o .xls.`);
+  if (/\.xls$/i.test(archivo.name)) {
+    return respuestaError(c, 400, 'El formato .xls no es compatible. Convierta el archivo a .xlsx en Excel o LibreOffice.');
+  }
+  if (!/\.xlsx$/i.test(archivo.name)) {
+    return respuestaError(c, 400, `Extensión no soportada ('${archivo.name}') -- se espera .xlsx.`);
   }
 
   let hojas: HojaCruda[];
   try {
     const bytes = new Uint8Array(await archivo.arrayBuffer());
-    hojas = leerHojasCrudas(bytes, archivo.name);
+    hojas = await leerHojasCrudas(bytes, archivo.name);
   } catch (err) {
     return respuestaError(c, 400, `No se pudo leer el archivo como Excel: ${err instanceof Error ? err.message : String(err)}`);
   }

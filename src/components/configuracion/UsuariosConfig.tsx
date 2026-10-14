@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSupabase } from '../../utils/supabase/client';
-import { projectId } from '../../utils/supabase/info';
+import { getSupabaseConfig } from '../../utils/supabase/config';
 import { Users, Plus, Edit, Trash2, Eye, EyeOff, Shield, CheckCircle2, XCircle } from 'lucide-react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
@@ -137,7 +137,7 @@ export function UsuariosConfig() {
 
     try {
       const token = await obtenerTokenSesion();
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/usuarios/${modalMode === 'crear' ? 'crear' : 'editar'}`;
+      const url = `${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/usuarios/${modalMode === 'crear' ? 'crear' : 'editar'}`;
 
       const body: any = {
         email,
@@ -194,7 +194,7 @@ export function UsuariosConfig() {
     if (!usuarioParaEliminar) return;
     try {
       const token = await obtenerTokenSesion();
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/usuarios/eliminar`;
+      const url = `${getSupabaseConfig().url}/functions/v1/make-server-1ccce916/usuarios/eliminar`;
 
       const response = await fetch(url, {
         method: 'POST',
