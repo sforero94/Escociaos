@@ -1,0 +1,4258 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "candidate_hashes": {
+    "purchase-integrity": "70b155aa8a80e373948b2b5082772055cbd95cf0e4d3336a989f7a8d83c3c941",
+    "manual-stock-movement": "d2b96e3f245e867d4bf71510c61aa86b5a8655e96e80df5f15dffb18fc0590a4",
+    "product-catalog-integrity": "55ed8a06ecf05c71c6fb6e30e6facaa952045259ba9db00e908ed27c153464a3",
+    "csv-product-import": "980cf89c94003db4d103d602f4135d5a5bfbf33ee2af5863fefe0b3c96be891b",
+    "application-closure": "9369d7e2d4c19c0b5b53569e74fad185be4c13a667c44ce6eb54a444c95c348f",
+    "application-plan-delete": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+    "ronda-stock-integrity": "27c42a1fb7846ec2ff16ec78e63fa1b798132375c183d70be47ec2d791170c75",
+    "hato-undo": "aaf13fcfc2bb460d8e1acedfb3fe4848f32c73b102ccdc3ac117ed30d3364ad3",
+    "hato-treatment-creation": "27ca417e1c9162dedc090bbee9282d1dad0fe4b8626b7341d85f2cd070031169"
+  },
+  "runner_sha256": "8b4f61d524d9d6c26a8ca7b5f7ab292e88a708cd76fa933b4c827bb17a190398",
+  "assertions": 44,
+  "checks": [
+    "initial complete exported-property parity",
+    "all nine candidates installed together before any synthetic mutation",
+    "catalog creates one trusted opening on coordinated graph",
+    "catalog lost-response recovery preserves entire combined database",
+    "manual entry and captured actor/timestamp triggers coexist with catalog opening",
+    "manual lost response adds no domain/financial/cattle/proof rows",
+    "purchase adds to current manual/catalog stock with actual purchase triggers",
+    "purchase lost-response replay preserves complete combined state",
+    "late financial association fault rolls back entire combined database",
+    "reversal preserves pending and confirmed expenses and exact retained financial fields",
+    "reversal removes only its posted stock and records both durable expense associations",
+    "lost reversal response never repeats ledger/deletion/expense detachment",
+    "retired legacy cleanup cannot delete preserved expenses",
+    "concurrent purchase/manual writers serialize on current shared product without lost stock",
+    "original stock revision refuses after competing purchase/manual writes with full rollback",
+    "CSV trusted-parser/human posting creates exact durable opening on coordinated graph",
+    "CSV original-key recovery preserves complete combined state",
+    "late closure receipt fault restores all stock/work/financial/audit/proof state",
+    "actual closure debits shared stock once with exact source costs and correction audit",
+    "closure retry preserves whole combined database and its original receipt",
+    "closed application and committed closure proof block unused-plan deletion",
+    "Ronda adjustment preserves actual provenance constraints and posts once on shared product",
+    "Ronda original exception proof replays without changing prior combined ledger",
+    "co-installed deletion preserves all five historical copies and original application IDs",
+    "co-installed deletion retry preserves all stock/financial/cattle state",
+    "co-installed Telegram creation binds Gerencia and exact pending step",
+    "retired direct undo core refuses service caller",
+    "native undo removes only exact prospective treatment and pending step with audit",
+    "creation and undo retries preserve both immutable receipts without recreating clinical rows",
+    "revoked Gerencia cannot disclose committed treatment creation",
+    "revoked Gerencia cannot replay undo receipt",
+    "every candidate protected table denies table/column access to ordinary and service roles",
+    "protected helper functions have no effective ordinary/service RPC entry",
+    "active_viewer cannot invoke trusted catalog mutation",
+    "inactive_admin cannot invoke trusted catalog mutation",
+    "missing_profile cannot invoke trusted catalog mutation",
+    "missing_uid cannot invoke trusted catalog mutation",
+    "anonymous cannot invoke trusted catalog mutation",
+    "direct stock UPDATE without ledger/proof reproduced only inside rolled-back local transaction",
+    "direct ledger DELETE without counter-entry reproduced only inside rolled-back local transaction",
+    "legacy treatment attribution bypass authenticated reproduced only inside rolled-back local transaction",
+    "legacy treatment attribution bypass service_role reproduced only inside rolled-back local transaction",
+    "application_closure currently refuses stock-grant retirement and fully rolls back",
+    "application_plan_delete currently refuses stock-grant retirement and fully rolls back"
+  ],
+  "limits": [
+    "Local schema/data/Auth only; effective EXECUTE is not proof a body authorizes a call.",
+    "Literal source callers and selected runtime contexts do not exhaust dynamic SQL/call graphs or hosted reachability.",
+    "No grants retired in this diagnostic unit; current direct/RPC bypasses remain release blockers."
+  ],
+  "table_matrix": [
+    {
+      "role": "anon",
+      "table": "application_closure.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "application_closure.requests",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "application_closure.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "application_plan_delete.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "application_plan_delete.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "application_plan_delete.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "csv_product_import.openings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "csv_product_import.openings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "csv_product_import.openings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "csv_product_import.parsed",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "csv_product_import.parsed",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "csv_product_import.parsed",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "csv_product_import.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "csv_product_import.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "csv_product_import.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_treatment_creation.action_fences",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_treatment_creation.action_fences",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_treatment_creation.action_fences",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_treatment_creation.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_treatment_creation.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_treatment_creation.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_treatment_creation.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_treatment_creation.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_treatment_creation.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_undo.attempts",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_undo.attempts",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_undo.attempts",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_undo.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_undo.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_undo.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_undo.deliveries",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_undo.deliveries",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_undo.deliveries",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "hato_undo.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "hato_undo.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "hato_undo.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "manual_stock.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "manual_stock.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "manual_stock.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "product_catalog_integrity.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "product_catalog_integrity.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "product_catalog_integrity.audit",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "product_catalog_integrity.openings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "product_catalog_integrity.openings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "product_catalog_integrity.openings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "product_catalog_integrity.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "product_catalog_integrity.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "product_catalog_integrity.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "public.compras",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "public.compras",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "public.compras",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "anon",
+      "table": "public.hato_tratamiento_pasos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "public.hato_tratamiento_pasos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "public.hato_tratamiento_pasos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "anon",
+      "table": "public.hato_tratamientos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "public.hato_tratamientos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "public.hato_tratamientos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "anon",
+      "table": "public.movimientos_inventario",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "public.movimientos_inventario",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "public.movimientos_inventario",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "anon",
+      "table": "public.productos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "public.productos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "public.productos",
+      "schema_usage": true,
+      "table_privileges": {
+        "DELETE": true,
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "TRIGGER": true,
+        "MAINTAIN": true,
+        "TRUNCATE": true,
+        "REFERENCES": true
+      },
+      "column_privileges": {
+        "INSERT": true,
+        "SELECT": true,
+        "UPDATE": true,
+        "REFERENCES": true
+      }
+    },
+    {
+      "role": "anon",
+      "table": "purchase_integrity.expense_links",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "purchase_integrity.expense_links",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "purchase_integrity.expense_links",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "purchase_integrity.postings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "purchase_integrity.postings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "purchase_integrity.postings",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "purchase_integrity.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "purchase_integrity.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "purchase_integrity.requests",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "ronda_stock_integrity.deliveries",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "ronda_stock_integrity.deliveries",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "ronda_stock_integrity.deliveries",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "ronda_stock_integrity.proofs",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "ronda_stock_integrity.proofs",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "ronda_stock_integrity.proofs",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "anon",
+      "table": "ronda_stock_integrity.proposals",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "authenticated",
+      "table": "ronda_stock_integrity.proposals",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    },
+    {
+      "role": "service_role",
+      "table": "ronda_stock_integrity.proposals",
+      "schema_usage": false,
+      "table_privileges": {
+        "DELETE": false,
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "TRIGGER": false,
+        "MAINTAIN": false,
+        "TRUNCATE": false,
+        "REFERENCES": false
+      },
+      "column_privileges": {
+        "INSERT": false,
+        "SELECT": false,
+        "UPDATE": false,
+        "REFERENCES": false
+      }
+    }
+  ],
+  "function_matrix": [
+    {
+      "name": "assert_boundary",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_closure.assert_boundary()",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_closure.authorize()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "lock_sources",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_closure.lock_sources()",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "snapshot",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_closure.snapshot(application_id uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "assert_boundary",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_plan_delete.assert_boundary()",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "assert_graph",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_plan_delete.assert_graph()",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_plan_delete.authorize()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "eligible",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_plan_delete.eligible(e jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "retained",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_plan_delete.retained()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "snapshot",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "application_plan_delete.snapshot(app uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "csv_product_import.authorize()",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "registered",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "csv_product_import.registered(a uuid, k uuid, p jsonb)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "validate",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "csv_product_import.validate(p jsonb)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "canonical_payload",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.canonical_payload(p jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "domain_state",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.domain_state()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "immutable_fence",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.immutable_fence()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "immutable_proof",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.immutable_proof()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "response",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.response(r hato_treatment_creation.requests)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "step",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.step(p_actor jsonb, p_action text, p_key uuid, p_payload jsonb, p_sender bigint, p_chat bigint, p_message bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "telegram_actor",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.telegram_actor(p_sender bigint, p_chat bigint, p_message bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "web_actor",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_treatment_creation.web_actor()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.authorize(sender bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "capture",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.capture(relations oid[])",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "lock_footprint",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.lock_footprint(op text)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "proof",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.proof(op text, target uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "refuse_references",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.refuse_references(op text, target uuid, snapshot jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "review_lock",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.review_lock(sender bigint, key uuid, op text)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "review_result",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.review_result(a hato_undo.attempts)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "validate_payload",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "hato_undo.validate_payload(actor uuid, sender bigint, payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "product_catalog_integrity.authorize()",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "validate",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "product_catalog_integrity.validate(p jsonb)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "actualizar_estado_tarea_labor",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.actualizar_estado_tarea_labor()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "actualizar_fecha_inicio_real",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.actualizar_fecha_inicio_real()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "actualizar_fecha_inicio_tarea",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.actualizar_fecha_inicio_tarea()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "actualizar_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.actualizar_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "auto_create_registro_trabajo_from_movimiento",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.auto_create_registro_trabajo_from_movimiento()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "auto_create_tarea_for_aplicacion",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.auto_create_tarea_for_aplicacion()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "calcular_costo_jornal",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.calcular_costo_jornal()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "calcular_diferencias_verificacion",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.calcular_diferencias_verificacion()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "es_usuario_gerencia",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.es_usuario_gerencia()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_alertas_horario_cambiar",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_alertas_horario_cambiar(p_jobname text, p_hora text)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_alertas_horario_listar",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_alertas_horario_listar()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_aplicar_movimiento_ganado",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_aplicar_movimiento_ganado()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "fn_application_close",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_application_close(p_request_key uuid, p_payload jsonb, p_expected jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_application_closure_snapshot",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_application_closure_snapshot(p_aplicacion_id uuid, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_application_closure_status",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_application_closure_status(p_request_key uuid, p_payload jsonb, p_expected jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_application_plan_delete",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_application_plan_delete(p_request_key uuid, p_application_id uuid, p_expected jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_application_plan_delete_snapshot",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_application_plan_delete_snapshot(p_application_id uuid, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_application_plan_delete_status",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_application_plan_delete_status(p_request_key uuid, p_application_id uuid, p_expected jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_cerrar_aplicacion",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "public.fn_cerrar_aplicacion(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_cleanup_compra_dependencies",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "public.fn_cleanup_compra_dependencies(p_compra_id uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_clima_candado_soltar",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_clima_candado_soltar(p_dueno text)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_clima_candado_tomar",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_clima_candado_tomar(p_dueno text, p_segundos integer)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_clima_rollup_diario",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_clima_rollup_diario(p_fecha date)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_cosecha_aguacate",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_cosecha_aguacate(p_fecha date)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_crear_movimiento_pendiente_ganado",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_crear_movimiento_pendiente_ganado()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "fn_csv_product_import",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_csv_product_import(p_request_key uuid, p_payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_csv_product_import_register",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_csv_product_import_register(p_actor uuid, p_request_key uuid, p_payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_csv_product_import_status",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_csv_product_import_status(p_request_key uuid, p_payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_gan_validar_cabezas_transaccion",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_gan_validar_cabezas_transaccion()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "fn_ganado_confirmar_pendiente_multi",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ganado_confirmar_pendiente_multi(p_movimiento_id uuid, p_filas jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ganado_registrar_traslado_multi",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ganado_registrar_traslado_multi(p_fecha date, p_origenes jsonb, p_destinos jsonb, p_peso_promedio_kg numeric, p_notas text)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_globalgap_registrar_correccion",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_globalgap_registrar_correccion()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "fn_hato_commit_chequeo",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_commit_chequeo(payload jsonb, p_created_by uuid)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_confirmar_paso_tratamiento",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_confirmar_paso_tratamiento(p_animal_id uuid, p_paso_id uuid, p_fecha_ejecutada date, p_respondida_por text)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_eliminar_quincena_venta",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_hato_eliminar_quincena_venta(p_quincena_id uuid)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_guardar_quincena_venta",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_hato_guardar_quincena_venta(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_registrar_correccion",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_registrar_correccion()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "fn_hato_registrar_tratamiento",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_hato_registrar_tratamiento(p_animal_id uuid, p_nombre text, p_fecha_inicio date, p_nota text, p_fecha_proximo_paso date, p_descripcion_paso text, p_fuente text, p_created_by uuid)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_registrar_venta_animales",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_hato_registrar_venta_animales(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_treatment_create_telegram",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_treatment_create_telegram(p_action text, p_sender bigint, p_chat_id bigint, p_message_id bigint, p_payload jsonb, p_request_key uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_treatment_create_telegram_action",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_treatment_create_telegram_action(p_action text, p_sender bigint, p_chat_id bigint, p_message_id bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_treatment_create_web",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_hato_treatment_create_web(p_action text, p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_treatment_snapshot_telegram",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_treatment_snapshot_telegram(p_sender bigint, p_chat_id bigint, p_message_id bigint, p_animal_id uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo(p_sender bigint, p_request_key uuid, p_payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_prepare",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_prepare(p_sender bigint, p_operation text, p_target_id uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_resolve",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_resolve(p_sender bigint, p_request_key uuid, p_payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_review_action",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_review_action(p_sender bigint, p_operation text, p_request_key uuid, p_chat_id bigint, p_message_id bigint, p_action text)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_review_begin",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_review_begin(p_sender bigint, p_operation text, p_target_id uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_review_deliver",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_review_deliver(p_sender bigint, p_operation text, p_request_key uuid, p_chat_id bigint, p_message_id bigint, p_complete_review boolean)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_review_new",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_review_new(p_sender bigint, p_operation text, p_request_key uuid, p_chat_id bigint, p_message_id bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_hato_undo_review_status",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_hato_undo_review_status(p_sender bigint, p_operation text, p_request_key uuid, p_chat_id bigint, p_message_id bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_informes_visita_snippet_fts",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_informes_visita_snippet_fts(p_texto text, p_temas text[])",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_manual_stock_movement",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_manual_stock_movement(p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_manual_stock_request_status",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_manual_stock_request_status(p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_novedades_autores",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_novedades_autores(p_ids uuid[])",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_product_catalog_post",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_product_catalog_post(p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_product_catalog_status",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_product_catalog_status(p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_purchase_post",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_purchase_post(p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_purchase_proof",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_purchase_proof(p_purchase_id uuid, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_purchase_resolve",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_purchase_resolve(p_request_key uuid, p_operation text, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_purchase_reverse",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_purchase_reverse(p_request_key uuid, p_payload jsonb, p_expected_owner uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_abrir",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_abrir(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_actor_correo",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_actor_correo(p_usuario uuid, p_telegram uuid)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_actor_nombre",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_actor_nombre(p_usuario uuid, p_telegram uuid)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_aplicar_ajuste",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_aplicar_ajuste(payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_cerrar",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_cerrar(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_confirmar_ajuste",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_confirmar_ajuste(payload jsonb, p_propuesta uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_confirmar_hallazgos",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_confirmar_hallazgos(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_decidir_ajuste",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_decidir_ajuste(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_deshacer_confirmacion",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_deshacer_confirmacion(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_emitir_reporte",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_ronda_emitir_reporte(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_explicacion_david",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_explicacion_david(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_proponer_ajuste",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_proponer_ajuste(payload jsonb)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_resolver_con_captura",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_resolver_con_captura(payload jsonb)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_telegram_ajuste",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_ronda_telegram_ajuste(p_sender bigint, p_chat bigint, p_excepcion uuid, p_fecha date)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_telegram_confirmar_ajuste",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_ronda_telegram_confirmar_ajuste(p_sender bigint, p_chat bigint, p_message bigint, p_propuesta uuid)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_telegram_registrar_revision",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_ronda_telegram_registrar_revision(p_sender bigint, p_chat bigint, p_message bigint, p_propuesta uuid)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_telegram_revisar_ajuste",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.fn_ronda_telegram_revisar_ajuste(p_sender bigint, p_chat bigint, p_propuesta uuid)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "fn_ronda_validar_actor",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.fn_ronda_validar_actor(p_usuario uuid, p_telegram uuid, p_modulo text)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "generar_codigo_tarea",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.generar_codigo_tarea()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "get_user_role",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.get_user_role()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "obtener_jornales_por_lote",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.obtener_jornales_por_lote(p_lote_id uuid, fecha_inicio date, fecha_fin date)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "obtener_jornales_semana",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      },
+      "function": "public.obtener_jornales_semana(fecha_inicio date, fecha_fin date)",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "po_sonda",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.po_sonda(p_consulta text, p_preparacion text[])",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "prevent_linked_tarea_deletion",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.prevent_linked_tarea_deletion()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_cosecha_aguacate",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_cosecha_aguacate()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_gasto_created_by",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_gasto_created_by()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_informe_visita_created_by",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_informe_visita_created_by()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_ingreso_created_by",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_ingreso_created_by()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_monitoreo_user_id",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_monitoreo_user_id()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_producto_updated_by",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_producto_updated_by()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_registro_trabajo_registrado_por",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_registro_trabajo_registrado_por()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_tarea_created_by",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_tarea_created_by()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "set_transaccion_ganado_created_by",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.set_transaccion_ganado_created_by()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "sync_tarea_lotes_on_aplicaciones_lotes_change",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.sync_tarea_lotes_on_aplicaciones_lotes_change()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "sync_tarea_on_aplicacion_edit",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.sync_tarea_on_aplicacion_edit()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_chat_conversation_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_chat_conversation_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_empleados_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_empleados_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_produccion_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_produccion_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_registros_trabajo_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_registros_trabajo_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_tareas_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_tareas_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_tipos_tareas_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_tipos_tareas_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_updated_at",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_updated_at()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "update_updated_at_column",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.update_updated_at_column()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "validar_estado_tarea_jornales",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "function": "public.validar_estado_tarea_jornales()",
+      "configuration": [
+        "search_path=public, pg_temp"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "purchase_integrity.authorize()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "begin_request",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "purchase_integrity.begin_request(actor uuid, key uuid, op text, body jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "finish_request",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "purchase_integrity.finish_request(actor uuid, key uuid, op text, body jsonb, receipt jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "positive_money",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "purchase_integrity.positive_money(v jsonb)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "assert_boundary",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.assert_boundary()",
+      "configuration": [
+        "search_path=pg_catalog, public"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "authorize",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.authorize(p_usuario uuid, p_telegram uuid, p_modulo text)",
+      "configuration": [
+        "search_path=pg_catalog",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "number",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.number(value numeric, minimum numeric, maximum numeric)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "post",
+      "owner": "postgres",
+      "definer": true,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.post(operation text, payload jsonb, proposal_id uuid)",
+      "configuration": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=5s"
+      ],
+      "returns_trigger": false
+    },
+    {
+      "name": "preserve_proof",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.preserve_proof()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "preserve_proposal",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.preserve_proposal()",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": true
+    },
+    {
+      "name": "telegram_actor",
+      "owner": "postgres",
+      "definer": false,
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": false
+      },
+      "function": "ronda_stock_integrity.telegram_actor(p_sender bigint, p_chat bigint)",
+      "configuration": [
+        "search_path=pg_catalog"
+      ],
+      "returns_trigger": false
+    }
+  ],
+  "view_matrix": [
+    {
+      "role": "anon",
+      "view": "public.v_gastos_completos",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.v_gastos_completos",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.v_gastos_completos",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "anon",
+      "view": "public.v_hato_estado_actual",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.v_hato_estado_actual",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.v_hato_estado_actual",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "anon",
+      "view": "public.v_hato_pajillas_stock",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.v_hato_pajillas_stock",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.v_hato_pajillas_stock",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "anon",
+      "view": "public.v_ingresos_completos",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.v_ingresos_completos",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.v_ingresos_completos",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "anon",
+      "view": "public.v_resumen_financiero_mes",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.v_resumen_financiero_mes",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.v_resumen_financiero_mes",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "anon",
+      "view": "public.vista_resumen_verificaciones",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.vista_resumen_verificaciones",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.vista_resumen_verificaciones",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "anon",
+      "view": "public.vista_tareas_resumen",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "authenticated",
+      "view": "public.vista_tareas_resumen",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    },
+    {
+      "role": "service_role",
+      "view": "public.vista_tareas_resumen",
+      "delete": true,
+      "insert": true,
+      "update": true,
+      "updatable_mask": 0
+    }
+  ],
+  "reader_probes": [
+    {
+      "context": "active_admin",
+      "table": "productos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "active_admin",
+      "table": "hato_tratamientos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "active_manager",
+      "table": "productos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "active_manager",
+      "table": "hato_tratamientos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "active_viewer",
+      "table": "productos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "active_viewer",
+      "table": "hato_tratamientos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "inactive_admin",
+      "table": "productos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "inactive_admin",
+      "table": "hato_tratamientos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "missing_profile",
+      "table": "productos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "missing_profile",
+      "table": "hato_tratamientos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "missing_uid",
+      "table": "productos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "missing_uid",
+      "table": "hato_tratamientos",
+      "reachable": true,
+      "permission_denied": false
+    },
+    {
+      "context": "anonymous",
+      "table": "productos",
+      "reachable": false,
+      "permission_denied": false
+    },
+    {
+      "context": "anonymous",
+      "table": "hato_tratamientos",
+      "reachable": false,
+      "permission_denied": false
+    }
+  ],
+  "confirmed_bypasses": [
+    "direct stock UPDATE without ledger/proof",
+    "direct ledger DELETE without counter-entry",
+    "legacy treatment attribution bypass authenticated",
+    "legacy treatment attribution bypass service_role"
+  ],
+  "extension_sha256": "6df711ce0a9ffac4647a9d5927efddf8cee051bec136310ecd0689dbc1f80eb1",
+  "temporary_database_stopped_and_removed": true
+}
