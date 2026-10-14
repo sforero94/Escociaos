@@ -1,0 +1,334 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "candidate_hashes": {
+    "purchase-integrity": "70b155aa8a80e373948b2b5082772055cbd95cf0e4d3336a989f7a8d83c3c941",
+    "manual-stock-movement": "d2b96e3f245e867d4bf71510c61aa86b5a8655e96e80df5f15dffb18fc0590a4",
+    "product-catalog-integrity": "55ed8a06ecf05c71c6fb6e30e6facaa952045259ba9db00e908ed27c153464a3",
+    "csv-product-import": "980cf89c94003db4d103d602f4135d5a5bfbf33ee2af5863fefe0b3c96be891b",
+    "application-closure": "9369d7e2d4c19c0b5b53569e74fad185be4c13a667c44ce6eb54a444c95c348f",
+    "application-plan-delete": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+    "ronda-stock-integrity": "27c42a1fb7846ec2ff16ec78e63fa1b798132375c183d70be47ec2d791170c75",
+    "hato-undo": "aaf13fcfc2bb460d8e1acedfb3fe4848f32c73b102ccdc3ac117ed30d3364ad3",
+    "hato-treatment-creation": "27ca417e1c9162dedc090bbee9282d1dad0fe4b8626b7341d85f2cd070031169"
+  },
+  "runner_sha256": "aeb28841ccdb370c0a2e28cac5f244077b951d43d4c7ca6f811d63b6cfbcf813",
+  "assertions": 68,
+  "checks": [
+    "initial complete exported-property parity",
+    "all nine candidates installed together before any synthetic mutation",
+    "catalog creates one trusted opening on coordinated graph",
+    "catalog lost-response recovery preserves entire combined database",
+    "manual entry and captured actor/timestamp triggers coexist with catalog opening",
+    "manual lost response adds no domain/financial/cattle/proof rows",
+    "purchase adds to current manual/catalog stock with actual purchase triggers",
+    "purchase lost-response replay preserves complete combined state",
+    "late financial association fault rolls back entire combined database",
+    "reversal preserves pending and confirmed expenses and exact retained financial fields",
+    "reversal removes only its posted stock and records both durable expense associations",
+    "lost reversal response never repeats ledger/deletion/expense detachment",
+    "retired legacy cleanup cannot delete preserved expenses",
+    "concurrent purchase/manual writers serialize on current shared product without lost stock",
+    "original stock revision refuses after competing purchase/manual writes with full rollback",
+    "CSV trusted-parser/human posting creates exact durable opening on coordinated graph",
+    "CSV original-key recovery preserves complete combined state",
+    "late closure receipt fault restores all stock/work/financial/audit/proof state",
+    "actual closure debits shared stock once with exact source costs and correction audit",
+    "closure retry preserves whole combined database and its original receipt",
+    "closed application and committed closure proof block unused-plan deletion",
+    "Ronda adjustment preserves actual provenance constraints and posts once on shared product",
+    "Ronda original exception proof replays without changing prior combined ledger",
+    "co-installed deletion preserves all five historical copies and original application IDs",
+    "co-installed deletion retry preserves all stock/financial/cattle state",
+    "co-installed Telegram creation binds Gerencia and exact pending step",
+    "retired direct undo core refuses service caller",
+    "native undo removes only exact prospective treatment and pending step with audit",
+    "creation and undo retries preserve both immutable receipts without recreating clinical rows",
+    "revoked Gerencia cannot disclose committed treatment creation",
+    "revoked Gerencia cannot replay undo receipt",
+    "anon direct hato_tratamientos INSERT refuses without state changes",
+    "anon direct hato_tratamientos DELETE refuses without state changes",
+    "anon direct hato_tratamiento_pasos INSERT refuses without state changes",
+    "anon direct hato_tratamiento_pasos DELETE refuses without state changes",
+    "authenticated direct hato_tratamientos INSERT refuses without state changes",
+    "authenticated direct hato_tratamientos DELETE refuses without state changes",
+    "authenticated direct hato_tratamiento_pasos INSERT refuses without state changes",
+    "authenticated direct hato_tratamiento_pasos DELETE refuses without state changes",
+    "service_role direct hato_tratamientos INSERT refuses without state changes",
+    "service_role direct hato_tratamientos DELETE refuses without state changes",
+    "service_role direct hato_tratamiento_pasos INSERT refuses without state changes",
+    "service_role direct hato_tratamiento_pasos DELETE refuses without state changes",
+    "all36 effective clinical creation/deletion/maintenance privileges denied",
+    "invoker177 retains required step/header UPDATE after INSERT/DELETE retirement",
+    "invoker177 same-date retry preserves full combined state",
+    "remaining authenticated direct step UPDATE reproduced and rolled back; audit cutover still required",
+    "purchase versus original stock adjustment refuses after observed lock wait",
+    "purchase versus original stock adjustment preserves exact winning state across all captured tables",
+    "manual stock write versus original catalog edit refuses after observed lock wait",
+    "manual stock write versus original catalog edit preserves exact winning state across all captured tables",
+    "daily source edit versus closure original refuses after observed lock wait",
+    "daily source edit versus closure original preserves exact winning state across all captured tables",
+    "late planned reference versus unused deletion original refuses after observed lock wait",
+    "late planned reference versus unused deletion original preserves exact winning state across all captured tables",
+    "animal source edit versus pending treatment post refuses after observed lock wait",
+    "animal source edit versus pending treatment post preserves exact winning state across all captured tables",
+    "registration relink versus committed native recovery refuses after observed lock wait",
+    "registration relink versus committed native recovery preserves exact winning state across all captured tables",
+    "profile deactivation versus committed stock receipt recovery refuses after observed lock wait",
+    "profile deactivation versus committed stock receipt recovery preserves exact winning state across all captured tables",
+    "direct step execution versus original undo review refuses after observed lock wait",
+    "direct step execution versus original undo review preserves exact winning state across all captured tables",
+    "confirmed undo versus delayed direct child insertion refuses after observed lock wait",
+    "confirmed undo versus delayed direct child insertion preserves exact winning state across all captured tables"
+  ],
+  "limits": [
+    "Local synthetic data/Auth only; no hosted/release certification.",
+    "Clinical UPDATE lanes including invoker177 remain open for subsequent atomic trusted-audit cutover; no complete cattle/global writer certificate."
+  ],
+  "installation_checks": [
+    "inherited clinical creator refuses with full catalog rollback",
+    "changed invoker177 refuses with full catalog rollback",
+    "writable clinical view refuses with full catalog rollback"
+  ],
+  "all_domain_read_privileges_preserved": true,
+  "nonclinical_relation_column_acls_preserved": true,
+  "clinical_table_writer_matrix": [
+    [
+      "anon",
+      "hato_tratamiento_pasos",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamiento_pasos",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamiento_pasos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamiento_pasos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamiento_pasos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamiento_pasos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamientos",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamientos",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamientos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamientos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamientos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "hato_tratamientos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamiento_pasos",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamiento_pasos",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamiento_pasos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamiento_pasos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamiento_pasos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamiento_pasos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamientos",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamientos",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamientos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamientos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamientos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_tratamientos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamiento_pasos",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamiento_pasos",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamiento_pasos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamiento_pasos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamiento_pasos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamiento_pasos",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamientos",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamientos",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamientos",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamientos",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamientos",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "hato_tratamientos",
+      "TRUNCATE",
+      false
+    ]
+  ],
+  "invoker177_preserved": true,
+  "remaining_direct_step_update_confirmed": true,
+  "observed_lock_races": [
+    "purchase versus original stock adjustment",
+    "manual stock write versus original catalog edit",
+    "daily source edit versus closure original",
+    "late planned reference versus unused deletion original",
+    "animal source edit versus pending treatment post",
+    "registration relink versus committed native recovery",
+    "profile deactivation versus committed stock receipt recovery",
+    "direct step execution versus original undo review",
+    "confirmed undo versus delayed direct child insertion"
+  ],
+  "clinical_candidate_sha256": "1fa0d75059b8a540bc8cfb607cdb7ade7717ba4531951dc66f9aadd6fcd3185b",
+  "stock_retirement_sha256": "dfe036ad5ca22c3d85b398e6ece3c20274bc58dc44986630b361c68e9eac4f81",
+  "extension_sha256": "619cda9b8187d76675e81243706c8db956abe0649262d29da31be2e3cbde96c2",
+  "temporary_database_stopped_and_removed": true
+}

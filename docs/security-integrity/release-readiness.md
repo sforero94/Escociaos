@@ -36,3 +36,6 @@ October14 combined mutation checkpoint:31selected native assertions now pass wit
 
 
 October14 retirement dependency: append `coordinated-writer-retirement.sql` LAST after the nine reviewed stock/cattle candidates, after exact deployed caller parity and draining old requests. Local84assertions/nine observed races pass with retirement already installed; protected protocols and clinical177 remain compatible, stock direct table/column writers and old treatment RPC are denied. SELECT/non-stock ACLs are unchanged. This closes the selected stock-grant/RPC preparation gate only; remaining direct clinical/cattle/financial writers, inactive-reader restrictions, hosted ordinary-role/runtime, retention/capacity and real recovery remain open. No numbered migration or production application authorized. See coordinated-writer-retirement-checkpoint.md.
+
+
+Clinical creation/deletion retirement is a separate dependency after coordinated stock retirement: clinical-creation-retirement.sql has68native assertions/nine observed races and preserves177/direct step UPDATE compatibility and readers. It remains unapplied. Clinical confirmation still needs the saved atomic trusted-audit/caller cutover before retiring UPDATE and177; current split alert/step writes are not certified. See clinical-writer-checkpoint.md.
