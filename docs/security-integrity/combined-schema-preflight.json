@@ -3,7 +3,8 @@
   "snapshot_hashes": {
     "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
     "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
-    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566"
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
   },
   "exported_at": "2026-10-13T19:06:45.019295-05:00",
   "source": "Owner-provided structure-only exports; no production connection",
@@ -366,5 +367,14 @@
     "memberships": 22,
     "overlapping_structure_matches": true,
     "limit": "Exporter attests no schema change; matching migration tips alone do not prove absence of manual DDL."
+  },
+  "catalog_state_admission_passed": true,
+  "addendum": {
+    "exported_at": "2026-10-13T21:24:24-05:00",
+    "indexes_joined": 357,
+    "constraints_joined": 510,
+    "user_rewrite_rules": 0,
+    "identity_sets_and_index_definitions_match": true,
+    "limit": "Catalog state reconciled for public/respaldos; not combined installation or hosted certification."
   }
 }

@@ -78,6 +78,65 @@ def with_supplement(catalog, supplement):
     return merged
 
 
+def with_addendum(catalog, supplement, addendum):
+    """Reconcile current catalog state without inferring flags from DDL text."""
+    meta = addendum['meta']
+    link = meta['addendum_to']
+    check = meta['schema_change_check']
+    tip = catalog['migrations'][-1]['name']
+    if (meta['project_ref'] != catalog['meta']['project_ref']
+        or link['original_exported_at'] != catalog['meta']['exported_at']
+        or link['supplement_exported_at'] != supplement['meta']['exported_at']
+        or link['catalog'] != 'live-catalog-private.json'
+        or link['rls'] != 'live-rls-private.json'
+        or link['supplement'] != 'live-catalog-supplement-private.json'
+        or datetime.fromisoformat(meta['exported_at']) < datetime.fromisoformat(supplement['meta']['exported_at'])):
+        raise ValueError('Addendum snapshot provenance does not match')
+    if (check['schema_changes_detected_vs_original'] is not False
+        or check['migrations_count_now'] != len(catalog['migrations'])
+        or check['migrations_count_original_export'] != len(catalog['migrations'])
+        or check['latest_migration_original_export'] != tip
+        or not (check['latest_migration_now'] == tip or check['latest_migration_now'].endswith('_' + tip))
+        or check['index_identity_set_matches_original'] is not True
+        or check['constraint_identity_set_matches_original'] is not True
+        or check['indexdef_text_mismatches_vs_original'] != []):
+        raise ValueError('Addendum schema-change attestation does not match')
+    merged = copy.deepcopy(catalog)
+    for section in ('indexes', 'constraints'):
+        original = unique_rows(merged[section], ('schema', 'table', 'name'))
+        extra = unique_rows(addendum[section], ('schema', 'table', 'name'))
+        if original.keys() != extra.keys():
+            raise ValueError('Addendum object identity coverage does not match')
+        for key, row in original.items():
+            added = dict(extra[key])
+            if section == 'indexes':
+                if row['def'] != added['indexdef']:
+                    raise ValueError('Addendum index definition changed')
+                flags = ('indisvalid', 'indisready', 'indislive', 'indimmediate', 'indisunique',
+                         'indisprimary', 'indisexclusion', 'indnullsnotdistinct')
+                # SQL array_agg over zero INCLUDE attributes exports null. The
+                # explicit key/total counts establish that it means an empty set.
+                if (added.get('include_columns') is None and 'include_columns' in added
+                    and added.get('indnatts') == added.get('indnkeyatts')):
+                    added['include_columns'] = []
+                if (any(not isinstance(added.get(f), bool) for f in flags)
+                    or not isinstance(added.get('indnkeyatts'), int)
+                    or not isinstance(added.get('indnatts'), int)
+                    or not isinstance(added.get('key_columns'), list)
+                    or not isinstance(added.get('include_columns'), list)
+                    or 'predicate' not in added or 'expressions' not in added):
+                    raise ValueError('Addendum index state is incomplete')
+            else:
+                if row['type'] != added['contype'] or any(not isinstance(added.get(f), bool)
+                    for f in ('convalidated', 'condeferrable', 'condeferred')):
+                    raise ValueError('Addendum constraint state changed or is incomplete')
+            row.update(added)
+    if not isinstance(addendum.get('rewrite_rules'), list):
+        raise ValueError('Explicit rewrite-rule inventory required')
+    merged['rewrite_rules'] = copy.deepcopy(addendum['rewrite_rules'])
+    return merged
+
+
 def digest(value):
     return hashlib.sha256(value).hexdigest()
 
@@ -197,6 +256,15 @@ def main():
         hashes[supplement_path.name] = digest(raw)
         supplement = json.loads(raw)
         values[0] = with_supplement(values[0], supplement)
+    addendum_path = evidence / 'live-catalog-addendum-private.json'
+    addendum = None
+    if addendum_path.exists():
+        if supplement is None:
+            raise ValueError('Addendum requires its referenced supplement')
+        raw = addendum_path.read_bytes()
+        hashes[addendum_path.name] = digest(raw)
+        addendum = json.loads(raw)
+        values[0] = with_addendum(values[0], supplement, addendum)
     report = assess(*values, hashes)
     if supplement:
         report['supplement'] = {
@@ -206,6 +274,14 @@ def main():
             'memberships': len(supplement['role_memberships']),
             'overlapping_structure_matches': True,
             'limit': 'Exporter attests no schema change; matching migration tips alone do not prove absence of manual DDL.'}
+    if addendum:
+        report['catalog_state_admission_passed'] = True
+        report['addendum'] = {
+            'exported_at': addendum['meta']['exported_at'],
+            'indexes_joined': len(addendum['indexes']), 'constraints_joined': len(addendum['constraints']),
+            'user_rewrite_rules': len(addendum['rewrite_rules']),
+            'identity_sets_and_index_definitions_match': True,
+            'limit': 'Catalog state reconciled for public/respaldos; not combined installation or hosted certification.'}
     output = json.dumps(report, indent=2) + '\n'
     if args.output:
         destination = args.output.resolve()

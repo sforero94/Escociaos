@@ -47,7 +47,83 @@ def supplemented_fixture():
     return catalog, rls, supplement
 
 
+def addendum_fixture():
+    catalog, rls, supplement = supplemented_fixture()
+    catalog['indexes'] = [dict(schema='public', table='productos', name='example_idx',
+                               def_='CREATE UNIQUE INDEX example_idx ON public.productos USING btree (quantity)')]
+    catalog['indexes'][0]['def'] = catalog['indexes'][0].pop('def_')
+    catalog['constraints'] = [dict(schema='public', table='productos', name='example_pk', type='p')]
+    addendum = {
+        'meta': dict(supplement['meta'], exported_at='2026-10-13T21:24:24-05:00',
+                     addendum_to={'catalog': 'live-catalog-private.json', 'rls': 'live-rls-private.json',
+                                  'supplement': 'live-catalog-supplement-private.json',
+                                  'original_exported_at': catalog['meta']['exported_at'],
+                                  'supplement_exported_at': supplement['meta']['exported_at']},
+                     schema_change_check=dict(supplement['meta']['schema_change_check'],
+                                              index_identity_set_matches_original=True,
+                                              constraint_identity_set_matches_original=True,
+                                              indexdef_text_mismatches_vs_original=[])),
+        'indexes': [dict(schema='public', table='productos', name='example_idx',
+                         indexdef=catalog['indexes'][0]['def'], indisvalid=True, indisready=True,
+                         indislive=True, indimmediate=True, indisunique=True, indisprimary=True,
+                         indisexclusion=False, indnullsnotdistinct=False, indnkeyatts=1, indnatts=1,
+                         key_columns=['quantity'], include_columns=[], predicate=None, expressions=None)],
+        'constraints': [dict(schema='public', table='productos', name='example_pk', contype='p',
+                             convalidated=True, condeferrable=False, condeferred=False)],
+        'rewrite_rules': []}
+    return p.with_supplement(catalog, supplement), rls, supplement, addendum
+
+
 class Preflight(unittest.TestCase):
+    def test_addendum_reconciles_without_mutating_input(self):
+        catalog, _, supplement, addendum = addendum_fixture()
+        merged = p.with_addendum(catalog, supplement, addendum)
+        self.assertTrue(merged['indexes'][0]['indisvalid'])
+        self.assertNotIn('indisvalid', catalog['indexes'][0])
+        self.assertEqual(merged['rewrite_rules'], [])
+
+    def test_addendum_missing_or_changed_object_refuses(self):
+        for mutation in ('missing', 'duplicate', 'definition', 'constraint_type', 'flag'):
+            catalog, _, supplement, addendum = addendum_fixture()
+            if mutation == 'missing':
+                addendum['indexes'] = []
+            elif mutation == 'duplicate':
+                addendum['constraints'].append(addendum['constraints'][0])
+            elif mutation == 'definition':
+                addendum['indexes'][0]['indexdef'] = 'changed'
+            elif mutation == 'constraint_type':
+                addendum['constraints'][0]['contype'] = 'u'
+            else:
+                del addendum['indexes'][0]['indisvalid']
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                p.with_addendum(catalog, supplement, addendum)
+
+    def test_addendum_requires_explicit_rule_inventory(self):
+        catalog, _, supplement, addendum = addendum_fixture()
+        del addendum['rewrite_rules']
+        with self.assertRaises(ValueError):
+            p.with_addendum(catalog, supplement, addendum)
+
+    def test_null_include_array_requires_explicit_zero_include_count(self):
+        catalog, _, supplement, addendum = addendum_fixture()
+        addendum['indexes'][0]['include_columns'] = None
+        self.assertEqual(p.with_addendum(catalog, supplement, addendum)['indexes'][0]['include_columns'], [])
+        addendum['indexes'][0]['indnatts'] = 2
+        with self.assertRaises(ValueError):
+            p.with_addendum(catalog, supplement, addendum)
+
+    def test_addendum_snapshot_or_schema_change_refuses(self):
+        for mutation in ('project', 'supplement', 'changed'):
+            catalog, _, supplement, addendum = addendum_fixture()
+            if mutation == 'project':
+                addendum['meta']['project_ref'] = 'other'
+            elif mutation == 'supplement':
+                addendum['meta']['addendum_to']['supplement_exported_at'] = 'other'
+            else:
+                addendum['meta']['schema_change_check']['schema_changes_detected_vs_original'] = True
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                p.with_addendum(catalog, supplement, addendum)
+
     def test_supplement_preserves_original_and_admits_exact_joined_types(self):
         catalog, rls, supplement = supplemented_fixture()
         merged = p.with_supplement(catalog, supplement)
