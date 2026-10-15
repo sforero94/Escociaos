@@ -1,0 +1,274 @@
+{
+  "scanned_files": 805,
+  "source_tree_sha256": "cbc9095fabf98164b46d1865ddda09fd3ba469beebb50d34faaa80cbf80c7f05",
+  "mutating_callers": [
+    {
+      "path": "src/components/finanzas/components/GastosList.tsx",
+      "line": 248,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/components/finanzas/components/IngresosList.tsx",
+      "line": 256,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 91,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 145,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 157,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 162,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 91,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 145,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 157,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 162,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    }
+  ],
+  "legacy_treatment_rpc_callers": [],
+  "legacy_clinical_confirmation_callers": [],
+  "clinical_confirmation_callers": [],
+  "stock_rpc_callers": [
+    {
+      "path": "src/supabase/functions/server/importar-productos.tsx",
+      "line": 74,
+      "function": "fn_csv_product_import_register"
+    },
+    {
+      "path": "src/supabase/functions/server/ronda-inventario-tick.ts",
+      "line": 683,
+      "function": "fn_ronda_emitir_reporte"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 626,
+      "function": "fn_ronda_abrir"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1035,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1170,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1822,
+      "function": "fn_ronda_confirmar_hallazgos"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1863,
+      "function": "fn_ronda_deshacer_confirmacion"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 2230,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 2248,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/cierreRonda.ts",
+      "line": 212,
+      "function": "fn_ronda_cerrar"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/excepcionDavid.ts",
+      "line": 261,
+      "function": "fn_ronda_explicacion_david"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/excepcionDavid.ts",
+      "line": 592,
+      "function": "fn_ronda_resolver_con_captura"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/ronda-helpers.ts",
+      "line": 547,
+      "function": "fn_ronda_actor_nombre"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/treatmentCreationProtocol.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/treatmentCreationProtocol.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    },
+    {
+      "path": "src/utils/hato/hatoTreatmentCreation.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "src/utils/hato/hatoTreatmentCreation.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    },
+    {
+      "path": "src/utils/manualStockMovement.ts",
+      "line": 75,
+      "function": "fn_manual_stock_movement"
+    },
+    {
+      "path": "src/utils/manualStockMovement.ts",
+      "line": 80,
+      "function": "fn_manual_stock_request_status"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/importar-productos.tsx",
+      "line": 74,
+      "function": "fn_csv_product_import_register"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/ronda-inventario-tick.ts",
+      "line": 683,
+      "function": "fn_ronda_emitir_reporte"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 626,
+      "function": "fn_ronda_abrir"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1035,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1170,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1822,
+      "function": "fn_ronda_confirmar_hallazgos"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1863,
+      "function": "fn_ronda_deshacer_confirmacion"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 2230,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 2248,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/cierreRonda.ts",
+      "line": 212,
+      "function": "fn_ronda_cerrar"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts",
+      "line": 261,
+      "function": "fn_ronda_explicacion_david"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts",
+      "line": 592,
+      "function": "fn_ronda_resolver_con_captura"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/ronda-helpers.ts",
+      "line": 547,
+      "function": "fn_ronda_actor_nombre"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/treatmentCreationProtocol.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/treatmentCreationProtocol.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    }
+  ],
+  "limits": [
+    "Literal fluent SDK calls only; dynamic table/helper call graphs require manual reconciliation."
+  ]
+}

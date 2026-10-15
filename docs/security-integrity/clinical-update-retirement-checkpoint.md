@@ -1,0 +1,21 @@
+# Coordinated clinical UPDATE and old177 retirement
+
+The nonnumbered clinical-update-retirement.sql candidate installs after the nine protocols, coordinated stock retirement, clinical creation/deletion retirement and clinical confirmation foundation (13candidates in total). Browser caller f74eb9a and Telegram caller2daa336 are validated prerequisites. Old deployed callers/in-flight requests must be drained before any separately approved installation; REVOKE does not cancel an admitted request. No production application is authorized.
+
+Admission requires the exact reviewed six-relation schema/semantic ACL fingerprint, old177 invoker body/owner/search_path, and all eight prepared confirmation function bodies/owners/configuration/definer settings. It removes table and explicit column UPDATE on both clinical tables for PUBLIC/anon/authenticated/service_role and retires old177 EXECUTE. SELECT and all nonclinical relation/column ACLs are preserved. The exact pinned confirmation dispatcher gains a private guard requiring the fully retired table/column/function boundary, preserved readers and denied protected table/helper access. Restored grants cause refusal before request lookup/mutation. Other protocol behavior is retained.
+
+The refreshed805-file TypeScript inventory finds no literal clinical table writer or old177 RPC caller. All10dynamic call sites were reviewed: finance deletion resolves to fin_gastos/fin_ingresos/fin_transacciones_ganado, photo capture writes hato_capturas_foto, and bot storage writes telegram_sessions/telegram_conversations. This is a source inventory, not a hosted deployment certificate. Among captured public function definitions, only the old creation and177 functions reference the clinical tables; both public routes are retired by the coordinated package. This is not complete global/dynamic SQL reachability certification.
+
+## Local proof
+
+clinical-update-retirement-replay.json records60aggregate assertions and25nested actual SDK checks. Four adversarial installations refuse with complete catalog rollback; all31combined stock/cattle/financial/audit mutations pass after retirement. All42effective table writer combinations and all clinical column writers are denied, with actual three-role UPDATE/old177 refusal and full domain/request/audit equality. Restored table/column/PUBLIC/legacy grants, lost readers and protected helper/audit grants refuse. Late audit suppression rolls back; concurrent same-key web posts commit one immutable proof and retry/status preserve complete state.
+
+The actual Telegram helper/installed SDK recovers a committed lost response independently from its original private action with conversation/session absent, preserving unlinked-worker authority and denying forwarding/revocation. The actual browser attempt/installed SDK recovers a committed lost response and refuses a session-owner switch before native mutation. Independent audit and actual graph readbacks match strict proof. Source digests and stopped/removed private-socket PG17.6 database are verified. Synthetic Auth/mock HTTP do not certify hosted JWTs, webhook/session persistence, deployed Deno or global writers.
+
+Reproduce using the four external private metadata exports only:
+
+```sh
+python3 scripts/security/clinical-update-retirement-replay.py /workspace/escociaos-security-control/schema-evidence --runtime /tmp/escocia-pg17-runtime/package/native --client /tmp/escocia-pg-client/node_modules/pg/lib/index.js --output docs/security-integrity/clinical-update-retirement-replay.json --private-diagnostics /tmp/escocia-clinical-retirement-private-diagnostics
+```
+
+Lint/typecheck/29Python checks PASS; focused25cases PASS and fresh complete256-file/5,338-case application suite PASS with maxWorkers=2 (64.01s), after two default runs had unrelated five-second timeouts. No deadline/assertion/runner configuration was changed. Logs and details are recorded in execution-status.md. Remaining clinical/alert lifecycle, inactive/missing-profile reader restrictions, ordinary-role/runtime/global review, retention/capacity and real recovery remain open. No production access, private publication, merge/deploy/live migration or historical/expense repair occurred.
