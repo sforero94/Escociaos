@@ -29,7 +29,7 @@ app.use('*', logger(console.log));
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info, Idempotency-Key",
   "Access-Control-Expose-Headers": "Content-Length",
   "Access-Control-Max-Age": "600",
 };
@@ -39,7 +39,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info", "Idempotency-Key"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,

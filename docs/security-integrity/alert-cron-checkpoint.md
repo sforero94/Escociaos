@@ -35,3 +35,8 @@ timeout -s INT -k 15s 300s python3 scripts/security/alert-cron-replay.py /worksp
 ```
 
 **Remaining caller work:** actual tick planning from the reserved source/reference time; all generation/retirement/escalation/expiration and delivery metadata cutover; strict RPC proof/installed-SDK replay; frozen `hjd:` bot callbacks and original private evidence recovery; explicit stale-job cancellation/replanning and unknown-send operator recovery. Current tick still uses its direct writes and old delivery loop. Do not deploy this foundation or retire grants in isolation. Hosted scheduler/JWT/webhook/Telegram behavior remains unverified. Existing alerts, message IDs, financial records and historical provenance are not repaired or adopted as prospective proof.
+
+
+## Superseding actual caller front
+
+The later alert-cron-callers-checkpoint.md records the actual reserved-source tick, atomic delivery metadata and frozen private callback cutover with a twenty-first coordinated candidate. Earlier foundation statements above remain historical. Stale-job/operator recovery and authoritative job-monitoring integration remain open; direct grants are unchanged and no hosted/deployed or production certification is implied.

@@ -19,18 +19,29 @@ function outcome(x:unknown):TelegramSendOutcome{
  return {outcome:'unknown',ok:false,error:'Original external send outcome is unknown; do not resend.'};
 }
 async function rpc(c:CronRpc,action:string,id:string,payload:Row|null){const r=await c.rpc('fn_alert_cron_service',{p_action:action,p_key:id,p_payload:payload});if(r.error)throw Error('Original delivery result unknown.');return envelope(r.data,id);}
+function canonical(x:unknown):string{if(Array.isArray(x))return '['+x.map(canonical).join(',')+']';if(record(x))return '{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}';return JSON.stringify(x);}
+function settledProof(x:{sendPermission:boolean;delivery:Row},original:Row,result:TelegramSendOutcome,allowSending=false){
+ const expected={...original,state:result.outcome,result};
+ if(x.sendPermission||!(canonical(x.delivery)===canonical(expected)||(allowSending&&canonical(x.delivery)===canonical(original))))throw Error('Original settlement proof could not be verified.');
+ return x;
+}
 /** One physical send at most. A repeated/lost claim never grants another send. */
-export async function dispatchCronDelivery(c:CronRpc,id:string,send:(options:FrozenSend)=>Promise<unknown>){
+export async function dispatchCronDelivery(c:CronRpc,id:string,send:(options:FrozenSend)=>Promise<unknown>,expected?:Row){
  if(!uuid(id))throw Error('Original delivery ID required.');const claimKey=crypto.randomUUID();
  const claimed=await rpc(c,'claim',id,{claimKey});
- if(!claimed.sendPermission)return claimed;
+ if(expected){const semantic=(d:Row)=>{const copy={...d};for(const k of ['state','claim_key','claimed_at','result'])delete copy[k];return copy;};if(canonical(semantic(claimed.delivery))!==canonical(semantic(expected)))throw Error('Original queued delivery changed.');}
+ if(!claimed.sendPermission){
+  const d=claimed.delivery,r=d.result;
+  if(['sent','rejected','unknown','not_attempted'].includes(String(d.state))&&(!record(r)||r.outcome!==d.state||(d.state==='sent'?(r.ok!==true||!Number.isSafeInteger(r.telegramMessageId)||Number(r.telegramMessageId)<1):r.ok!==false||typeof r.error!=='string')))throw Error('Original terminal delivery proof required.');
+  return claimed;
+ }
  const options=frozen(claimed.delivery,claimKey);
  let result:TelegramSendOutcome;try{result=outcome(await send(options));}catch{result=outcome(null);}
  const payload={claimKey,outcome:result};
- try{return await rpc(c,'settle',id,payload);}catch{
+ try{return settledProof(await rpc(c,'settle',id,payload),claimed.delivery,result);}catch{
   // Recovery is database-only: never call send again after acquiring permission.
-  const status=await rpc(c,'delivery_status',id,null);
+  const status=settledProof(await rpc(c,'delivery_status',id,null),claimed.delivery,result,true);
   if(status.delivery.state!=='sending')return status;
-  return rpc(c,'settle',id,payload);
+  return settledProof(await rpc(c,'settle',id,payload),claimed.delivery,result);
  }
 }

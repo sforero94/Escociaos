@@ -28,11 +28,10 @@ import { resolve } from 'node:path';
 const RAIZ = resolve(__dirname, '../..');
 
 /** Cada entrada: fichero + la funcion que resuelve destinatarios en el. */
+// The source-bound Hato planner is exercised with null/malformed recipient IDs in alertCronPlan.test.ts.
 const RESOLVEDORES: ReadonlyArray<{ fichero: string; funcion: string }> = [
   { fichero: 'src/supabase/functions/server/ronda-inventario-tick.ts', funcion: 'resolverDestinatarios' },
   { fichero: 'supabase/functions/make-server-1ccce916/ronda-inventario-tick.ts', funcion: 'resolverDestinatarios' },
-  { fichero: 'src/supabase/functions/server/hato-alertas-tick.ts', funcion: 'resolverFilasSuscripcion' },
-  { fichero: 'supabase/functions/make-server-1ccce916/hato-alertas-tick.ts', funcion: 'resolverFilasSuscripcion' },
   { fichero: 'src/supabase/functions/server/telegram/ronda-helpers.ts', funcion: 'obtenerDestinatariosModuloRonda' },
   { fichero: 'supabase/functions/make-server-1ccce916/telegram/ronda-helpers.ts', funcion: 'obtenerDestinatariosModuloRonda' },
 ];

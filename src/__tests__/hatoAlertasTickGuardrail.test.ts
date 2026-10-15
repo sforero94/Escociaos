@@ -14,71 +14,37 @@ const COPIAS = [
   'supabase/functions/make-server-1ccce916/hato-alertas-tick.ts',
 ];
 
-describe('tick: las suscripciones son la única regla de destinatarios', () => {
-  it('ninguna copia del tick filtra destinatarios por rol', () => {
-    for (const rel of COPIAS) {
-      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).not.toContain('destinatariosTelegramPermitidos');
-      expect(fuente, rel).toContain("suscriptoresPorClave.get(clave)?.recibe");
-      expect(fuente, rel).toContain("suscriptoresPorClave.get(claveEscalamiento)?.escalamiento");
+describe('tick: source-bound caller and subscription authority', () => {
+  it('keeps both actual tick roots identical with no direct domain writes', () => {
+    const sources=COPIAS.map(rel=>readFileSync(resolve(__dirname,'../..',rel),'utf8'));
+    expect(sources[0]).toBe(sources[1]);
+    for(const source of sources){
+      expect(source).toContain('postReservedAlertCron');
+      expect(source).toContain('dispatchCronDelivery');
+      expect(source).not.toMatch(/\.(insert|update|upsert|delete)\(/);
+      expect(source).not.toContain("from('hato_config')");
+      expect(source).not.toContain("from('v_hato_estado_actual')");
     }
   });
-
-  it('ambas copias del tick retiran las alertas superadas por un cambio de regla (ESCO-93)', () => {
-    // La fase (0) tiene que EXISTIR en el handler, no solo estar descrita en
-    // un comentario: sin la llamada al motor, una regla re-afinada vuelve a
-    // dejar sus alertas viejas escalando para siempre.
-    for (const rel of COPIAS) {
-      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('alertasSuperadasPorCambioDeRegla(');
-      // Se marcan descartada, nunca se borran: `hato_alertas` es historia.
-      expect(fuente, rel).toMatch(/estado:\s*'descartada'/);
-      expect(fuente, rel).not.toMatch(/from\('hato_alertas'\)\s*\.delete\(/);
+  it('reserves manual jobs with the original JWT/UUID and current Gerencia',()=>{
+    for(const rel of COPIAS){const source=readFileSync(resolve(__dirname,'../..',rel),'utf8');
+      expect(source).toContain("new Set(['Gerencia'])");
+      expect(source).toContain('supabase.auth.getUser(token)');
+      expect(source).toContain("c.req.header('Idempotency-Key')");
+      expect(source).toContain("Authorization:'Bearer '+auth.token");
+      expect(source).toContain("'fn_alert_cron_web'");
     }
   });
-
-  it('ambas copias del tick retiran las alertas cuyo hecho ya está registrado (ESCO-134)', () => {
-    for (const rel of COPIAS) {
-      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('alertasConHechoRegistrado(');
-      expect(fuente, rel).toContain(".from('hato_eventos')");
-      expect(fuente, rel).toContain('retiradas_hecho_registrado');
-      // La fase 0 tiene que leer animal_id y created_at para el ancla.
-      expect(fuente, rel).toContain("select('id, tipo, estado, regla_clave, datos, animal_id, created_at')");
-    }
-  });
-
-  it('las dos copias del tick siguen siendo idénticas en el filtro', () => {
-    const [a, b] = COPIAS.map((rel) => readFileSync(resolve(__dirname, '../..', rel), 'utf8'));
-    expect(a).toBe(b);
-  });
-});
-
-describe('tick: ESCO-106 (JWT manual + retries + tick_runs en error)', () => {
-  it('ambas copias tienen la segunda puerta JWT+Gerencia (patrón acciones/ronda)', () => {
-    for (const rel of COPIAS) {
-      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('async function verificarAuth');
-      expect(fuente, rel).toContain("new Set(['Gerencia'])");
-      expect(fuente, rel).toContain('supabase.auth.getUser(token)');
-      expect(fuente, rel).toContain('El disparo manual está restringido a Gerencia.');
-      // El secreto solo ya no es la única puerta: sin JWT el 401 nombra las dos.
-      expect(fuente, rel).toContain('no hay JWT de Gerencia');
-      expect(fuente, rel).not.toContain('function verificarSecretoTick');
-    }
-  });
-
-  it('ambas copias reintentan lecturas abortantes y persisten estado=error al abortar', () => {
-    for (const rel of COPIAS) {
-      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('consultarConReintento');
-      expect(fuente, rel).toContain('esErrorPostgrestReintentable');
-      expect(fuente, rel).toContain('const INTENTOS_TICK = 3');
-      expect(fuente, rel).toContain('async function abortarTick');
-      expect(fuente, rel).toMatch(/estado:\s*'error'/);
-      expect(fuente, rel).toContain("from('hato_config')");
-      expect(fuente, rel).toContain("from('v_hato_estado_actual')");
-    }
+  it('allows the stable manual key through both edge CORS boundaries',()=>{for(const file of ['src/supabase/functions/server/index.tsx','supabase/functions/make-server-1ccce916/index.ts']){const source=readFileSync(file,'utf8');expect(source).toContain('x-client-info, Idempotency-Key');expect(source).toContain('"x-client-info", "Idempotency-Key"');}});
+  it('plans rule/fact retirement only from reserved source and never filters subscriptions by role',()=>{
+    const source=readFileSync('src/supabase/functions/server/alertCronPlan.ts','utf8');
+    expect(source).toContain('alertasSuperadasPorCambioDeRegla(');
+    expect(source).toContain('alertasConHechoRegistrado(');
+    expect(source).toContain("patch:{estado:'descartada'");
+    expect(source).toContain("phase==='delivery'?'recibe':'escalamiento'");
+    expect(source).not.toContain('rol_bot');
+    expect(source).not.toContain('destinatariosTelegramPermitidos');
+    expect(source).not.toContain('Date.now');
   });
 });
 

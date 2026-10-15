@@ -24,3 +24,8 @@ it.each(['after','before'])('lost settlement %s commit recovers only through the
 it('a thrown send result remains unknown without a second HTTP attempt',async()=>{const h=harness(),send=vi.fn(async()=>{throw Error('Lost external result');});expect((await dispatchCronDelivery(h.client,id,send)).delivery.state).toBe('unknown');await dispatchCronDelivery(h.client,id,send);expect(send).toHaveBeenCalledOnce();});
 it('malformed permission proof cannot trigger a physical send',async()=>{const h=harness(),send=vi.fn();h.client.rpc.mockResolvedValueOnce({data:{version:1,sendPermission:true,delivery:{id}},error:null} as never);await expect(dispatchCronDelivery(h.client,id,send)).rejects.toThrow();expect(send).not.toHaveBeenCalled();});
 it('both edge roots share the dispatcher',()=>expect(readFileSync('src/supabase/functions/server/telegram/alertCronDelivery.ts','utf8')).toBe(readFileSync('supabase/functions/make-server-1ccce916/telegram/alertCronDelivery.ts','utf8')));
+it.each(['body','recipient','claim_key','result'])('settlement/status tampering in %s cannot be reported as verified',async field=>{
+ const h=harness(),original=h.client.rpc.getMockImplementation()!;
+ h.client.rpc.mockImplementation(async(name,args)=>{const r=await original(name,args);if(args.p_action==='settle'||args.p_action==='delivery_status')return {...r,data:{...r.data,delivery:{...r.data.delivery,[field]:null}}};return r;});
+ const send=vi.fn(async()=>({outcome:'sent',ok:true,telegramMessageId:91}));await expect(dispatchCronDelivery(h.client,id,send)).rejects.toThrow();expect(send).toHaveBeenCalledOnce();
+});

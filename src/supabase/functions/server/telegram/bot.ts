@@ -1,3 +1,4 @@
+import { handleAlertCronCallback } from './alertCronCallback.ts';
 import { beginAlertResponse, handleAlertResponseRecovery, privateAlertResponseAction, renderAlertResponse } from './alertResponse.ts';
 import { queryAlertResponseTelegram } from './alertResponseProtocol.ts';
 import { beginTelegramAdjustment, confirmTelegramAdjustment, recoverTelegramAdjustment, PendingRondaReview, escapeRondaReviewText, RONDA_FORCE, RONDA_REVIEW } from '../ronda-adjustment-confirmation.ts';
@@ -1444,6 +1445,12 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^hato_tr_undo:/, async (ctx) => {
     await handleHatoUndoReview(ctx, getSupabaseAdmin(), 'treatment');
+  });
+
+  bot.callbackQuery(/^hjd:/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    try { await handleAlertCronCallback(ctx,getSupabaseAdmin(),hoyBogota); }
+    catch { await ctx.reply('No pude verificar la entrega privada original. Consérvela; no solicite un reenvío.'); }
   });
 
   bot.callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/, async (ctx) => {

@@ -1,0 +1,17 @@
+import {it,expect,vi} from 'vitest';
+import {verifyCronRun,verifyCronReceipt,postReservedAlertCron,type CronRun} from '../supabase/functions/server/alertCronJob';
+import {planAlertCron} from '../supabase/functions/server/alertCronPlan';
+const id='10000000-0000-4000-8000-000000000001',owner='10000000-0000-4000-8000-000000000002';
+function fixture(){
+ const config={razas:['jersey'],meses_secado_por_raza:{_default:2},meses_gestacion_default:9,umbral_partos_reemplazo:9,ventana_proxima_secar_dias:30,ventana_proximo_parir_dias:30,dias_parto_proximo_alerta:14,dias_servicio_sin_confirmacion:45,dias_espera_voluntaria_post_parto:60,dias_rechequeo_due:60};
+ const source={domain:{alerts:[],animals:[],events:[],headers:[],steps:[],corrections:[]},animalsView:[],config:Object.entries(config).map(([clave,valor])=>({clave,valor})),alertConfig:[],subscriptions:[],registrations:[],profiles:[]};
+ const actor={origin:'manual',profileId:owner},run:CronRun={id,slot:`manual:${owner}:${id}`,actor,reference_at:'2026-10-15T12:00:00Z',source,state:'prepared',plan:null,receipt:null};
+ const plan=planAlertCron(source,run.reference_at),receipt={version:1,runId:id,initiator:actor,executor:{origin:'executor',principal:'service_role',job:'hato_alertas_tick'},recordedAt:'2026-10-15T12:00:01Z',source,plan,after:source,deliveries:[]};
+ return {run,plan,receipt,committed:{...run,state:'committed' as const,plan,receipt}};
+}
+it('verifies exact original initiator/key/source/time and coordinated after proof',()=>{const f=fixture();expect(verifyCronRun(f.committed,{actor:f.run.actor,id,slot:f.run.slot})).toEqual(f.committed);expect(verifyCronReceipt(f.receipt,f.run,f.plan)).toEqual(f.receipt);});
+it.each(['version','runId','initiator','executor','recordedAt','source','plan','after','deliveries','extra'])('rejects tampered receipt %s',key=>{const f=fixture(),x={...f.receipt,[key]:key==='extra'?true:null};expect(()=>verifyCronReceipt(x,f.run,f.plan)).toThrow();});
+it.each(['actor','id','slot','source','reference_at','state','receipt','plan','extra'])('rejects tampered reservation %s',key=>{const f=fixture();expect(()=>verifyCronRun({...f.run,[key]:['plan','receipt'].includes(key)?{}:null},{actor:f.run.actor,id,slot:f.run.slot})).toThrow();});
+it('lost committed response uses only original status and verifies the full durable receipt',async()=>{const f=fixture(),rpc=vi.fn(async(_name:string,args:Record<string,unknown>)=>{if(args.p_action==='post')throw Error('Lost response');return {data:f.committed,error:null};});expect(await postReservedAlertCron({rpc},f.run)).toEqual(f.receipt);expect(rpc.mock.calls.map(c=>c[1].p_action)).toEqual(['post','status']);expect(rpc.mock.calls.every(c=>c[1].p_key===id)).toBe(true);});
+it('stale source never allocates a replacement job or retries a post',async()=>{const f=fixture(),rpc=vi.fn(async(_name:string,args:Record<string,unknown>)=>args.p_action==='post'?{data:null,error:{message:'source changed'}}:{data:f.run,error:null});await expect(postReservedAlertCron({rpc},f.run)).rejects.toThrow(/unresolved or stale/);expect(rpc.mock.calls.map(c=>c[1].p_action)).toEqual(['post','status']);});
+it('status replacing the original captured source refuses',async()=>{const f=fixture(),rpc=vi.fn(async(_name:string,args:Record<string,unknown>)=>args.p_action==='post'?{data:null,error:true}:{data:{...f.committed,reference_at:'2026-10-15T11:59:00Z'},error:null});await expect(postReservedAlertCron({rpc},f.run)).rejects.toThrow();});

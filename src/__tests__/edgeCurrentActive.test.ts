@@ -1,3 +1,4 @@
+import { cronUuid } from '../supabase/functions/server/alertCronPlan';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
@@ -35,11 +36,11 @@ function load(root: string, file: string, guard: string, handler: string) {
   const helper = readFileSync(`${root}/perfilAplicacionActivo.ts`, 'utf8').replace('export function', 'function');
   const code = helper + '\n' + declarations.map(node => node.getText(sf).replace(/^export /, '')).join('\n');
   const js = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-  return new Function('createClient', 'conReintento', 'esErrorPostgrestReintentable', `${js}; return {guard:${guard},handler:${handler}};`)(
-    createClient, conReintento, esErrorPostgrestReintentable,
+  return new Function('createClient', 'conReintento', 'esErrorPostgrestReintentable', 'cronUuid', `${js}; return {guard:${guard},handler:${handler}};`)(
+    createClient, conReintento, esErrorPostgrestReintentable, cronUuid,
   ) as { guard: Auth; handler: (c: Context) => Promise<Response> };
 }
-function context(headers: Record<string, string> = { Authorization: 'Bearer human-token' }) {
+function context(headers: Record<string, string> = { Authorization: 'Bearer human-token', 'Idempotency-Key':actor }) {
   return {
     req: { header: (name: string) => headers[name], json: vi.fn(), parseBody: vi.fn(), query: vi.fn() },
     json: (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }),
