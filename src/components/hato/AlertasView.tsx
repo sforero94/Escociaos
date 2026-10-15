@@ -1,3 +1,6 @@
+import {useAlertManagement} from './hooks/useAlertManagement';
+import {AlertManagementDialog} from './components/AlertManagementDialog';
+import {observedManagementAlerts} from '@/utils/hato/alertManagementProtocol';
 import {useAlertResponse} from './hooks/useAlertResponse';
 import {AlertResponseDialog} from './components/AlertResponseDialog';
 // ARCHIVO: components/hato/AlertasView.tsx
@@ -102,7 +105,7 @@ function SeccionTema({
 }
 
 export function AlertasView() {
-  const { profile, user } = useAuth();
+  const { profile } = useAuth();
   const canWrite = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const canGerencia = profile?.rol === 'Gerencia';
   const navigate = useNavigate();
@@ -115,12 +118,10 @@ export function AlertasView() {
     reload,
     loading,
     error,
-    actualizarEstadoAlertas,
-    editarAlerta,
-    crearAlertaManual,
   } = useHatoAlertas();
   const clinical = useClinicalStepConfirmation();
   const response = useAlertResponse();
+  const management = useAlertManagement();
   const [idActuando, setIdActuando] = useState<string | null>(null);
   const [crearOpen, setCrearOpen] = useState(false);
   const [guardandoForm, setGuardandoForm] = useState(false);
@@ -131,7 +132,6 @@ export function AlertasView() {
     [alertas],
   );
   const historial = useMemo(() => ordenarAlertasHistorial(completadas), [completadas]);
-  const nombreActor = profile?.nombre ?? null;
 
   const handleResponder = async (id: string, respuesta: RespuestaAlertaHato) => {
     setIdActuando(id);
@@ -154,8 +154,8 @@ export function AlertasView() {
   const handleDescartar = async (id: string) => {
     setIdActuando(id);
     try {
-      await actualizarEstadoAlertas([id], { estado: 'descartada', respondidaPor: nombreActor });
-      toast.success('Alerta descartada');
+      const original=alertas.find(a=>a.id===id);if(!original)throw Error('Recargue la alerta original.');
+      await management.run('prepare',{version:1,kind:'discard',alerts:observedManagementAlerts([{...original}])});
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('Error descartando la alerta: ' + message);
@@ -210,6 +210,7 @@ export function AlertasView() {
               <div className="flex justify-end gap-2 mb-4">
                 <Button size="sm" variant="outline" disabled={clinical.busy} onClick={()=>{void clinical.recover().catch(()=>{});}}>Verificar paso pendiente</Button>
                 <Button size="sm" variant="outline" disabled={response.busy} onClick={()=>{void response.recover().catch(()=>{});}}>Verificar respuesta pendiente</Button>
+                <Button size="sm" variant="outline" disabled={management.busy} onClick={()=>{void management.recover().catch(()=>{});}}>Verificar gestión pendiente</Button>
                 <Button size="sm" onClick={() => setCrearOpen(true)}>
                   <Plus className="w-4 h-4 mr-1.5" />
                   Crear alerta
@@ -284,6 +285,9 @@ export function AlertasView() {
       <ClinicalStepConfirmationDialog open={clinical.open} busy={clinical.busy} error={clinical.error} attempt={clinical.attempt} onClose={clinical.close} onAction={mode=>{
         void clinical.run(mode,mode==='prepare'?clinical.attempt?.intent??null:null).then(async a=>{if(a?.result?.state==='committed')await reload();}).catch(()=>{});
       }}/>
+      <AlertManagementDialog open={management.open} busy={management.busy} error={management.error} attempt={management.attempt} onClose={management.close} onAction={mode=>{
+        void management.run(mode,mode==='prepare'?management.attempt?.intent??null:null).then(async a=>{if(a?.result?.state==='committed')await reload();}).catch(()=>{});
+      }}/>
       <CrearAlertaManualDialog
         open={crearOpen}
         onOpenChange={setCrearOpen}
@@ -291,7 +295,7 @@ export function AlertasView() {
         onCrear={async (input) => {
           setGuardandoForm(true);
           try {
-            await crearAlertaManual(input, user?.id ?? null);
+            await management.run('prepare',{version:1,kind:'create',tipo:input.tipo,animalId:input.tipo==='rechequeo_due'?null:input.animalId,pasoId:input.tipo==='tratamiento_paso'?input.pasoId??null:null,fechaProgramada:input.fechaProgramada,nota:input.nota.trim()});
           } finally {
             setGuardandoForm(false);
           }
@@ -309,7 +313,7 @@ export function AlertasView() {
         onGuardar={async (alerta, input) => {
           setGuardandoForm(true);
           try {
-            await editarAlerta(alerta, input);
+            await management.run('prepare',{version:1,kind:'edit',alerts:observedManagementAlerts([{...alerta}]),fechaProgramada:input.fechaProgramada,nota:input.nota.trim()});
           } finally {
             setGuardandoForm(false);
           }

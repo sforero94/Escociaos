@@ -21,9 +21,6 @@ import { getSupabase } from '@/utils/supabase/client';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import type { RespuestaAlertaHato } from '@/utils/hatoAlertas';
 import {
-  datosConNotaGestor,
-  validarAlertaManual,
-  validarEdicionAlerta,
   type InputAlertaManual,
   type InputEditarAlerta,
 } from '@/utils/hatoAlertasGestor';
@@ -119,84 +116,13 @@ export function useHatoAlertas() {
     reload();
   }, [reload]);
 
-  const actualizarEstadoAlerta = useCallback(
-    async (id: string, cambios: { estado: EstadoAlertaHato; respondidaPor?: string | null }) => {
-      const supabase = getSupabase() as any;
-      const { error: updateError } = await supabase
-        .from('hato_alertas')
-        .update({
-          estado: cambios.estado,
-          ...(cambios.respondidaPor !== undefined ? { respondida_por: cambios.respondidaPor } : {}),
-        })
-        .eq('id', id);
-      if (updateError) throw updateError;
-      await reload();
-    },
-    [reload],
-  );
-
-  /** T3a (ronda agosto 2026) -- descarte masivo / expiración automática: UN
-   * `.update().in('id', ids)` en vez de N requests secuenciales, mismo
-   * cambio para todas las filas seleccionadas. La RLS de escritura
-   * (Administrador/Gerencia, migración 056) es la misma que ya cubre
-   * `actualizarEstadoAlerta`; este hook no la duplica. */
-  const actualizarEstadoAlertas = useCallback(
-    async (ids: string[], cambios: { estado: EstadoAlertaHato; respondidaPor?: string | null }) => {
-      if (ids.length === 0) return;
-      const supabase = getSupabase() as any;
-      const { error: updateError } = await supabase
-        .from('hato_alertas')
-        .update({
-          estado: cambios.estado,
-          ...(cambios.respondidaPor !== undefined ? { respondida_por: cambios.respondidaPor } : {}),
-        })
-        .in('id', ids);
-      if (updateError) throw updateError;
-      await reload();
-    },
-    [reload],
-  );
-
-  // Legacy callers must enter the prepared owner-bound protocol before any write.
-  const responderAlerta = useCallback(async (_id: string, _respuesta: RespuestaAlertaHato, _respondidaPor: string | null) => {
-    throw new Error('Revise y confirme la respuesta desde su intento preparado original.');
-  }, []);
-
-  const editarAlerta = useCallback(
-    async (alerta: HatoAlertaRow, input: InputEditarAlerta) => {
-      const validacion = validarEdicionAlerta(input);
-      if (!validacion.ok) throw new Error(validacion.error);
-      const supabase = getSupabase() as any;
-      const { error: updateError } = await supabase
-        .from('hato_alertas')
-        .update({
-          fecha_programada: validacion.fecha_programada,
-          datos: datosConNotaGestor(alerta.datos, validacion.nota),
-        })
-        .eq('id', alerta.id);
-      if (updateError) throw updateError;
-      await reload();
-    },
-    [reload],
-  );
-
-  const crearAlertaManual = useCallback(
-    async (input: Omit<InputAlertaManual, 'idUnico'>, createdBy: string | null) => {
-      const validacion = validarAlertaManual({
-        ...input,
-        idUnico: crypto.randomUUID(),
-      });
-      if (!validacion.ok) throw new Error(validacion.error);
-      const supabase = getSupabase() as any;
-      const { error: insertError } = await supabase.from('hato_alertas').insert({
-        ...validacion.fila,
-        created_by: createdBy,
-      });
-      if (insertError) throw insertError;
-      await reload();
-    },
-    [reload],
-  );
+  // Direct mutation entry points are retired only in this hook; database grants remain unchanged.
+  const prepared=async()=>{throw Error('Revise la gestión desde su intento preparado original.');};
+  const actualizarEstadoAlerta=useCallback(async (_id:string,_cambios:{estado:EstadoAlertaHato;respondidaPor?:string|null})=>prepared(),[]);
+  const actualizarEstadoAlertas=useCallback(async (_ids:string[],_cambios:{estado:EstadoAlertaHato;respondidaPor?:string|null})=>prepared(),[]);
+  const responderAlerta=useCallback(async (_id:string,_respuesta:RespuestaAlertaHato,_actor:string|null)=>prepared(),[]);
+  const editarAlerta=useCallback(async (_alerta:HatoAlertaRow,_input:InputEditarAlerta)=>prepared(),[]);
+  const crearAlertaManual=useCallback(async (_input:Omit<InputAlertaManual,'idUnico'>,_actor:string|null)=>prepared(),[]);
 
   return {
     alertas,

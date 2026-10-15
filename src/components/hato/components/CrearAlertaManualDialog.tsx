@@ -139,7 +139,7 @@ export function CrearAlertaManualDialog({
         pasoId:tipo==='tratamiento_paso'?pasoId:null,
       });
       onOpenChange(false);
-      toast.success('Alerta creada');
+      toast.success('Revisión preparada. Confirme la creación.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('No se pudo crear la alerta: ' + message);

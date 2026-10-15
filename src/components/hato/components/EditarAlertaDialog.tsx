@@ -56,7 +56,7 @@ export function EditarAlertaDialog({
     try {
       await onGuardar(alerta, { fechaProgramada, nota });
       onOpenChange(false);
-      toast.success('Alerta actualizada');
+      toast.success('Revisión preparada. Confirme el cambio.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('No se pudo editar la alerta: ' + message);

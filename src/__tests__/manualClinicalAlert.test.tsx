@@ -28,10 +28,9 @@ it('clears selected step when the animal changes',async()=>{await mount();await 
 it('ignores a stale step lookup after animal change',async()=>{let resolve!:(v:unknown)=>void;stepQuery.order.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}) as never);await mount();await choose();await act(async()=>selects()[1].props.onValueChange(OTHER));await act(async()=>resolve({data:[{id:OTHER,descripcion:'Stale other step',fecha_programada:'2026-10-14'}],error:null}));expect(JSON.stringify(renderer!.toJSON())).not.toContain('Stale other step');});
 it('refuses a failed step lookup rather than posting an unlinked alert',async()=>{stepQuery.order.mockResolvedValueOnce({data:[],error:Error('synthetic failure')} as never);await mount();await choose();expect(JSON.stringify(renderer!.toJSON())).toContain('No se pudieron verificar');await submit();expect(createAlert).not.toHaveBeenCalled();});
 
-it('actual creation hook includes the selected paso_id in its insert and refuses unlinked clinical input',async()=>{
+it('retired legacy creation hook refuses before direct insert for linked and unlinked input',async()=>{
  const insert=vi.fn(async()=>({error:null})),chain={select:vi.fn(),order:vi.fn(async()=>({data:[],error:null})),insert};chain.select.mockReturnValue(chain);state.client={from:vi.fn(()=>chain)};
  let api!:ReturnType<typeof useHatoAlertas>;function Hook(){const value=useHatoAlertas();useLayoutEffect(()=>{api=value;});return null;}
  await act(async()=>{renderer=create(<Hook/>);});
- await act(async()=>{await api.crearAlertaManual(input,OWNER);});expect(insert).toHaveBeenCalledWith(expect.objectContaining({paso_id:STEP,animal_id:ANIMAL,tipo:'tratamiento_paso'}));
- insert.mockClear();await expect(api.crearAlertaManual({...input,pasoId:null},OWNER)).rejects.toThrow('paso clínico');expect(insert).not.toHaveBeenCalled();
+ await expect(api.crearAlertaManual(input,OWNER)).rejects.toThrow('intento preparado');await expect(api.crearAlertaManual({...input,pasoId:null},OWNER)).rejects.toThrow('intento preparado');expect(insert).not.toHaveBeenCalled();
 });
