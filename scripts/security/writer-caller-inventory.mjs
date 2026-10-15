@@ -4,7 +4,8 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 const files=execFileSync('rg',['--files','src','supabase'],{encoding:'utf8'}).trim().split('\n').filter(p=>/\.[cm]?tsx?$/.test(p)&&!/(?:__tests__|\.test\.|vendor\/)/.test(p)).sort();
-const targets=new Set(['productos','compras','movimientos_inventario','hato_tratamientos','hato_tratamiento_pasos']);
+const lifecycle=process.argv.includes('--lifecycle');
+const targets=new Set(lifecycle?['hato_animales','hato_alertas','hato_alertas_envios','hato_eventos','hato_chequeos','hato_chequeo_vacas','hato_correcciones','globalgap_correcciones','logs_auditoria','hato_pesajes_leche','hato_produccion_quincenal','hato_tratamientos','hato_tratamiento_pasos']:['productos','compras','movimientos_inventario','hato_tratamientos','hato_tratamiento_pasos']);
 const rows=[],rpc=[];
 const digest=createHash('sha256');
 for(const path of files){
@@ -28,4 +29,4 @@ for(const path of files){
  }
  visit(file);
 }
-process.stdout.write(JSON.stringify({scanned_files:files.length,source_tree_sha256:digest.digest('hex'),mutating_callers:rows,legacy_treatment_rpc_callers:rpc.filter(r=>r.function==='fn_hato_registrar_tratamiento'),legacy_clinical_confirmation_callers:rpc.filter(r=>r.function==='fn_hato_confirmar_paso_tratamiento'),clinical_confirmation_callers:rpc.filter(r=>/^fn_clinical_step_(web|telegram)$/.test(r.function)),stock_rpc_callers:rpc.filter(r=>/fn_(purchase|product_catalog|manual_stock|csv_product|application_clos|application_plan|ronda_|hato_treatment)/.test(r.function)),limits:['Literal fluent SDK calls only; dynamic table/helper call graphs require manual reconciliation.']},null,2)+'\n');
+process.stdout.write(JSON.stringify({scanned_files:files.length,inventory_scope:lifecycle?'remaining-cattle-lifecycle-and-audit':'stock-and-clinical',source_tree_sha256:digest.digest('hex'),mutating_callers:rows,lifecycle_rpc_callers:lifecycle?rpc.filter(r=>/^(fn_hato_|fn_clinical_step_)/.test(r.function)):undefined,legacy_treatment_rpc_callers:rpc.filter(r=>r.function==='fn_hato_registrar_tratamiento'),legacy_clinical_confirmation_callers:rpc.filter(r=>r.function==='fn_hato_confirmar_paso_tratamiento'),clinical_confirmation_callers:rpc.filter(r=>/^fn_clinical_step_(web|telegram)$/.test(r.function)),stock_rpc_callers:rpc.filter(r=>/fn_(purchase|product_catalog|manual_stock|csv_product|application_clos|application_plan|ronda_|hato_treatment)/.test(r.function)),limits:['Literal fluent SDK calls only; dynamic table/helper call graphs require manual reconciliation.']},null,2)+'\n');

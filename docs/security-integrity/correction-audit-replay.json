@@ -1,0 +1,381 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "candidate_hashes": {
+    "purchase-integrity": "70b155aa8a80e373948b2b5082772055cbd95cf0e4d3336a989f7a8d83c3c941",
+    "manual-stock-movement": "d2b96e3f245e867d4bf71510c61aa86b5a8655e96e80df5f15dffb18fc0590a4",
+    "product-catalog-integrity": "55ed8a06ecf05c71c6fb6e30e6facaa952045259ba9db00e908ed27c153464a3",
+    "csv-product-import": "980cf89c94003db4d103d602f4135d5a5bfbf33ee2af5863fefe0b3c96be891b",
+    "application-closure": "9369d7e2d4c19c0b5b53569e74fad185be4c13a667c44ce6eb54a444c95c348f",
+    "application-plan-delete": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+    "ronda-stock-integrity": "27c42a1fb7846ec2ff16ec78e63fa1b798132375c183d70be47ec2d791170c75",
+    "hato-undo": "aaf13fcfc2bb460d8e1acedfb3fe4848f32c73b102ccdc3ac117ed30d3364ad3",
+    "hato-treatment-creation": "27ca417e1c9162dedc090bbee9282d1dad0fe4b8626b7341d85f2cd070031169"
+  },
+  "runner_sha256": "aeb28841ccdb370c0a2e28cac5f244077b951d43d4c7ca6f811d63b6cfbcf813",
+  "assertions": 84,
+  "checks": [
+    "initial complete exported-property parity",
+    "all nine candidates installed together before any synthetic mutation",
+    "catalog creates one trusted opening on coordinated graph",
+    "catalog lost-response recovery preserves entire combined database",
+    "manual entry and captured actor/timestamp triggers coexist with catalog opening",
+    "manual lost response adds no domain/financial/cattle/proof rows",
+    "purchase adds to current manual/catalog stock with actual purchase triggers",
+    "purchase lost-response replay preserves complete combined state",
+    "late financial association fault rolls back entire combined database",
+    "reversal preserves pending and confirmed expenses and exact retained financial fields",
+    "reversal removes only its posted stock and records both durable expense associations",
+    "lost reversal response never repeats ledger/deletion/expense detachment",
+    "retired legacy cleanup cannot delete preserved expenses",
+    "concurrent purchase/manual writers serialize on current shared product without lost stock",
+    "original stock revision refuses after competing purchase/manual writes with full rollback",
+    "CSV trusted-parser/human posting creates exact durable opening on coordinated graph",
+    "CSV original-key recovery preserves complete combined state",
+    "late closure receipt fault restores all stock/work/financial/audit/proof state",
+    "actual closure debits shared stock once with exact source costs and correction audit",
+    "closure retry preserves whole combined database and its original receipt",
+    "closed application and committed closure proof block unused-plan deletion",
+    "Ronda adjustment preserves actual provenance constraints and posts once on shared product",
+    "Ronda original exception proof replays without changing prior combined ledger",
+    "co-installed deletion preserves all five historical copies and original application IDs",
+    "co-installed deletion retry preserves all stock/financial/cattle state",
+    "co-installed Telegram creation binds Gerencia and exact pending step",
+    "retired direct undo core refuses service caller",
+    "native undo removes only exact prospective treatment and pending step with audit",
+    "creation and undo retries preserve both immutable receipts without recreating clinical rows",
+    "revoked Gerencia cannot disclose committed treatment creation",
+    "revoked Gerencia cannot replay undo receipt",
+    "all42 ordinary/service audit table writer privileges denied",
+    "anon hato_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "anon hato_correcciones UPDATE refuses preserving complete domain/control/audit state",
+    "anon hato_correcciones DELETE refuses preserving complete domain/control/audit state",
+    "anon hato_correcciones TRUNCATE refuses preserving complete domain/control/audit state",
+    "anon globalgap_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "anon globalgap_correcciones UPDATE refuses preserving complete domain/control/audit state",
+    "anon globalgap_correcciones DELETE refuses preserving complete domain/control/audit state",
+    "anon globalgap_correcciones TRUNCATE refuses preserving complete domain/control/audit state",
+    "authenticated hato_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "authenticated hato_correcciones UPDATE refuses preserving complete domain/control/audit state",
+    "authenticated hato_correcciones DELETE refuses preserving complete domain/control/audit state",
+    "authenticated hato_correcciones TRUNCATE refuses preserving complete domain/control/audit state",
+    "authenticated globalgap_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "authenticated globalgap_correcciones UPDATE refuses preserving complete domain/control/audit state",
+    "authenticated globalgap_correcciones DELETE refuses preserving complete domain/control/audit state",
+    "authenticated globalgap_correcciones TRUNCATE refuses preserving complete domain/control/audit state",
+    "service_role hato_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "service_role hato_correcciones UPDATE refuses preserving complete domain/control/audit state",
+    "service_role hato_correcciones DELETE refuses preserving complete domain/control/audit state",
+    "service_role hato_correcciones TRUNCATE refuses preserving complete domain/control/audit state",
+    "service_role globalgap_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "service_role globalgap_correcciones UPDATE refuses preserving complete domain/control/audit state",
+    "service_role globalgap_correcciones DELETE refuses preserving complete domain/control/audit state",
+    "service_role globalgap_correcciones TRUNCATE refuses preserving complete domain/control/audit state",
+    "all audit effective column writers denied",
+    "source audit trigger EXECUTE denied to all ordinary/service roles",
+    "current human source trigger still records exact trusted actor/before/after after EXECUTE retirement",
+    "GlobalGAP source trigger retains exact correction audit with all candidates co-installed",
+    "owner hato_correcciones immutable UPDATE refuses preserving complete domain/control/audit state",
+    "owner hato_correcciones immutable DELETE refuses preserving complete domain/control/audit state",
+    "owner hato_correcciones immutable TRUNCATE refuses preserving complete domain/control/audit state",
+    "restored service hato_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "direct owner hato_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "owner globalgap_correcciones immutable UPDATE refuses preserving complete domain/control/audit state",
+    "owner globalgap_correcciones immutable DELETE refuses preserving complete domain/control/audit state",
+    "owner globalgap_correcciones immutable TRUNCATE refuses preserving complete domain/control/audit state",
+    "restored service globalgap_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "direct owner globalgap_correcciones INSERT refuses preserving complete domain/control/audit state",
+    "source plus late audit fault refuses preserving complete domain/control/audit state",
+    "plan restored audit writer grant refuses preserving complete domain/control/audit state",
+    "plan disabled immutable trigger refuses preserving complete domain/control/audit state",
+    "plan changed private guard config refuses preserving complete domain/control/audit state",
+    "plan restored source function execute refuses preserving complete domain/control/audit state",
+    "remaining service source UPDATE skips legacy correction audit; reproduced only in rolled-back local transaction"
+  ],
+  "limits": [
+    "Local synthetic metadata replay only; no hosted/global certification.",
+    "Prospective correction storage protection, not certification of historical audit provenance.",
+    "Service source writes with NULL UID still skip legacy audit; remaining lifecycle/reader/global review is open."
+  ],
+  "installation_checks": [
+    "audit schema drift refuses with catalog rollback",
+    "audit RLS drift refuses with catalog rollback",
+    "audit writer config drift refuses with catalog rollback",
+    "audit writer ownership mode drift refuses with catalog rollback",
+    "missing source binding refuses with catalog rollback",
+    "plan graph config drift refuses with catalog rollback"
+  ],
+  "pre_retirement_local_bypasses": [
+    "hato_correcciones service INSERT/UPDATE/DELETE reproduced and rolled back",
+    "globalgap_correcciones service INSERT/UPDATE/DELETE reproduced and rolled back"
+  ],
+  "all_reader_privileges_preserved": true,
+  "existing_audit_rows_unchanged": true,
+  "effective_audit_table_writer_matrix": [
+    [
+      "anon",
+      "globalgap_correcciones",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "globalgap_correcciones",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "globalgap_correcciones",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "globalgap_correcciones",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "globalgap_correcciones",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "globalgap_correcciones",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "anon",
+      "globalgap_correcciones",
+      "UPDATE",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "DELETE",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "INSERT",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "REFERENCES",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "TRIGGER",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "anon",
+      "hato_correcciones",
+      "UPDATE",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "globalgap_correcciones",
+      "UPDATE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "DELETE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "INSERT",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "REFERENCES",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "TRIGGER",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "authenticated",
+      "hato_correcciones",
+      "UPDATE",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "globalgap_correcciones",
+      "UPDATE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "DELETE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "INSERT",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "MAINTAIN",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "REFERENCES",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "TRIGGER",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "TRUNCATE",
+      false
+    ],
+    [
+      "service_role",
+      "hato_correcciones",
+      "UPDATE",
+      false
+    ]
+  ],
+  "existing_source_audits_preserved": true,
+  "legacy_service_audit_gap_remains": true,
+  "source_hashes": {
+    "src/sql/security-candidates/correction-audit-integrity.sql": "8f87295cc10f322bdead1d20112e41896f36e096853767bd58fa74ba4b61bdd6",
+    "scripts/security/correction-audit-baseline-query.sql": "43ca0b86defe611c1f78406e76a5b844b1f33dc14208a892a71f20f8810c4c8a",
+    "scripts/security/correction-audit-replay.py": "c28f5c735a500eef75b405acfe9fb54f89f02a620ce09ceafe6991780f1bed64",
+    "src/sql/security-candidates/clinical-update-retirement.sql": "878ad966a2af4d8f97a8a81ac6d34e51a49935af30697622c4df8c8c32f486b5"
+  },
+  "temporary_database_stopped_and_removed": true
+}

@@ -1,0 +1,756 @@
+{
+  "scanned_files": 805,
+  "inventory_scope": "remaining-cattle-lifecycle-and-audit",
+  "source_tree_sha256": "cbc9095fabf98164b46d1865ddda09fd3ba469beebb50d34faaa80cbf80c7f05",
+  "mutating_callers": [
+    {
+      "path": "src/components/finanzas/components/GastosList.tsx",
+      "line": 248,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/components/finanzas/components/IngresosList.tsx",
+      "line": 256,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useActualizarHatoAnimal.ts",
+      "line": 67,
+      "table": "hato_animales",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useCorregirEventoHato.ts",
+      "line": 51,
+      "table": "hato_eventos",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useCorregirEventoHato.ts",
+      "line": 80,
+      "table": "hato_eventos",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useCrearHatoAnimal.ts",
+      "line": 43,
+      "table": "hato_animales",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useDetallePesajeSemana.ts",
+      "line": 108,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useDetallePesajeSemana.ts",
+      "line": 119,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useHatoAlertas.ts",
+      "line": 135,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useHatoAlertas.ts",
+      "line": 157,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useHatoAlertas.ts",
+      "line": 179,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useHatoAlertas.ts",
+      "line": 202,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useHatoAlertas.ts",
+      "line": 229,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useHatoAlertas.ts",
+      "line": 250,
+      "table": "hato_alertas",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useMarcarCicloHato.ts",
+      "line": 112,
+      "table": "hato_animales",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useMarcarCicloHato.ts",
+      "line": 204,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useMarcarCicloHato.ts",
+      "line": 208,
+      "table": "hato_animales",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useReactivarHatoAnimal.ts",
+      "line": 127,
+      "table": "hato_animales",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useRegistrarSalidaHato.ts",
+      "line": 38,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useRegistrarSalidaHato.ts",
+      "line": 50,
+      "table": "hato_animales",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useRegistrarSalidaHato.ts",
+      "line": 81,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useRegistrarSalidaHato.ts",
+      "line": 91,
+      "table": "hato_animales",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/components/hato/hooks/useSubidasPesajeMes.ts",
+      "line": 213,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 457,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 509,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 628,
+      "table": "hato_alertas",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 721,
+      "table": "hato_alertas_envios",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 733,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 794,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 821,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-alertas-tick.ts",
+      "line": 861,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 91,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 145,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-pesaje-pipeline.ts",
+      "line": 725,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/hato-pesaje-pipeline.ts",
+      "line": 745,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 157,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 162,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1458,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1513,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/eventoHato.ts",
+      "line": 979,
+      "table": "hato_animales",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/eventoHato.ts",
+      "line": 1010,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/eventoHato.ts",
+      "line": 1034,
+      "table": "hato_animales",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/eventoHato.ts",
+      "line": 1084,
+      "table": "hato_eventos",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 457,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 509,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 628,
+      "table": "hato_alertas",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 721,
+      "table": "hato_alertas_envios",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 733,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 794,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 821,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-alertas-tick.ts",
+      "line": 861,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 91,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 145,
+      "table": "<dynamic>",
+      "argument": "TABLA",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts",
+      "line": 725,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts",
+      "line": 745,
+      "table": "hato_pesajes_leche",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 157,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "upsert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 162,
+      "table": "<dynamic>",
+      "argument": "table",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1458,
+      "table": "hato_alertas",
+      "writes": [
+        "update"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1513,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/eventoHato.ts",
+      "line": 979,
+      "table": "hato_animales",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/eventoHato.ts",
+      "line": 1010,
+      "table": "hato_eventos",
+      "writes": [
+        "insert"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/eventoHato.ts",
+      "line": 1034,
+      "table": "hato_animales",
+      "writes": [
+        "delete"
+      ]
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/eventoHato.ts",
+      "line": 1084,
+      "table": "hato_eventos",
+      "writes": [
+        "update"
+      ]
+    }
+  ],
+  "lifecycle_rpc_callers": [
+    {
+      "path": "src/components/hato/hooks/useProduccionHato.ts",
+      "line": 277,
+      "function": "fn_hato_guardar_quincena_venta"
+    },
+    {
+      "path": "src/components/hato/hooks/useProduccionHato.ts",
+      "line": 312,
+      "function": "fn_hato_eliminar_quincena_venta"
+    },
+    {
+      "path": "src/components/hato/hooks/useVentaAnimalesHato.ts",
+      "line": 93,
+      "function": "fn_hato_registrar_venta_animales"
+    },
+    {
+      "path": "src/supabase/functions/server/hato-chequeo-commit.ts",
+      "line": 418,
+      "function": "fn_hato_commit_chequeo"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/treatmentCreationProtocol.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/treatmentCreationProtocol.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    },
+    {
+      "path": "src/utils/hato/hatoTreatmentCreation.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "src/utils/hato/hatoTreatmentCreation.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/hato-chequeo-commit.ts",
+      "line": 418,
+      "function": "fn_hato_commit_chequeo"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/treatmentCreationProtocol.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/treatmentCreationProtocol.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    }
+  ],
+  "legacy_treatment_rpc_callers": [],
+  "legacy_clinical_confirmation_callers": [],
+  "clinical_confirmation_callers": [],
+  "stock_rpc_callers": [
+    {
+      "path": "src/supabase/functions/server/importar-productos.tsx",
+      "line": 74,
+      "function": "fn_csv_product_import_register"
+    },
+    {
+      "path": "src/supabase/functions/server/ronda-inventario-tick.ts",
+      "line": 683,
+      "function": "fn_ronda_emitir_reporte"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 626,
+      "function": "fn_ronda_abrir"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1035,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1170,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1822,
+      "function": "fn_ronda_confirmar_hallazgos"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 1863,
+      "function": "fn_ronda_deshacer_confirmacion"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 2230,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/bot.ts",
+      "line": 2248,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/cierreRonda.ts",
+      "line": 212,
+      "function": "fn_ronda_cerrar"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/excepcionDavid.ts",
+      "line": 261,
+      "function": "fn_ronda_explicacion_david"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/conversations/excepcionDavid.ts",
+      "line": 592,
+      "function": "fn_ronda_resolver_con_captura"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/ronda-helpers.ts",
+      "line": 547,
+      "function": "fn_ronda_actor_nombre"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/treatmentCreationProtocol.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "src/supabase/functions/server/telegram/treatmentCreationProtocol.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    },
+    {
+      "path": "src/utils/hato/hatoTreatmentCreation.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "src/utils/hato/hatoTreatmentCreation.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    },
+    {
+      "path": "src/utils/manualStockMovement.ts",
+      "line": 75,
+      "function": "fn_manual_stock_movement"
+    },
+    {
+      "path": "src/utils/manualStockMovement.ts",
+      "line": 80,
+      "function": "fn_manual_stock_request_status"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/importar-productos.tsx",
+      "line": 74,
+      "function": "fn_csv_product_import_register"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/ronda-inventario-tick.ts",
+      "line": 683,
+      "function": "fn_ronda_emitir_reporte"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 626,
+      "function": "fn_ronda_abrir"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1035,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1170,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1822,
+      "function": "fn_ronda_confirmar_hallazgos"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 1863,
+      "function": "fn_ronda_deshacer_confirmacion"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 2230,
+      "function": "fn_ronda_proponer_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/bot.ts",
+      "line": 2248,
+      "function": "fn_ronda_decidir_ajuste"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/cierreRonda.ts",
+      "line": 212,
+      "function": "fn_ronda_cerrar"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts",
+      "line": 261,
+      "function": "fn_ronda_explicacion_david"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts",
+      "line": 592,
+      "function": "fn_ronda_resolver_con_captura"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/ronda-helpers.ts",
+      "line": 547,
+      "function": "fn_ronda_actor_nombre"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/treatmentCreationProtocol.ts",
+      "line": 83,
+      "function": "fn_hato_treatment_create_telegram_action"
+    },
+    {
+      "path": "supabase/functions/make-server-1ccce916/telegram/treatmentCreationProtocol.ts",
+      "line": 95,
+      "function": "fn_hato_treatment_snapshot_telegram"
+    }
+  ],
+  "limits": [
+    "Literal fluent SDK calls only; dynamic table/helper call graphs require manual reconciliation."
+  ]
+}
