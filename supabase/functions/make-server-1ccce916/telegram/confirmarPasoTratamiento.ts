@@ -27,7 +27,7 @@ export async function ofrecerPasosPendientes(args: {
   hoy: string;
   transporte: TransportePasos;
   cargar: () => Promise<PasoTratamientoPendiente[]>;
-  confirmar: (paso: PasoTratamientoPendiente, fecha: string) => Promise<void>;
+  confirmar: (paso: PasoTratamientoPendiente, fecha: string) => Promise<void | 'prepared'>;
 }): Promise<boolean> {
   const { transporte: t, hoy } = args;
   let pasos: PasoTratamientoPendiente[];
@@ -112,7 +112,7 @@ export async function ofrecerPasosPendientes(args: {
     if (cancelar(confirmacion)) return false;
     if (confirmacion.callback !== "tp_confirmar") continue;
     try {
-      await args.confirmar(paso, fecha);
+      if (await args.confirmar(paso, fecha) === 'prepared') return false;
     } catch {
       await t.decir("No pude confirmar el paso. Puede haber cambiado; no se sobrescribirá una fecha existente. Puedes revisar los pendientes o registrar uno nuevo.");
       continue;

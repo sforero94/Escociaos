@@ -28,6 +28,7 @@ export interface TelegramUsuario {
 }
 
 export interface SessionData {
+  pendientePasoClinico?: {action:{sender:number;chatId:number;messageId:number};intent:{version:1;stepId:string;fechaEjecutada:string;alertId:string|null}} | null;
   pendienteTratamiento?: {sender:number;chatId:number;messageId:number} | null;
   // grammy conversations stores its state here automatically
 

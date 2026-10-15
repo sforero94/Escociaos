@@ -61,7 +61,7 @@ import {
 } from "../resolverUsuarioTelegram.ts";
 import { ofrecerPasosPendientes, type PasoTratamientoPendiente } from "../confirmarPasoTratamiento.ts";
 import { confirmTreatment, readOriginalTreatmentAnimal } from '../treatmentCreation.ts';
-import { cerrarAlertaEnEnvios } from "../enviar.ts";
+import { beginClinicalStep } from '../clinicalStepConfirmation.ts';
 import {
   avisoFechaLejana,
   fechaLegible,
@@ -439,34 +439,11 @@ export async function eventoHatoConversation(
             if ((data?.length ?? 0) < 500) return pendientes;
           }
         }),
-        confirmar: async (paso, fecha) => {
-          const resultado = await conversation.external(async () => {
-            const sb = getSupabaseAdmin();
-            const actor = await resolverUsuarioTelegram(sb, ctx.from?.id);
-            if (!actor.ok || !actor.usuarioId) throw new Error("Cuenta no vinculada.");
-            const { data, error } = await sb.rpc("fn_hato_confirmar_paso_tratamiento", {
-              p_animal_id: vaca!.animal_id, p_paso_id: paso.id,
-              p_fecha_ejecutada: fecha,
-              p_respondida_por: actor.nombreDisplay || `Telegram ${ctx.from!.id}`,
-            });
-            if (error) throw new Error(error.message);
-            return data as { alerta_ids: string[]; ya_confirmado: boolean };
-          });
-          escrito = true;
-          // El cierre en la base ya se confirmó. Fallos de edición de mensajes
-          // no deben convertirlo en un supuesto fallo de escritura.
-          await conversation.external(async () => {
-            try {
-              const sb = getSupabaseAdmin();
-              for (const id of resultado.alerta_ids) {
-                await cerrarAlertaEnEnvios(sb, id, null,
-                  `✅ Paso de tratamiento confirmado desde /tratamiento.\n🐄 ${etiquetaVaca(vaca!)}\n${paso.nombre}\nAplicado: ${fechaLegible(fecha)}`);
-              }
-            } catch (error) {
-              console.error("[tratamiento] Paso guardado; fallo al cerrar mensajes:", error);
-            }
-          });
-        },
+        confirmar: (paso, fecha) => conversation.external((outside) =>
+          beginClinicalStep(outside,getSupabaseAdmin(),{
+            version:1,stepId:paso.id,fechaEjecutada:fecha,alertId:null,
+          })
+        ),
       });
       if (!continuar) return;
       // El paso anterior ya tuvo su mensaje de éxito. La escritura del

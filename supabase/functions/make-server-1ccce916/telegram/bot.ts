@@ -22,6 +22,8 @@ import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
+import { beginClinicalStep, handleClinicalRecovery, privateClinicalAction, renderClinical } from './clinicalStepConfirmation.ts';
+import { queryClinicalTelegram } from './clinicalStepConfirmationProtocol.ts';
 import { handleTreatmentRecovery, renderTreatment } from './treatmentCreation.ts';
 import { recoverTelegramTreatment } from './treatmentCreationProtocol.ts';
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
@@ -268,6 +270,17 @@ function getBot(): Bot<BotContext> {
     await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
   });
 
+  bot.use(async (ctx,next)=>{
+    await handleClinicalRecovery(ctx,next,getSupabaseAdmin(),async result=>{
+      for(const alert of result.receipt!.after.alerts){
+        if(alert.paso_id===result.intent!.stepId&&alert.tipo==='tratamiento_paso'&&alert.estado==='confirmada'){
+          await cerrarAlertaEnEnvios(getSupabaseAdmin(),String(alert.id),null,
+            `✅ Paso de tratamiento confirmado. Aplicado: ${result.intent!.fechaEjecutada}`);
+        }
+      }
+    });
+  });
+
   // --- SALIDA DE EMERGENCIA — va ANTES de los `createConversation` -----------
   //
   // ORIGEN: incidente del 2026-09-08. Dos usuarios quedaron con una
@@ -292,6 +305,18 @@ function getBot(): Bot<BotContext> {
   // siendo una acción de un usuario registrado.
   bot.command("cancelar", async (ctx) => {
     let tratamientoRegistrado=false;
+    const paso=ctx.session.pendientePasoClinico;
+    if(paso){
+      try{
+        const message={message_id:paso.action.messageId,chat:{id:paso.action.chatId,type:'private'}};
+        privateClinicalAction({...ctx,callbackQuery:{message}});
+        const result=await queryClinicalTelegram(getSupabaseAdmin(),paso.action,'resolve');
+        if(result.state!=='committed'&&result.state!=='canceled')throw Error('Cancelación no verificable');
+        ctx.session.pendientePasoClinico=null;
+        if(result.state==='committed')await ctx.reply('El paso ya estaba registrado; la cancelación no lo deshace.');
+        try{await renderClinical(ctx,paso.action,result);}catch{/* Durable native proof remains recoverable. */}
+      }catch{await ctx.reply('No pude verificar la cancelación del paso. Conserve el mensaje privado original.');return;}
+    }
     const pendiente=ctx.session.pendienteTratamiento;
     if(pendiente){
       try{
@@ -1410,6 +1435,17 @@ function getBot(): Bot<BotContext> {
     }
 
     const sb = getSupabaseAdmin();
+    // Clinical “sí” prepares a separate private review before any alert claim.
+    const {data: originalAlert,error: readError}=await sb.from('hato_alertas')
+      .select('id,tipo,paso_id').eq('id',alertaId).maybeSingle();
+    if(readError||!originalAlert){await ctx.answerCallbackQuery({text:'No pude verificar la alerta original.'});return;}
+    if(respuesta==='si'&&originalAlert.tipo==='tratamiento_paso'){
+      await ctx.answerCallbackQuery();
+      try{
+        await beginClinicalStep(ctx,sb,{version:1,stepId:originalAlert.paso_id,fechaEjecutada:hoyBogota(),alertId:alertaId});
+      }catch{await ctx.reply('Verifique o cancele el intento clínico desde su mensaje privado original.');}
+      return;
+    }
     const respondidaPor = ctx.telegramUser?.nombre_display ?? String(ctx.from?.id ?? "desconocido");
     const nuevoEstado = estadoTrasRespuestaAlerta(respuesta);
 
@@ -1423,6 +1459,7 @@ function getBot(): Bot<BotContext> {
       .from("hato_alertas")
       .update({ estado: nuevoEstado, respuesta, respondida_por: respondidaPor })
       .eq("id", alertaId)
+      .eq("tipo", originalAlert.tipo)
       .in("estado", ["pendiente", "enviada"])
       .select("id, tipo, animal_id, paso_id, datos")
       .maybeSingle();
@@ -1477,15 +1514,6 @@ function getBot(): Bot<BotContext> {
           payloadEventoSecadoDesdeAlerta(efecto.animal_id, alertaId, hoyIso),
         );
         if (errorEvento) console.error("[Telegram] hato_eventos (secado_real) insert error:", errorEvento.message);
-      } else if (efecto.kind === "tratamiento_paso") {
-        // hato_eventos.tipo (CHECK de la migración 053) no tiene ninguna
-        // variante de "tratamiento" -- no hay un evento que insertar aquí,
-        // solo se marca ejecutado el paso mismo (055).
-        const { error: errorPaso } = await sb
-          .from("hato_tratamiento_pasos")
-          .update({ fecha_ejecutada: hoyIso })
-          .eq("id", efecto.paso_id);
-        if (errorPaso) console.error("[Telegram] hato_tratamiento_pasos update error:", errorPaso.message);
       }
     }
     // "no"/"otro" -- NUNCA se auto-resuelve: Martha lo revisa desde
