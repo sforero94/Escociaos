@@ -51,3 +51,6 @@ October15 correction storage dependency: append correction-audit-integrity.sql a
 
 
 October15 prospective human audit dependency: append correction-audit-readbacks.sql after correction storage (15candidates total). Local52native assertions and full5,338App tests pass, including eight suppression/corruption rollbacks and exact durable actor/before/after evidence. Pinned plan graph is coordinated with the new GlobalGAP writer body. NULL-UID service omission and remaining lifecycle/reader/global/hosted/recovery gates stay open; no historical provenance is inferred or production application authorized.
+
+
+October15 clinical alert dependency: clinical-alert-integrity.sql follows the15candidate graph (16total). Local55aggregate/25nested SDK checks verify prospective confirmed treatment alert consistency with an executed step/matching animal, authority-before-lookup, existing prepared callers and legacy executed-step cron closure. No existing records are repaired or given invented audit. Atomic alert/secado, event/animal lifecycle/CAS/trusted actor, remaining direct writers, readers and global/hosted/recovery gates remain open. Candidate is unapplied; see clinical-alert-checkpoint.md.
