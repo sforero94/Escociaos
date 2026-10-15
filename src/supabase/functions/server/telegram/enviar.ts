@@ -1,3 +1,4 @@
+import {classifyTelegramSend} from './sendOutcome.ts';
 // telegram/enviar.ts — helper de envío SALIENTE de Telegram (S6, motor de
 // alertas del Hato Lechero). Hasta esta sesión (S1-S5) el bot solo
 // respondía dentro de una conversación que el usuario iniciaba (`bot.on`,
@@ -45,6 +46,8 @@ export interface BotonAlertaTelegram {
 }
 
 export interface ResultadoEnvioTelegram {
+  outcome?: 'sent' | 'rejected' | 'unknown' | 'not_attempted';
+  errorCode?: number;
   ok: boolean;
   telegramMessageId?: number;
   error?: string;
@@ -107,6 +110,7 @@ export async function enviarMensajeTelegram(
   opciones: OpcionesEnvioTelegram,
 ): Promise<ResultadoEnvioTelegram> {
   let resultado: ResultadoEnvioTelegram;
+  let requestStarted=false;
   try {
     const body: Record<string, unknown> = {
       chat_id: opciones.telegramId,
@@ -118,26 +122,24 @@ export async function enviarMensajeTelegram(
       };
     }
 
-    const respuesta = await fetch(urlApiTelegram('sendMessage'), {
+    const url=urlApiTelegram('sendMessage');
+    requestStarted=true;
+    const respuesta = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     const json = await respuesta.json().catch(() => null);
 
-    if (!respuesta.ok || !json?.ok) {
-      resultado = {
-        ok: false,
-        error: json?.description ?? `Telegram respondió HTTP ${respuesta.status}`,
-      };
-    } else {
-      resultado = { ok: true, telegramMessageId: json.result?.message_id };
-    }
-  } catch (err) {
-    resultado = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    resultado=classifyTelegramSend(respuesta.status,json,opciones.telegramId);
+  } catch {
+    resultado={outcome:requestStarted?'unknown':'not_attempted',ok:false,error:requestStarted?'Resultado de envío desconocido. Conserve el intento original; no lo repita automáticamente.':'El envío no se inició.'};
   }
 
-  await registrarEnvio(supabase, opciones, resultado);
+  try{await registrarEnvio(supabase, opciones, resultado);}catch{
+    // A failed best-effort log must not erase a known external outcome or resend.
+    console.error('[hato-alertas][telegram_mensajes] no se pudo registrar el resultado del envío.');
+  }
   return resultado;
 }
 

@@ -66,3 +66,6 @@ October15 owner Option1 dependency: append manual-clinical-alert-link.sql after 
 
 
 October15 manual management dependency: alert-management.sql follows all18candidates (19total). Actual browser manual creation/edit/discard now use owner-bound prepare/review/post/status/cancel with strict receipt proof, observed source CAS and trusted transactional audit. Native60aggregate/12nested SDK assertions pass on the local graph. Cron remains a direct competing writer, so direct alert/event grants are unchanged and cannot be retired yet. Event/animal lifecycle, inactive readers, global/runtime and recovery gates remain open. See alert-management-checkpoint.md. No live application authorized.
+
+
+October15 cron foundation dependency: alert-cron.sql follows all19candidates (20total). Local64native assertions validate protected source-bound job/outbox, current Gerencia/service boundaries, atomic source-CAS/audit and one-time send permission with immutable unknown outcomes. Actual sender classification/dispatcher29cases and full5,500App tests pass. Actual tick planning/direct-write cutover, strict SDK proofs, hjd bot/private recovery, stale-job resolution and unknown-send operator handling remain required. Direct grants are unchanged; do not deploy this foundation in isolation. See alert-cron-checkpoint.md. No production application authorized.

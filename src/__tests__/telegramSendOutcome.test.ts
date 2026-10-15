@@ -1,0 +1,23 @@
+import {afterEach,it,expect,vi} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {classifyTelegramSend} from '../supabase/functions/server/telegram/sendOutcome';
+import ts from 'typescript';
+const sender:Record<string,unknown>={};
+const compiled=ts.transpileModule(readFileSync('src/supabase/functions/server/telegram/enviar.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+new Function('exports','require',compiled)(sender,(name:string)=>{if(name!=='./sendOutcome.ts')throw Error('Unexpected edge dependency');return {classifyTelegramSend};});
+const enviarMensajeTelegram=sender.enviarMensajeTelegram as (client:unknown,options:unknown)=>Promise<unknown>;
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
+const accepted={ok:true,result:{message_id:91,chat:{id:789}}};
+it('accepts only the expected chat and a verified positive message ID',()=>expect(classifyTelegramSend(200,accepted,'789')).toEqual({outcome:'sent',ok:true,telegramMessageId:91}));
+it.each([null,{ok:true},{ok:true,result:{message_id:91}},{ok:true,result:{message_id:0,chat:{id:789}}},{ok:true,result:{message_id:91,chat:{id:800}}},{ok:false,error_code:500}])('keeps malformed or ambiguous response unknown %#',body=>expect(classifyTelegramSend(200,body,'789').outcome).toBe('unknown'));
+it.each([400,401,403,429])('records explicit rejection %i',status=>expect(classifyTelegramSend(status,{ok:false,error_code:status,description:'Synthetic rejection'},'789')).toMatchObject({outcome:'rejected',ok:false,errorCode:status}));
+it.each([500,502,503,504])('keeps server failure %i unknown',status=>expect(classifyTelegramSend(status,{ok:false,error_code:status},'789').outcome).toBe('unknown'));
+it('does not call a mismatched or malformed API error a definite rejection',()=>expect(classifyTelegramSend(429,{ok:false,error_code:400},'789').outcome).toBe('unknown'));
+const options={telegramId:'789',texto:'Synthetic alert',tipoMensaje:'alerta_hato'};
+function setup(){vi.stubGlobal('Deno',{env:{get:()=> 'synthetic-token'}});const insert=vi.fn(async()=>({error:null}));return {client:{from:vi.fn(()=>({insert}))},insert};}
+it('actual sender performs one request and records a known accepted outcome',async()=>{const h=setup(),fetch=vi.fn(async()=>new Response(JSON.stringify(accepted),{status:200}));vi.stubGlobal('fetch',fetch);expect(await enviarMensajeTelegram(h.client as never,options)).toEqual({outcome:'sent',ok:true,telegramMessageId:91});expect(fetch).toHaveBeenCalledOnce();expect(h.insert).toHaveBeenCalledOnce();});
+it('actual transport loss is unknown and never automatically retried',async()=>{const h=setup(),fetch=vi.fn(async()=>{throw Error('Synthetic lost response');});vi.stubGlobal('fetch',fetch);expect(await enviarMensajeTelegram(h.client as never,options)).toMatchObject({outcome:'unknown',ok:false});expect(fetch).toHaveBeenCalledOnce();});
+it('rate rejection never causes an immediate retry or limit bypass',async()=>{const h=setup(),fetch=vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:429}),{status:429}));vi.stubGlobal('fetch',fetch);expect(await enviarMensajeTelegram(h.client as never,options)).toMatchObject({outcome:'rejected',errorCode:429});expect(fetch).toHaveBeenCalledOnce();});
+it('a thrown audit failure cannot erase the known accepted message ID',async()=>{const h=setup();h.insert.mockRejectedValueOnce(Error('Synthetic audit loss'));vi.spyOn(console,'error').mockImplementation(()=>{});vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(accepted),{status:200})));expect(await enviarMensajeTelegram(h.client as never,options)).toEqual({outcome:'sent',ok:true,telegramMessageId:91});});
+it('missing token is known not attempted without any network request',async()=>{const h=setup();vi.stubGlobal('Deno',{env:{get:()=>undefined}});const fetch=vi.fn();vi.stubGlobal('fetch',fetch);expect(await enviarMensajeTelegram(h.client as never,options)).toMatchObject({outcome:'not_attempted',ok:false});expect(fetch).not.toHaveBeenCalled();});
+it('edge mirrors share exactly the same sender and classifier',()=>{for(const name of ['enviar.ts','sendOutcome.ts'])expect(readFileSync('src/supabase/functions/server/telegram/'+name,'utf8')).toBe(readFileSync('supabase/functions/make-server-1ccce916/telegram/'+name,'utf8'));});
