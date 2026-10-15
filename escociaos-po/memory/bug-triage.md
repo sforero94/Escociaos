@@ -825,3 +825,9 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - El 406 sobre hato_alertas?…estado=in.(pendiente,enviada) es el UPDATE…maybeSingle() del callback (telegram/bot.ts:1662) cuando la alerta ya estaba cerrada. Benigno. [corrida: 2026-10-12-lunes]
 - BUG_REPORT.md refrescado en PR #325 (ESCO-154): 33/33 reportes, último 2026-10-05, semana 40; 3b igual, líneas 512-523/526. [corrida: 2026-10-12-lunes]
 - La API de GitHub devolvió 502 una vez al crear el PR sin crearlo; comprobar por REST antes de reintentar. gh pr list falla (GraphQL bloqueado); usar REST. [corrida: 2026-10-12-lunes]
+
+## Corrida 2026-10-15-jueves
+- Baseline main@ca28ef1 verde: vitest 205 ficheros / 4.187 pruebas, tsc 0, lint 0 / 909. sin_hallazgos. [corrida: 2026-10-15-jueves]
+- #327 (alerta de silencio de la estacion) revisado: sin defecto que dispare (arboles identicos; gate fuera del try; claim upsert ignoreDuplicates; claim liberado si nadie recibe; join por FK de 096). #326 es solo DROP FUNCTION, 0 referencias. [corrida: 2026-10-15-jueves]
+- Punto ciego conocido, NO defecto hoy: `clima_lecturas.timestamp` viene de `ecowitt.time` (hora de respuesta, clima.tsx:142). Si Ecowitt devolviera datos viejos no vacios, el aviso de silencio no dispararia. Detectar: `timestamp - lluvia_diaria_actualizada_en` crece por horas (hoy max 0,04 h). [corrida: 2026-10-15-jueves]
+- chat_messages 0 filas desde 10-12; telegram_mensajes solo registra salientes. [corrida: 2026-10-15-jueves]

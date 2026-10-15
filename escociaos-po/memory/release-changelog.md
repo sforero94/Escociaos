@@ -609,3 +609,9 @@ mensual sigue siendo la unica legible.**
 - Notion vía Composio: filtro {"property":"ID","unique_id":{"greater_than_or_equal_to":N}} funciona. Estado does_not_equal Done da el backlog abierto en una llamada pequeña. [corrida: 2026-10-12-lunes]
 - PR #324 (draft, Codex+Santiago): 8 candidatos SQL SIN numerar en src/sql/security-candidates/ → no compite por número. Cuando salga de draft: candidatos a migraciones numeradas con barrido de ramas, y orden migración → deploy CLI. [corrida: 2026-10-12-lunes]
 - Sonda de contenido #318: literales de toast (Reporte listo para compartir) dentro de InventoryList-*.js. [corrida: 2026-10-12-lunes]
+
+## Corrida 2026-10-15-jueves
+- Linea base: HEAD ca28ef1 · edge v274 (2026-10-12T15:41:28Z), hash 432e499b… = drift-state de d631168 · migraciones hasta 180, 0 aplicadas sin fusionar · Vercel prod = ca28ef1 · 1 PR abierto (#324 draft) · nada pendiente de despliegue. Barrido 181–185: 0 colisiones. [corrida: 2026-10-15-jueves]
+- Orden 180 → deploy correcto: ledger 15:41:08Z, edge 15:41:28Z (20 s). [corrida: 2026-10-15-jueves]
+- ESCO-154 y ESCO-138 cerrados Arreglado. ESCO-152 sigue In progress: mitad de codigo entregada pero sin ejercitar (clima_avisos 0 filas). Para cerrar: primera alerta real + mitad de mantenimiento (decision). [corrida: 2026-10-15-jueves]
+- query_logs: `request.path` no existe en edge_logs; usar source='function_edge_logs' con positionCaseInsensitive(event_message,'clima/sync'). `gh pr list` falla (GraphQL 403); usar `gh api repos/.../pulls?state=open`. [corrida: 2026-10-15-jueves]

@@ -23,6 +23,28 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-15 — corrida jueves
+
+A short window: **four PRs merged** (#325–#328), all on 2026-10-12, and **two migrations
+applied** (179, 180). Everything is live. The frontend is on `ca28ef1` (Vercel READY; no
+frontend source changed). The edge function `make-server-1ccce916` is v274
+(2026-10-12T15:41:28Z, hash = drift-state of `d631168`). Migration 180 went in 20 s before
+the edge deploy, in the required order. Nothing waits for a deploy.
+
+### Clima
+- Santiago now gets a Telegram message when the weather station sends no readings for 3 hours, one message per outage (ESCO-152, migration 180, #327). It has not fired yet: the station has had no outage since the deploy.
+
+### Finanzas
+- A dormant database function that could create a pending gasto for every compra is gone. Nothing called it, so no screen changes (ESCO-138, migration 179, #326).
+
+### Interno
+- `BUG_REPORT.md` figures refreshed against production (ESCO-154, #325).
+- CLAUDE.md marks migrations 179 and 180 as applied (#328).
+- Drift-detector state updated to `d631168` (`ca28ef1`, bot commit).
+
+### Requiere despliegue manual
+- None.
+
 ## 2026-10-12 — corrida lunes
 
 A cleanup week. **Seven PRs merged** (#316, #318–#323), all on 2026-10-08 and 2026-10-10,

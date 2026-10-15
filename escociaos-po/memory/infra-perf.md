@@ -674,3 +674,11 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - MÉTODO: un día sin fila en clima_resumen_diario no aparece con un `where fecha >= …`. Usar generate_series + left join. cobertura_hueco_max_min > 45 oculta filas viejas donde la columna es NULL. [corrida: 2026-10-12-lunes]
 - Edge v273 (2026-10-10T15:25:46Z, verify_jwt=false), ezbr 0adeb2c4…6524 = drift-state de da5f5a6 (#316 + #320 en vivo). Drift 0. Detector #49–#51 success tras #322. /health anónimo 200. [corrida: 2026-10-12-lunes]
 - Baselines 2026-10-12: DB 128 MB (net._http_response 60 MB, cron.job_run_details 24 MB, +1 MB/semana), 17 conexiones · Storage 259 MB / 307 objetos · Vercel PROMOTED a852d3e, build ~33 s · payload inicial 405 KB gzip · 5 crons, 1.236 corridas en 72 h, 0 fallos · hato tick 6 ok seguidos · suite 204 ficheros / 4.175 pruebas, tsc limpio, lint 0 / 909 warnings, vite build 18,7 s · árboles edge 78/78, 0 diffs reales (index.tsx difiere sólo en newline final) · consulta más lenta fn_clima_rollup_diario 195,5 ms. [corrida: 2026-10-12-lunes]
+
+## Corrida 2026-10-15-jueves
+- sin_hallazgos. Edge v274 (2026-10-12T15:41:28Z, verify_jwt=false), ezbr `432e499b…` = drift-state `d631168`, deriva 0; detector #52–#54 success. Vercel PROMOTED `ca28ef1`, build 39,9 s. [corrida: 2026-10-15-jueves]
+- METODO: `VERCEL_GET_DEPLOYMENTS` sin `target` devuelve primero los previews (hoy los de la PR #324). Pasar `"target":"production"`. [corrida: 2026-10-15-jueves]
+- Firma nueva, aislada: `[clima-sync] Ecowitt API HTTP 525` → 502 en 2026-10-15 02:20Z, una lectura perdida, upstream. Filar solo si se repite ≥3 veces en 24 h. [corrida: 2026-10-15-jueves]
+- ESCO-152 / 180: clima_avisos = 0 filas (sin silencio >3 h desde el deploy). Shipped, no probado. En el proximo apagon verificar fila en clima_avisos y log `[clima-silencio]`. [corrida: 2026-10-15-jueves]
+- `reconstruido` 8 de 29 dias en 30 d: la causa la explica ESCO-155 (lectura de medianoche con contador de ayer), no degradacion del feed. Re-medir despues del arreglo. [corrida: 2026-10-15-jueves]
+- Lineas base: DB 129 MB, 21 conexiones, 5 crons / 873 corridas / 0 fallos en 72 h, suite 205 / 4.187, lint 0 / 909, tsc limpio, entry JS 106 KB gzip, arboles edge 79/79. [corrida: 2026-10-15-jueves]

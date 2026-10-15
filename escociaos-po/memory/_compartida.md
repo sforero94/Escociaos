@@ -2361,3 +2361,18 @@ La auto-poda no aplica. El P1 (ESCO-149) nacio 24 h antes de esta corrida; el lu
 - Usar los subagent_type registrados (data-integrity, …) con instrucción de leer brief + memoria + run-context desde su worktree funcionó: 6/6 volvieron en < 7 min, todos respetaron worktree y no-refilar. [corrida: 2026-10-12-lunes]
 - Dos agentes (DI, infra) encontraron el mismo apagón de clima por evidencia propia: fusionado en ESCO-152. [corrida: 2026-10-12-lunes]
 - **Decisiones del 2026-10-12 (sesión en vivo):** ESCO-150 aceptado («no action»: no re-filar la tasa de respuesta de alertas de gerencia). ESCO-151 al viernes, solo higiene (a)+(d). ESCO-139: activos SOLO Piedra Paula, Salto, Australia y La Vega; 5/6/8/9/10 erradicados (abril–junio); SOW de prorrateo en `reports/2026-10-12-sow-esco139.md`. ESCO-138: borrar la función → migración 179 (PR #326). ESCO-152: alerta Telegram a Santiago tras 3 h sin lecturas → migración 180 + código (PR #327). **PR #324 (borrador, seguridad): NO tocar — lo trabaja otro agente.** Migraciones 179 y 180 tomadas por ramas abiertas: el siguiente número libre es 181 (barrer ramas igual). [corrida: 2026-10-12-lunes]
+
+## Corrida 2026-10-15-jueves — hechos transversales
+- Preflight 4/4 Composio active, lectura como supabase_read_only_user, query_logs responde, `ATTENDED=0`. Cero prompts, cero denegaciones (REMOTE_BASH permitido al orquestador). Worktrees + agentes por nombre + run-context: 4/4 volvieron en < 5 min. [corrida: 2026-10-15-jueves]
+- Ventana de 72 h sin escrituras de dominio (festivo 10-12; ultimo sign-in web 10-02). Todo lo fusionado el lunes (#325–#328, migraciones 179/180, edge v274) esta en produccion. [corrida: 2026-10-15-jueves]
+- Siguiente numero de migracion libre: 181 (barrido de ramas 181–185 limpio). [corrida: 2026-10-15-jueves]
+- Opcion de Resolucion para un arreglo entregado: `Arreglado` (verificado: existe en el select). [corrida: 2026-10-15-jueves]
+- **VIGILANCIA PARA EL LUNES 2026-10-19**: (1) clima_avisos sigue en 0 → no ha habido apagon; si hubo hueco >3 h sin fila, defecto de #327. (2) Si las escrituras de dominio siguen en cero, señal operativa para usage-analytics. (3) ESCO-155 elegible para el viernes 10-16 (ddl_aditivo, sin aprobacion). [corrida: 2026-10-15-jueves]
+
+## Racha del jueves (regla de auto-poda) — actualizada 2026-10-15
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-10-01-jueves | 1 |
+| 2026-10-08-jueves | 4 |
+| **2026-10-15-jueves** | **1 (ESCO-155, P3). Racha de ceros: 0** |
+La auto-poda no aplica.
