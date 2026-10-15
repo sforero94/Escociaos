@@ -1,0 +1,13 @@
+# Prospective correction source readbacks
+
+correction-audit-readbacks.sql follows correction-audit-integrity.sql (15candidates including the nine original protocols). It pins both original correction writer functions and the exact repository-owned adapted plan graph guard. New source functions retain the existing NULL-UID service lane and true no-op behavior; human corrections require a freshly active profile locked FOR SHARE.
+
+Each prospective audit has a server-generated UUID, server timestamp, trusted UID and complete original/new source values. Exact INSERT RETURNING and independent durable readback must equal the entire expected row. Suppression or actor/timestamp/payload corruption raises and rolls back the source write and audit. The exact plan graph hash is adapted to require the new GlobalGAP writer body; unrelated reference/trigger/retention/permission gates remain intact. Existing audit rows are untouched, and no historical provenance is asserted.
+
+Native52assertions PASS on the verified private-socket PG17.6 replay: preceding audit admission/rolled-back bypass checks, all31combined stock/cattle/financial/audit mutations after the15candidate installation, one new source admission drift refusal, eight suppression/corruption cases with complete domain/control/audit rollback, independently checked exact Hato/GlobalGAP audit and genuine same-transaction no-op behavior. The application timestamp trigger makes a later-transaction unchanged-value UPDATE a real timestamp change; the no-op fixture respects it. Source hashes and temporary database cleanup are verified. See correction-audit-readback-replay.json.
+
+```sh
+python3 scripts/security/correction-audit-readback-replay.py /workspace/escociaos-security-control/schema-evidence --runtime /tmp/escocia-pg17-runtime/package/native --client /tmp/escocia-pg-client/node_modules/pg/lib/index.js --output docs/security-integrity/correction-audit-readback-replay.json --private-diagnostics /tmp/escocia-correction-readback-final-private-diagnostics
+```
+
+Application/lint/typecheck/Python validation and logs are recorded in execution-status.md. Remaining NULL-UID service attribution, clinical/alert/event/animal lifecycle CAS/retry/callers and broader source-side trigger faults remain open; this is exact prospective human correction audit, not a global writer certificate. Reader restrictions, hosted ordinary-role/runtime, retention/capacity and real recovery remain separate. Four local private metadata exports only; no production access, private publication, merge/deploy/live migration or historical/expense repair.

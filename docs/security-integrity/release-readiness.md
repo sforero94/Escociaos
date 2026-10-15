@@ -48,3 +48,6 @@ October15 clinical caller/retirement dependency: browser f74eb9a and Telegram2da
 
 
 October15 correction storage dependency: append correction-audit-integrity.sql after clinical UPDATE retirement (14candidates total). Local84assertions preserve all31combined mutations and exact human correction audits while denying ordinary/service audit DML/maintenance and trigger-function invocation. Pinned plan graph compatibility now requires the exact immutable guards/retired grants. Candidate is unapplied. Legacy NULL-UID service source writes still skip correction audit; source suppression/readback, lifecycle caller cutover, readers/global/runtime/recovery remain open. No historical proof is invented. See correction-audit-checkpoint.md.
+
+
+October15 prospective human audit dependency: append correction-audit-readbacks.sql after correction storage (15candidates total). Local52native assertions and full5,338App tests pass, including eight suppression/corruption rollbacks and exact durable actor/before/after evidence. Pinned plan graph is coordinated with the new GlobalGAP writer body. NULL-UID service omission and remaining lifecycle/reader/global/hosted/recovery gates stay open; no historical provenance is inferred or production application authorized.
