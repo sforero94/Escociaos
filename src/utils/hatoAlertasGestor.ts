@@ -42,6 +42,7 @@ export interface InputAlertaManual {
   fechaProgramada: string;
   nota: string;
   idUnico: string;
+  pasoId?: string | null;
 }
 
 export interface FilaAlertaManual {
@@ -50,6 +51,7 @@ export interface FilaAlertaManual {
   regla_clave: string;
   fecha_programada: string;
   estado: 'pendiente';
+  paso_id: string | null;
   datos: { origen: 'manual'; nota?: string };
 }
 
@@ -79,6 +81,8 @@ export function validarAlertaManual(input: InputAlertaManual): ResultadoValidaci
   if (tipoAlertaRequiereAnimal(input.tipo) && !input.animalId) {
     return { ok: false, error: 'Elige la vaca de esta alerta.' };
   }
+  if (input.tipo === 'tratamiento_paso' && (typeof input.pasoId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.pasoId))) return {ok:false,error:'Elige un paso clínico pendiente de esta vaca.'};
+  if (input.tipo !== 'tratamiento_paso' && input.pasoId != null) return {ok:false,error:'Este tipo de alerta no admite un paso clínico.'};
   const nota = input.nota.trim();
   return {
     ok: true,
@@ -93,6 +97,7 @@ export function validarAlertaManual(input: InputAlertaManual): ResultadoValidaci
       ),
       fecha_programada: input.fechaProgramada,
       estado: 'pendiente',
+      paso_id: input.tipo === 'tratamiento_paso' ? input.pasoId! : null,
       datos: nota ? { origen: 'manual', nota } : { origen: 'manual' },
     },
   };

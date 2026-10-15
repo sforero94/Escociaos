@@ -1,0 +1,19 @@
+# Manual treatment-alert linkage — owner Option1
+
+Santiago requires each newly created manual `tratamiento_paso` alert to select an existing pending clinical step for the selected animal; Sí executes that step through the existing prepared clinical protocol. Existing unlinked alerts remain preserved, without historical rewrite or inferred execution.
+
+The actual creation dialog loads pending steps from active treatments filtered to the selected animal. A separate explicit selection is required; animal/type/owner changes clear the selection and late lookup results are ignored. Lookup failure cannot submit an unlinked clinical alert. Validation carries the selected `paso_id` through the actual creation hook and refuses missing/malformed clinical step IDs or clinical linkage on another alert type.
+
+The nonnumbered `manual-clinical-alert-link.sql` follows the existing seventeen-candidate graph. Admission requires the reviewed five-table schema/ACL/trigger/function fingerprint, actor helper config/owner/body and retired clinical/correction boundaries. The new private definer trigger rechecks fresh current human authority and locks/verifies the existing pending step and active treatment's animal for new manual clinical alerts or prospective linkage changes. It adds no treatment, step, event or historical update. Existing unlinked alert metadata can remain editable; unlinked phantom confirmation remains denied by the prior clinical alert execution invariant. Nonclinical manual alerts and cron-generated clinical alerts remain compatible. Direct grants are unchanged.
+
+The four-export local replay passes47native assertions with all eighteen candidates installed before all31combined mutations. Additional checks cover missing/wrong-animal/missing-target and already-executed step refusal with whole-state rollback; current owner revocation; three-role private guard denial; exact existing linkage; prospective retarget refusal; preservation of a synthetic pre-candidate unlinked row; prepared clinical execution and original receipt recovery; nonclinical compatibility. Only synthetic fixture construction temporarily disables the new trigger to model an old unlinked row; the candidate never disables guards or rewrites existing rows. This is local SQL evidence, not a newly observed lock race or hosted/runtime certification. Source hashes and database stop/removal are verified.
+
+```sh
+python3 scripts/security/manual-clinical-alert-link-replay.py /workspace/escociaos-security-control/schema-evidence --runtime /tmp/escocia-pg17-runtime/package/native --client /tmp/escocia-pg-client/node_modules/pg/lib/index.js --output docs/security-integrity/manual-clinical-alert-link-replay.json --private-diagnostics /tmp/escocia-manual-link-private-diagnostics
+```
+
+This unit closes the selected owner linkage decision. Manual creation still needs the coordinated actor-bound retry/trusted audit protocol; edit/bulk/cron, other lifecycle writers, direct-grant retirement, reader restrictions, ordinary-role/runtime/global review and real recovery remain separate. Caller deployment requires its compatible candidate first. No production connection, deployment, migration, private-file publication, historical repair or expense deletion occurred.
+
+Final verification after the explicit typed mock fix:47native assertions and source hashes/cleanup pass; full262files/5,429App cases pass71.86s;29Python checks pass. Typecheck is clean. Native/App/static logs use `/tmp/escocia-manual-link-{native-verified,tests-verified,typecheck-verified,lint-verified,python-verified}.log`. Initial TS2322 was in the test callback typing, not a passing typecheck; the earlier whole-suite result is superseded by the final rerun.
+
+Final lint:0errors/875warnings (one additional existing-style dynamic Hato table cast in the new lookup); typecheck passes. No test deadlines, assertions or runner configuration were relaxed.

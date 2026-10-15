@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DateInput } from '@/components/ui/date-input';
+import {useAuth} from '@/contexts/AuthContext';
 import { getSupabase } from '@/utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { LABEL_TIPO_ALERTA_HATO } from '@/utils/hatoAlertasUi';
@@ -54,9 +55,15 @@ export function CrearAlertaManualDialog({
     animalId: string | null;
     fechaProgramada: string;
     nota: string;
+    pasoId?: string | null;
   }) => Promise<void>;
   guardando: boolean;
 }) {
+  const {user}=useAuth();
+  const [pasoId,setPasoId]=useState<string|null>(null);
+  const [pasos,setPasos]=useState<Array<{id:string;descripcion:string|null;fecha_programada:string}>>([]);
+  const [cargandoPasos,setCargandoPasos]=useState(false);
+  const [errorPasos,setErrorPasos]=useState<string|null>(null);
   const [tipo, setTipo] = useState<TipoAlertaHato>('secado_due');
   const [animalId, setAnimalId] = useState<string | null>(null);
   const [fechaProgramada, setFechaProgramada] = useState(obtenerFechaHoy());
@@ -65,6 +72,8 @@ export function CrearAlertaManualDialog({
 
   useEffect(() => {
     if (!open) return;
+    let current=true;
+    setVacas([]);
     setTipo('secado_due');
     setAnimalId(null);
     setFechaProgramada(obtenerFechaHoy());
@@ -78,24 +87,44 @@ export function CrearAlertaManualDialog({
           .eq('estado', 'activa')
           .order('nombre', { ascending: true });
         if (error) throw error;
-        setVacas((data ?? []) as VacaOpcion[]);
+        if(current)setVacas((data ?? []) as VacaOpcion[]);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Error desconocido';
-        toast.error('No se pudieron cargar las vacas: ' + message);
+        if(current)toast.error('No se pudieron cargar las vacas: ' + message);
       }
     })();
-  }, [open]);
+    return ()=>{current=false;};
+  }, [open,user?.id]);
+
+  useEffect(()=>{
+    let current=true;setPasoId(null);setPasos([]);setErrorPasos(null);setCargandoPasos(false);
+    if(open&&tipo==='tratamiento_paso'&&animalId&&user?.id){
+      setCargandoPasos(true);
+      void(async()=>{try{
+        const {data,error}=await (getSupabase() as any).from('hato_tratamiento_pasos')
+          .select('id,descripcion,fecha_programada,hato_tratamientos!inner(animal_id,estado)')
+          .eq('hato_tratamientos.animal_id',animalId).eq('hato_tratamientos.estado','activo')
+          .is('fecha_ejecutada',null).order('fecha_programada',{ascending:true});
+        if(error)throw error;
+        if(current)setPasos(data??[]);
+      }catch{if(current)setErrorPasos('No se pudieron verificar los pasos pendientes.');}
+      finally{if(current)setCargandoPasos(false);}})();
+    }
+    return()=>{current=false;};
+  },[open,tipo,animalId,user?.id]);
 
   const exigeVaca = tipoAlertaRequiereAnimal(tipo);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if(tipo==='tratamiento_paso'&&(cargandoPasos||errorPasos||!pasos.some(p=>p.id===pasoId))){toast.error('Elige un paso clínico pendiente verificado para esta vaca.');return;}
     const validacion = validarAlertaManual({
       tipo,
       animalId: exigeVaca ? animalId : null,
       fechaProgramada,
       nota,
       idUnico: 'preview',
+      pasoId,
     });
     if (!validacion.ok) {
       toast.error(validacion.error);
@@ -107,6 +136,7 @@ export function CrearAlertaManualDialog({
         animalId: exigeVaca ? animalId : null,
         fechaProgramada,
         nota,
+        pasoId:tipo==='tratamiento_paso'?pasoId:null,
       });
       onOpenChange(false);
       toast.success('Alerta creada');
@@ -155,6 +185,16 @@ export function CrearAlertaManualDialog({
                 </Select>
               </div>
             )}
+            {tipo==='tratamiento_paso'&&<div><Label>Paso clínico pendiente</Label>
+              <Select value={pasoId??undefined} onValueChange={setPasoId} disabled={cargandoPasos||!animalId||!!errorPasos}>
+                <SelectTrigger><SelectValue placeholder="Elige el paso existente"/></SelectTrigger>
+                <SelectContent>{pasos.map(p=><SelectItem key={p.id} value={p.id}>{p.fecha_programada} · {p.descripcion??'Sin descripción'}</SelectItem>)}</SelectContent>
+              </Select>
+              {cargandoPasos&&<p role="status">Verificando pasos pendientes…</p>}
+              {errorPasos&&<p role="alert">{errorPasos}</p>}
+              {!cargandoPasos&&!errorPasos&&animalId&&pasos.length===0&&<p>No hay pasos pendientes para esta vaca.</p>}
+              <p>Responder Sí registra la ejecución de este paso después de revisar la confirmación.</p>
+            </div>}
             <div>
               <Label>Fecha programada</Label>
               <div className="mt-1">

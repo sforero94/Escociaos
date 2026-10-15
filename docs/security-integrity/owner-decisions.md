@@ -16,3 +16,5 @@ Owner submitted 1A, 2B, 3A, 4A, 5C, 6A, 7A, 8A, 9B, Sunday 6pm. Saved interpreta
 - Overnight hourly automation ended Oct8 at09:00 America/New_York and must remain expired. Later direct work remains authorized.
 
 October14 clarification from Santiago: an otherwise eligible unused live application plan may be deleted when any of the five historical `respaldos` copies (063/107/118/119/150) reference its `aplicacion_id`. Preserve every backup row and its original identifier unchanged as historical reference. This exemption does not authorize any backup mutation or exempt a live FK. Backup063 provenance was not provided and remains **unknown**.
+
+October15 clarification from Santiago (Option1): a new manual Hato alert of type `tratamiento_paso` must select an existing pending clinical step for the selected animal. Answering Sí executes that step through the prepared clinical confirmation protocol. Existing unlinked alerts stay unchanged; no historical rewrite or inferred execution is authorized.
