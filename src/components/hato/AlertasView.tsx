@@ -1,3 +1,5 @@
+import {useAlertResponse} from './hooks/useAlertResponse';
+import {AlertResponseDialog} from './components/AlertResponseDialog';
 // ARCHIVO: components/hato/AlertasView.tsx
 // DESCRIPCIÓN: Ruta `/hato-lechero/alertas` — gestor de alertas (S6 +
 // issue #217). Tres pestañas sobre el mismo stack `hato_alertas` /
@@ -114,11 +116,11 @@ export function AlertasView() {
     loading,
     error,
     actualizarEstadoAlertas,
-    responderAlerta,
     editarAlerta,
     crearAlertaManual,
   } = useHatoAlertas();
   const clinical = useClinicalStepConfirmation();
+  const response = useAlertResponse();
   const [idActuando, setIdActuando] = useState<string | null>(null);
   const [crearOpen, setCrearOpen] = useState(false);
   const [guardandoForm, setGuardandoForm] = useState(false);
@@ -140,10 +142,7 @@ export function AlertasView() {
         await clinical.run('prepare',{version:1,stepId:original.paso_id,fechaEjecutada:diaBogota(new Date().toISOString()),alertId:id});
         return;
       }
-      await responderAlerta(id, respuesta, nombreActor);
-      toast.success(
-        respuesta === 'si' ? 'Alerta confirmada' : respuesta === 'no' ? 'Anotado: todavía no' : 'Anotado: otra cosa',
-      );
+      await response.run('prepare',{version:1,alertId:id,respuesta,fecha:diaBogota(new Date().toISOString())});
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('Error actualizando la alerta: ' + message);
@@ -210,6 +209,7 @@ export function AlertasView() {
             {canWrite && (
               <div className="flex justify-end gap-2 mb-4">
                 <Button size="sm" variant="outline" disabled={clinical.busy} onClick={()=>{void clinical.recover().catch(()=>{});}}>Verificar paso pendiente</Button>
+                <Button size="sm" variant="outline" disabled={response.busy} onClick={()=>{void response.recover().catch(()=>{});}}>Verificar respuesta pendiente</Button>
                 <Button size="sm" onClick={() => setCrearOpen(true)}>
                   <Plus className="w-4 h-4 mr-1.5" />
                   Crear alerta
@@ -278,6 +278,9 @@ export function AlertasView() {
         </Tabs>
       </div>
 
+      <AlertResponseDialog open={response.open} busy={response.busy} error={response.error} attempt={response.attempt} onClose={response.close} onAction={mode=>{
+        void response.run(mode,mode==='prepare'?response.attempt?.intent??null:null).then(async a=>{if(a?.result?.state==='committed')await reload();}).catch(()=>{});
+      }}/>
       <ClinicalStepConfirmationDialog open={clinical.open} busy={clinical.busy} error={clinical.error} attempt={clinical.attempt} onClose={clinical.close} onAction={mode=>{
         void clinical.run(mode,mode==='prepare'?clinical.attempt?.intent??null:null).then(async a=>{if(a?.result?.state==='committed')await reload();}).catch(()=>{});
       }}/>

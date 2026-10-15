@@ -87,13 +87,13 @@ const COPIAS_BOT = [
   'supabase/functions/make-server-1ccce916/telegram/bot.ts',
 ];
 
-describe('bot: respuesta de alerta usa los helpers del motor (issue #217)', () => {
-  it('ambas copias del bot delegan estado y efecto de dominio', () => {
+describe('bot: respuesta de alerta usa el protocolo preparado', () => {
+  it('ambas copias delegan respuesta y efecto atómico sin reclamo directo', () => {
     for (const rel of COPIAS_BOT) {
       const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
-      expect(fuente, rel).toContain('estadoTrasRespuestaAlerta');
-      expect(fuente, rel).toContain('efectoDominioRespuestaAlerta');
-      expect(fuente, rel).toContain('payloadEventoSecadoDesdeAlerta');
+      expect(fuente, rel).toContain('await beginAlertResponse');
+      expect(fuente, rel).toContain('await handleAlertResponseRecovery');
+      expect(fuente, rel).not.toContain('payloadEventoSecadoDesdeAlerta');
     }
   });
 

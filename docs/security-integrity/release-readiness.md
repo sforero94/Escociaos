@@ -57,3 +57,6 @@ October15 clinical alert dependency: clinical-alert-integrity.sql follows the15c
 
 
 October15 atomic alert response foundation: alert-response.sql follows the16candidate graph (17total); native69assertions include all31combined mutations and event/alert/audit/control fault rollback, original owner/private action recovery and fresh authority. Browser/bot caller preview/proof/durable controls are still pending; do not deploy old split claim/event callers against retired grants. Manual/edit/bulk/cron, other event/animal lifecycle and direct-writer retirement remain separate. No existing event is silently adopted as prospective proof and no historical row is repaired. See alert-response-checkpoint.md; no production application authorized.
+
+
+October15 alert response caller dependency: actual browser and Telegram callbacks now require the seventeen-candidate graph ending in alert-response.sql, captured target/date review and strict original receipt recovery. Clinical “sí” retains its existing protocol. Direct alert/event grants are unchanged; manual/edit/bulk/cron and event/animal lifecycle callers must be reconciled before coordinated retirement. Local SDK proof uses synthetic Auth/private-socket PostgreSQL and does not certify hosted runtime or conversation persistence. See alert-response-callers-checkpoint.md; no deployment or live migration authorized.

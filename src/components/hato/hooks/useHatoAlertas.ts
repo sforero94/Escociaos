@@ -14,22 +14,12 @@
 // los botones para otros roles) vive en `AlertasView.tsx`, igual que
 // `GanadoMovimientos.tsx` con `useGanadoInventario.ts`.
 //
-// Issue #217: `responderAlerta` reclama la fila con el mismo set de estados
-// abiertos que el bot (`ESTADOS_ALERTA_RESPONSIBLES`) y aplica el MISMO
-// efecto de dominio (`efectoDominioRespuestaAlerta`). Editar/crear manual
-// no tocan tablas clínicas.
+// Responses use the separate prepared alert-response protocol; manual/edit/bulk remain separate.
 
 import { useState, useCallback, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
-import { obtenerFechaHoy } from '@/utils/fechas';
-import {
-  ESTADOS_ALERTA_RESPONSIBLES,
-  efectoDominioRespuestaAlerta,
-  estadoTrasRespuestaAlerta,
-  payloadEventoSecadoDesdeAlerta,
-  type RespuestaAlertaHato,
-} from '@/utils/hatoAlertas';
+import type { RespuestaAlertaHato } from '@/utils/hatoAlertas';
 import {
   datosConNotaGestor,
   validarAlertaManual,
@@ -167,59 +157,10 @@ export function useHatoAlertas() {
     [reload],
   );
 
-  const aplicarEfectoDominio = useCallback(
-    async (
-      alerta: { id: string; tipo: TipoAlertaHato; animal_id: string | null; paso_id: string | null },
-      respuesta: RespuestaAlertaHato,
-    ) => {
-      const supabase = getSupabase() as any;
-      const efecto = efectoDominioRespuestaAlerta(alerta, respuesta);
-      const hoy = obtenerFechaHoy();
-      if (efecto.kind === 'secado_real') {
-        const { error: errorEvento } = await supabase
-          .from('hato_eventos')
-          .insert(payloadEventoSecadoDesdeAlerta(efecto.animal_id, alerta.id, hoy));
-        if (errorEvento) throw errorEvento;
-      } else if (efecto.kind === 'tratamiento_paso') {
-        throw new Error('Revise y confirme el paso desde su intento preparado.');
-      }
-    },
-    [],
-  );
-
-  /**
-   * Parity with Telegram `hato_alerta:{id}:{si|no|otro}`. Claims the row
-   * only while it is still open (pendiente/enviada/escalada). A second
-   * click after someone else answered throws instead of repeating the
-   * domain write.
-   */
-  const responderAlerta = useCallback(
-    async (id: string, respuesta: RespuestaAlertaHato, respondidaPor: string | null) => {
-      const original = alertas.find(a => a.id === id);
-      if (!original) throw new Error('Recargue la alerta original antes de responder.');
-      if (respuesta === 'si' && original.tipo === 'tratamiento_paso') throw new Error('Revise y confirme el paso desde su intento preparado.');
-      const supabase = getSupabase() as any;
-      const { data: actualizada, error: updateError } = await supabase
-        .from('hato_alertas')
-        .update({
-          estado: estadoTrasRespuestaAlerta(respuesta),
-          respuesta,
-          respondida_por: respondidaPor,
-        })
-        .eq('id', id)
-        .eq('tipo', original.tipo)
-        .in('estado', [...ESTADOS_ALERTA_RESPONSIBLES])
-        .select('id, tipo, animal_id, paso_id')
-        .maybeSingle();
-      if (updateError) throw updateError;
-      if (!actualizada) {
-        throw new Error('Esa alerta ya no está abierta. Recarga la página.');
-      }
-      await aplicarEfectoDominio(actualizada as HatoAlertaRow, respuesta);
-      await reload();
-    },
-    [aplicarEfectoDominio, reload, alertas],
-  );
+  // Legacy callers must enter the prepared owner-bound protocol before any write.
+  const responderAlerta = useCallback(async (_id: string, _respuesta: RespuestaAlertaHato, _respondidaPor: string | null) => {
+    throw new Error('Revise y confirme la respuesta desde su intento preparado original.');
+  }, []);
 
   const editarAlerta = useCallback(
     async (alerta: HatoAlertaRow, input: InputEditarAlerta) => {
