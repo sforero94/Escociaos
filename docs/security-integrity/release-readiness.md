@@ -54,3 +54,6 @@ October15 prospective human audit dependency: append correction-audit-readbacks.
 
 
 October15 clinical alert dependency: clinical-alert-integrity.sql follows the15candidate graph (16total). Local55aggregate/25nested SDK checks verify prospective confirmed treatment alert consistency with an executed step/matching animal, authority-before-lookup, existing prepared callers and legacy executed-step cron closure. No existing records are repaired or given invented audit. Atomic alert/secado, event/animal lifecycle/CAS/trusted actor, remaining direct writers, readers and global/hosted/recovery gates remain open. Candidate is unapplied; see clinical-alert-checkpoint.md.
+
+
+October15 atomic alert response foundation: alert-response.sql follows the16candidate graph (17total); native69assertions include all31combined mutations and event/alert/audit/control fault rollback, original owner/private action recovery and fresh authority. Browser/bot caller preview/proof/durable controls are still pending; do not deploy old split claim/event callers against retired grants. Manual/edit/bulk/cron, other event/animal lifecycle and direct-writer retirement remain separate. No existing event is silently adopted as prospective proof and no historical row is repaired. See alert-response-checkpoint.md; no production application authorized.
