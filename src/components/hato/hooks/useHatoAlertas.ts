@@ -181,12 +181,7 @@ export function useHatoAlertas() {
           .insert(payloadEventoSecadoDesdeAlerta(efecto.animal_id, alerta.id, hoy));
         if (errorEvento) throw errorEvento;
       } else if (efecto.kind === 'tratamiento_paso') {
-        const { error: errorPaso } = await supabase
-          .from('hato_tratamiento_pasos')
-          .update({ fecha_ejecutada: hoy })
-          .eq('id', efecto.paso_id)
-          .is('fecha_ejecutada', null);
-        if (errorPaso) throw errorPaso;
+        throw new Error('Revise y confirme el paso desde su intento preparado.');
       }
     },
     [],
@@ -200,6 +195,9 @@ export function useHatoAlertas() {
    */
   const responderAlerta = useCallback(
     async (id: string, respuesta: RespuestaAlertaHato, respondidaPor: string | null) => {
+      const original = alertas.find(a => a.id === id);
+      if (!original) throw new Error('Recargue la alerta original antes de responder.');
+      if (respuesta === 'si' && original.tipo === 'tratamiento_paso') throw new Error('Revise y confirme el paso desde su intento preparado.');
       const supabase = getSupabase() as any;
       const { data: actualizada, error: updateError } = await supabase
         .from('hato_alertas')
@@ -209,6 +207,7 @@ export function useHatoAlertas() {
           respondida_por: respondidaPor,
         })
         .eq('id', id)
+        .eq('tipo', original.tipo)
         .in('estado', [...ESTADOS_ALERTA_RESPONSIBLES])
         .select('id, tipo, animal_id, paso_id')
         .maybeSingle();
@@ -219,7 +218,7 @@ export function useHatoAlertas() {
       await aplicarEfectoDominio(actualizada as HatoAlertaRow, respuesta);
       await reload();
     },
-    [aplicarEfectoDominio, reload],
+    [aplicarEfectoDominio, reload, alertas],
   );
 
   const editarAlerta = useCallback(

@@ -22,6 +22,9 @@ import { AlertaGrupoInformativo } from './components/AlertaGrupoInformativo';
 import { AlertaHistorialTabla } from './components/AlertaHistorialTabla';
 import { CrearAlertaManualDialog } from './components/CrearAlertaManualDialog';
 import { EditarAlertaDialog } from './components/EditarAlertaDialog';
+import {useClinicalStepConfirmation} from './hooks/useClinicalStepConfirmation';
+import {ClinicalStepConfirmationDialog} from './components/ClinicalStepConfirmationDialog';
+import {diaBogota} from '@/utils/fechas';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { LABEL_TIPO_ALERTA_HATO, ordenarAlertasHato } from '@/utils/hatoAlertasUi';
 import {
@@ -107,6 +110,7 @@ export function AlertasView() {
 
   const {
     alertas,
+    reload,
     loading,
     error,
     actualizarEstadoAlertas,
@@ -114,6 +118,7 @@ export function AlertasView() {
     editarAlerta,
     crearAlertaManual,
   } = useHatoAlertas();
+  const clinical = useClinicalStepConfirmation();
   const [idActuando, setIdActuando] = useState<string | null>(null);
   const [crearOpen, setCrearOpen] = useState(false);
   const [guardandoForm, setGuardandoForm] = useState(false);
@@ -129,6 +134,12 @@ export function AlertasView() {
   const handleResponder = async (id: string, respuesta: RespuestaAlertaHato) => {
     setIdActuando(id);
     try {
+      const original = alertas.find(a => a.id === id);
+      if (respuesta === 'si' && original?.tipo === 'tratamiento_paso') {
+        if (!original.paso_id) throw new Error('La alerta no tiene un paso clínico válido.');
+        await clinical.run('prepare',{version:1,stepId:original.paso_id,fechaEjecutada:diaBogota(new Date().toISOString()),alertId:id});
+        return;
+      }
       await responderAlerta(id, respuesta, nombreActor);
       toast.success(
         respuesta === 'si' ? 'Alerta confirmada' : respuesta === 'no' ? 'Anotado: todavía no' : 'Anotado: otra cosa',
@@ -197,7 +208,8 @@ export function AlertasView() {
 
           <TabsContent value="activas" className="mt-6">
             {canWrite && (
-              <div className="flex justify-end mb-4">
+              <div className="flex justify-end gap-2 mb-4">
+                <Button size="sm" variant="outline" disabled={clinical.busy} onClick={()=>{void clinical.recover().catch(()=>{});}}>Verificar paso pendiente</Button>
                 <Button size="sm" onClick={() => setCrearOpen(true)}>
                   <Plus className="w-4 h-4 mr-1.5" />
                   Crear alerta
@@ -266,6 +278,9 @@ export function AlertasView() {
         </Tabs>
       </div>
 
+      <ClinicalStepConfirmationDialog open={clinical.open} busy={clinical.busy} error={clinical.error} attempt={clinical.attempt} onClose={clinical.close} onAction={mode=>{
+        void clinical.run(mode,mode==='prepare'?clinical.attempt?.intent??null:null).then(async a=>{if(a?.result?.state==='committed')await reload();}).catch(()=>{});
+      }}/>
       <CrearAlertaManualDialog
         open={crearOpen}
         onOpenChange={setCrearOpen}

@@ -1,0 +1,27 @@
+import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
+import {create,act,type ReactTestRenderer} from 'react-test-renderer';
+import {AlertasView} from '@/components/hato/AlertasView';
+import {ClinicalStepConfirmationDialog} from '@/components/hato/components/ClinicalStepConfirmationDialog';
+import {OWNER,KEY,ALERT,prepared,committed} from './fixtures/clinicalStep';
+import {memory,storage,testLocks} from './purchaseProtocolFixtures';
+const state=vi.hoisted(()=>({client:null as unknown,rows:[] as unknown[],fila:[] as Array<{alerta:{id:string};onResponder?:(id:string,response:'si'|'no'|'otro')=>Promise<void>}>,responder:vi.fn(),reload:vi.fn()}));
+vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'10000000-0000-4000-8000-000000000001'},profile:{rol:'Gerencia',nombre:'Synthetic manager'}})}));
+vi.mock('@/utils/supabase/client',()=>({getSupabase:()=>state.client}));
+vi.mock('@/components/hato/hooks/useHatoAlertas',()=>({useHatoAlertas:()=>({alertas:state.rows,loading:false,error:null,reload:state.reload,responderAlerta:state.responder,actualizarEstadoAlertas:vi.fn(),editarAlerta:vi.fn(),crearAlertaManual:vi.fn()})}));
+vi.mock('react-router-dom',()=>({useNavigate:()=>vi.fn(),useSearchParams:()=>[new URLSearchParams(),vi.fn()]}));
+vi.mock('sonner',()=>({toast:{success:vi.fn(),error:vi.fn()}}));
+vi.mock('@/components/ui/tabs',()=>{const F=({children}:{children?:React.ReactNode})=><div>{children}</div>;return {Tabs:F,TabsContent:F,TabsList:F,TabsTrigger:F};});
+vi.mock('@/components/ui/dialog',()=>({Dialog:({children,open}:{children:React.ReactNode;open:boolean})=>open?<div>{children}</div>:null,DialogContent:({children}:{children:React.ReactNode})=><div>{children}</div>,DialogHeader:({children}:{children:React.ReactNode})=><div>{children}</div>,DialogTitle:({children}:{children:React.ReactNode})=><h2>{children}</h2>,DialogDescription:({children}:{children:React.ReactNode})=><p>{children}</p>,DialogBody:({children}:{children:React.ReactNode})=><div>{children}</div>,DialogFooter:({children}:{children:React.ReactNode})=><div>{children}</div>}));
+vi.mock('@/components/hato/components/AlertaFila',()=>({AlertaFila:(props:typeof state.fila[number])=>{state.fila.push(props);return null;}}));
+vi.mock('@/components/hato/components/AlertaGrupoInformativo',()=>({AlertaGrupoInformativo:()=>null}));
+vi.mock('@/components/hato/components/AlertaHistorialTabla',()=>({AlertaHistorialTabla:()=>null}));
+vi.mock('@/components/hato/components/CrearAlertaManualDialog',()=>({CrearAlertaManualDialog:()=>null}));
+vi.mock('@/components/hato/components/EditarAlertaDialog',()=>({EditarAlertaDialog:()=>null}));
+vi.mock('@/components/hato/components/HatoPageHeader',()=>({HatoPageHeader:()=>null}));
+let renderer:ReactTestRenderer|undefined;
+beforeEach(()=>{memory.clear();state.fila=[];state.responder.mockClear();state.reload.mockClear();const p=prepared();state.rows=[{...p.original!.alerts[0],created_at:'2026-10-14T12:00:00Z',animalNumero:1,animalNombre:'Synthetic animal',animalNumeroEsProvisional:false}];state.client={auth:{getUser:async()=>({data:{user:{id:OWNER}},error:null})},rpc:vi.fn(async(_name,args)=>({data:args.p_action==='post'?committed():prepared(),error:null}))};vi.stubGlobal('localStorage',storage);vi.stubGlobal('navigator',{locks:testLocks});vi.spyOn(crypto,'randomUUID').mockReturnValue(KEY);vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-15T00:30:00Z'));});
+afterEach(async()=>{if(renderer)await act(async()=>renderer!.unmount());renderer=undefined;vi.useRealTimers();vi.unstubAllGlobals();vi.restoreAllMocks();});
+describe('actual alert response handler clinical cutover',()=>{
+ it('prepares with Bogotá date and never claims an alert before clinical review',async()=>{await act(async()=>{renderer=create(<AlertasView/>);});const row=state.fila.find(x=>x.alerta.id===ALERT)!;await act(async()=>{await row.onResponder!(ALERT,'si');});expect(state.responder).not.toHaveBeenCalled();const client=state.client as {rpc:ReturnType<typeof vi.fn>};expect(client.rpc).toHaveBeenCalledTimes(1);expect(client.rpc.mock.calls[0][1]).toMatchObject({p_action:'prepare',p_expected_owner:OWNER,p_intent:{fechaEjecutada:'2026-10-14',alertId:ALERT}});expect(renderer!.root.findByType(ClinicalStepConfirmationDialog).props.attempt.result.state).toBe('pending');});
+ it('posts only after the prepared dialog action and reloads on the committed receipt',async()=>{await act(async()=>{renderer=create(<AlertasView/>);});await act(async()=>{await state.fila.find(x=>x.alerta.id===ALERT)!.onResponder!(ALERT,'si');});await act(async()=>{renderer!.root.findByType(ClinicalStepConfirmationDialog).props.onAction('post');});const client=state.client as {rpc:ReturnType<typeof vi.fn>};expect(client.rpc.mock.calls.map(c=>c[1].p_action)).toEqual(['prepare','post']);expect(state.responder).not.toHaveBeenCalled();expect(state.reload).toHaveBeenCalledTimes(1);});
+});

@@ -1,0 +1,95 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "candidate_hashes": {
+    "purchase-integrity": "70b155aa8a80e373948b2b5082772055cbd95cf0e4d3336a989f7a8d83c3c941",
+    "manual-stock-movement": "d2b96e3f245e867d4bf71510c61aa86b5a8655e96e80df5f15dffb18fc0590a4",
+    "product-catalog-integrity": "55ed8a06ecf05c71c6fb6e30e6facaa952045259ba9db00e908ed27c153464a3",
+    "csv-product-import": "980cf89c94003db4d103d602f4135d5a5bfbf33ee2af5863fefe0b3c96be891b",
+    "application-closure": "9369d7e2d4c19c0b5b53569e74fad185be4c13a667c44ce6eb54a444c95c348f",
+    "application-plan-delete": "b086febc030d3a00f2553ea8b612e8d59fa16eb73a55e34803d370e1fe73237e",
+    "ronda-stock-integrity": "27c42a1fb7846ec2ff16ec78e63fa1b798132375c183d70be47ec2d791170c75",
+    "hato-undo": "aaf13fcfc2bb460d8e1acedfb3fe4848f32c73b102ccdc3ac117ed30d3364ad3",
+    "hato-treatment-creation": "27ca417e1c9162dedc090bbee9282d1dad0fe4b8626b7341d85f2cd070031169"
+  },
+  "runner_sha256": "aeb28841ccdb370c0a2e28cac5f244077b951d43d4c7ca6f811d63b6cfbcf813",
+  "assertions": 33,
+  "checks": [
+    "initial complete exported-property parity",
+    "all nine candidates installed together before any synthetic mutation",
+    "catalog creates one trusted opening on coordinated graph",
+    "catalog lost-response recovery preserves entire combined database",
+    "manual entry and captured actor/timestamp triggers coexist with catalog opening",
+    "manual lost response adds no domain/financial/cattle/proof rows",
+    "purchase adds to current manual/catalog stock with actual purchase triggers",
+    "purchase lost-response replay preserves complete combined state",
+    "late financial association fault rolls back entire combined database",
+    "reversal preserves pending and confirmed expenses and exact retained financial fields",
+    "reversal removes only its posted stock and records both durable expense associations",
+    "lost reversal response never repeats ledger/deletion/expense detachment",
+    "retired legacy cleanup cannot delete preserved expenses",
+    "concurrent purchase/manual writers serialize on current shared product without lost stock",
+    "original stock revision refuses after competing purchase/manual writes with full rollback",
+    "CSV trusted-parser/human posting creates exact durable opening on coordinated graph",
+    "CSV original-key recovery preserves complete combined state",
+    "late closure receipt fault restores all stock/work/financial/audit/proof state",
+    "actual closure debits shared stock once with exact source costs and correction audit",
+    "closure retry preserves whole combined database and its original receipt",
+    "closed application and committed closure proof block unused-plan deletion",
+    "Ronda adjustment preserves actual provenance constraints and posts once on shared product",
+    "Ronda original exception proof replays without changing prior combined ledger",
+    "co-installed deletion preserves all five historical copies and original application IDs",
+    "co-installed deletion retry preserves all stock/financial/cattle state",
+    "co-installed Telegram creation binds Gerencia and exact pending step",
+    "retired direct undo core refuses service caller",
+    "native undo removes only exact prospective treatment and pending step with audit",
+    "creation and undo retries preserve both immutable receipts without recreating clinical rows",
+    "revoked Gerencia cannot disclose committed treatment creation",
+    "revoked Gerencia cannot replay undo receipt",
+    "installed SDK/native lost-post proof passes with exact source receiver",
+    "installed SDK/native owner-switch proof passes with exact source receiver"
+  ],
+  "limits": [
+    "Actual installed SDK/protocol and local PG; mocked HTTP transport/synthetic Auth, not hosted JWT verification or deployment certification.",
+    "Browser only; bot/native conversation callers and direct UPDATE/177 retirement remain open."
+  ],
+  "sdk_proofs": [
+    {
+      "mode": "lost-post",
+      "assertions": 7,
+      "checks": [
+        "installed SDK prepares a real native clinical snapshot without posting",
+        "uncertain/refused native post remains an explicit failed client result",
+        "client retains original durable key after uncertainty",
+        "committed response loss does not falsely clear the prepared client attempt",
+        "same-key installed SDK status verifies the real native committed receipt",
+        "independent native durable audit equals client-verified receipt exactly",
+        "client receipt matches independently read actual animal/header/steps/alerts"
+      ]
+    },
+    {
+      "mode": "owner-switch",
+      "assertions": 5,
+      "checks": [
+        "installed SDK prepares a real native clinical snapshot without posting",
+        "uncertain/refused native post remains an explicit failed client result",
+        "client retains original durable key after uncertainty",
+        "lazy SDK sends new synthetic JWT with old owner guard and native SQL rejects before mutation",
+        "owner-switch refusal preserves every domain/request/audit row exactly"
+      ]
+    }
+  ],
+  "source_hashes": {
+    "scripts/security/clinical-browser-native.mjs": "603836f58704976f348046b4b68c28b8b73ad65f616425e535b51d93c6e9da68",
+    "scripts/security/clinical-browser-native-replay.py": "8835e3f8d2451b5cb4aa0d59382f069031e579a5ddb760e47cf5391280e215bd",
+    "src/sql/security-candidates/clinical-step-confirmation.sql": "99c58b4127b85e8aa2efe42cbbda6e808b999651d4d3bd37023e9413ef6f282c",
+    "src/utils/hato/clinicalStepConfirmationProtocol.ts": "0642e4d182f65dad54ee97cf49c759dc865b9018955e232a121f647501ffbe8d",
+    "src/utils/hato/clinicalStepBrowserAttempt.ts": "2c43823882b3ae7c2a022bc9bf8965ef0a0c57e2c4614c318ce74bdf45b06ba7"
+  },
+  "temporary_database_stopped_and_removed": true,
+  "native_sdk_assertions": 12
+}
