@@ -1,3 +1,4 @@
+import {AlertCronMonitor} from './AlertCronMonitor';
 // ARCHIVO: components/configuracion/AlertasConfig.tsx
 // DESCRIPCIÓN: Configuración → Alertas (Gerencia). Un solo lugar para todo lo
 // que decide qué alerta sale, a quién y a qué hora (decisión del dueño,
@@ -39,6 +40,7 @@ export function AlertasConfig() {
       <Seccion titulo="Tipos de alerta del hato">
         <AlertasTiposTab canWrite={esGerencia} />
       </Seccion>
+      <Seccion titulo="Corridas y entregas de alertas"><AlertCronMonitor /></Seccion>
       <p className="text-xs text-brand-brown/60">
         Los días de anticipación de cada alerta del hato (parto próximo, servicio sin confirmar, rechequeo) se
         editan en la pestaña Hato de esta misma página.

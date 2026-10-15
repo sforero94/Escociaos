@@ -21,3 +21,6 @@ Final full270files/5,549App tests, typecheck, lint0errors/872existing warnings a
 ```sh
 timeout -s INT -k 15s 300s python3 scripts/security/alert-cron-callers-replay.py /workspace/escociaos-security-control/schema-evidence --runtime /tmp/escocia-pg17-runtime/package/native --client /tmp/escocia-pg-client/node_modules/pg/lib/index.js --output docs/security-integrity/alert-cron-callers-replay.json --private-diagnostics /tmp/escocia-cron-callers-private-diagnostics7
 ```
+
+
+The later alert-cron-operations-checkpoint.md supersedes the stale-job/operator/monitoring work remaining above with an additional twenty-second candidate and actual Gerencia callers. Hosted/runtime/deployed parity and the rest of the scope remain open.

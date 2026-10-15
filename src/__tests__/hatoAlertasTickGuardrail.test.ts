@@ -19,8 +19,8 @@ describe('tick: source-bound caller and subscription authority', () => {
     const sources=COPIAS.map(rel=>readFileSync(resolve(__dirname,'../..',rel),'utf8'));
     expect(sources[0]).toBe(sources[1]);
     for(const source of sources){
-      expect(source).toContain('postReservedAlertCron');
-      expect(source).toContain('dispatchCronDelivery');
+      expect(source).toContain('executeReservedAlertCron');
+      expect(readFileSync('src/supabase/functions/server/alertCronExecution.ts','utf8')).toContain('dispatchCronDelivery');
       expect(source).not.toMatch(/\.(insert|update|upsert|delete)\(/);
       expect(source).not.toContain("from('hato_config')");
       expect(source).not.toContain("from('v_hato_estado_actual')");

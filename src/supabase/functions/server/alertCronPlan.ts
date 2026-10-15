@@ -1,6 +1,6 @@
 import {
   alertasSuperadasPorCambioDeRegla, alertasConHechoRegistrado,
-  generarAlertasPendientes, decidirAccionEscalamiento, decidirExpiracionTerminal,
+  generarAlertasPendientes, resumirCoberturaAlertas, decidirAccionEscalamiento, decidirExpiracionTerminal,
   ESTADOS_ALERTA_RESPONSIBLES,
   type AnimalHatoParaAlertas, type PasoTratamientoPendienteInput,
   type AlertaAbiertaConHecho, type EventoHatoParaRetiro, type EstadoAlertaHato,
@@ -20,7 +20,7 @@ export interface CronPlan {
   deliveries: Array<{reglaClave: string; registrationId: string; phase: 'delivery' | 'escalation'; text: string}>;
 }
 /** Pure planning: only the reserved source and server time, never a fresh read or wall clock. */
-export function planAlertCron(source: unknown, referenceAt: string): CronPlan {
+export function analyzeAlertCron(source: unknown, referenceAt: string) {
   if (!cronObject(source) || !cronObject(source.domain) || !Number.isFinite(Date.parse(referenceAt))) throw Error('Original reserved source/time required.');
   const domain = source.domain;
   const alerts = cronRows(domain.alerts), animals = cronRows(domain.animals);
@@ -96,5 +96,7 @@ export function planAlertCron(source: unknown, referenceAt: string): CronPlan {
     for (const registrationId of recipients(String(a.tipo),phase)) plan.deliveries.push({reglaClave:String(a.regla_clave),registrationId,phase,text:body});
   }
   if (plan.generate.length>500 || plan.updates.length>500 || plan.deliveries.length>1000 || plan.deliveries.some(d => d.text.length<1||d.text.length>3500)) throw Error('Reserved plan exceeds atomic bounds; no partial tick is allowed.');
-  return plan;
+  return {plan,coverage:resumirCoberturaAlertas(view as unknown as AnimalHatoParaAlertas[],pending,config,new Map(alerts.map(a=>[String(a.regla_clave),a.estado as EstadoAlertaHato])),date)};
 }
+
+export function planAlertCron(source:unknown,referenceAt:string):CronPlan{return analyzeAlertCron(source,referenceAt).plan;}

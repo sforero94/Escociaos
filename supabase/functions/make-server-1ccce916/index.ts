@@ -1,3 +1,4 @@
+import {handleAlertCronOperatorExecution} from './alertCronOperatorExecution.ts';
 import { handleInvoiceUpload } from './invoice-upload.ts';
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
@@ -197,6 +198,7 @@ app.post("/make-server-1ccce916/hato/pesaje/commit", async (c) => {
 // por pg_cron (migración 060). Auth por secreto compartido
 // (x-hato-tick-secret), más disparo manual con JWT+Gerencia -- ver
 // hato-alertas-tick.ts.
+app.post('/make-server-1ccce916/hato/alertas/operacion/ejecutar',handleAlertCronOperatorExecution);
 app.post("/make-server-1ccce916/hato/alertas/tick", async (c) => {
   return await handleHatoAlertasTick(c);
 });

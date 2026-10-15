@@ -4,10 +4,9 @@ import type { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 import { conReintento, esErrorPostgrestReintentable } from './reintento.ts';
-import { verifyCronRun, postReservedAlertCron } from './alertCronJob.ts';
-import { cronRows, cronUuid } from './alertCronPlan.ts';
-import { dispatchCronDelivery } from './telegram/alertCronDelivery.ts';
-import { enviarMensajeTelegram } from './telegram/enviar.ts';
+import { verifyCronRun } from './alertCronJob.ts';
+import { cronUuid } from './alertCronPlan.ts';
+import {executeReservedAlertCron} from './alertCronExecution.ts';
 type Client=ReturnType<typeof createClient>;
 const ROLES_DISPARO_MANUAL=new Set(['Gerencia']);
 const INTENTOS_TICK=3;
@@ -50,16 +49,8 @@ export async function handleHatoAlertasTick(c:Context):Promise<Response>{
       const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(run.reference_at));
       if(run.slot!=='cron:'+day)throw Error('Original scheduled slot could not be verified.');
     }
-    const receipt=await postReservedAlertCron(service,run),deliveries=cronRows(receipt.deliveries),outcomes=[];
-    for(const d of deliveries){
-      try{
-        const result=await dispatchCronDelivery(service,String(d.id),options=>enviarMensajeTelegram(service,options),d);
-        outcomes.push({id:d.id,state:result.delivery.state});
-      }catch{outcomes.push({id:d.id,state:'unverified'});}
-    }
-    const held=outcomes.some(d=>!['sent','rejected','not_attempted','canceled'].includes(String(d.state)));
-    // Only minimal identifiers/counters leave this service endpoint, never the private source/receipt.
-    return c.json({success:!held,runId:run.id,state:'committed',generated:(receipt.plan as {generate:unknown[]}).generate.length,deliveries:outcomes,held},held?202:200);
+    const result=await executeReservedAlertCron(service,run);
+    return c.json(result,result.held?202:200);
   }catch{
     return c.json({success:false,runId:originalId,error:'Resultado original no verificado o fuente cambiada. Conserve la reserva; no reenvíe ni cree un reemplazo.'},503);
   }
