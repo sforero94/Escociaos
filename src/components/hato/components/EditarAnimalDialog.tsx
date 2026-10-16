@@ -1,6 +1,6 @@
 // ARCHIVO: components/hato/components/EditarAnimalDialog.tsx
 // DESCRIPCIÓN: Diálogo "Editar" de la ficha (HojaDeVida) -- corrige in-place
-// numero/nombre/etapa/estado/raza/fecha_nacimiento de UN `hato_animales` ya
+// numero/nombre/etapa/raza/fecha_nacimiento de UN `hato_animales` ya
 // existente. `numero` es la renumeración que pidió el dueño para cuando
 // Martha retagea el hato (migración 066: atributo mutable -- "chapeta
 // actual" -- NUNCA la identidad, que sigue siendo `id`). Gateado a
@@ -33,7 +33,7 @@ import { useActualizarHatoAnimal, type HatoAnimalEdicion } from '../hooks/useAct
 import { useCandidatosGenealogia } from '../hooks/useCandidatosGenealogia';
 import { candidatasAMadre, etiquetaCandidatoGenealogia } from '@/utils/hato/genealogiaHato';
 import { ordenarPorValor } from '@/utils/ordenarAnimalesHato';
-import type { HatoAnimalRow, EtapaHato, EstadoAnimalHato } from '@/types/hato';
+import type { HatoAnimalRow, EtapaHato } from '@/types/hato';
 
 // Exportado para que `CrearAnimalDialog.tsx` (§4 del Figma spec) use el
 // mismo catálogo de etapas -- una sola fuente, nunca dos listas que puedan
@@ -45,13 +45,6 @@ export const ETAPAS: { value: EtapaHato; label: string }[] = [
   { value: 'toro', label: 'Toro' },
 ];
 
-const ESTADOS: { value: EstadoAnimalHato; label: string }[] = [
-  { value: 'activa', label: 'Activa' },
-  { value: 'vendida', label: 'Vendida' },
-  { value: 'muerta', label: 'Muerta' },
-  { value: 'descartada', label: 'Descartada' },
-];
-
 /** Estado local del formulario: strings vacíos en vez de `null` para que los
  * inputs controlados no salten entre controlado/no-controlado; se normaliza
  * a `HatoAnimalEdicion` (con `null`) solo al enviar. */
@@ -59,7 +52,6 @@ interface FormState {
   numero: number | undefined;
   nombre: string;
   etapa: EtapaHato;
-  estado: EstadoAnimalHato;
   raza: string;
   fecha_nacimiento: string;
   etapaForzada: boolean;
@@ -78,7 +70,6 @@ function formDesdeAnimal(animal: HatoAnimalRow): FormState {
     numero: animal.numero ?? undefined,
     nombre: animal.nombre ?? '',
     etapa: animal.etapa,
-    estado: animal.estado,
     raza: animal.raza ?? '',
     fecha_nacimiento: animal.fecha_nacimiento ?? '',
     etapaForzada: animal.etapa_forzada,
@@ -92,7 +83,6 @@ function edicionDesdeForm(form: FormState): HatoAnimalEdicion {
     numero: form.numero ?? null,
     nombre: form.nombre.trim() || null,
     etapa: form.etapa,
-    estado: form.estado,
     raza: form.raza.trim() || null,
     fecha_nacimiento: form.fecha_nacimiento || null,
     etapa_forzada: form.etapaForzada,
@@ -203,16 +193,8 @@ export function EditarAnimalDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="editar-animal-estado">Estado</Label>
-                <Select value={form.estado} onValueChange={(v) => actualizarCampo('estado', v as EstadoAnimalHato)}>
-                  <SelectTrigger id="editar-animal-estado">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ESTADOS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input id="editar-animal-estado" value={animal.estado} readOnly />
+                <p className="text-xs text-gray-500">El estado cambia mediante venta, muerte o reactivación. Las correcciones históricas se revisan con Santiago.</p>
               </div>
             </div>
 

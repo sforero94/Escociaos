@@ -14,7 +14,7 @@
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import type { EtapaHato, EstadoAnimalHato } from '@/types/hato';
+import type { EtapaHato } from '@/types/hato';
 
 /** Subconjunto editable de `hato_animales` desde el diálogo "Editar" de la
  * ficha. Valores ya normalizados (`null`, no `''`) -- la conversión desde el
@@ -23,7 +23,6 @@ export interface HatoAnimalEdicion {
   numero: number | null;
   nombre: string | null;
   etapa: EtapaHato;
-  estado: EstadoAnimalHato;
   raza: string | null;
   fecha_nacimiento: string | null;
   /** Corrección de precedencia D-13 (migración 092, 2026-08-06): cuando es
@@ -70,7 +69,6 @@ export function useActualizarHatoAnimal() {
             numero: edicion.numero,
             nombre: edicion.nombre,
             etapa: edicion.etapa,
-            estado: edicion.estado,
             raza: edicion.raza,
             fecha_nacimiento: edicion.fecha_nacimiento,
             etapa_forzada: edicion.etapa_forzada,
