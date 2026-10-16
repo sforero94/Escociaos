@@ -13,7 +13,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
-import type { HatoAnimalActivoPicker, TipoVentaAnimalesHato, VentaAnimalesHatoPayload } from '@/types/hato';
+import type { HatoAnimalActivoPicker, TipoVentaAnimalesHato } from '@/types/hato';
 
 export interface AnimalPickerVenta extends HatoAnimalActivoPicker {
   numeroEsProvisional: boolean;
@@ -31,7 +31,7 @@ export function useVentaAnimalesHato() {
 
   const [animales, setAnimales] = useState<AnimalPickerVenta[]>([]);
   const [loadingAnimales, setLoadingAnimales] = useState(true);
-  const [guardando, setGuardando] = useState(false);
+  const guardando = false;
 
   const cargarAnimales = useCallback(async () => {
     setLoadingAnimales(true);
@@ -77,25 +77,7 @@ export function useVentaAnimalesHato() {
       nombre: string | null;
       animalIds: string[];
     }): Promise<ResultadoRegistrarVentaAnimales> => {
-      setGuardando(true);
-      try {
-        const rpcPayload: VentaAnimalesHatoPayload = {
-          tipo: payload.tipo,
-          cabezas: payload.cabezas,
-          valor: payload.valor,
-          fecha: payload.fecha,
-          region_id: payload.regionId,
-          medio_pago_id: payload.medioPagoId,
-          comprador_id: payload.compradorId,
-          nombre: payload.nombre,
-          animal_ids: payload.animalIds,
-        };
-        const { data, error } = await supabase.rpc('fn_hato_registrar_venta_animales', { payload: rpcPayload });
-        if (error) throw error;
-        return data as ResultadoRegistrarVentaAnimales;
-      } finally {
-        setGuardando(false);
-      }
+      void payload;throw Error('Use la venta con revisión preparada y recuperación del intento original.');
     },
     [supabase],
   );

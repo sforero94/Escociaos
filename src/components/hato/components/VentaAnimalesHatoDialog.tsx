@@ -15,7 +15,12 @@
 // `estado='activa'` — un animal ya vendido/muerto no puede volver a
 // aparecer aquí.
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {useAuth} from '@/contexts/AuthContext';
+import {useFormDraft} from '@/hooks/useFormDraft';
+import {FormDraftBanner} from '@/components/shared/FormDraftBanner';
+import {useSale} from '../hooks/useSale';
+import {saleIntent} from '@/utils/hato/hatoSaleProtocol';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -66,13 +71,15 @@ interface VentaAnimalesHatoDialogProps {
   onGuardado: () => void;
 }
 
-export function VentaAnimalesHatoDialog({
+export function VentaAnimalesHatoDialog(props:VentaAnimalesHatoDialogProps){const {user}=useAuth();return <SaleForm key={user?.id??'none'} {...props}/>;}
+function SaleForm({
   open,
   onOpenChange,
   animalIdPreseleccionado,
   onGuardado,
 }: VentaAnimalesHatoDialogProps) {
-  const { animales, loadingAnimales, guardando, registrarVenta } = useVentaAnimalesHato();
+  const { animales, loadingAnimales } = useVentaAnimalesHato();
+  const flow=useSale(),guardando=flow.busy;const mounted=useRef(true);useLayoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const catalogos = useFinCatalogosVenta();
 
   const [tipo, setTipo] = useState<TipoVentaAnimalesHato>('terneros');
@@ -85,6 +92,9 @@ export function VentaAnimalesHatoDialog({
   const [nombre, setNombre] = useState('');
   const [animalIds, setAnimalIds] = useState<Set<string>>(new Set());
 
+  const draft=useFormDraft('hato_sale',{tipo,cabezas,valor,fecha,regionId,medioPagoId,compradorId,nombre,animalIds:[...animalIds]}, {enabled:open&&!flow.attempt});
+  useEffect(()=>{if(open)void flow.run('status').catch(()=>{});},[open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const action=(mode:'post'|'status'|'resolve'|'new')=>{const committed=flow.attempt?.result?.state==='committed';void flow.run(mode).then(()=>{if(!mounted.current)return;if(mode==='new'){draft.clearDraft();onOpenChange(false);if(committed)onGuardado();}}).catch(()=>{});};
   // Reinicia el formulario cada vez que se abre -- evita arrastrar datos de
   // una apertura anterior (mismo patrón que MuerteAnimalDialog/EditarAnimalDialog).
   useEffect(() => {
@@ -149,28 +159,29 @@ export function VentaAnimalesHatoDialog({
     }
 
     try {
-      await registrarVenta({
-        tipo,
-        cabezas: cabezas as number,
-        valor,
-        fecha,
-        regionId,
-        medioPagoId,
-        compradorId: compradorId || null,
-        nombre: nombre.trim() || null,
-        animalIds: Array.from(animalIds),
-      });
-      toast.success('Venta registrada');
-      onGuardado();
-      onOpenChange(false);
+      if(!Number.isSafeInteger(valor))throw Error('El valor debe ser un número entero de pesos dentro del rango exacto.');
+      const selected=animales.filter(a=>animalIds.has(a.id)).map(a=>({id:a.id,numero:a.numero,nombre:a.nombre})).sort((a,b)=>a.id.localeCompare(b.id));
+      if(selected.length!==animalIds.size)throw Error('La selección de animales cambió. Revísala antes de preparar.');
+      const region=catalogos.regiones.find(r=>r.id===regionId),medio=catalogos.mediosPago.find(r=>r.id===medioPagoId),comprador=catalogos.compradores.find(r=>r.id===compradorId);
+      if(!region||!medio||(compradorId&&!comprador))throw Error('Verifica los catálogos seleccionados.');
+      const ref=(r:{id:string;nombre:string})=>({id:r.id,nombre:r.nombre});
+      await flow.run('prepare',saleIntent({version:1,tipo,cabezas,valor:String(valor),fecha,regionId,medioPagoId,compradorId:compradorId||null,nombre:nombre.trim(),animals:selected,refs:{region:ref(region),medio:ref(medio),comprador:comprador?ref(comprador):null}}));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido registrando la venta';
       toast.error(msg);
     }
   };
 
+  if(flow.attempt){const a=flow.attempt,r=a.result;return <Dialog open={open} onOpenChange={value=>{if(!guardando)onOpenChange(value);}}><DialogContent size="lg"><DialogHeader><DialogTitle>Revisar venta preparada</DialogTitle></DialogHeader><DialogBody className="space-y-3">
+    {flow.error&&<p role="alert">{flow.error}</p>}<p>Intento original: {a.key} · {r?.state??'sin verificar'}</p><p>Fecha: {a.intent.fecha} · {a.intent.tipo} · {a.intent.cabezas} cabezas</p><p>Valor total: {a.intent.valor} pesos</p><p>Región: {a.intent.refs.region.nombre} · Pago: {a.intent.refs.medio.nombre} · Comprador: {a.intent.refs.comprador?.nombre??'Sin comprador seleccionado'}</p><p>Nombre: {a.intent.nombre||`Venta ${a.intent.tipo} (${a.intent.cabezas} cabezas)`}</p>
+    {r?.original&&<p>Categoría: {String(r.original.refs.categoria.nombre)} · Negocio: {String(r.original.refs.negocio.nombre)}</p>}
+    <p>Ingreso reservado: {r?.plan?.incomeId??'sin verificar'}</p>{a.intent.animals.map(animal=><p key={animal.id}>Animal: #{animal.numero??'sin caravana'} {animal.nombre??'Sin nombre'} · {animal.id}</p>)}
+    {a.intent.animals.length===0&&<p>Venta sin animales enlazados; no se crearán eventos ni cambios de estado.</p>}
+    {r?.state==='pending'&&<p>Confirme este importe, fecha, referencias y animales. El ingreso, sus eventos y los estados se guardan juntos.</p>}{r?.state==='committed'&&<p>Venta registrada y comprobada.</p>}
+    </DialogBody><DialogFooter><Button variant="outline" disabled={guardando} onClick={()=>onOpenChange(false)}>Cerrar</Button><Button disabled={guardando} onClick={()=>action('status')}>Verificar venta original</Button>
+    {(!r||['unknown','pending'].includes(r.state))&&<Button disabled={guardando} onClick={()=>action('resolve')}>Cancelar intento original</Button>}{r?.state==='pending'&&<Button disabled={guardando} onClick={()=>action('post')}>Confirmar venta preparada</Button>}{r&&['committed','canceled'].includes(r.state)&&<Button disabled={guardando} onClick={()=>action('new')}>Finalizar venta verificada</Button>}</DialogFooter></DialogContent></Dialog>;}
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value=>{if(!guardando)onOpenChange(value);}}>
       {/* `lg`, no `md`: 5 filas de campos (tipo/fecha, cabezas/valor,
           región/medio de pago, comprador/nombre) más el picker de animales
           enlazados (hasta 256px de lista propia) es el formulario más largo
@@ -182,6 +193,9 @@ export function VentaAnimalesHatoDialog({
             <DialogTitle>Registrar venta</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
+            {flow.error&&<p role="alert">{flow.error}</p>}
+            <FormDraftBanner show={draft.hasDraft} variant="available" onDiscard={draft.discardDraft} onRestore={()=>{const d=draft.draftData;if(d){setTipo(d.tipo);setCabezas(d.cabezas);setValor(d.valor);setFecha(d.fecha);setRegionId(d.regionId);setMedioPagoId(d.medioPagoId);setCompradorId(d.compradorId);setNombre(d.nombre);setAnimalIds(new Set(d.animalIds));draft.acceptDraft();}}}/>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="venta-tipo">Tipo de venta *</Label>
@@ -297,9 +311,9 @@ export function VentaAnimalesHatoDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={guardando}>
+            <Button type="submit" disabled={!!flow.error||guardando||loadingAnimales||catalogos.loading}>
               {guardando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Registrar venta
+              Preparar venta
             </Button>
           </DialogFooter>
         </form>
