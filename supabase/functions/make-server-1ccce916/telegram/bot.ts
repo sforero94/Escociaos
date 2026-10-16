@@ -1,3 +1,4 @@
+import {handleQuickUndoRecovery} from './quickUndo.ts';
 import {handleQuickRecovery} from './quickCreation.ts';
 import {handleBirthRecovery} from './birthCreation.ts';
 import { handleAlertCronCallback } from './alertCronCallback.ts';
@@ -271,6 +272,7 @@ function getBot(): Bot<BotContext> {
     await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
   });
 
+  bot.use(async(ctx,next)=>{await handleQuickUndoRecovery(ctx,next,getSupabaseAdmin());});
   bot.use(async(ctx,next)=>{await handleQuickRecovery(ctx,next,getSupabaseAdmin());});
   bot.use(async(ctx,next)=>{await handleBirthRecovery(ctx,next,getSupabaseAdmin());});
 
