@@ -28,6 +28,7 @@ export interface TelegramUsuario {
 }
 
 export interface SessionData {
+  pendienteParto?: {action:import('./birthCreationProtocol.ts').BirthAction;intent:import('./birthCreationProtocol.ts').BirthIntent}|null;
   pendienteRespuestaAlerta?: {action:{sender:number;chatId:number;messageId:number};intent:{version:1;alertId:string;respuesta:'si'|'no'|'otro';fecha:string}} | null;
   pendientePasoClinico?: {action:{sender:number;chatId:number;messageId:number};intent:{version:1;stepId:string;fechaEjecutada:string;alertId:string|null}} | null;
   pendienteTratamiento?: {sender:number;chatId:number;messageId:number} | null;

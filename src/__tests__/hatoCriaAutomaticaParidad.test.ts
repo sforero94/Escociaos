@@ -97,12 +97,13 @@ describe('criaAutomatica — los escritores la usan de verdad', () => {
     'supabase/functions/make-server-1ccce916/telegram/bot.ts',
   ];
 
-  it.each(CONVERSACIONES)('%s crea la ficha y enlaza cria_id', (rel) => {
-    const src = leer(rel);
-    expect(src).toContain('../../hato-cria-automatica.ts');
-    expect(src).toMatch(/crearFichaCriaConReintento\(/);
-    expect(src).toMatch(/debeCrearFichaCria\(/);
-    expect(src).toMatch(/cria_id:\s*cria\?\.id/);
+  it.each(CONVERSACIONES)('%s prepara parto/cría antes de cualquier escritor directo', (rel) => {
+    const src=leer(rel);expect(src).toContain("if(clave==='parto')return await confirmBirth");
+    expect(src.indexOf("if(clave==='parto')return await confirmBirth")).toBeLessThan(src.indexOf('const guardado = await conversation.external'));
+    expect(src).not.toMatch(/crearFichaCriaConReintento\(|debeCrearFichaCria\(|errBorrarCria/);
+    const protocol=leer(rel.replace('/conversations/eventoHato.ts','/birthCreationProtocol.ts'));
+    for(const helper of ['construirFichaCria','calcularSiguienteChapetaCria','elegirToroDelServicio'])expect(protocol).toContain(helper+'(');
+    expect(protocol).toContain("'fn_hato_birth_telegram'");
   });
 
   it.each(BOTS)('%s preserves coupled calf history through the reviewed atomic undo protocol', (rel) => {

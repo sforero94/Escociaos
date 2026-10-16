@@ -1,3 +1,4 @@
+import {handleBirthRecovery} from './birthCreation.ts';
 import { handleAlertCronCallback } from './alertCronCallback.ts';
 import { beginAlertResponse, handleAlertResponseRecovery, privateAlertResponseAction, renderAlertResponse } from './alertResponse.ts';
 import { queryAlertResponseTelegram } from './alertResponseProtocol.ts';
@@ -268,6 +269,8 @@ function getBot(): Bot<BotContext> {
     if(!ctx.callbackQuery?.data?.startsWith('htc:'))return next();
     await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
   });
+
+  bot.use(async(ctx,next)=>{await handleBirthRecovery(ctx,next,getSupabaseAdmin());});
 
   bot.use(async (ctx,next)=>{
     await handleClinicalRecovery(ctx,next,getSupabaseAdmin(),async result=>{

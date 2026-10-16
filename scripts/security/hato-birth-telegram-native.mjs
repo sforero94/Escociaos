@@ -1,0 +1,36 @@
+// Actual private-message entry/recovery and installed SDK -> synthetic local socket only.
+import fs from 'node:fs';import {createRequire} from 'node:module';import ts from 'typescript';import {createClient} from '@supabase/supabase-js';
+const input=JSON.parse(fs.readFileSync(0,'utf8'));if(!/^\/tmp\/escocia-treatment-pg-[^/]+\/socket$/.test(input.socket)||!input.client.startsWith('/tmp/'))throw Error('Local transport refused');
+const {Client}=createRequire(import.meta.url)(input.client),pg=new Client({host:input.socket,port:55439,user:'postgres',database:'postgres',password:'',ssl:false,connectionTimeoutMillis:5000,query_timeout:10000});
+function load(path,deps={}){const exports={};const code=ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;new Function('exports','require',code)(exports,n=>{if(!(n in deps))throw Error('Unexpected module');return deps[n];});return exports;}
+const common=load('src/supabase/functions/server/telegram/alertResponseProtocol.ts'),calves=load('src/supabase/functions/server/hato-cria-automatica.ts');
+const protocol=load('src/supabase/functions/server/telegram/birthCreationProtocol.ts',{'./alertResponseProtocol.ts':common,'../hato-cria-automatica.ts':calves}),native=load('src/supabase/functions/server/telegram/birthCreation.ts',{'./birthCreationProtocol.ts':protocol});
+let losePost=true,posts=0,acks=0;const calls=[],checks=[],check=(ok,label)=>{if(!ok)throw Error(label);checks.push(label);};
+const sdk=createClient('https://birth-telegram.invalid','synthetic-service',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:async(url,options)=>{
+ const target=new URL(String(url));if(target.origin!=='https://birth-telegram.invalid'||target.pathname!=='/rest/v1/rpc/fn_hato_birth_telegram'||options?.method!=='POST')throw Error('Hosted HTTP forbidden');
+ const a=JSON.parse(String(options.body));calls.push(a.p_action);if(a.p_action==='post')posts++;let result;
+ try{await pg.query('BEGIN');await pg.query('SET LOCAL ROLE service_role');result=(await pg.query('SELECT fn_hato_birth_telegram($1,$2::bigint,$3::bigint,$4::bigint,$5::jsonb) result',[a.p_action,a.p_sender,a.p_chat_id,a.p_message_id,a.p_intent])).rows[0].result;await pg.query('COMMIT');}catch(error){await pg.query('ROLLBACK');return new Response(JSON.stringify({message:error.message,code:error.code??'P0001'}),{status:400,headers:{'Content-Type':'application/json'}});}
+ if(a.p_action==='post'&&losePost){losePost=false;throw Error('Synthetic lost committed birth reply');}return new Response(JSON.stringify(result),{headers:{'Content-Type':'application/json'}});
+}}});
+const message={message_id:91,chat:{id:input.sender,type:'private'},text:'Original private anchor'};
+const ctx={from:{id:input.sender},chat:{id:input.sender,type:'private'},message:{...message,message_id:90},callbackQuery:null,session:{},reply:async()=>message,answerCallbackQuery:async()=>{acks++;},api:{editMessageText:async(chat,id,text)=>{if(chat!==input.sender||id!==91)throw Error('Wrong private anchor');message.text=text;}}};
+const state=async()=>(await pg.query(input.stateQuery)).rows[0].jsonb_object_agg;
+try{
+ await pg.connect();const animal=(await pg.query('SELECT to_jsonb(x) animal FROM hato_animales x WHERE id=$1',[input.animal])).rows[0].animal,intent=protocol.birthIntent({version:1,animalId:input.animal,fecha:input.day,criaDestino:'retenida',observedAnimal:animal});
+ let halted=0;const conversation={external:async fn=>fn(ctx),halt:async()=>{halted++;return 'halted';}};await native.confirmBirth(conversation,ctx,()=>sdk,intent);
+ check(halted===1&&calls.join(',')==='prepare','actual conversation outside current identity prepares and exits without posting');check(ctx.session.pendienteParto.action.messageId===91,'reservation binds delivered private anchor instead of incoming command');
+ check(message.text.includes(input.day)&&message.text.includes('Synthetic native birth mother')&&message.text.includes('Parto y ficha se guardan juntos'),'actual native preview captures target/date/calf details');
+ const before=await state();ctx.session={};ctx.callbackQuery={data:'hbt:post',message:{...message,text:'Preparing'}};await native.handleBirthRecovery(ctx,async()=>{throw Error('Unexpected fallthrough');},sdk);
+ check(posts===0&&protocol.sameBirth(before,await state()),'early or undelivered preview cannot mutate any domain/proof row');
+ ctx.callbackQuery={data:'hbt:post',message:{...message}};await native.handleBirthRecovery(ctx,async()=>{},sdk);check(posts===1,'original delivered review commits once despite a lost response');
+ const after=await state(),audit=(await pg.query('SELECT receipt FROM hato_birth_telegram.audit WHERE receipt->\'action\'->>\'messageId\'=\'91\'' )).rows[0].receipt;check(!!audit,'committed protected native audit survives response loss');
+ ctx.session={};ctx.callbackQuery={data:'hbt:status',message:{...message}};await native.handleBirthRecovery(ctx,async()=>{},sdk);check(message.text.includes('Parto registrado')&&posts===1,'sessionless original status recovers verified birth without resend');check(protocol.sameBirth(after,await state()),'original status preserves all public/private/native domain rows');
+ const action={sender:input.sender,chatId:input.sender,messageId:91},proof=await protocol.birthTelegram(sdk,action,'status');check(proof.actor.profileId===null&&proof.receipt.calf.created_by===null,'permitted unlinked worker retains real registration actor without invented profile');check(protocol.sameBirth(proof.receipt,audit),'strict actual receiver equals independent protected registration audit');
+ const calf=(await pg.query('SELECT to_jsonb(x) value FROM hato_animales x WHERE id=$1',[audit.calf.id])).rows[0].value,graph=(await pg.query('SELECT hato_death.snapshot($1::uuid) value',[input.animal])).rows[0].value;
+ check(protocol.sameBirth(calf,audit.calf)&&protocol.sameBirth(graph,audit.after),'independent native calf/event/mother graph equals recovered original proof');
+ ctx.callbackQuery={data:'hbt:post',message:{...message}};await native.handleBirthRecovery(ctx,async()=>{},sdk);check(posts===1&&protocol.sameBirth(after,await state()),'repeated original post button cannot create another calf/event');
+ const previous=calls.length;ctx.from={id:input.sender+1};await native.handleBirthRecovery(ctx,async()=>{},sdk);check(calls.length===previous,'forwarded/cross-user private controls refuse before RPC');ctx.from={id:input.sender};
+ ctx.chat={id:input.sender,type:'group'};await native.handleBirthRecovery(ctx,async()=>{},sdk);check(calls.length===previous,'group controls refuse before RPC');ctx.chat={id:input.sender,type:'private'};
+ await pg.query('UPDATE telegram_usuarios SET activo=false WHERE id=$1',[input.registration]);const revoked=await state();message.text='Revoked placeholder';ctx.callbackQuery={data:'hbt:status',message:{...message}};await native.handleBirthRecovery(ctx,async()=>{},sdk);check(message.text==='Revoked placeholder'&&protocol.sameBirth(revoked,await state()),'revoked registration cannot disclose or mutate original proof');
+ check(acks===7,'every independent native callback attempt is acknowledged');process.stdout.write(JSON.stringify({assertions:checks.length,checks})+'\n');
+}finally{await pg.end();}
