@@ -29,6 +29,9 @@ import { useFinCatalogosVenta } from '../hooks/useFinCatalogosVenta';
 import { useOcrLiquidacionPomar } from '../hooks/useOcrLiquidacionPomar';
 import { CapturaArchivo } from './CapturaArchivo';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
+import { borradorQuincenaConDatos, type BorradorQuincenaVenta } from '@/utils/hato/produccionV2';
 
 // Defaults del dueño para la venta quincenal a El Pomar (D-8,
 // docs/plan_hato_ronda_agosto_2026.md §4 S4) -- resueltos por NOMBRE contra
@@ -59,6 +62,9 @@ export interface ProduccionQuincenalDialogProps {
    * usuario tenga que volver a elegir "Cargar factura" dentro del
    * diálogo. */
   fotosIniciales?: File[];
+  /** Quincena que se abre al abrir el diálogo (Cargas › «Completar» o una
+   * fila del historial). Sin ella, el diálogo abre en la quincena de hoy. */
+  quincenaInicial?: { anio: number; mes: number; quincena: 1 | 2 } | null;
 }
 
 /**
@@ -87,7 +93,7 @@ export interface ProduccionQuincenalDialogProps {
  * (`ocrPendiente`, `defaultsIngresoRef`) NUNCA se recrean al abrir/cerrar el
  * diálogo porque el componente no se desmonta con él, solo con la pestaña.
  */
-export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIniciales }: ProduccionQuincenalDialogProps) {
+export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIniciales, quincenaInicial }: ProduccionQuincenalDialogProps) {
   const hook = useProduccionHato();
   const catalogos = useFinCatalogosVenta();
   const ocr = useOcrLiquidacionPomar();
@@ -131,6 +137,31 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
 
   const rango = rangoQuincena(anio, mes, quincena);
   const soloLectura = origenDato === 'derivado_mensual';
+
+  // Borrador (mensaje de Martha, 2026-10-16: «me faltó el dato de cuántas
+  // vacas, tuve que dejarlo ahí y ahora no puedo seguir»). Lo leído de la
+  // liquidación vivía solo en memoria: cerrar el diálogo o la pestaña lo
+  // perdía, y la foto ya subida no se podía volver a leer sin el archivo.
+  // Solo se guarda una quincena NUEVA con algún dato: una quincena ya
+  // guardada está en la base, no en el navegador. Cancelar NO borra el
+  // borrador a propósito — cancelar para ir a buscar un dato es justo el
+  // caso que esto existe para cubrir. Se borra al guardar o eliminar.
+  const borrador = useFormDraft<BorradorQuincenaVenta | null>(
+    'hato_quincena_venta_v1',
+    registroId || soloLectura
+      ? null
+      : borradorQuincenaConDatos({
+          anio, mes, quincena, litrosTotal, litrosPomar, numVacasOrdeno, notas,
+          fechaIngreso, valorBruto, regionId, medioPagoId, compradorId,
+        }),
+  );
+  // Un borrador vacío (se guardó `null` al cargar una quincena existente)
+  // no es nada que recuperar, y `useFormDraft` deja de guardar mientras
+  // haya uno pendiente: se descarta para que el autoguardado siga vivo.
+  const { hasDraft, draftData, discardDraft } = borrador;
+  useEffect(() => {
+    if (hasDraft && draftData == null) discardDraft();
+  }, [hasDraft, draftData, discardDraft]);
 
   // Defaults del dueño ya resueltos a id, mantenidos en una referencia para
   // que `resetIngreso` los pueda leer sin capturarlos en un cierre viejo
@@ -230,6 +261,10 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
   // y evita que los valores de una quincena se filtren a otra cuando el
   // usuario navega a mano. Lo que se hace es dejar la lectura en espera y
   // aplicarla DESPUÉS de que la recarga del periodo destino termine.
+  // Borrador por aplicar: igual que `ocrPendiente`, espera a que la recarga
+  // del periodo termine, o la limpieza lo borraría.
+  const borradorPendiente = useRef<BorradorQuincenaVenta | null>(null);
+
   const ocrPendiente = useRef<{
     anio: number;
     mes: number;
@@ -308,6 +343,16 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
           if (pendiente.fechaPago) setFechaIngreso(pendiente.fechaPago);
         }
       }
+      const enEspera = borradorPendiente.current;
+      if (enEspera && enEspera.anio === anio && enEspera.mes === mes && enEspera.quincena === quincena) {
+        borradorPendiente.current = null;
+        if (existente) {
+          // Alguien guardó esa quincena mientras tanto: lo guardado manda.
+          toast.warning('Esa quincena ya está guardada. Se muestra lo guardado, no el borrador.');
+        } else {
+          aplicarBorrador(enEspera);
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Error cargando quincena: ${msg}`);
@@ -333,6 +378,32 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
   useEffect(() => {
     cargarHistorial();
   }, [cargarHistorial]);
+
+  function aplicarBorrador(b: BorradorQuincenaVenta) {
+    setLitrosTotal(b.litrosTotal ?? undefined);
+    setLitrosPomar(b.litrosPomar ?? undefined);
+    setNumVacasOrdeno(b.numVacasOrdeno ?? undefined);
+    setNotas(b.notas);
+    setFechaIngreso(b.fechaIngreso);
+    setValorBruto(b.valorBruto ?? undefined);
+    if (b.regionId) setRegionId(b.regionId);
+    if (b.medioPagoId) setMedioPagoId(b.medioPagoId);
+    if (b.compradorId) setCompradorId(b.compradorId);
+  }
+
+  const handleRecuperarBorrador = () => {
+    const b = borrador.draftData;
+    borrador.acceptDraft();
+    if (!b) return;
+    borradorPendiente.current = b;
+    if (b.anio === anio && b.mes === mes && b.quincena === quincena) {
+      void cargarRegistro();
+    } else {
+      setAnio(b.anio);
+      setMes(b.mes);
+      setQuincena(b.quincena);
+    }
+  };
 
   const handleGuardar = async () => {
     if (soloLectura) return;
@@ -382,6 +453,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
         ? ` (ICA retenida: ${formatCurrency(resultado.ica)}, neto: ${formatCurrency(resultado.neto)})`
         : ' (sin retención de ICA -- periodo anterior a julio 2026)';
       toast.success(`${registroId ? 'Quincena actualizada' : 'Quincena registrada'}${mensajeIca}`);
+      borrador.clearDraft();
       await Promise.all([cargarRegistro(), cargarHistorial()]);
       onSaved?.();
     } catch (err: unknown) {
@@ -402,6 +474,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
     try {
       await hook.eliminarQuincena(registroId);
       toast.success('Quincena eliminada (junto con su ingreso enlazado)');
+      borrador.clearDraft();
       await Promise.all([cargarRegistro(), cargarHistorial()]);
       onSaved?.();
     } catch (err: unknown) {
@@ -492,6 +565,11 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
   // liquidación" con el diálogo ya abierto.
   useEffect(() => {
     if (!open) return;
+    if (quincenaInicial) {
+      setAnio(quincenaInicial.anio);
+      setMes(quincenaInicial.mes);
+      setQuincena(quincenaInicial.quincena);
+    }
     if (fotosIniciales && fotosIniciales.length > 0) void handleOcrLeido(fotosIniciales);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -547,6 +625,12 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
         </DialogHeader>
         <DialogBody className="space-y-4">
         <div className="space-y-4">
+        <FormDraftBanner
+          variant="available"
+          show={borrador.hasDraft && borrador.draftData != null}
+          onRestore={handleRecuperarBorrador}
+          onDiscard={borrador.discardDraft}
+        />
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="q-anio">Año</Label>
@@ -617,10 +701,15 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
                 <NumberInput value={litrosPomar} onChange={setLitrosPomar} decimals={1} placeholder="—" />
               </div>
               <div className="space-y-1.5">
-                <Label>Vacas en ordeño</Label>
+                <Label>Vacas en ordeño (opcional)</Label>
                 <NumberInput value={numVacasOrdeno} onChange={setNumVacasOrdeno} decimals={0} placeholder="—" />
               </div>
             </div>
+            {numVacasOrdeno == null && (
+              <p className="text-xs text-gray-500">
+                ¿No tienes el número de vacas? Guarda la quincena sin él. Cargas te avisa y lo completas después.
+              </p>
+            )}
 
             {productividad !== null && (
               <p className="text-xs text-gray-500">

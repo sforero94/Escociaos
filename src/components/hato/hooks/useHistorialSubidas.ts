@@ -38,6 +38,7 @@ function primeraRuta(c: CapturaCruda): string | null {
 export function useHistorialSubidas(desde: string) {
   const [fotosLiquidacion, setFotosLiquidacion] = useState<FotoSubida[]>([]);
   const [fotoPesajePorFecha, setFotoPesajePorFecha] = useState<Map<string, FotoSubida>>(new Map());
+  const [pesajesSinFilas, setPesajesSinFilas] = useState<Array<FotoSubida & { anio: number; mes: number }>>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,6 +82,7 @@ export function useHistorialSubidas(desde: string) {
         }));
 
       const porFecha = new Map<string, FotoSubida>();
+      const sinFilas: Array<FotoSubida & { anio: number; mes: number }> = [];
       if (capturasPesaje.length > 0) {
         const { filas } = await fetchAll<FilaSubida>((d, h) =>
           supabase
@@ -95,6 +97,20 @@ export function useHistorialSubidas(desde: string) {
           const cruda = capturas.find((c) => c.id === subida.captura.id);
           const ruta = cruda ? primeraRuta(cruda) : null;
           if (!ruta) continue;
+          // Una foto que no dejó ni un litro es una carga a medias. Solo se
+          // afirma para meses que la consulta de filas cubre (`fecha >=
+          // desde`): fuera de esa ventana, "sin filas" sería no haber mirado.
+          const inicioMes = `${subida.captura.anio}-${String(subida.captura.mes).padStart(2, '0')}-01`;
+          if (subida.filaIds.length === 0 && subida.captura.desenlace !== 'ok' && inicioMes >= desde) {
+            sinFilas.push({
+              capturaId: subida.captura.id,
+              bucket: subida.captura.storageBucket,
+              ruta,
+              creadoEn: subida.captura.creadoEn,
+              anio: subida.captura.anio,
+              mes: subida.captura.mes,
+            });
+          }
           for (const filaId of subida.filaIds) {
             const fecha = fechaPorFila.get(filaId);
             // La subida más reciente gana: `ligarFilasASubidas` ya las
@@ -108,6 +124,7 @@ export function useHistorialSubidas(desde: string) {
 
       setFotosLiquidacion(liquidaciones);
       setFotoPesajePorFecha(porFecha);
+      setPesajesSinFilas(sinFilas);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar las fotos de las subidas.');
     } finally {
@@ -137,5 +154,7 @@ export function useHistorialSubidas(desde: string) {
     return null;
   }, []);
 
-  return { fotosLiquidacion, fotoPesajePorFecha, cargando, error, recargar: cargar, abrirFoto };
+  return { fotosLiquidacion, fotoPesajePorFecha, pesajesSinFilas, cargando, error, recargar: cargar, abrirFoto };
 }
+
+export type HistorialSubidasEstado = ReturnType<typeof useHistorialSubidas>;

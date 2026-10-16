@@ -36,12 +36,16 @@ export function CargaPesajeCard({
   pesajes,
   onAbrirFecha,
   onGuardado,
+  solicitud,
 }: {
   hoy: string;
   diaPesaje: { iso: number; nombre: string } | null;
   pesajes: PesajeLecheVaca[];
   onAbrirFecha: (fecha: string) => void;
   onGuardado: () => void;
+  /** Pedido desde «Quedaron a medias»: abrir la grilla a mano del mes de
+   * una planilla que se subió y no dejó litros. `nonce` cambia en cada pedido. */
+  solicitud?: { anio: number; mes: number; nonce: number } | null;
 }) {
   const hook = useProduccionHato();
   const { captura, recargar: recargarCaptura } = useUltimaCapturaFoto('pesaje');
@@ -58,6 +62,12 @@ export function CargaPesajeCard({
   useEffect(() => {
     if (dialogo) setDialogoAbierto(true);
   }, [dialogo]);
+
+  useEffect(() => {
+    if (!solicitud) return;
+    setPeriodo(`${solicitud.anio}-${String(solicitud.mes).padStart(2, '0')}`);
+    setDialogo({ modo: 'manual', fotos: [] });
+  }, [solicitud]);
 
   const semanas = useMemo(() => {
     if (!periodoValido || !diaPesaje) return [];

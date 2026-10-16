@@ -13,10 +13,10 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMillonesCOP, formatNumber } from '@/utils/format';
-import { filasHistorialSubidas, inicioMesesAtras, type FilaHistorialSubida, type TipoSubida } from '@/utils/hato/produccionV2';
+import { filasHistorialSubidas, type FilaHistorialSubida, type QuincenaClave, type TipoSubida } from '@/utils/hato/produccionV2';
 import type { PesajeLecheVaca } from '@/utils/hatoProduccion';
 import type { HatoProduccionQuincenalConIngreso } from '../../hooks/useProduccionHato';
-import { useHistorialSubidas } from '../../hooks/useHistorialSubidas';
+import type { HistorialSubidasEstado } from '../../hooks/useHistorialSubidas';
 import { DetalleQuincenaVentaDialog } from '../DetalleQuincenaVentaDialog';
 import { SubidasPesajeMes } from '../SubidasPesajeMes';
 
@@ -40,24 +40,31 @@ function valorTotal(fila: FilaHistorialSubida): string {
 }
 
 export function HistorialSubidas({
-  hoy,
   historial,
   pesajes,
+  fotos,
+  desde,
+  meses,
+  onMasMeses,
   onAbrirPesaje,
+  onAbrirQuincena,
   onCambio,
 }: {
-  hoy: string;
   historial: HatoProduccionQuincenalConIngreso[];
   pesajes: PesajeLecheVaca[];
+  fotos: HistorialSubidasEstado;
+  desde: string;
+  meses: number;
+  onMasMeses: () => void;
   onAbrirPesaje: (fecha: string) => void;
+  /** Gerencia: abre la quincena para verla o completarla (p. ej. el número
+   * de vacas). Quien no es Gerencia ve el detalle de solo lectura. */
+  onAbrirQuincena: (q: QuincenaClave) => void;
   onCambio: () => void;
 }) {
-  const [meses, setMeses] = useState(3);
   const [filtro, setFiltro] = useState<Filtro>('todo');
   const [quincena, setQuincena] = useState<HatoProduccionQuincenalConIngreso | null>(null);
   const { hasRole } = useAuth();
-  const desde = useMemo(() => inicioMesesAtras(hoy, meses), [hoy, meses]);
-  const fotos = useHistorialSubidas(desde);
 
   const filas = useMemo(
     () =>
@@ -73,8 +80,14 @@ export function HistorialSubidas({
   const visibles = filtro === 'todo' ? filas : filas.filter((f) => f.tipo === filtro);
 
   const abrirFila = (fila: FilaHistorialSubida) => {
-    if (fila.tipo === 'pesaje') onAbrirPesaje(fila.fecha);
-    else setQuincena(historial.find((h) => h.id === fila.clave) ?? null);
+    if (fila.tipo === 'pesaje') {
+      onAbrirPesaje(fila.fecha);
+      return;
+    }
+    const q = historial.find((h) => h.id === fila.clave) ?? null;
+    if (!q) return;
+    if (hasRole(['Gerencia'])) onAbrirQuincena({ anio: q.anio, mes: q.mes, quincena: q.quincena });
+    else setQuincena(q);
   };
 
   return (
@@ -161,7 +174,7 @@ export function HistorialSubidas({
             </TableBody>
           </Table>
         <p className="text-xs text-gray-500">Toca una fila para ver los datos crudos.</p>
-        <Button variant="ghost" className="text-primary" onClick={() => setMeses((m) => m + 3)}>
+        <Button variant="ghost" className="text-primary" onClick={onMasMeses}>
           Ver más subidas
         </Button>
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   agregarVacas,
+  borradorQuincenaConDatos,
+  cargasAMedias,
   etiquetaDiaPesaje,
   filasCompararVacas,
   filasHistorialSubidas,
@@ -173,7 +175,7 @@ describe('Cargas', () => {
   it('pendientesCarga: quincena sin liquidación y miércoles pasado sin pesaje', () => {
     const p = pendientesCarga({
       hoy: '2026-10-16',
-      quincenasCargadas: [{ anio: 2026, mes: 9, quincena: 2 }],
+      quincenasCargadas: [{ anio: 2026, mes: 9, quincena: 2, num_vacas_ordeno: 30 }],
       fechasPesajeMesActual: ['2026-10-07', '2026-10-14', '2026-10-21', '2026-10-28'],
       fechasPesajeMesAnterior: ['2026-09-30'],
       fechasConPesaje: new Set(['2026-10-07']),
@@ -217,5 +219,85 @@ describe('Cargas', () => {
 
   it('inicioMesesAtras', () => {
     expect(inicioMesesAtras('2026-02-16', 3)).toBe('2025-12-01');
+  });
+
+  it('pendientesCarga: quincena guardada sin número de vacas pide completarlo', () => {
+    const p = pendientesCarga({
+      hoy: '2026-10-16',
+      quincenasCargadas: [
+        { anio: 2026, mes: 10, quincena: 1, num_vacas_ordeno: null },
+        { anio: 2026, mes: 9, quincena: 2, num_vacas_ordeno: 26 },
+        { anio: 2026, mes: 9, quincena: 1, num_vacas_ordeno: null },
+      ],
+      fechasPesajeMesActual: [],
+      fechasPesajeMesAnterior: [],
+      fechasConPesaje: new Set(),
+    });
+    expect(p.map((x) => [x.tipo, x.texto])).toEqual([
+      ['vacas', 'Vacas en ordeño · 1ª quincena oct'],
+      ['vacas', 'Vacas en ordeño · 1ª quincena sep'],
+    ]);
+  });
+
+  it('pendientesCarga: la 3ª quincena sin liquidación ya no se pide', () => {
+    const p = pendientesCarga({
+      hoy: '2026-10-16',
+      quincenasCargadas: [
+        { anio: 2026, mes: 10, quincena: 1, num_vacas_ordeno: 20 },
+        { anio: 2026, mes: 9, quincena: 2, num_vacas_ordeno: 20 },
+      ],
+      fechasPesajeMesActual: [],
+      fechasPesajeMesAnterior: [],
+      fechasConPesaje: new Set(),
+    });
+    expect(p).toEqual([]);
+  });
+
+  it('cargasAMedias: foto de liquidación sin quincena guardada después', () => {
+    const foto = (id: string, creadoEn: string) => ({ capturaId: id, bucket: 'b', ruta: id, creadoEn });
+    const p = cargasAMedias({
+      hoy: '2026-10-16',
+      fotosLiquidacion: [
+        foto('guardada', '2026-10-01T10:00:00Z'),
+        foto('martha', '2026-10-15T20:00:00Z'),
+        foto('vieja', '2026-08-01T10:00:00Z'),
+      ],
+      guardadosQuincena: ['2026-10-01T10:30:00Z', null],
+      pesajesSinFilas: [],
+    });
+    expect(p.map((x) => [x.tipo, x.clave])).toEqual([['liquidacion_a_medias', 'martha']]);
+    expect(p[0].foto?.capturaId).toBe('martha');
+  });
+
+  it('cargasAMedias: un guardado ANTERIOR a la foto no la cierra', () => {
+    const p = cargasAMedias({
+      hoy: '2026-10-16',
+      fotosLiquidacion: [{ capturaId: 'x', bucket: 'b', ruta: 'r', creadoEn: '2026-10-15T20:00:00Z' }],
+      guardadosQuincena: ['2026-10-15T19:00:00Z'],
+      pesajesSinFilas: [],
+    });
+    expect(p).toHaveLength(1);
+  });
+
+  it('cargasAMedias: planilla de pesaje sin litros lleva su mes', () => {
+    const p = cargasAMedias({
+      hoy: '2026-10-16',
+      fotosLiquidacion: [],
+      guardadosQuincena: [],
+      pesajesSinFilas: [{ capturaId: 'p', bucket: 'b', ruta: 'r', creadoEn: '2026-10-08T15:00:00Z', anio: 2026, mes: 10 }],
+    });
+    expect(p[0]).toMatchObject({ tipo: 'pesaje_a_medias', anio: 2026, mes: 10 });
+    expect(p[0].texto).toContain('oct');
+  });
+
+  it('borradorQuincenaConDatos: sin datos no guarda borrador; con vacas o litros sí', () => {
+    const base = {
+      anio: 2026, mes: 10, quincena: 1 as const, litrosTotal: undefined, litrosPomar: undefined,
+      numVacasOrdeno: undefined, notas: '  ', fechaIngreso: '2026-10-16', valorBruto: undefined,
+      regionId: '', medioPagoId: '', compradorId: '',
+    };
+    expect(borradorQuincenaConDatos(base)).toBeNull();
+    expect(borradorQuincenaConDatos({ ...base, litrosTotal: 5000 })).toMatchObject({ litrosTotal: 5000, numVacasOrdeno: null });
+    expect(borradorQuincenaConDatos({ ...base, numVacasOrdeno: 26 })?.numVacasOrdeno).toBe(26);
   });
 });

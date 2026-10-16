@@ -445,29 +445,55 @@ export function semanasPesajeDelMes(
   });
 }
 
+export type TipoPendienteCarga =
+  | 'liquidacion'
+  | 'pesaje'
+  /** La quincena se guardó sin el número de vacas en ordeño. */
+  | 'vacas'
+  /** Foto de liquidación subida y leída, pero la quincena nunca se guardó. */
+  | 'liquidacion_a_medias'
+  /** Foto de planilla subida, pero ningún litro entró. */
+  | 'pesaje_a_medias';
+
 export interface PendienteCarga {
-  tipo: 'liquidacion' | 'pesaje';
+  tipo: TipoPendienteCarga;
   clave: string;
   texto: string;
+  /** Quincena que abre «Continuar» (tipos `liquidacion` y `vacas`). */
+  quincena?: QuincenaClave;
+  /** Foto ya subida (tipos `*_a_medias`): se puede volver a ver. */
+  foto?: FotoSubida;
+  /** Mes de la planilla (tipo `pesaje_a_medias`). */
+  anio?: number;
+  mes?: number;
 }
 
-/** Lo que falta cargar: las 2 últimas quincenas cerradas sin liquidación y
- * los días de pesaje del mes (y del anterior, si hoy es antes del 8) que ya
- * pasaron sin un solo pesaje. Solo mira hacia atrás un mes: lo más viejo
- * vive en el historial. */
+/** Quincenas cerradas que miran "Falta cargar" y "Falta vacas". */
+const QUINCENAS_REVISADAS = 3;
+
+/** Lo que falta cargar: las 2 últimas quincenas cerradas sin liquidación,
+ * las 3 últimas cargadas sin vacas en ordeño, y los días de pesaje del mes
+ * (y del anterior, si hoy es antes del 8) que ya pasaron sin un solo
+ * pesaje. Solo mira hacia atrás un mes: lo más viejo vive en el historial. */
 export function pendientesCarga(input: {
   hoy: string;
-  quincenasCargadas: readonly QuincenaClave[];
+  quincenasCargadas: ReadonlyArray<QuincenaClave & { num_vacas_ordeno?: number | null }>;
   fechasPesajeMesActual: readonly string[];
   fechasPesajeMesAnterior: readonly string[];
   fechasConPesaje: ReadonlySet<string>;
 }): PendienteCarga[] {
-  const cargadas = new Set(input.quincenasCargadas.map((q) => `${q.anio}-${q.mes}-${q.quincena}`));
+  const cargadas = new Map(input.quincenasCargadas.map((q) => [`${q.anio}-${q.mes}-${q.quincena}`, q]));
   const salida: PendienteCarga[] = [];
-  for (const q of ultimasQuincenasCerradas(input.hoy)) {
+  ultimasQuincenasCerradas(input.hoy, QUINCENAS_REVISADAS).forEach((q, i) => {
     const clave = `${q.anio}-${q.mes}-${q.quincena}`;
-    if (!cargadas.has(clave)) salida.push({ tipo: 'liquidacion', clave, texto: `Liquidación · ${etiquetaQuincena(q)}` });
-  }
+    const cargada = cargadas.get(clave);
+    if (!cargada) {
+      // Solo las 2 más recientes: la 3ª sin liquidación ya es historia.
+      if (i < 2) salida.push({ tipo: 'liquidacion', clave, texto: `Liquidación · ${etiquetaQuincena(q)}`, quincena: q });
+    } else if (cargada.num_vacas_ordeno == null) {
+      salida.push({ tipo: 'vacas', clave: `vacas-${clave}`, texto: `Vacas en ordeño · ${etiquetaQuincena(q)}`, quincena: q });
+    }
+  });
   const { dia } = partes(input.hoy);
   const fechas = [...(dia < 8 ? input.fechasPesajeMesAnterior : []), ...input.fechasPesajeMesActual];
   // Solo los días de pesaje de los últimos 35 días que ya pasaron.
@@ -477,6 +503,56 @@ export function pendientesCarga(input: {
     if (!input.fechasConPesaje.has(fecha)) salida.push({ tipo: 'pesaje', clave: fecha, texto: `Pesaje · ${diaSemanaCorto(fecha)} ${partes(fecha).dia} ${MESES_CORTOS[partes(fecha).mes - 1]}` });
   }
   return salida;
+}
+
+/** Días hacia atrás que miran las cargas a medias. */
+export const DIAS_CARGAS_A_MEDIAS = 35;
+
+/**
+ * Cargas que quedaron a medias (mensaje de Martha, 2026-10-16: «tuve que
+ * dejar ahí mientras tenía el dato y ahora no puedo seguir»):
+ *   - una foto de liquidación sin ninguna quincena guardada en las 36 h
+ *     siguientes (la inversa de `fotoDeQuincena`);
+ *   - una foto de pesaje que no dejó ni un litro.
+ * Solo los últimos 35 días: una foto más vieja ya no es una tarea abierta.
+ */
+export function cargasAMedias(input: {
+  hoy: string;
+  fotosLiquidacion: readonly FotoSubida[];
+  guardadosQuincena: ReadonlyArray<string | null>;
+  pesajesSinFilas: ReadonlyArray<FotoSubida & { anio: number; mes: number }>;
+}): PendienteCarga[] {
+  const limite = Date.parse(`${sumarDias(input.hoy, -DIAS_CARGAS_A_MEDIAS)}T00:00:00`);
+  const guardados = input.guardadosQuincena.map((g) => (g ? Date.parse(g) : NaN)).filter((t) => !Number.isNaN(t));
+  const salida: PendienteCarga[] = [];
+  for (const foto of input.fotosLiquidacion) {
+    const t = Date.parse(foto.creadoEn);
+    if (Number.isNaN(t) || t < limite) continue;
+    const guardada = guardados.some((g) => g >= t && g - t <= VENTANA_LIGA_LIQUIDACION_MS);
+    if (!guardada) {
+      salida.push({ tipo: 'liquidacion_a_medias', clave: foto.capturaId, texto: `Liquidación subida el ${etiquetaInstante(foto.creadoEn)}, sin guardar`, foto });
+    }
+  }
+  for (const foto of input.pesajesSinFilas) {
+    const t = Date.parse(foto.creadoEn);
+    if (Number.isNaN(t) || t < limite) continue;
+    salida.push({
+      tipo: 'pesaje_a_medias',
+      clave: foto.capturaId,
+      texto: `Planilla de pesaje de ${MESES_CORTOS[foto.mes - 1]} subida el ${etiquetaInstante(foto.creadoEn)}, sin litros`,
+      foto,
+      anio: foto.anio,
+      mes: foto.mes,
+    });
+  }
+  return salida.sort((a, b) => ((a.foto?.creadoEn ?? '') < (b.foto?.creadoEn ?? '') ? 1 : -1));
+}
+
+/** "3 oct" en hora local, a partir de un instante ISO. */
+function etiquetaInstante(instante: string): string {
+  const d = new Date(instante);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${d.getDate()} ${MESES_CORTOS[d.getMonth()]}`;
 }
 
 const DIAS_SEMANA = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -622,4 +698,60 @@ export function inicioMesesAtras(hoy: string, meses: number): string {
     mes = ant.mes;
   }
   return iso(anio, mes, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Borrador de la venta quincenal (ProduccionQuincenalDialog)
+// ---------------------------------------------------------------------------
+
+export interface BorradorQuincenaVenta {
+  anio: number;
+  mes: number;
+  quincena: 1 | 2;
+  litrosTotal: number | null;
+  litrosPomar: number | null;
+  numVacasOrdeno: number | null;
+  notas: string;
+  fechaIngreso: string;
+  valorBruto: number | null;
+  regionId: string;
+  medioPagoId: string;
+  compradorId: string;
+}
+
+/** El borrador solo existe si hay algo que perder: litros, valor, vacas o
+ * notas. Los valores por defecto del formulario (fecha de hoy, región y
+ * medio de pago) solos no son un borrador: mostrar «tienes datos sin
+ * guardar» por ellos sería un falso aviso cada vez que se abre el diálogo. */
+export function borradorQuincenaConDatos(input: {
+  anio: number;
+  mes: number;
+  quincena: 1 | 2;
+  litrosTotal: number | undefined;
+  litrosPomar: number | undefined;
+  numVacasOrdeno: number | undefined;
+  notas: string;
+  fechaIngreso: string;
+  valorBruto: number | undefined;
+  regionId: string;
+  medioPagoId: string;
+  compradorId: string;
+}): BorradorQuincenaVenta | null {
+  const conDatos =
+    input.litrosTotal != null || input.valorBruto != null || input.numVacasOrdeno != null || input.notas.trim() !== '';
+  if (!conDatos) return null;
+  return {
+    anio: input.anio,
+    mes: input.mes,
+    quincena: input.quincena,
+    litrosTotal: input.litrosTotal ?? null,
+    litrosPomar: input.litrosPomar ?? null,
+    numVacasOrdeno: input.numVacasOrdeno ?? null,
+    notas: input.notas,
+    fechaIngreso: input.fechaIngreso,
+    valorBruto: input.valorBruto ?? null,
+    regionId: input.regionId,
+    medioPagoId: input.medioPagoId,
+    compradorId: input.compradorId,
+  };
 }

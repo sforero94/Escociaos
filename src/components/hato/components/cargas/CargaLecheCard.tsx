@@ -5,11 +5,11 @@
 // del PDF/foto + confirmación). Gerencia-only: el guardado escribe
 // `fin_ingresos` (migración 070).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Lock, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RoleGuard } from '@/components/auth/RoleGuard';
-import { etiquetaQuincena, ultimasQuincenasCerradas } from '@/utils/hato/produccionV2';
+import { etiquetaQuincena, ultimasQuincenasCerradas, type QuincenaClave } from '@/utils/hato/produccionV2';
 import type { HatoProduccionQuincenalConIngreso } from '../../hooks/useProduccionHato';
 import { CapturaArchivo } from '../CapturaArchivo';
 import { ProduccionQuincenalDialog } from '../ProduccionQuincenalDialog';
@@ -28,39 +28,68 @@ function Encabezado() {
   );
 }
 
-function CargaLecheInterna({ hoy, historial, onSaved }: { hoy: string; historial: HatoProduccionQuincenalConIngreso[]; onSaved: () => void }) {
+/** Pedido de abrir el diálogo desde fuera de la tarjeta (Falta ahora,
+ * cargas a medias, historial). `nonce` cambia en cada pedido, para que
+ * pedir dos veces la misma quincena vuelva a abrir. */
+export interface SolicitudLeche {
+  quincena: QuincenaClave | null;
+  nonce: number;
+}
+
+interface CargaLecheProps {
+  hoy: string;
+  historial: HatoProduccionQuincenalConIngreso[];
+  onSaved: () => void;
+  solicitud?: SolicitudLeche | null;
+}
+
+function CargaLecheInterna({ hoy, historial, onSaved, solicitud }: CargaLecheProps) {
   const [abierto, setAbierto] = useState(false);
   const [fotos, setFotos] = useState<File[]>([]);
+  const [quincenaInicial, setQuincenaInicial] = useState<QuincenaClave | null>(null);
   const quincenas = ultimasQuincenasCerradas(hoy).reverse();
 
-  const abrir = (archivos: File[]) => {
+  const abrir = (archivos: File[], q: QuincenaClave | null = null) => {
     setFotos(archivos);
+    setQuincenaInicial(q);
     setAbierto(true);
   };
+
+  useEffect(() => {
+    if (solicitud) abrir([], solicitud.quincena);
+  }, [solicitud]);
 
   return (
     <>
       <div className="grid grid-cols-2 gap-2">
         {quincenas.map((q) => {
-          const cargada = historial.some((h) => h.anio === q.anio && h.mes === q.mes && h.quincena === q.quincena);
+          const fila = historial.find((h) => h.anio === q.anio && h.mes === q.mes && h.quincena === q.quincena);
+          const faltaVacas = fila != null && fila.num_vacas_ordeno == null;
+          const estilo = !fila || faltaVacas ? 'border-amber-200 bg-amber-50 hover:bg-amber-100' : 'border-gray-200 hover:bg-gray-50';
           return (
-            <div
+            <button
               key={`${q.anio}-${q.mes}-${q.quincena}`}
-              className={`flex flex-col gap-0.5 rounded-md border px-2.5 py-2 ${cargada ? 'border-gray-200' : 'border-amber-200 bg-amber-50'}`}
+              type="button"
+              onClick={() => abrir([], q)}
+              className={`flex min-h-11 flex-col gap-0.5 rounded-md border px-2.5 py-2 text-left ${estilo}`}
             >
-              <span className={`text-xs ${cargada ? 'text-gray-500' : 'text-amber-800'}`}>{etiquetaQuincena(q)}</span>
-              <span className={`text-sm font-medium ${cargada ? 'text-green-700' : 'text-amber-700'}`}>{cargada ? '✓ Cargada' : 'Pendiente'}</span>
-            </div>
+              <span className={`text-xs ${fila && !faltaVacas ? 'text-gray-500' : 'text-amber-800'}`}>{etiquetaQuincena(q)}</span>
+              <span className={`text-sm font-medium ${fila && !faltaVacas ? 'text-green-700' : 'text-amber-700'}`}>
+                {!fila ? 'Pendiente' : faltaVacas ? 'Falta # de vacas ›' : '✓ Cargada'}
+              </span>
+            </button>
           );
         })}
       </div>
-      <p className="text-xs text-gray-500">Sube el PDF o la foto de la liquidación. El sistema lee litros y valor, y tú confirmas.</p>
+      <p className="text-xs text-gray-500">
+        Sube el PDF o la foto de la liquidación. El sistema lee litros y valor, y tú confirmas. Toca una quincena para verla o completarla.
+      </p>
       <CapturaArchivo
         label="Subir liquidación"
         acceptArchivo="application/pdf,image/*"
         labelOpcionArchivo="Subir PDF o imagen"
-        onFotos={abrir}
-        onArchivo={abrir}
+        onFotos={(a) => abrir(a)}
+        onArchivo={(a) => abrir(a)}
         className="w-full"
       />
       <Button variant="ghost" className="text-primary" onClick={() => abrir([])}>
@@ -70,16 +99,20 @@ function CargaLecheInterna({ hoy, historial, onSaved }: { hoy: string; historial
         open={abierto}
         onOpenChange={(o) => {
           setAbierto(o);
-          if (!o) setFotos([]);
+          if (!o) {
+            setFotos([]);
+            setQuincenaInicial(null);
+          }
         }}
         fotosIniciales={fotos}
+        quincenaInicial={quincenaInicial}
         onSaved={onSaved}
       />
     </>
   );
 }
 
-export function CargaLecheCard(props: { hoy: string; historial: HatoProduccionQuincenalConIngreso[]; onSaved: () => void }) {
+export function CargaLecheCard(props: CargaLecheProps) {
   return (
     <section id="carga-leche" className="flex scroll-mt-4 flex-col gap-3 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <Encabezado />

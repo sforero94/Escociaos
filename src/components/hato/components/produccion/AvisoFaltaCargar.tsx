@@ -1,13 +1,35 @@
 // ARCHIVO: components/hato/components/produccion/AvisoFaltaCargar.tsx
 // DESCRIPCIÓN: aviso "Falta cargar" de Producción v2 (D17: Martha se perdía
 // al elegir qué cargar y dónde). En Producción lleva a Cargas; en Cargas
-// cada línea salta a su tarjeta.
+// cada línea abre directo lo que hay que terminar — incluidas las cargas
+// que quedaron a medias (mensaje de Martha, 2026-10-16), que además dejan
+// volver a ver la foto ya subida.
 
 import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import type { PendienteCarga } from '@/utils/hato/produccionV2';
 
-export function AvisoFaltaCargar({ pendientes, modo }: { pendientes: PendienteCarga[]; modo: 'produccion' | 'cargas' }) {
+const ACCION: Record<PendienteCarga['tipo'], string> = {
+  liquidacion: 'Subir ›',
+  vacas: 'Completar ›',
+  pesaje: 'Ver ›',
+  liquidacion_a_medias: 'Continuar ›',
+  pesaje_a_medias: 'Continuar ›',
+};
+
+export function AvisoFaltaCargar({
+  pendientes,
+  modo,
+  onAbrir,
+  onVerFoto,
+}: {
+  pendientes: PendienteCarga[];
+  modo: 'produccion' | 'cargas';
+  /** Solo en Cargas: abre lo que hay que terminar. */
+  onAbrir?: (pendiente: PendienteCarga) => void;
+  /** Solo en Cargas: abre la foto ya subida de una carga a medias. */
+  onVerFoto?: (pendiente: PendienteCarga) => void;
+}) {
   if (pendientes.length === 0) return null;
 
   if (modo === 'produccion') {
@@ -29,19 +51,42 @@ export function AvisoFaltaCargar({ pendientes, modo }: { pendientes: PendienteCa
     );
   }
 
+  const aMedias = pendientes.filter((p) => p.tipo === 'liquidacion_a_medias' || p.tipo === 'pesaje_a_medias');
+  const faltan = pendientes.filter((p) => !aMedias.includes(p));
+
+  const fila = (p: PendienteCarga) => (
+    <div key={`${p.tipo}-${p.clave}`} className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-1.5 text-sm text-amber-800">
+      <span className="min-w-0">{p.texto}</span>
+      <span className="flex flex-shrink-0 items-center gap-1">
+        {p.foto && onVerFoto && (
+          <button type="button" onClick={() => onVerFoto(p)} className="h-11 rounded-md px-2 font-medium text-amber-700 hover:bg-amber-50 sm:h-9">
+            Ver foto
+          </button>
+        )}
+        <button type="button" onClick={() => onAbrir?.(p)} className="h-11 rounded-md px-2 font-semibold hover:bg-amber-50 sm:h-9">
+          {ACCION[p.tipo]}
+        </button>
+      </span>
+    </div>
+  );
+
   return (
     <section role="status" className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-      <p className="text-sm font-semibold text-amber-800">Falta ahora</p>
-      {pendientes.map((p) => (
-        <a
-          key={`${p.tipo}-${p.clave}`}
-          href={p.tipo === 'liquidacion' ? '#carga-leche' : '#carga-pesaje'}
-          className="flex h-11 items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 text-sm text-amber-800"
-        >
-          <span>{p.texto}</span>
-          <span className="font-semibold">{p.tipo === 'liquidacion' ? 'Subir ›' : 'Ver ›'}</span>
-        </a>
-      ))}
+      {faltan.length > 0 && (
+        <>
+          <p className="text-sm font-semibold text-amber-800">Falta ahora</p>
+          {faltan.map(fila)}
+        </>
+      )}
+      {aMedias.length > 0 && (
+        <>
+          <p className="text-sm font-semibold text-amber-800">Quedaron a medias</p>
+          <p className="text-xs text-amber-800">
+            Subiste la foto pero no se guardó. Ábrela para tener los datos a mano y toca «Continuar».
+          </p>
+          {aMedias.map(fila)}
+        </>
+      )}
     </section>
   );
 }
