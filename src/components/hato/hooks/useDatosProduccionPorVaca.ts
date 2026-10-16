@@ -2,7 +2,7 @@
 // DESCRIPCIÓN: Compone `useHatoAnimales` (estado reproductivo YA derivado
 // por el motor puro, calculosHato.ts) + `usePesajesYPartos` (I/O de
 // `hato_pesajes_leche`/`hato_eventos` tipo `parto`) en el shape exacto que
-// piden `TrackerProductividad`/`RankingVacas` -- SOW 5 de
+// piden `LitrosPesados`/`RankingVacas` -- SOW 5 de
 // `docs/plan_hato_produccion_rework.md` §4.2c/§4.3. Ningún cálculo vive
 // aquí: solo ensamblado de I/O y un reshape trivial (renombrar/filtrar por
 // categoría), nunca aritmética (esa vive en `hatoProduccion.ts`, §4.1).

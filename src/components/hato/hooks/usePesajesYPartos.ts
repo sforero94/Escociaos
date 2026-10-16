@@ -15,6 +15,32 @@ import { getSupabase } from '@/utils/supabase/client';
 import { fetchAll } from '@/utils/supabase/fetchAll';
 import type { PesajeLecheVaca } from '@/utils/hatoProduccion';
 
+interface FilaPesajeCruda {
+  animal_id: string;
+  fecha: string;
+  litros_total: number | string;
+  litros_am: number | string | null;
+  litros_pm: number | string | null;
+}
+
+function numero(valor: number | string | null): number | null {
+  if (valor == null || valor === '') return null;
+  const n = typeof valor === 'number' ? valor : Number(valor);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pesajeDesdeCruda(fila: FilaPesajeCruda): PesajeLecheVaca | null {
+  const litros = numero(fila.litros_total);
+  if (litros == null) return null;
+  return {
+    animal_id: fila.animal_id,
+    fecha: fila.fecha,
+    litros_total: litros,
+    litros_am: numero(fila.litros_am),
+    litros_pm: numero(fila.litros_pm),
+  };
+}
+
 export interface PesajesYPartos {
   pesajes: PesajeLecheVaca[];
   /** `animal_id` -> fecha del ÚLTIMO parto conocido (MAX(fecha) de
@@ -43,10 +69,10 @@ export function usePesajesYPartos(): PesajesYPartos {
       const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
       const [pesajesRes, partosRes] = await Promise.all([
-        fetchAll<PesajeLecheVaca>((desde, hasta) =>
+        fetchAll<FilaPesajeCruda>((desde, hasta) =>
           supabase
             .from('hato_pesajes_leche')
-            .select('animal_id, fecha, litros_total')
+            .select('animal_id, fecha, litros_total, litros_am, litros_pm')
             .order('fecha', { ascending: true })
             .range(desde, hasta),
         ),
@@ -60,7 +86,7 @@ export function usePesajesYPartos(): PesajesYPartos {
         ),
       ]);
 
-      setPesajes(pesajesRes.filas);
+      setPesajes(pesajesRes.filas.map(pesajeDesdeCruda).filter((fila): fila is PesajeLecheVaca => fila != null));
 
       const mapaPartos = new Map<string, string>();
       for (const p of partosRes.filas) {

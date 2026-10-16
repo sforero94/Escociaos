@@ -4,8 +4,8 @@
 // §4.3/§6) y luego separado en dos pestañas (consumo vs. registro) siguiendo
 // el mismo patrón que `IngresosView.tsx` (`historial`/`registrar` + Tabs +
 // `TABS_VALIDOS` + `useSearchParams`): chip de vejez permanente (decisión
-// 17) arriba de las pestañas → pestaña `Producción` (tracker de
-// productividad bottom-up, decisión 13; gráfico + KPIs de ventas GERENCIA-
+// 17) arriba de las pestañas → pestaña `Producción` (litros pesados,
+// issue #334; gráfico + KPIs de ventas GERENCIA-
 // ONLY, decisión 14; ranking por vaca, decisiones 10/12) → pestaña
 // `Registrar` (pesaje semanal, quincenal, venta de animales del hato).
 //
@@ -21,12 +21,13 @@ import { RoleGuard } from '@/components/auth/RoleGuard';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { vejezPesajes, fechaAnclaProduccion } from '@/utils/hatoProduccion';
+import { offsetSemanaDesdeAncla } from '@/utils/hato/litrosPesados';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { useProduccionHato, type HatoProduccionQuincenalConIngreso } from './hooks/useProduccionHato';
 import { useDatosProduccionPorVaca } from './hooks/useDatosProduccionPorVaca';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { ChipVejezPesajes } from './components/ChipVejezPesajes';
-import { TrackerProductividad } from './components/TrackerProductividad';
+import { LitrosPesados } from './components/LitrosPesados';
 import { DetallePesajeSemanalDialog } from './components/DetallePesajeSemanalDialog';
 import { SubidasPesajeMes } from './components/SubidasPesajeMes';
 import { RankingVacas } from './components/RankingVacas';
@@ -146,7 +147,7 @@ export function ProduccionView() {
           breadcrumb="Hato Lechero"
           section="Producción"
           title="Producción"
-          subtitle="Tracker de productividad, ventas del hato y ranking por vaca"
+          subtitle="Litros pesados, ventas del hato y ranking por vaca"
         />
 
         {/* Chip de vejez, permanente y por encima de las pestañas -- en
@@ -168,16 +169,19 @@ export function ProduccionView() {
           </TabsList>
 
           <TabsContent value="produccion" className="mt-6 space-y-6">
-            {/* 1. Tracker de productividad (decisión 13) -- todos los roles. */}
-            <TrackerProductividad
+            <LitrosPesados
               pesajes={datos.pesajes}
               estadosReproductivos={datos.estadosReproductivos}
               fechaReferencia={fechaAncla}
-              vejez={vejez}
+              identidadPorAnimal={datos.identidadPorAnimal}
               loading={datos.loading}
               error={datos.error}
-              onSemanaMedidaClick={(semana, etiquetaSemana) =>
-                setDetallePesaje({ semana, etiqueta: etiquetaSemana, fechaReferencia: fechaAncla })
+              onFechaMedidaClick={(fecha, etiqueta) =>
+                setDetallePesaje({
+                  semana: offsetSemanaDesdeAncla(fechaAncla, fecha),
+                  etiqueta,
+                  fechaReferencia: fechaAncla,
+                })
               }
             />
 

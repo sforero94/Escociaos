@@ -4,7 +4,7 @@
 // mes queda. Issue #297.
 
 import { useState } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,51 +83,71 @@ export function ListaSubidasMes({
   subidas,
   puedeGerencia,
   descartando,
+  abiertas,
+  onToggle,
   onDescartar,
 }: {
   subidas: SubidaVisible[];
   puedeGerencia: boolean;
   descartando: boolean;
+  /** Ids de las subidas expandidas. Cerrada: no hay foto ni botón de descarte. */
+  abiertas: ReadonlySet<string>;
+  onToggle: (id: string) => void;
   onDescartar: (id: string) => void;
 }) {
   if (subidas.length === 0) {
     return <p className="text-sm text-gray-500">Este mes no tiene subidas.</p>;
   }
   return (
-    <ul className="space-y-3">
-      {subidas.map((subida) => (
-        <li key={subida.id} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center">
-          {subida.url ? (
-            <img src={subida.url} alt="" className="h-16 w-16 rounded-md border border-gray-200 object-cover" />
-          ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-xs text-gray-500">
-              Sin foto
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900">Subió {subida.autor}</p>
-            <p className="text-xs text-gray-500">
-              {subida.cuando} · {subida.origen} · {subida.estado}
-            </p>
-            <p className="text-xs text-gray-700">
-              {subida.rango}
-              {subida.fotos > 1 ? ` · ${subida.fotos} fotos` : ''}
-            </p>
-          </div>
-          {puedeGerencia && (
-            <Button
+    <ul className="space-y-2">
+      {subidas.map((subida) => {
+        const abierta = abiertas.has(subida.id);
+        return (
+          <li key={subida.id} className="rounded-lg border border-gray-200">
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className={CLASE_DESCARTAR}
-              disabled={descartando}
-              onClick={() => onDescartar(subida.id)}
+              aria-expanded={abierta}
+              onClick={() => onToggle(subida.id)}
+              className="flex w-full items-start gap-2 p-3 text-left"
             >
-              <Trash2 className="w-4 h-4 mr-1.5" /> Descartar esta subida
-            </Button>
-          )}
-        </li>
-      ))}
+              {abierta ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-gray-900">Subió {subida.autor}</span>
+                <span className="block text-xs text-gray-500">
+                  {subida.cuando} · {subida.origen} · {subida.estado}
+                </span>
+                <span className="block text-xs text-gray-700">
+                  {subida.rango}
+                  {subida.fotos > 1 ? ` · ${subida.fotos} fotos` : ''}
+                </span>
+              </span>
+            </button>
+            {abierta && (
+              <div className="flex flex-col gap-3 border-t border-gray-100 px-3 py-3 sm:flex-row sm:items-center">
+                {subida.url ? (
+                  <img src={subida.url} alt="" className="h-16 w-16 rounded-md border border-gray-200 object-cover" />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-xs text-gray-500">
+                    Sin foto
+                  </div>
+                )}
+                {puedeGerencia && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={CLASE_DESCARTAR}
+                    disabled={descartando}
+                    onClick={() => onDescartar(subida.id)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5" /> Descartar esta subida
+                  </Button>
+                )}
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -136,6 +156,8 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
   const { hasRole, isLoading } = useAuth();
   const puedeGerencia = !isLoading && hasRole(['Gerencia']);
   const [periodo, setPeriodo] = useState(mesActualIso);
+  const [grupoAbierto, setGrupoAbierto] = useState(false);
+  const [abiertas, setAbiertas] = useState<ReadonlySet<string>>(() => new Set());
   const [anioTexto, mesTexto] = periodo.split('-');
   const anio = parseInt(anioTexto, 10);
   const mes = parseInt(mesTexto, 10);
@@ -180,12 +202,25 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
           type="month"
           aria-label="Mes de las subidas"
           value={periodo}
-          onChange={(e) => setPeriodo(e.target.value)}
-          className="w-40"
+          onChange={(e) => {
+            setPeriodo(e.target.value);
+            setAbiertas(new Set());
+          }}
+          className="w-full sm:w-40"
         />
       </div>
+      <button
+        type="button"
+        aria-expanded={grupoAbierto}
+        onClick={() => setGrupoAbierto((abierto) => !abierto)}
+        className="mb-3 flex items-center gap-2 text-sm text-gray-800"
+      >
+        {grupoAbierto ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+        {grupoAbierto ? 'Ocultar subidas' : 'Mostrar subidas'}
+        {periodoValido ? ` (${visibles.length})` : ''}
+      </button>
       {estado.error && <p className="mb-3 text-sm text-red-600">{estado.error}</p>}
-      {estado.cargando ? (
+      {grupoAbierto && (estado.cargando ? (
         <p className="flex items-center text-sm text-gray-500">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando subidas…
         </p>
@@ -194,10 +229,19 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
           subidas={visibles}
           puedeGerencia={puedeGerencia}
           descartando={estado.descartando}
+          abiertas={abiertas}
+          onToggle={(id) =>
+            setAbiertas((actual) => {
+              const siguiente = new Set(actual);
+              if (siguiente.has(id)) siguiente.delete(id);
+              else siguiente.add(id);
+              return siguiente;
+            })
+          }
           onDescartar={setConfirmarId}
         />
-      )}
-      {!puedeGerencia && !estado.cargando && (
+      ))}
+      {grupoAbierto && !puedeGerencia && !estado.cargando && (
         <p className="mt-3 text-xs text-gray-500">Solo Gerencia puede descartar una subida.</p>
       )}
       <ConfirmDialog

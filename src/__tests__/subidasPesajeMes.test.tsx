@@ -141,7 +141,14 @@ describe('lista de subidas del mes', () => {
       { 'c1:pesaje-foto/a/pagina-1.jpg': 'https://ejemplo.test/mini.jpg' },
     );
     const html = renderToStaticMarkup(
-      <ListaSubidasMes subidas={visibles} puedeGerencia descartando={false} onDescartar={() => undefined} />,
+      <ListaSubidasMes
+        subidas={visibles}
+        puedeGerencia
+        descartando={false}
+        abiertas={new Set(['c1'])}
+        onToggle={() => undefined}
+        onDescartar={() => undefined}
+      />,
     );
     expect(html).toContain('https://ejemplo.test/mini.jpg');
     expect(html).toContain('Subió Fernando Jimenez');
@@ -169,6 +176,8 @@ describe('lista de subidas del mes', () => {
         subidas={filasVisibles(ligarFilasASubidas([martha], []), new Map([['martha', 'Martha Vega']]), {})}
         puedeGerencia
         descartando={false}
+        abiertas={new Set(['martha'])}
+        onToggle={() => undefined}
         onDescartar={() => undefined}
       />,
     );
@@ -183,10 +192,39 @@ describe('lista de subidas del mes', () => {
   it('sin Gerencia no ofrece descartar', () => {
     const visibles = filasVisibles(ligarFilasASubidas([subida], []), new Map(), {});
     const html = renderToStaticMarkup(
-      <ListaSubidasMes subidas={visibles} puedeGerencia={false} descartando={false} onDescartar={() => undefined} />,
+      <ListaSubidasMes
+        subidas={visibles}
+        puedeGerencia={false}
+        descartando={false}
+        abiertas={new Set(visibles.map((fila) => fila.id))}
+        onToggle={() => undefined}
+        onDescartar={() => undefined}
+      />,
     );
     expect(html).toContain('Sin autor registrado');
     expect(html).not.toContain('Descartar esta subida');
+  });
+
+  it('cerrada no muestra la foto ni el descarte', () => {
+    const visibles = filasVisibles(
+      ligarFilasASubidas([subida], []),
+      new Map([['user-1', 'Fernando Jimenez']]),
+      { 'c1:pesaje-foto/a/pagina-1.jpg': 'https://ejemplo.test/mini.jpg' },
+    );
+    const html = renderToStaticMarkup(
+      <ListaSubidasMes
+        subidas={visibles}
+        puedeGerencia
+        descartando={false}
+        abiertas={new Set()}
+        onToggle={() => undefined}
+        onDescartar={() => undefined}
+      />,
+    );
+    expect(html).toContain('Subió Fernando Jimenez');
+    expect(html).not.toContain('Descartar esta subida');
+    expect(html).not.toContain('https://ejemplo.test/mini.jpg');
+    expect(html).toContain('aria-expanded="false"');
   });
 
   it('la semana no descarta y la página de producción lista las subidas', () => {
@@ -198,6 +236,8 @@ describe('lista de subidas del mes', () => {
     expect(dialogo).not.toContain('Descartar esta subida');
     expect(dialogo).not.toContain('Borrar este pesaje');
     expect(pagina).toContain('<SubidasPesajeMes');
+    expect(ui).toContain('useState(false)');
+    expect(ui).toContain('aria-expanded');
     expect(ui).toContain('toast.error');
     expect(hook).toContain('rutasFotoABorrar');
     expect(hook).toContain('mensajeErrorDescarte');
