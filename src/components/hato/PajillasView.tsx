@@ -84,7 +84,7 @@ export function PajillasView() {
     guardando,
     reload: recargarPajillas,
     registrarCompra,
-    registrarUso,
+
   } = useHatoPajillas();
 
   const [dialogToro, setDialogToro] = useState<{ open: boolean; toro: HatoToroRow | null }>({ open: false, toro: null });
@@ -301,8 +301,6 @@ export function PajillasView() {
             pajillas={pajillas}
             animales={animales}
             pajillaIdInicial={dialogUso.pajillaId}
-            registrarUso={registrarUso}
-            guardando={guardando}
             onGuardado={recargarPajillas}
           />
         </>
