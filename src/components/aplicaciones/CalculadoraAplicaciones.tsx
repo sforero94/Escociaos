@@ -289,7 +289,7 @@ export function CalculadoraAplicaciones() {
                 unidades_a_comprar: item.unidades_a_comprar,
                 ultimo_precio_unitario: item.precio_unitario || undefined,
                 costo_estimado: item.costo_estimado || undefined,
-                alerta: (item.alerta ?? 'normal') as 'normal' | 'sin_precio' | 'sin_stock',
+                alerta: (item.alerta ?? 'normal') as 'normal' | 'sin_precio',
               })),
               costo_total_estimado: compras.reduce((sum, item) => sum + (item.costo_estimado || 0), 0),
               productos_sin_precio: compras.filter((item) => !item.precio_unitario).length,
