@@ -1,0 +1,21 @@
+import {it,expect,vi,beforeEach,afterEach} from 'vitest';
+import {animalEditIntent,validateAnimalEditResult,type AnimalEditResult} from '@/utils/hato/hatoAnimalEditProtocol';
+import {runAnimalEditBrowser,pendingAnimalEditBrowser} from '@/utils/hato/hatoAnimalEditBrowserAttempt';
+import {prepared,committed,intent,OWNER,KEY,OTHER} from './fixtures/hatoAnimalEdit';
+const validate=(r:AnimalEditResult)=>validateAnimalEditResult(r,OWNER,KEY,intent);
+beforeEach(()=>{const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:unknown,_o:unknown,fn:()=>unknown)=>fn()}});});
+afterEach(()=>vi.unstubAllGlobals());
+it.each(['activa','vendida','muerta','descartada'])('preserves %s state and unrelated fields while applying only the reviewed edits',estado=>{const p={...intent,observedAnimal:{...intent.observedAnimal,estado}},r=committed(prepared(KEY,p));expect(validateAnimalEditResult(r,OWNER,KEY,p).state).toBe('committed');expect(r.receipt!.after.animal).toEqual({...p.observedAnimal,...p.changes});});
+it.each(['actor','date','identity','notes','audit','events','time','graph','effective-date'])('rejects %s proof drift',field=>{const r=committed(),q=r.receipt!;if(field==='actor')q.actor.profileId=OTHER;if(field==='date')q.after.animal.fecha_estado='2026-10-13';if(field==='identity')q.after.animal.nombre='Different animal';if(field==='notes')q.after.animal.notas='Forged notes';if(field==='audit')q.correction.corregido_por=OTHER;if(field==='events')q.after.events.push({id:OTHER});if(field==='time')q.recordedAt='not a time';if(field==='graph')q.after.headers.push({id:OTHER,animal_id:intent.animalId});if(field==='effective-date')q.effectiveDate='2026-10-15';expect(()=>validate(r)).toThrow('original');});
+it.each([{...intent,changes:{...intent.changes,fecha_nacimiento:'2026-02-30'}},{...intent,changes:{...intent.changes,nombre:' untrimmed '}},{...intent,changes:{...intent.changes,estado:'muerta'}},{...intent,animalId:OTHER},{...intent,changes:{...intent.changes,madre_id:intent.animalId}}])('rejects invalid prospective intent',p=>expect(()=>animalEditIntent(p)).toThrow());
+it('keeps original UUID after lost post and clears only verified terminal status',async()=>{
+ let saved:AnimalEditResult|null=null,lose=true;const calls:string[]=[];
+ const c={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>{calls.push(String(a.p_action));if(a.p_action==='prepare')saved=prepared(String(a.p_request_key));if(a.p_action==='post'){saved=committed(saved!);if(lose){lose=false;throw Error('lost response');}}return {data:saved,error:null};})};
+ const p=await runAnimalEditBrowser(c,OWNER,intent,'prepare',()=>true);await expect(runAnimalEditBrowser(c,OWNER,null,'post',()=>true,p)).rejects.toThrow();expect(pendingAnimalEditBrowser(OWNER)?.key).toBe(p!.key);
+ const recovered=await runAnimalEditBrowser(c,OWNER,null,'status',()=>true);expect(recovered?.result?.state).toBe('committed');await runAnimalEditBrowser(c,OWNER,null,'new',()=>true,recovered);expect(pendingAnimalEditBrowser(OWNER)).toBeNull();expect(calls).toEqual(['prepare','post','status','status']);
+});
+it('refuses unreviewed posting/account switches and preserves corrupt original storage',async()=>{
+ const c={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>({data:prepared(String(a.p_request_key)),error:null}))};
+ const p=await runAnimalEditBrowser(c,OWNER,intent,'prepare',()=>true);await expect(runAnimalEditBrowser(c,OWNER,null,'post',()=>true)).rejects.toThrow();expect(c.rpc).toHaveBeenCalledTimes(1);c.auth.getUser.mockResolvedValue({data:{user:{id:OTHER}},error:null});await expect(runAnimalEditBrowser(c,OWNER,null,'status',()=>true)).rejects.toThrow();expect(pendingAnimalEditBrowser(OWNER)?.key).toBe(p!.key);
+ localStorage.setItem(`hato_animal_edit_v1:${OWNER}`,'{bad');expect(()=>pendingAnimalEditBrowser(OWNER)).toThrow();expect(localStorage.getItem(`hato_animal_edit_v1:${OWNER}`)).toBe('{bad');
+});

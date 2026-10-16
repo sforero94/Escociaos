@@ -1,19 +1,7 @@
-// ARCHIVO: components/hato/hooks/useActualizarHatoAnimal.ts
-// DESCRIPCIÓN: Escritura in-place de `hato_animales` -- el mecanismo de
-// corrección que pidió el dueño para cuando Martha retagea el hato
-// (migración 066: `numero` deja de ser identidad permanente y pasa a ser un
-// atributo MUTABLE, "chapeta actual"; la identidad sigue siendo
-// `hato_animales.id`). Único punto de escritura del diálogo "Editar" de
-// HojaDeVida -- no crea animales nuevos, fuera de alcance.
-//
-// Colisión de caravana: el índice único parcial `hato_animales_numero_activa_unique`
-// (066) rechaza un `numero` que ya lleva OTRO animal con `estado='activa'` --
-// Postgres devuelve el código 23505 (mismo patrón que
-// `configuracion/SublotesConfig.tsx`). Se traduce a un mensaje en español y
-// nunca se propaga el error crudo de Postgres a la UI.
+// Compatibility boundary: general animal edits use useAnimalEdit prepared review.
+// Stale direct callers fail before accessing Auth, the client or database.
 
-import { useState, useCallback } from 'react';
-import { getSupabase } from '@/utils/supabase/client';
+import { useCallback } from 'react';
 import type { EtapaHato } from '@/types/hato';
 
 /** Subconjunto editable de `hato_animales` desde el diálogo "Editar" de la
@@ -52,54 +40,8 @@ export interface ResultadoActualizarHatoAnimal {
   error?: string;
 }
 
+/** Compatible stale caller refuses before any client or mutation. */
 export function useActualizarHatoAnimal() {
-  const [guardando, setGuardando] = useState(false);
-
-  const actualizar = useCallback(
-    async (animalId: string, edicion: HatoAnimalEdicion): Promise<ResultadoActualizarHatoAnimal> => {
-      setGuardando(true);
-      try {
-        // `src/types/database.ts` (generado) no incluye las tablas hato_* --
-        // mismo workaround que `useHatoAnimal.ts`/`useHatoAnimales.ts` (`as
-        // any` en el punto de entrada, ver nota en CLAUDE.md).
-        const supabase = getSupabase() as any;
-        const { error } = await supabase
-          .from('hato_animales')
-          .update({
-            numero: edicion.numero,
-            nombre: edicion.nombre,
-            etapa: edicion.etapa,
-            raza: edicion.raza,
-            fecha_nacimiento: edicion.fecha_nacimiento,
-            etapa_forzada: edicion.etapa_forzada,
-            madre_id: edicion.madre_id,
-            padre_toro_id: edicion.padre_toro_id,
-          })
-          .eq('id', animalId);
-
-        if (error) {
-          if (error.code === '23505') {
-            return {
-              ok: false,
-              esColisionCaravana: true,
-              error: `La caravana ${edicion.numero} ya la lleva otro animal activo.`,
-            };
-          }
-          throw error;
-        }
-
-        return { ok: true };
-      } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : 'Error desconocido actualizando el animal',
-        };
-      } finally {
-        setGuardando(false);
-      }
-    },
-    [],
-  );
-
-  return { actualizar, guardando };
+ const actualizar=useCallback(async(_animalId:string,_edicion:HatoAnimalEdicion):Promise<ResultadoActualizarHatoAnimal>=>({ok:false,error:'Use la edición con revisión preparada y recuperación del intento original.'}),[]);
+ return {actualizar,guardando:false};
 }

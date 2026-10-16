@@ -19,7 +19,7 @@
 // (el switch) y de fácil salida (apagarlo vuelve al cálculo automático,
 // sin perder el valor de `etapa` que quedó guardado).
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -29,7 +29,12 @@ import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useActualizarHatoAnimal, type HatoAnimalEdicion } from '../hooks/useActualizarHatoAnimal';
+import type { HatoAnimalEdicion } from '../hooks/useActualizarHatoAnimal';
+import {useAnimalEdit} from '../hooks/useAnimalEdit';
+import {useAuth} from '@/contexts/AuthContext';
+import {useFormDraft} from '@/hooks/useFormDraft';
+import {animalEditIntent} from '@/utils/hato/hatoAnimalEditProtocol';
+import type {JsonRow} from '@/utils/hato/alertResponseProtocol';
 import { useCandidatosGenealogia } from '../hooks/useCandidatosGenealogia';
 import { candidatasAMadre, etiquetaCandidatoGenealogia } from '@/utils/hato/genealogiaHato';
 import { ordenarPorValor } from '@/utils/ordenarAnimalesHato';
@@ -64,6 +69,7 @@ interface FormState {
 
 /** Centinela de "sin registrar" para los dos selectores de genealogía. */
 const SIN_REGISTRAR = 'sin_registrar';
+const EDIT_LABELS:Record<string,string>={numero:'Caravana',nombre:'Nombre',etapa:'Etapa',raza:'Raza',fecha_nacimiento:'Fecha de nacimiento',etapa_forzada:'Forzar etapa',madre_id:'Madre',padre_toro_id:'Padre (toro)'};
 
 function formDesdeAnimal(animal: HatoAnimalRow): FormState {
   return {
@@ -91,7 +97,7 @@ function edicionDesdeForm(form: FormState): HatoAnimalEdicion {
   };
 }
 
-export function EditarAnimalDialog({
+function AnimalEditor({
   open,
   onOpenChange,
   animal,
@@ -105,7 +111,8 @@ export function EditarAnimalDialog({
    * `useHatoAnimal`). */
   onGuardado: () => void;
 }) {
-  const { actualizar, guardando } = useActualizarHatoAnimal();
+  const edit=useAnimalEdit(); const guardando=edit.busy;
+  const [observed,setObserved]=useState(()=>animal as unknown as JsonRow);
   const { candidatos, loading: cargandoCandidatos } = useCandidatosGenealogia(open);
   const [form, setForm] = useState<FormState>(() => formDesdeAnimal(animal));
 
@@ -124,39 +131,47 @@ export function EditarAnimalDialog({
       : undefined;
   const opcionesMadre = madreGuardadaFaltante ? [madreGuardadaFaltante, ...madres] : madres;
 
-  // Reinicia el formulario cada vez que se abre el diálogo -- evita
-  // arrastrar una edición sin guardar de una apertura anterior.
-  useEffect(() => {
-    if (open) setForm(formDesdeAnimal(animal));
-  }, [open, animal]);
-
+  const draft=useFormDraft('hato-animal-edit:'+animal.id,{form,observed},{enabled:open&&!edit.attempt});
   const actualizarCampo = <K extends keyof FormState>(campo: K, valor: FormState[K]) => {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const resultado = await actualizar(animal.id, edicionDesdeForm(form));
-    if (!resultado.ok) {
-      // Colisión de caravana u otro error: se muestra el mensaje amigable y
-      // el diálogo queda abierto para corregir -- nunca se cierra en error.
-      toast.error(resultado.error ?? 'Error desconocido actualizando el animal');
-      return;
-    }
-    toast.success('Animal actualizado');
-    onGuardado();
-    onOpenChange(false);
+    try {await edit.run('prepare',animalEditIntent({version:1,animalId:animal.id,observedAnimal:observed,changes:edicionDesdeForm(form)}));}
+    catch(e){toast.error(e instanceof Error?e.message:'Conserve el intento original.');}
+  };
+  const action=async(mode:'post'|'status'|'resolve'|'new')=>{
+    try {const a=await edit.run(mode);if(mode==='new'){draft.clearDraft();if(edit.attempt?.result?.state==='committed')onGuardado();onOpenChange(false);}else if(a?.result?.state==='committed')toast.success('Edición verificada. Finalice para cerrar.');}
+    catch(e){toast.error(e instanceof Error?e.message:'Conserve el intento original.');}
+  };
+  const captured=edit.attempt?.result;
+  const display=(field:string,value:unknown)=>{
+    if(value===null)return 'Sin registrar';if(typeof value==='boolean')return value?'Sí':'No';
+    const mother=captured?.original?.refs.mother,toro=captured?.original?.refs.toro;
+    if(field==='madre_id'&&mother&&mother.id===value)return '#'+String(mother.numero??'—')+' '+String(mother.nombre??'Sin nombre')+' ('+String(value)+')';
+    if(field==='padre_toro_id'&&toro&&toro.id===value)return String(toro.nombre??'Sin nombre')+' ('+String(value)+')';
+    return String(value);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(value)=>{if(!value&&!guardando){if(!edit.attempt)draft.clearDraft();onOpenChange(false);}}}>
       <DialogContent size="md">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
           <DialogHeader>
             <DialogTitle>Editar animal</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            {draft.hasDraft&&!edit.attempt&&<div role="status"><p>Hay una edición guardada de esta cuenta.</p><Button type="button" onClick={()=>{if(draft.draftData){setForm(draft.draftData.form);setObserved(draft.draftData.observed);draft.acceptDraft();}}}>Restaurar borrador</Button><Button type="button" onClick={draft.discardDraft}>Descartar borrador</Button></div>}
+            <Button type="button" disabled={guardando} onClick={()=>void action('status')}>Recuperar intento original</Button>
+            {edit.error&&<p role="alert">{edit.error}</p>}
+            {edit.attempt&&<section aria-label="Revisión de edición"><p>Animal capturado: #{String(captured?.original?.animal.numero??'—')} {String(captured?.original?.animal.nombre??'')} · {edit.attempt.key}</p><p>Revisión válida para: {captured?.effectiveDate??'por verificar'}. Estado del intento: {captured?.state??'por verificar'}. Estado del animal y fecha de estado se conservan.</p>
+              {captured?.original&&Object.entries(edit.attempt.intent.changes).map(([field,value])=><p key={field}>{EDIT_LABELS[field]}: {display(field,captured.original!.animal[field])} → {display(field,value)}</p>)}
+              <Button type="button" disabled={guardando||captured?.state!=='pending'} onClick={()=>void action('post')}>Confirmar edición revisada</Button>
+              <Button type="button" disabled={guardando||!['pending','unknown'].includes(captured?.state??'unknown')} onClick={()=>void action('resolve')}>Cancelar intento original</Button>
+              <Button type="button" disabled={guardando||!['committed','canceled'].includes(captured?.state??'')} onClick={()=>void action('new')}>Finalizar intento verificado</Button>
+            </section>}
+            <fieldset disabled={guardando||!!edit.attempt||draft.hasDraft} className="contents"><div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="editar-animal-numero">Número (caravana)</Label>
                 <NumberInput
@@ -288,18 +303,24 @@ export function EditarAnimalDialog({
                 </div>
               </div>
             </div>
+            </fieldset>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
+            <Button type="button" variant="outline" onClick={() => {if(!edit.attempt)draft.clearDraft();onOpenChange(false);}} disabled={guardando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={guardando}>
+            <Button type="submit" disabled={guardando||!!edit.attempt||draft.hasDraft}>
               {guardando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Guardar
+              Revisar edición
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Account/target/open boundaries cannot reuse an earlier mounted form. */
+export function EditarAnimalDialog(props:Parameters<typeof AnimalEditor>[0]){
+ const {user}=useAuth();return props.open?<AnimalEditor key={(user?.id??'signed-out')+':'+props.animal.id} {...props}/>:null;
 }
