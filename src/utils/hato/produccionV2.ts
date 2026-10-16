@@ -163,9 +163,13 @@ export interface BarraQuincena {
 export interface ResumenVentas {
   /** `null` si ninguna quincena del período trae litros. */
   litrosVendidos: number | null;
-  /** Σ (litros de la quincena ÷ vacas en ordeño de esa quincena), sobre las
-   * quincenas que traen los dos datos. `null` si ninguna los trae. */
+  /** Σ (litros de la quincena ÷ vacas en ordeño de esa quincena). `null` si
+   * alguna quincena con litros no trae el número de vacas: una suma parcial
+   * fabricaría una caída (un mes con una sola quincena contada daría la
+   * mitad). */
   litrosPorVaca: number | null;
+  /** Quincenas con litros y sin número de vacas (la razón del `null`). */
+  quincenasSinVacas: number;
   /** `null` cuando no hay ingresos visibles (sin permiso o sin ventas). */
   ingreso: number | null;
   reparto: RepartoVentasHato | null;
@@ -242,7 +246,8 @@ export function resumirVentasPeriodo(
 
   return {
     litrosVendidos: conLitros === 0 ? null : litros,
-    litrosPorVaca: conVacas === 0 ? null : porVaca,
+    litrosPorVaca: conVacas === 0 || conVacas < conLitros ? null : porVaca,
+    quincenasSinVacas: conLitros - conVacas,
     ingreso,
     reparto,
     barras,

@@ -97,7 +97,13 @@ export function VentasProduccionBloque({
               value={actual.litrosPorVaca == null ? '—' : formatNumber(actual.litrosPorVaca)}
               unit={actual.litrosPorVaca == null ? undefined : 'L'}
               delta={deltaContraAnterior(variacionContraAnterior(actual.litrosPorVaca, anterior.litrosPorVaca).variacion, etiquetaAnterior)}
-              sub={actual.litrosPorVaca == null ? 'Sin conteo de vacas en ordeño' : 'Litros vendidos ÷ vacas en ordeño'}
+              sub={
+                actual.litrosPorVaca != null
+                  ? 'Litros vendidos ÷ vacas en ordeño'
+                  : actual.quincenasSinVacas > 0
+                    ? 'Falta el número de vacas de una quincena. Complétalo en Cargas.'
+                    : 'Sin conteo de vacas en ordeño'
+              }
             />
             <HatoKpiCard
               icon={DollarSign}

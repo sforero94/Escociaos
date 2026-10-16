@@ -82,6 +82,12 @@ describe('resumirVentasPeriodo — dato real', () => {
     expect(r.litrosPorVaca).toBe(200 + 300);
     expect(r.barras.map((b) => b.etiqueta)).toEqual(['1ª sep', '2ª sep']);
   });
+  it('una quincena sin vacas deja el L/vaca en null, nunca una suma parcial', () => {
+    const r = resumirVentasPeriodo([q(2026, 9, 1, 6000, 30), q(2026, 9, 2, 6000, null)], null, rango);
+    expect(r.litrosVendidos).toBe(12000);
+    expect(r.litrosPorVaca).toBeNull();
+    expect(r.quincenasSinVacas).toBe(1);
+  });
   it('sin datos es null, nunca 0', () => {
     const r = resumirVentasPeriodo([q(2026, 9, 1, null, null)], null, rango);
     expect(r.litrosVendidos).toBeNull();

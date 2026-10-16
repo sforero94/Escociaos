@@ -71,8 +71,10 @@ export function CargasView() {
         abrirQuincena(p.quincena ?? null);
         break;
       case 'liquidacion_a_medias':
-        // Sin quincena: el diálogo ofrece recuperar el borrador, si quedó.
-        abrirQuincena(null);
+        // La quincena cerrada más reciente sin liquidación es la que se
+        // estaba cargando. Si ya no falta ninguna, el diálogo usa su
+        // período por defecto. El borrador, si quedó, se ofrece igual.
+        abrirQuincena(d.pendientes.find((x) => x.tipo === 'liquidacion')?.quincena ?? null);
         break;
       case 'pesaje':
         document.getElementById('carga-pesaje')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
