@@ -25,7 +25,10 @@ def exercise(sql,ctx):
  query="SELECT jsonb_object_agg(name,rows) FROM ("+' UNION ALL '.join('SELECT '+lit(a+'.'+b)+" name,(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text),'[]') FROM "+r.q(a)+'.'+r.q(b)+' x) rows' for a,b in tables)+') snapshot;'
  state=lambda:sql(query)
  def sale(mode,key,intent=None,owner=c.OWNER,ok=True):return call('fn_hato_sale_web',[lit(mode),u(key),js(intent) if intent is not None else 'NULL::jsonb',u(owner)],actor=owner,ok=ok)
- negocio,cat,region,medio=[c.uid() for _ in range(4)];sql('INSERT INTO fin_negocios(id,nombre) VALUES('+u(negocio)+",'Hato Lechero');INSERT INTO fin_categorias_ingresos(id,negocio_id,nombre) VALUES("+u(cat)+','+u(negocio)+",'Venta de Terneros');INSERT INTO fin_regiones(id,nombre) VALUES("+u(region)+",'Synthetic sale region');INSERT INTO fin_medios_pago(id,nombre) VALUES("+u(medio)+",'Synthetic sale payment');")
+ if ctx.get('sale_dimensions'):
+  negocio,cat,region,medio=ctx['sale_dimensions']
+ else:
+  negocio,cat,region,medio=[c.uid() for _ in range(4)];sql('INSERT INTO fin_negocios(id,nombre) VALUES('+u(negocio)+",'Hato Lechero');INSERT INTO fin_categorias_ingresos(id,negocio_id,nombre) VALUES("+u(cat)+','+u(negocio)+",'Venta de Terneros');INSERT INTO fin_regiones(id,nombre) VALUES("+u(region)+",'Synthetic sale region');INSERT INTO fin_medios_pago(id,nombre) VALUES("+u(medio)+",'Synthetic sale payment');")
  target=ctx['treated']['payload']['animalId'];a=json.loads(sql('SELECT to_jsonb(x) FROM hato_animales x WHERE id='+u(target)+';'));day=sql("SELECT to_char((now() AT TIME ZONE 'America/Bogota')::date,'YYYY-MM-DD');")
  p=dict(version=1,tipo='terneros',cabezas=1,valor='123456',fecha=day,regionId=region,medioPagoId=medio,compradorId=None,nombre='Synthetic sale',animals=[{k:a[k] for k in ('id','numero','nombre')}],refs=dict(region=dict(id=region,nombre='Synthetic sale region'),medio=dict(id=medio,nombre='Synthetic sale payment'),comprador=None))
  key=c.uid();prepared=sale('prepare',key,p);check(prepared['state']=='pending','sale reserves original graph/income/event IDs without posting')
