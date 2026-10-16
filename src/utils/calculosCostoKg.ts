@@ -10,7 +10,8 @@
  *                          (movimientos_diarios_productos, lote via movimientos_diarios, año Y)
  *   overhead_farm(Y)    = Σ fin_gastos.valor (estado='Confirmado', negocio Aguacate Hass, año Y,
  *                           categoría NO IN categoriasExcluidas)
- *   overhead(L,Y)       = overhead_farm(Y) × (arboles_L / Σ arboles de lotes con arboles > 0)
+ *   peso(L,Y)           = arboles_L × dias_activos(L,Y)   (ESCO-139, prorrateo por árbol-día)
+ *   overhead(L,Y)       = overhead_farm(Y) × (peso(L,Y) / Σ peso de los lotes del año)
  *   costo_total(L,Y)    = costo_directo + overhead
  *   costo_kg(L,Y)       = costo_total / kg_totales(L,Y)
  *   por_cosecha         = costo_total proporcional a kg de Principal vs Traviesa
@@ -29,6 +30,7 @@ import type {
   LaborLoteAnual,
   LoteInfoCosto,
   OverheadFarmaAnual,
+  PeriodoCosto,
 } from '@/types/produccion';
 
 // ---------------------------------------------------------------------------
@@ -108,6 +110,76 @@ export function asignarOverheadPorArboles(
 }
 
 // ---------------------------------------------------------------------------
+// Asignación de overhead por árbol-día (ESCO-139)
+// ---------------------------------------------------------------------------
+
+const MS_DIA = 86_400_000;
+
+/** AAAA-MM-DD → número de día UTC (entero). null si el texto no es una fecha válida. */
+function diaUTC(fecha: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha);
+  if (!m) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(ms) ? null : Math.round(ms / MS_DIA);
+}
+
+/** Año calendario completo como período de prorrateo. */
+export function periodoDelAno(ano: number): PeriodoCosto {
+  return { inicio: `${ano}-01-01`, fin: `${ano}-12-31` };
+}
+
+/**
+ * Días en que el lote existió dentro del período [inicio, fin] (ambos inclusive).
+ *
+ *   - fecha_erradicacion dentro del período → días ANTES de esa fecha (el día de
+ *     la erradicación no cuenta: erradicado el día 1 del período = 0 días)
+ *   - fecha_erradicacion antes del período  → 0
+ *   - fecha_erradicacion después del período → período completo
+ *   - activo = false sin fecha              → 0 (igual que la regla anterior)
+ *   - activo (o ausente) sin fecha          → período completo
+ *
+ * La fecha, cuando existe, decide por encima de `activo`.
+ */
+export function diasActivosLoteEnPeriodo(lote: LoteInfoCosto, periodo: PeriodoCosto): number {
+  const inicio = diaUTC(periodo.inicio);
+  const fin = diaUTC(periodo.fin);
+  if (inicio === null || fin === null || fin < inicio) return 0;
+  const diasPeriodo = fin - inicio + 1;
+
+  const erradicacion = lote.fecha_erradicacion ? diaUTC(lote.fecha_erradicacion) : null;
+  if (erradicacion !== null) {
+    return Math.min(Math.max(erradicacion - inicio, 0), diasPeriodo);
+  }
+  return lote.activo === false ? 0 : diasPeriodo;
+}
+
+/**
+ * Reparte el gasto general del período por árboles × días activos del lote en
+ * el período. Un lote con 0 árboles o 0 días recibe 0 y no entra al
+ * denominador, así que la suma asignada es igual a `overheadFarm` siempre que
+ * algún lote tenga peso (si ninguno lo tiene, todos reciben 0, como antes).
+ *
+ * @returns Mapa lote_id → overhead asignado (sin redondear)
+ */
+export function asignarOverheadPorArbolDia(
+  lotes: LoteInfoCosto[],
+  overheadFarm: number,
+  periodo: PeriodoCosto,
+): Map<string, number> {
+  const pesos = lotes.map((l) => {
+    const arboles = l.total_arboles > 0 ? l.total_arboles : 0;
+    return { id: l.id, peso: arboles * diasActivosLoteEnPeriodo(l, periodo) };
+  });
+  const pesoTotal = pesos.reduce((s, p) => s + p.peso, 0);
+
+  const result = new Map<string, number>();
+  for (const { id, peso } of pesos) {
+    result.set(id, pesoTotal > 0 && peso > 0 ? overheadFarm * (peso / pesoTotal) : 0);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Costo total por lote
 // ---------------------------------------------------------------------------
 
@@ -127,7 +199,7 @@ export function combinarCostosLote(
 ): CostoLoteAnual[] {
   const laborMap = new Map(labor.map((l) => [l.lote_id, l]));
   const insumosMap = new Map(insumos.map((i) => [i.lote_id, i]));
-  const overheadMap = asignarOverheadPorArboles(lotes, overheadFarm);
+  const overheadMap = asignarOverheadPorArbolDia(lotes, overheadFarm, periodoDelAno(ano));
 
   return lotes.map((lote) => {
     const lab = laborMap.get(lote.id);
@@ -246,7 +318,8 @@ export function calcularCostoKgFarmFallback(
  * Para años < ANO_MIN_LOTE devuelve un único objeto fallback (array vacío de lotes).
  *
  * @param ano
- * @param lotes                    - Lotes con total_arboles (de la tabla `lotes`)
+ * @param lotes                    - Lotes con total_arboles, activo y fecha_erradicacion
+ *                                   (de la tabla `lotes`, incluidos los inactivos)
  * @param labor                    - Costo de mano de obra por lote
  * @param insumos                  - Costo de insumos por lote
  * @param gastosOverhead           - Filas de fin_gastos para el overhead

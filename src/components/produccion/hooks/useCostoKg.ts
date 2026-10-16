@@ -8,7 +8,9 @@
  *                      (cantidad_utilizada, unidad) ⋈ productos (precio_unitario)
  *   - Overhead       : fin_gastos (estado='Confirmado', negocio 'Aguacate Hass',
  *                      fecha del año) ⋈ fin_categorias_gastos (nombre)
- *   - Árboles por lote: lotes (id, nombre, total_arboles)
+ *   - Árboles por lote: lotes (id, nombre, total_arboles, activo, fecha_erradicacion),
+ *                      TODOS los lotes: el prorrateo por árbol-día decide cuánto
+ *                      gasto general carga cada uno (ESCO-139). Ver `cargarLotesCosto`.
  *   - Producción     : produccion (lote_id, sublote_id, ano, cosecha_tipo, kg_totales)
  *                      Consolidado: si existe registro nivel-lote (sublote_id IS NULL)
  *                      para (lote_id, cosecha_tipo), se usa ese; de lo contrario
@@ -75,25 +77,9 @@ export function useCostoKg(): UseCostoKgReturn {
 
     try {
       // ------------------------------------------------------------------
-      // 1. Lotes con total_arboles (generado en DB)
+      // 1. Lotes con total_arboles (generado en DB), activo y fecha_erradicacion
       // ------------------------------------------------------------------
-      const { data: lotesData, error: lotesErr } = await supabase
-        .from('lotes')
-        .select('id, nombre, total_arboles')
-        .eq('activo', true)
-        .order('numero_orden', { ascending: true });
-
-      if (lotesErr) throw new Error(`Lotes: ${lotesErr.message}`);
-
-      const lotes: LoteInfoCosto[] = (lotesData ?? []).map((l: {
-        id: string;
-        nombre: string;
-        total_arboles: number | null;
-      }) => ({
-        id: l.id,
-        nombre: l.nombre,
-        total_arboles: l.total_arboles ?? 0,
-      }));
+      const lotes = await cargarLotesCosto(supabase);
 
       // ------------------------------------------------------------------
       // 2. Labor directa: registros_trabajo con lote_id asignado, año dado
@@ -304,6 +290,68 @@ export function useCostoKg(): UseCostoKgReturn {
   }, []);
 
   return { loading, error, calcular };
+}
+
+// ---------------------------------------------------------------------------
+// Lectura de lotes (exportada para pruebas)
+// ---------------------------------------------------------------------------
+
+/**
+ * Códigos de PostgREST/Postgres para «la columna no existe»: 42703 en un SELECT,
+ * PGRST204 cuando el caché de esquema de PostgREST no la conoce.
+ */
+const CODIGOS_COLUMNA_INEXISTENTE = new Set(['42703', 'PGRST204']);
+
+type ClienteLotes = Pick<ReturnType<typeof getSupabase>, 'from'>;
+
+interface FilaLote {
+  id: string;
+  nombre: string;
+  total_arboles: number | null;
+  activo?: boolean | null;
+  fecha_erradicacion?: string | null;
+}
+
+/**
+ * Lee TODOS los lotes con `activo` y `fecha_erradicacion` para el prorrateo por
+ * árbol-día (ESCO-139).
+ *
+ * Degradación: mientras la migración 181 (`lotes.fecha_erradicacion`) no esté
+ * aplicada, el SELECT falla con 42703/PGRST204. En ese caso se repite la
+ * consulta de antes — sólo `activo = true`, sin fecha — y cada lote cuenta el
+ * período completo, que es exactamente la regla anterior. Nunca falla por la
+ * columna ausente; cualquier otro error se propaga.
+ */
+export async function cargarLotesCosto(supabase: ClienteLotes): Promise<LoteInfoCosto[]> {
+  const completa = await supabase
+    .from('lotes')
+    .select('id, nombre, total_arboles, activo, fecha_erradicacion')
+    .order('numero_orden', { ascending: true });
+
+  let filas: FilaLote[];
+  if (completa.error) {
+    if (!CODIGOS_COLUMNA_INEXISTENTE.has(String(completa.error.code ?? ''))) {
+      throw new Error(`Lotes: ${completa.error.message}`);
+    }
+    const degradada = await supabase
+      .from('lotes')
+      .select('id, nombre, total_arboles')
+      .eq('activo', true)
+      .order('numero_orden', { ascending: true });
+    if (degradada.error) throw new Error(`Lotes: ${degradada.error.message}`);
+    filas = ((degradada.data ?? []) as FilaLote[]).map((l) => ({ ...l, activo: true }));
+  } else {
+    // `src/types/database.ts` todavía no conoce la columna (migración 181).
+    filas = (completa.data ?? []) as unknown as FilaLote[];
+  }
+
+  return filas.map((l) => ({
+    id: l.id,
+    nombre: l.nombre,
+    total_arboles: l.total_arboles ?? 0,
+    activo: l.activo !== false,
+    fecha_erradicacion: l.fecha_erradicacion ?? null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
