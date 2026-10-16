@@ -58,6 +58,15 @@ export function VentasProduccionBloque({
   const barras = actual.barras.map((b) => ({ etiqueta: b.etiqueta, litros: b.litros }));
   const reparto = actual.reparto;
 
+  // Una quincena cerrada sin liquidación (de este período o del anterior)
+  // fabricaría una caída al comparar: se muestra la cifra, sin comparación.
+  const faltantes = actual.quincenasSinLiquidacion + anterior.quincenasSinLiquidacion;
+  const incompleto = faltantes > 0;
+  const avisoIncompleto =
+    actual.quincenasSinLiquidacion > 0
+      ? `Falta la liquidación de ${actual.quincenasSinLiquidacion} quincena${actual.quincenasSinLiquidacion === 1 ? '' : 's'}. Sin comparación.`
+      : `Al período anterior le faltan liquidaciones. Sin comparación.`;
+
   return (
     <section className="flex flex-col gap-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -87,8 +96,8 @@ export function VentasProduccionBloque({
               label="Litros vendidos"
               value={actual.litrosVendidos == null ? '—' : formatNumber(actual.litrosVendidos)}
               unit={actual.litrosVendidos == null ? undefined : 'L'}
-              delta={deltaContraAnterior(variacionContraAnterior(actual.litrosVendidos, anterior.litrosVendidos).variacion, etiquetaAnterior)}
-              sub={actual.litrosVendidos == null ? 'Sin liquidaciones en el período' : undefined}
+              delta={incompleto ? undefined : deltaContraAnterior(variacionContraAnterior(actual.litrosVendidos, anterior.litrosVendidos).variacion, etiquetaAnterior)}
+              sub={actual.litrosVendidos == null ? 'Sin liquidaciones en el período' : incompleto ? avisoIncompleto : undefined}
             />
             <HatoKpiCard
               icon={Droplet}
@@ -110,8 +119,8 @@ export function VentasProduccionBloque({
               tone="blue"
               label="Ingreso del período"
               value={actual.ingreso == null ? '—' : formatMillonesCOP(actual.ingreso)}
-              delta={deltaContraAnterior(variacionContraAnterior(actual.ingreso, anterior.ingreso).variacion, etiquetaAnterior)}
-              sub={actual.ingreso == null ? 'Sin ingresos en el período' : undefined}
+              delta={incompleto ? undefined : deltaContraAnterior(variacionContraAnterior(actual.ingreso, anterior.ingreso).variacion, etiquetaAnterior)}
+              sub={actual.ingreso == null ? 'Sin ingresos en el período' : incompleto ? avisoIncompleto : undefined}
             />
           </div>
 

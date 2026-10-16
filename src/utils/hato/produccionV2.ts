@@ -16,13 +16,13 @@
 import { resumirLitrosPesados, turnoIncompleto, type PesajeLitros, type RangoFecha } from './litrosPesados';
 import { repartoVentasHato, type IngresoHatoParaReparto, type RepartoVentasHato } from '@/utils/hatoProduccion';
 
-export type PeriodoProduccion = 'quincena' | 'mes' | 'trimestre' | 'anio';
+/** Dos períodos (dueño, 2026-10-16): los cerrados (quincena, mes,
+ * trimestre) escondían el mes en curso. Los dos terminan HOY. */
+export type PeriodoProduccion = 'ultimos3' | 'anio';
 
 export const PERIODOS_PRODUCCION: Array<{ id: PeriodoProduccion; label: string; etiquetaAnterior: string }> = [
-  { id: 'quincena', label: 'Quincena', etiquetaAnterior: 'la quincena anterior' },
-  { id: 'mes', label: 'Mes', etiquetaAnterior: 'el mes anterior' },
-  { id: 'trimestre', label: 'Trimestre', etiquetaAnterior: 'el trimestre anterior' },
-  { id: 'anio', label: 'Año', etiquetaAnterior: 'el mismo tramo del año pasado' },
+  { id: 'ultimos3', label: 'Últimos 3 meses', etiquetaAnterior: 'los 3 meses anteriores' },
+  { id: 'anio', label: 'Año a la fecha', etiquetaAnterior: 'el mismo tramo del año pasado' },
 ];
 
 export const MAX_VACAS_COMPARAR = 6;
@@ -68,64 +68,34 @@ function mesAnterior(anio: number, mes: number): { anio: number; mes: number } {
   return mes === 1 ? { anio: anio - 1, mes: 12 } : { anio, mes: mes - 1 };
 }
 
-/** Rango del período elegido, con `hoy` en hora local (`obtenerFechaHoy`). */
+/** Rango del período elegido, con `hoy` en hora local (`obtenerFechaHoy`).
+ * Últimos 3 meses = del 1 del mes de hace dos meses a hoy (16 oct → 1 ago a
+ * 16 oct): meses calendario completos más el mes en curso, así las
+ * quincenas no quedan partidas. Año = 1 de enero a hoy. */
 export function rangoPeriodoProduccion(periodo: PeriodoProduccion, hoy: string): RangoFecha {
-  const { anio, mes, dia } = partes(hoy);
-  switch (periodo) {
-    case 'quincena': {
-      // Última quincena cerrada: si hoy es del 16 en adelante, la 1ª de
-      // este mes; si no, la 2ª del mes anterior.
-      if (dia >= 16) return rangoQuincena(anio, mes, 1);
-      const ant = mesAnterior(anio, mes);
-      return rangoQuincena(ant.anio, ant.mes, 2);
-    }
-    case 'mes': {
-      const ant = mesAnterior(anio, mes);
-      return { desde: iso(ant.anio, ant.mes, 1), hasta: iso(ant.anio, ant.mes, ultimoDiaMes(ant.anio, ant.mes)) };
-    }
-    case 'trimestre': {
-      const trimestreActual = Math.floor((mes - 1) / 3);
-      const anioT = trimestreActual === 0 ? anio - 1 : anio;
-      const t = trimestreActual === 0 ? 3 : trimestreActual - 1;
-      const mesInicio = t * 3 + 1;
-      return { desde: iso(anioT, mesInicio, 1), hasta: iso(anioT, mesInicio + 2, ultimoDiaMes(anioT, mesInicio + 2)) };
-    }
-    case 'anio':
-      return { desde: iso(anio, 1, 1), hasta: hoy };
-  }
+  const { anio, mes } = partes(hoy);
+  if (periodo === 'anio') return { desde: iso(anio, 1, 1), hasta: hoy };
+  const inicio = sumarMeses(anio, mes, -2);
+  return { desde: iso(inicio.anio, inicio.mes, 1), hasta: hoy };
 }
 
-/** Período anterior del mismo tipo. El año compara el mismo tramo (1 ene →
- * mismo día) del año pasado; un 29 de febrero cae al 28. */
+/** El mismo tramo, corrido hacia atrás: 3 meses para «Últimos 3 meses», un
+ * año para «Año a la fecha». El día se recorta al último del mes (31 →
+ * 30, 29 de febrero → 28). */
 export function rangoAnteriorProduccion(periodo: PeriodoProduccion, rango: RangoFecha): RangoFecha {
-  const d = partes(rango.desde);
-  switch (periodo) {
-    case 'quincena':
-      if (d.dia === 16) return rangoQuincena(d.anio, d.mes, 1);
-      {
-        const ant = mesAnterior(d.anio, d.mes);
-        return rangoQuincena(ant.anio, ant.mes, 2);
-      }
-    case 'mes': {
-      const ant = mesAnterior(d.anio, d.mes);
-      return { desde: iso(ant.anio, ant.mes, 1), hasta: iso(ant.anio, ant.mes, ultimoDiaMes(ant.anio, ant.mes)) };
-    }
-    case 'trimestre': {
-      let mesInicio = d.mes - 3;
-      let anioT = d.anio;
-      if (mesInicio < 1) {
-        mesInicio += 12;
-        anioT -= 1;
-      }
-      return { desde: iso(anioT, mesInicio, 1), hasta: iso(anioT, mesInicio + 2, ultimoDiaMes(anioT, mesInicio + 2)) };
-    }
-    case 'anio': {
-      const h = partes(rango.hasta);
-      const anioAnt = h.anio - 1;
-      const dia = Math.min(h.dia, ultimoDiaMes(anioAnt, h.mes));
-      return { desde: iso(anioAnt, 1, 1), hasta: iso(anioAnt, h.mes, dia) };
-    }
-  }
+  const meses = periodo === 'anio' ? -12 : -3;
+  return { desde: correrMeses(rango.desde, meses), hasta: correrMeses(rango.hasta, meses) };
+}
+
+function sumarMeses(anio: number, mes: number, delta: number): { anio: number; mes: number } {
+  const total = anio * 12 + (mes - 1) + delta;
+  return { anio: Math.floor(total / 12), mes: (total % 12) + 1 };
+}
+
+function correrMeses(fechaIso: string, delta: number): string {
+  const { anio, mes, dia } = partes(fechaIso);
+  const m = sumarMeses(anio, mes, delta);
+  return iso(m.anio, m.mes, Math.min(dia, ultimoDiaMes(m.anio, m.mes)));
 }
 
 export interface Variacion {
@@ -170,6 +140,9 @@ export interface ResumenVentas {
   litrosPorVaca: number | null;
   /** Quincenas con litros y sin número de vacas (la razón del `null`). */
   quincenasSinVacas: number;
+  /** Quincenas cerradas del rango sin liquidación. Con alguna, comparar
+   * contra el período anterior fabricaría una caída. */
+  quincenasSinLiquidacion: number;
   /** `null` cuando no hay ingresos visibles (sin permiso o sin ventas). */
   ingreso: number | null;
   reparto: RepartoVentasHato | null;
@@ -248,6 +221,7 @@ export function resumirVentasPeriodo(
     litrosVendidos: conLitros === 0 ? null : litros,
     litrosPorVaca: conVacas === 0 || conVacas < conLitros ? null : porVaca,
     quincenasSinVacas: conLitros - conVacas,
+    quincenasSinLiquidacion: barras.filter((b) => b.litros == null).length,
     ingreso,
     reparto,
     barras,
@@ -480,13 +454,12 @@ export interface PendienteCarga {
   mes?: number;
 }
 
-/** Quincenas cerradas que miran "Falta cargar" y "Falta vacas". */
-const QUINCENAS_REVISADAS = 3;
-
-/** Lo que falta cargar: las 2 últimas quincenas cerradas sin liquidación,
- * las 3 últimas cargadas sin vacas en ordeño, y los días de pesaje del mes
- * (y del anterior, si hoy es antes del 8) que ya pasaron sin un solo
- * pesaje. Solo mira hacia atrás un mes: lo más viejo vive en el historial. */
+/** Lo que falta cargar: de las 2 últimas quincenas cerradas, las que no
+ * tienen liquidación o la tienen sin vacas en ordeño (las mismas dos que
+ * muestra la tarjeta Venta de leche, dueño 2026-10-16), y los días de
+ * pesaje del mes (y del anterior, si hoy es antes del 8) que ya pasaron sin
+ * un solo pesaje. Las quincenas van de la más vieja a la más nueva. Lo más
+ * viejo vive en el historial. */
 export function pendientesCarga(input: {
   hoy: string;
   quincenasCargadas: ReadonlyArray<QuincenaClave & { num_vacas_ordeno?: number | null }>;
@@ -496,23 +469,22 @@ export function pendientesCarga(input: {
 }): PendienteCarga[] {
   const cargadas = new Map(input.quincenasCargadas.map((q) => [`${q.anio}-${q.mes}-${q.quincena}`, q]));
   const salida: PendienteCarga[] = [];
-  ultimasQuincenasCerradas(input.hoy, QUINCENAS_REVISADAS).forEach((q, i) => {
+  for (const q of ultimasQuincenasCerradas(input.hoy).reverse()) {
     const clave = `${q.anio}-${q.mes}-${q.quincena}`;
     const cargada = cargadas.get(clave);
     if (!cargada) {
-      // Solo las 2 más recientes: la 3ª sin liquidación ya es historia.
-      if (i < 2) salida.push({ tipo: 'liquidacion', clave, texto: `Liquidación · ${etiquetaQuincena(q)}`, quincena: q });
+      salida.push({ tipo: 'liquidacion', clave, texto: `${etiquetaQuincena(q)} (liquidación)`, quincena: q });
     } else if (cargada.num_vacas_ordeno == null) {
-      salida.push({ tipo: 'vacas', clave: `vacas-${clave}`, texto: `Vacas en ordeño · ${etiquetaQuincena(q)}`, quincena: q });
+      salida.push({ tipo: 'vacas', clave: `vacas-${clave}`, texto: `${etiquetaQuincena(q)} (# de vacas)`, quincena: q });
     }
-  });
+  }
   const { dia } = partes(input.hoy);
   const fechas = [...(dia < 8 ? input.fechasPesajeMesAnterior : []), ...input.fechasPesajeMesActual];
   // Solo los días de pesaje de los últimos 35 días que ya pasaron.
   const limite = sumarDias(input.hoy, -35);
   for (const fecha of fechas) {
     if (fecha > input.hoy || fecha < limite) continue;
-    if (!input.fechasConPesaje.has(fecha)) salida.push({ tipo: 'pesaje', clave: fecha, texto: `Pesaje · ${diaSemanaCorto(fecha)} ${partes(fecha).dia} ${MESES_CORTOS[partes(fecha).mes - 1]}` });
+    if (!input.fechasConPesaje.has(fecha)) salida.push({ tipo: 'pesaje', clave: fecha, texto: `pesaje del ${diaSemanaCorto(fecha)} ${partes(fecha).dia} ${MESES_CORTOS[partes(fecha).mes - 1]}` });
   }
   return salida;
 }
@@ -523,8 +495,9 @@ export const DIAS_CARGAS_A_MEDIAS = 35;
 /**
  * Cargas que quedaron a medias (mensaje de Martha, 2026-10-16: «tuve que
  * dejar ahí mientras tenía el dato y ahora no puedo seguir»):
- *   - una foto de liquidación sin ninguna quincena guardada en las 36 h
- *     siguientes (la inversa de `fotoDeQuincena`);
+ *   - una foto de liquidación sin NINGUNA quincena guardada después. Una
+ *     ventana corta (36 h) daba falsos positivos: la quincena se guarda,
+ *     se edita días después y `updated_at` se aleja de la foto;
  *   - una foto de pesaje que no dejó ni un litro.
  * Solo los últimos 35 días: una foto más vieja ya no es una tarea abierta.
  */
@@ -540,9 +513,9 @@ export function cargasAMedias(input: {
   for (const foto of input.fotosLiquidacion) {
     const t = Date.parse(foto.creadoEn);
     if (Number.isNaN(t) || t < limite) continue;
-    const guardada = guardados.some((g) => g >= t && g - t <= VENTANA_LIGA_LIQUIDACION_MS);
+    const guardada = guardados.some((g) => g >= t);
     if (!guardada) {
-      salida.push({ tipo: 'liquidacion_a_medias', clave: foto.capturaId, texto: `Liquidación subida el ${etiquetaInstante(foto.creadoEn)}, sin guardar`, foto });
+      salida.push({ tipo: 'liquidacion_a_medias', clave: foto.capturaId, texto: `Foto subida el ${etiquetaInstante(foto.creadoEn)}, sin guardar`, foto });
     }
   }
   for (const foto of input.pesajesSinFilas) {
@@ -551,7 +524,7 @@ export function cargasAMedias(input: {
     salida.push({
       tipo: 'pesaje_a_medias',
       clave: foto.capturaId,
-      texto: `Planilla de pesaje de ${MESES_CORTOS[foto.mes - 1]} subida el ${etiquetaInstante(foto.creadoEn)}, sin litros`,
+      texto: `Planilla de ${MESES_CORTOS[foto.mes - 1]} subida el ${etiquetaInstante(foto.creadoEn)}, sin litros`,
       foto,
       anio: foto.anio,
       mes: foto.mes,

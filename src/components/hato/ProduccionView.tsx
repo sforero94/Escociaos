@@ -47,16 +47,14 @@ function CandadoVentas() {
 }
 
 const ETIQUETA_PERIODO: Record<PeriodoProduccion, string> = {
-  quincena: 'la quincena',
-  mes: 'el mes',
-  trimestre: 'el trimestre',
+  ultimos3: 'los 3 meses',
   anio: 'el año',
 };
 
 export function ProduccionView() {
   const d = useProduccionV2();
   const { isLoading: authLoading } = useAuth();
-  const [periodo, setPeriodo] = useState<PeriodoProduccion>('mes');
+  const [periodo, setPeriodo] = useState<PeriodoProduccion>('ultimos3');
   const [detalleFecha, setDetalleFecha] = useState<string | null>(null);
 
   const rango = useMemo(() => rangoPeriodoProduccion(periodo, d.hoy), [periodo, d.hoy]);
@@ -89,7 +87,7 @@ export function ProduccionView() {
           }
         />
 
-        <AvisoFaltaCargar pendientes={d.pendientes} modo="produccion" />
+        <AvisoFaltaCargar pendientes={d.pendientes} />
 
         {authLoading ? (
           <div className="h-64 animate-pulse rounded-xl border border-gray-200 bg-white" aria-hidden="true" />

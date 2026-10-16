@@ -21,32 +21,24 @@ import {
   type QuincenaVenta,
 } from '@/utils/hato/produccionV2';
 
-describe('rangoPeriodoProduccion — último período cerrado; año = enero a hoy', () => {
-  it('quincena: antes del 16 es la 2ª del mes anterior', () => {
-    expect(rangoPeriodoProduccion('quincena', '2026-10-10')).toEqual({ desde: '2026-09-16', hasta: '2026-09-30' });
+describe('rangoPeriodoProduccion — los dos terminan hoy', () => {
+  it('últimos 3 meses: del 1 del mes de hace dos meses a hoy (incluye el mes en curso)', () => {
+    expect(rangoPeriodoProduccion('ultimos3', '2026-10-16')).toEqual({ desde: '2026-08-01', hasta: '2026-10-16' });
   });
-  it('quincena: desde el 16 es la 1ª del mes', () => {
-    expect(rangoPeriodoProduccion('quincena', '2026-10-16')).toEqual({ desde: '2026-10-01', hasta: '2026-10-15' });
-  });
-  it('mes: el mes anterior completo, cruza el año', () => {
-    expect(rangoPeriodoProduccion('mes', '2026-01-05')).toEqual({ desde: '2025-12-01', hasta: '2025-12-31' });
-  });
-  it('trimestre: el trimestre calendario anterior', () => {
-    expect(rangoPeriodoProduccion('trimestre', '2026-10-16')).toEqual({ desde: '2026-07-01', hasta: '2026-09-30' });
-    expect(rangoPeriodoProduccion('trimestre', '2026-02-01')).toEqual({ desde: '2025-10-01', hasta: '2025-12-31' });
+  it('últimos 3 meses cruza el año', () => {
+    expect(rangoPeriodoProduccion('ultimos3', '2026-01-05')).toEqual({ desde: '2025-11-01', hasta: '2026-01-05' });
   });
   it('año: 1 de enero a hoy, nunca 12 meses', () => {
     expect(rangoPeriodoProduccion('anio', '2026-10-16')).toEqual({ desde: '2026-01-01', hasta: '2026-10-16' });
   });
 });
 
-describe('rangoAnteriorProduccion', () => {
-  it('quincena 1 → 2ª del mes anterior; quincena 2 → 1ª del mismo mes', () => {
-    expect(rangoAnteriorProduccion('quincena', { desde: '2026-10-01', hasta: '2026-10-15' })).toEqual({ desde: '2026-09-16', hasta: '2026-09-30' });
-    expect(rangoAnteriorProduccion('quincena', { desde: '2026-09-16', hasta: '2026-09-30' })).toEqual({ desde: '2026-09-01', hasta: '2026-09-15' });
+describe('rangoAnteriorProduccion — el mismo tramo, corrido hacia atrás', () => {
+  it('últimos 3 meses: 3 meses antes', () => {
+    expect(rangoAnteriorProduccion('ultimos3', { desde: '2026-08-01', hasta: '2026-10-16' })).toEqual({ desde: '2026-05-01', hasta: '2026-07-16' });
   });
-  it('trimestre cruza el año', () => {
-    expect(rangoAnteriorProduccion('trimestre', { desde: '2026-01-01', hasta: '2026-03-31' })).toEqual({ desde: '2025-10-01', hasta: '2025-12-31' });
+  it('el día se recorta al último del mes y cruza el año', () => {
+    expect(rangoAnteriorProduccion('ultimos3', { desde: '2026-03-01', hasta: '2026-05-31' })).toEqual({ desde: '2025-12-01', hasta: '2026-02-28' });
   });
   it('año: mismo tramo del año pasado; el 29 de febrero cae al 28', () => {
     expect(rangoAnteriorProduccion('anio', { desde: '2028-01-01', hasta: '2028-02-29' })).toEqual({ desde: '2027-01-01', hasta: '2027-02-28' });
@@ -87,6 +79,12 @@ describe('resumirVentasPeriodo — dato real', () => {
     expect(r.litrosVendidos).toBe(12000);
     expect(r.litrosPorVaca).toBeNull();
     expect(r.quincenasSinVacas).toBe(1);
+  });
+  it('cuenta las quincenas cerradas del rango sin liquidación (sin comparación)', () => {
+    const r = resumirVentasPeriodo([q(2026, 9, 1, 6000, 30)], null, { desde: '2026-08-01', hasta: '2026-10-16' });
+    // ago 1ª/2ª, sep 2ª y oct 1ª faltan; la 2ª de oct no ha cerrado.
+    expect(r.barras.map((b) => b.etiqueta)).toEqual(['1ª ago', '2ª ago', '1ª sep', '2ª sep', '1ª oct']);
+    expect(r.quincenasSinLiquidacion).toBe(4);
   });
   it('sin datos es null, nunca 0', () => {
     const r = resumirVentasPeriodo([q(2026, 9, 1, null, null)], null, rango);
@@ -188,7 +186,7 @@ describe('Cargas', () => {
       fechasPesajeMesAnterior: ['2026-09-30'],
       fechasConPesaje: new Set(['2026-10-07']),
     });
-    expect(p.map((x) => x.texto)).toEqual(['Liquidación · 1ª quincena oct', 'Pesaje · mié 14 oct']);
+    expect(p.map((x) => x.texto)).toEqual(['1ª quincena oct (liquidación)', 'pesaje del mié 14 oct']);
   });
 
   it('etiquetaDiaPesaje', () => {
@@ -229,12 +227,12 @@ describe('Cargas', () => {
     expect(inicioMesesAtras('2026-02-16', 3)).toBe('2025-12-01');
   });
 
-  it('pendientesCarga: quincena guardada sin número de vacas pide completarlo', () => {
+  it('pendientesCarga: solo las 2 quincenas de la tarjeta, de la más vieja a la más nueva', () => {
     const p = pendientesCarga({
       hoy: '2026-10-16',
       quincenasCargadas: [
-        { anio: 2026, mes: 10, quincena: 1, num_vacas_ordeno: null },
-        { anio: 2026, mes: 9, quincena: 2, num_vacas_ordeno: 26 },
+        { anio: 2026, mes: 9, quincena: 2, num_vacas_ordeno: null },
+        // La 3ª hacia atrás sin vacas ya no se pide: vive en el historial.
         { anio: 2026, mes: 9, quincena: 1, num_vacas_ordeno: null },
       ],
       fechasPesajeMesActual: [],
@@ -242,8 +240,8 @@ describe('Cargas', () => {
       fechasConPesaje: new Set(),
     });
     expect(p.map((x) => [x.tipo, x.texto])).toEqual([
-      ['vacas', 'Vacas en ordeño · 1ª quincena oct'],
-      ['vacas', 'Vacas en ordeño · 1ª quincena sep'],
+      ['vacas', '2ª quincena sep (# de vacas)'],
+      ['liquidacion', '1ª quincena oct (liquidación)'],
     ]);
   });
 
@@ -261,7 +259,7 @@ describe('Cargas', () => {
     expect(p).toEqual([]);
   });
 
-  it('cargasAMedias: foto de liquidación sin quincena guardada después', () => {
+  it('cargasAMedias: foto de liquidación sin ninguna quincena guardada después', () => {
     const foto = (id: string, creadoEn: string) => ({ capturaId: id, bucket: 'b', ruta: id, creadoEn });
     const p = cargasAMedias({
       hoy: '2026-10-16',
@@ -270,7 +268,8 @@ describe('Cargas', () => {
         foto('martha', '2026-10-15T20:00:00Z'),
         foto('vieja', '2026-08-01T10:00:00Z'),
       ],
-      guardadosQuincena: ['2026-10-01T10:30:00Z', null],
+      // Un guardado días después también cierra la foto (antes: 36 h).
+      guardadosQuincena: ['2026-10-04T10:30:00Z', null],
       pesajesSinFilas: [],
     });
     expect(p.map((x) => [x.tipo, x.clave])).toEqual([['liquidacion_a_medias', 'martha']]);

@@ -17,7 +17,7 @@ import { fechasPesajeMensuales } from '@/utils/calculosHato';
 import { descargarPlanillaPesajePDF } from '@/utils/hato/exportarPlanillaPesajePDF';
 import { fechasPorSemanaDelMes } from '@/utils/hato/exportarPlanillaPesaje';
 import { describirUltimaCaptura } from '@/utils/hato/capturasFoto';
-import { etiquetaDiaPesaje, semanasPesajeDelMes } from '@/utils/hato/produccionV2';
+import { etiquetaDiaPesaje, semanasPesajeDelMes, type PendienteCarga } from '@/utils/hato/produccionV2';
 import { formatShortDate } from '@/utils/format';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 import type { PesajeLecheVaca } from '@/utils/hatoProduccion';
@@ -25,6 +25,7 @@ import { useProduccionHato } from '../../hooks/useProduccionHato';
 import { useUltimaCapturaFoto } from '../../hooks/useUltimaCapturaFoto';
 import { CapturaArchivo } from '../CapturaArchivo';
 import { SubirPesajeFoto } from '../SubirPesajeFoto';
+import { FilaCargaAMedias } from './FilaCargaAMedias';
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -36,16 +37,17 @@ export function CargaPesajeCard({
   pesajes,
   onAbrirFecha,
   onGuardado,
-  solicitud,
+  aMedias = [],
+  onVerFoto,
 }: {
   hoy: string;
   diaPesaje: { iso: number; nombre: string } | null;
   pesajes: PesajeLecheVaca[];
   onAbrirFecha: (fecha: string) => void;
   onGuardado: () => void;
-  /** Pedido desde «Quedaron a medias»: abrir la grilla a mano del mes de
-   * una planilla que se subió y no dejó litros. `nonce` cambia en cada pedido. */
-  solicitud?: { anio: number; mes: number; nonce: number } | null;
+  /** Planillas subidas que no dejaron litros (`cargasAMedias`). */
+  aMedias?: PendienteCarga[];
+  onVerFoto?: (p: PendienteCarga) => void;
 }) {
   const hook = useProduccionHato();
   const { captura, recargar: recargarCaptura } = useUltimaCapturaFoto('pesaje');
@@ -63,11 +65,12 @@ export function CargaPesajeCard({
     if (dialogo) setDialogoAbierto(true);
   }, [dialogo]);
 
-  useEffect(() => {
-    if (!solicitud) return;
-    setPeriodo(`${solicitud.anio}-${String(solicitud.mes).padStart(2, '0')}`);
+  // «Continuar» una planilla a medias: la grilla a mano de su mes.
+  const continuar = (p: PendienteCarga) => {
+    if (p.anio == null || p.mes == null) return;
+    setPeriodo(`${p.anio}-${String(p.mes).padStart(2, '0')}`);
     setDialogo({ modo: 'manual', fotos: [] });
-  }, [solicitud]);
+  };
 
   const semanas = useMemo(() => {
     if (!periodoValido || !diaPesaje) return [];
@@ -152,6 +155,9 @@ export function CargaPesajeCard({
 
       <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
         <p className="text-xs font-semibold text-gray-700">Si Telegram no funcionó</p>
+        {aMedias.map((p) => (
+          <FilaCargaAMedias key={p.clave} pendiente={p} onVerFoto={(x) => onVerFoto?.(x)} onContinuar={continuar} />
+        ))}
         <p className={`text-xs ${descripcionCaptura.tono === 'alerta' ? 'text-amber-700' : 'text-gray-500'}`}>{descripcionCaptura.texto}</p>
         <CapturaArchivo
           label="Subir foto de la planilla"

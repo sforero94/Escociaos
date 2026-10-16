@@ -9,10 +9,11 @@ import { useEffect, useState } from 'react';
 import { Lock, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RoleGuard } from '@/components/auth/RoleGuard';
-import { etiquetaQuincena, ultimasQuincenasCerradas, type QuincenaClave } from '@/utils/hato/produccionV2';
+import { etiquetaQuincena, ultimasQuincenasCerradas, type PendienteCarga, type QuincenaClave } from '@/utils/hato/produccionV2';
 import type { HatoProduccionQuincenalConIngreso } from '../../hooks/useProduccionHato';
 import { CapturaArchivo } from '../CapturaArchivo';
 import { ProduccionQuincenalDialog } from '../ProduccionQuincenalDialog';
+import { FilaCargaAMedias } from './FilaCargaAMedias';
 
 function Encabezado() {
   return (
@@ -41,9 +42,12 @@ interface CargaLecheProps {
   historial: HatoProduccionQuincenalConIngreso[];
   onSaved: () => void;
   solicitud?: SolicitudLeche | null;
+  /** Fotos de liquidación subidas y no guardadas (`cargasAMedias`). */
+  aMedias?: PendienteCarga[];
+  onVerFoto?: (p: PendienteCarga) => void;
 }
 
-function CargaLecheInterna({ hoy, historial, onSaved, solicitud }: CargaLecheProps) {
+function CargaLecheInterna({ hoy, historial, onSaved, solicitud, aMedias = [], onVerFoto }: CargaLecheProps) {
   const [abierto, setAbierto] = useState(false);
   const [fotos, setFotos] = useState<File[]>([]);
   const [quincenaInicial, setQuincenaInicial] = useState<QuincenaClave | null>(null);
@@ -81,6 +85,16 @@ function CargaLecheInterna({ hoy, historial, onSaved, solicitud }: CargaLechePro
           );
         })}
       </div>
+      {aMedias.map((p) => (
+        <FilaCargaAMedias
+          key={p.clave}
+          pendiente={p}
+          onVerFoto={(x) => onVerFoto?.(x)}
+          // La quincena más vieja de las que faltan es la que se estaba
+          // cargando. El borrador, si quedó, se ofrece al abrir.
+          onContinuar={() => abrir([], quincenas.find((q) => !historial.some((h) => h.anio === q.anio && h.mes === q.mes && h.quincena === q.quincena)) ?? null)}
+        />
+      ))}
       <p className="text-xs text-gray-500">
         Sube el PDF o la foto de la liquidación. El sistema lee litros y valor, y tú confirmas. Toca una quincena para verla o completarla.
       </p>
