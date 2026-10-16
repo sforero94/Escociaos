@@ -28,11 +28,11 @@
 -- `arboles_*`. Eso es la 182 (clase datos), que depende de esta.
 --
 -- GUARDAS: la columna no existe antes; existe despues, tipo date, nullable,
--- sin default; el numero de filas de `lotes` no cambia (linea base relativa
--- capturada en la pre-condicion, nunca un literal -- leccion de la 103/120) y
--- todas las filas quedan con `fecha_erradicacion IS NULL`. La linea base viaja
--- de un bloque al otro en un ajuste local de la transaccion
--- (`set_config(..., true)`), que muere con la transaccion.
+-- sin default; todas las filas quedan con `fecha_erradicacion IS NULL`; el
+-- COMMENT existe. Los dos bloques DO solo hacen RAISE (lista permitida del
+-- viernes). No hay guarda de conteo de filas: un ADD COLUMN sin DEFAULT no
+-- puede cambiarlo, y pasar una linea base entre bloques exigiria escribir un
+-- ajuste de sesion (revision adversarial 2026-10-16).
 --
 -- RLS/consumidores: `lotes` no tiene triggers. Las 6 politicas no nombran
 -- columnas. La unica vista dependiente (`vista_tareas_resumen`) expande sus
@@ -57,8 +57,6 @@
 -- 0. Pre-condiciones
 -- ---------------------------------------------------------------------------
 DO $$
-DECLARE
-  v_filas bigint;
 BEGIN
   IF to_regclass('public.lotes') IS NULL THEN
     RAISE EXCEPTION '181 ABORTADA: public.lotes no existe.';
@@ -70,9 +68,6 @@ BEGIN
   ) THEN
     RAISE EXCEPTION '181 ABORTADA: lotes.fecha_erradicacion ya existe -- ¿ya se aplico?';
   END IF;
-  SELECT count(*) INTO v_filas FROM public.lotes;
-  PERFORM set_config('escocia.m181_lotes_filas', v_filas::text, true);
-  RAISE NOTICE '181: linea base = % filas en lotes', v_filas;
 END
 $$;
 
@@ -92,17 +87,12 @@ COMMENT ON COLUMN public.lotes.fecha_erradicacion IS
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE
-  v_base     bigint := current_setting('escocia.m181_lotes_filas', true)::bigint;
   v_filas    bigint;
   v_tipo     text;
   v_nullable text;
   v_default  text;
   v_no_nulas bigint;
 BEGIN
-  IF v_base IS NULL THEN
-    RAISE EXCEPTION '181 ABORTADA: se perdio la linea base de la pre-condicion.';
-  END IF;
-
   SELECT data_type, is_nullable, column_default
     INTO v_tipo, v_nullable, v_default
     FROM information_schema.columns
@@ -123,9 +113,6 @@ BEGIN
 
   SELECT count(*), count(fecha_erradicacion) INTO v_filas, v_no_nulas
     FROM public.lotes;
-  IF v_filas <> v_base THEN
-    RAISE EXCEPTION '181 ABORTADA: lotes paso de % a % filas.', v_base, v_filas;
-  END IF;
   IF v_no_nulas <> 0 THEN
     RAISE EXCEPTION '181 ABORTADA: % filas con fecha_erradicacion no nula.', v_no_nulas;
   END IF;
