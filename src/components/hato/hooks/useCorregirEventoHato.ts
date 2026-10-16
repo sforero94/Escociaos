@@ -1,20 +1,5 @@
-// ARCHIVO: components/hato/hooks/useCorregirEventoHato.ts
-// DESCRIPCIÓN: T4b (S3, docs/plan_hato_ciclo_manual_override.md §4.6) --
-// editar o eliminar UN `hato_eventos` ya registrado. La traza la escribe
-// SOLA el trigger `fn_hato_registrar_correccion` (migración 084) -- este
-// hook solo hace el UPDATE/DELETE por `id`, nunca escribe en
-// `hato_correcciones` directamente (no podría: sin política de escritura
-// para `authenticated`).
-//
-// `motivo` (opcional) viaja en `datos.motivo_correccion` -- el ÚNICO canal
-// que el trigger sabe leer (084 §5.3). `tipo` y `animal_id` NO son
-// editables por diseño: cambiar el tipo es borrar y crear, no corregir
-// (§4.6) -- por eso `EdicionEventoHato` no los incluye.
-
-import { useState, useCallback } from 'react';
-import { getSupabase } from '@/utils/supabase/client';
-import type { ConfianzaFecha, CriaDestino, HatoEventoRow, TipoServicioHato } from '@/types/hato';
-
+/** Retained stale callers refuse; EditarEventoDialog uses the prepared protocol. */
+import type {ConfianzaFecha,CriaDestino,HatoEventoRow,TipoServicioHato} from '@/types/hato';
 export interface EdicionEventoHato {
   fecha: string;
   fecha_confianza: ConfianzaFecha;
@@ -33,62 +18,7 @@ export interface ResultadoCorreccionEventoHato {
   error?: string;
 }
 
-export function useCorregirEventoHato() {
-  const [guardando, setGuardando] = useState(false);
-
-  const editar = useCallback(
-    async (evento: HatoEventoRow, edicion: EdicionEventoHato): Promise<ResultadoCorreccionEventoHato> => {
-      setGuardando(true);
-      try {
-        const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-
-        const datosSiguiente: Record<string, unknown> = { ...(evento.datos ?? {}) };
-        const notaLimpia = edicion.nota.trim();
-        if (notaLimpia) datosSiguiente.nota = notaLimpia;
-        else delete datosSiguiente.nota;
-        if (edicion.motivo?.trim()) datosSiguiente.motivo_correccion = edicion.motivo.trim();
-
-        const { error } = await supabase
-          .from('hato_eventos')
-          .update({
-            fecha: edicion.fecha,
-            fecha_confianza: edicion.fecha_confianza,
-            tipo_servicio: edicion.tipo_servicio,
-            toro_id: edicion.toro_id,
-            cria_destino: edicion.cria_destino,
-            datos: Object.keys(datosSiguiente).length > 0 ? datosSiguiente : null,
-          })
-          .eq('id', evento.id);
-        if (error) throw error;
-        return { ok: true };
-      } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : 'Error desconocido corrigiendo el evento',
-        };
-      } finally {
-        setGuardando(false);
-      }
-    },
-    [],
-  );
-
-  const eliminar = useCallback(async (eventoId: string): Promise<ResultadoCorreccionEventoHato> => {
-    setGuardando(true);
-    try {
-      const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-      const { error } = await supabase.from('hato_eventos').delete().eq('id', eventoId);
-      if (error) throw error;
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : 'Error desconocido eliminando el evento',
-      };
-    } finally {
-      setGuardando(false);
-    }
-  }, []);
-
-  return { editar, eliminar, guardando };
+export function useCorregirEventoHato(){
+ const refused=async():Promise<ResultadoCorreccionEventoHato>=>({ok:false,error:'Abra la revisión preparada y conserve el intento original.'});
+ return {editar:(_evento:HatoEventoRow,_edicion:EdicionEventoHato)=>refused(),eliminar:(_eventoId:string)=>refused(),guardando:false};
 }

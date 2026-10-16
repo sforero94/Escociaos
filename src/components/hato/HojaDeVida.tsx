@@ -39,7 +39,7 @@ import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
 import { EditarAnimalDialog } from './components/EditarAnimalDialog';
 import { MarcarCicloDialog } from './components/MarcarCicloDialog';
-import { EditarEventoDialog } from './components/EditarEventoDialog';
+import { EditarEventoDialog, EventCorrectionRecoveryButton } from './components/EditarEventoDialog';
 import { HistorialCorreccionesCard } from './components/HistorialCorreccionesCard';
 import { CurvaSemanalProduccion } from './components/CurvaSemanalProduccion';
 import { CurvaProduccionLeche } from './components/CurvaProduccionLeche';
@@ -364,6 +364,7 @@ export function HojaDeVida() {
             guardando={guardandoTratamiento}
             onGuardado={recargarTratamientos}
           />
+          <EventCorrectionRecoveryButton onRecover={setEventoSeleccionado}/>
           <EditarEventoDialog
             open={!!eventoSeleccionado}
             onOpenChange={(o) => {
