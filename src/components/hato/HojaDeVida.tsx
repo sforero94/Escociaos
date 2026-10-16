@@ -407,7 +407,7 @@ export function HojaDeVida() {
           <MuerteAnimalDialog
             open={muerteOpen}
             onOpenChange={setMuerteOpen}
-            animalId={animal.id}
+            animal={animal}
             onGuardado={reload}
           />
         </>
