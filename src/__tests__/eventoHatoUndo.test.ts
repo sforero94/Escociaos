@@ -264,15 +264,14 @@ describe('contrato del tratamiento en el código', () => {
       // sin decidir cómo lo clasifica `derivarEstadoReproductivo` tira al
       // animal a `indeterminado` (trampa documentada en S3/T4a).
       expect(fuente).toMatch(/tratamiento:\s*\{[^}]*tipo:\s*null/);
-      // El insert de `hato_eventos` toma su tipo de `def.tipo`, así que con
-      // `tipo: null` no hay forma de que el tratamiento llegue ahí -- pero
-      // solo si el camino del RPC RETORNA antes de ese insert.
+      // Treatment must return before the protected quick-event caller; no direct insert remains.
       const idxRpc = fuente.indexOf('if(def.esTratamiento){');
       const idxRetorno = fuente.indexOf('return await confirmTreatment(', idxRpc);
-      const idxInsertEventos = fuente.indexOf('animal_id: vaca!.animal_id,\n          tipo: def.tipo,');
+      const idxInsertEventos = fuente.indexOf('return await confirmQuick(');
       expect(idxRpc).toBeGreaterThan(-1);
       expect(idxRetorno).toBeGreaterThan(idxRpc);
       expect(idxInsertEventos).toBeGreaterThan(idxRetorno);
+      expect(fuente).not.toMatch(/\.insert\(/);
       // La verificación de duplicados de la 139 consulta `hato_eventos` por
       // `def.tipo`, que para el tratamiento es `null`: `tipo=eq.null` no es
       // `is.null` y no responde nada útil. Tiene que saltarse.
@@ -335,36 +334,20 @@ describe('contrato del tratamiento en el código', () => {
 
 describe('contrato en el código (no volver al callback largo ni al catch mentiroso)', () => {
   for (const ruta of COPIAS_CONVERSACION) {
-    it(`${ruta} no concatena usoId en el callback`, () => {
-      const fuente = leer(ruta);
-      expect(fuente).not.toMatch(/hato_ev_undo:\$\{[^}]+\}:\$\{/);
-      expect(fuente).toContain('construirCallbackDeshacerEvento');
-    });
-
-    it(`${ruta} resuelve telegram_usuarios en el instante de escribir`, () => {
-      const fuente = leer(ruta);
-      expect(fuente).toContain('ctx.from?.id');
-      expect(fuente).toContain('resolverUsuarioTelegram');
-      // La lectura al entrar al flujo es la que dejaba created_by en NULL
-      // cuando el plugin replayaba sin ctx.telegramUser.
+    it(`${ruta} delegates writes and recovery to protected original-action callers`, () => {
+      const fuente=leer(ruta);
+      expect(fuente).toContain('confirmQuick(conversation,ctx,getSupabaseAdmin');
+      expect(fuente).toContain('confirmBirth(conversation,ctx,getSupabaseAdmin');
+      expect(fuente).not.toMatch(/\.insert\(|\.update\(|\.delete\(/);
       expect(fuente).not.toMatch(/const usuarioId = ctx\.telegramUser/);
-    });
-
-    it(`${ruta} no trata un fallo del reply de éxito como fallo de escritura`, () => {
-      const fuente = leer(ruta);
-      expect(fuente).toContain('let escrito = false');
-      // Copia actualizada el 2026-09-09: el flujo tambien registra
-      // tratamientos, que NO son eventos del ciclo, asi que el mensaje pasó
-      // de "El evento" a "El registro". La guarda sigue siendo el literal
-      // exacto a proposito -- lo que protege es que ese mensaje exista y
-      // salga DESPUES de `escrito = true`, nunca el catch de error.
-      expect(fuente).toContain('El registro quedó guardado');
-      const idxEscrito = fuente.indexOf('escrito = true');
-      const idxReply = fuente.lastIndexOf('ctx.reply(textoExito');
-      const idxCatch = fuente.lastIndexOf('Error registrando el evento');
-      expect(idxEscrito).toBeGreaterThan(-1);
-      expect(idxReply).toBeGreaterThan(idxEscrito);
-      expect(idxCatch).toBeGreaterThan(idxReply);
+      const caller=leer(ruta.replace('conversations/eventoHato.ts','quickCreation.ts'));
+      expect(caller).toContain('privateQuickAction(ctx)');
+      expect(caller).toContain("callback_data:'hato_ev_undo:'");
+      expect(caller).toContain("'status'");
+      expect(caller).toContain('Conserve su mensaje; no cree un reemplazo.');
+      const sql=leer('src/sql/security-candidates/hato-quick-telegram.sql');
+      expect(sql).toContain('hato_treatment_creation.telegram_actor(p_sender,p_chat,p_message)');
+      expect(sql).toContain('Quick final authority/source mismatch');
     });
   }
 

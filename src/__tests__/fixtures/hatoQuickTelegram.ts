@@ -1,0 +1,10 @@
+import {prepared as cyclePrepared} from './hatoCycle';
+import {KEY,OTHER} from './hatoDeath';
+import {expectedQuickPlan,type QuickActor,type QuickIntent,type QuickResult} from '@/utils/hato/hatoQuickTelegramProtocol';
+export {KEY,OTHER,OWNER,ANIMAL} from './hatoDeath';
+export const action={sender:789,chatId:789,messageId:91};
+export const BULL='70000000-0000-4000-8000-000000000091',LOT='70000000-0000-4000-8000-000000000092';
+export const actor:QuickActor={origin:'telegram',registrationId:OTHER,profileId:null,sender:789,displayName:'Synthetic field worker'};
+export const intent:QuickIntent={version:1,animalId:cyclePrepared().intent!.animalId,fecha:'2026-10-14',kind:'inseminacion',toroId:BULL,pajillaId:LOT,observedAnimal:cyclePrepared().original!.graph.animal};
+export function prepared(p=intent,a=actor):QuickResult{const source=cyclePrepared().original!;source.graph.animal=structuredClone(p.observedAnimal);source.animals=[source.graph.animal];const original={...source,toros:[{id:BULL,nombre:'Synthetic AI bull',tipo:p.kind==='monta'?'monta':'inseminacion',activo:true}],lots:[{id:LOT,toro_id:BULL,cantidad_inicial:0,activa:true}],uses:[],stock:[{pajilla_id:LOT,toro_id:BULL,cantidad_inicial:0,usos:0,cantidad_actual:0}]};return {version:1,requestKey:KEY,action,actor:a,state:'pending',intent:structuredClone(p),original,plan:expectedQuickPlan(p,original,{event:'70000000-0000-4000-8000-000000000081',usage:p.pajillaId?'70000000-0000-4000-8000-000000000082':null},a),effectiveDate:'2026-10-16',receipt:null};}
+export function committed(r=prepared()):QuickResult{const q=structuredClone(r),time='2026-10-16T13:00:00.123456+00:00';q.state='committed';q.receipt={version:1,requestKey:q.requestKey!,actor:structuredClone(q.actor),action:structuredClone(q.action),intent:q.intent!,original:q.original!,plan:q.plan!,effectiveDate:q.effectiveDate!,recordedAt:time,after:{...structuredClone(q.original!.graph),events:[...q.original!.graph.events,...q.plan!.events.map((e):Record<string,unknown>=>({...e,created_at:time}))].sort((a,b)=>String(a.id).localeCompare(String(b.id)))},usage:q.plan!.usage?{...q.plan!.usage,created_at:time}:null};return q;}

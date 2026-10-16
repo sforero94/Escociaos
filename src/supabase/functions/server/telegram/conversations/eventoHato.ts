@@ -1,3 +1,4 @@
+import {confirmQuick} from '../quickCreation.ts';
 // telegram/conversations/eventoHato.ts — Registro en campo de eventos del
 // ciclo reproductivo (N5-N9 del plan
 // docs/plan_hato_telegram_estados_agosto_2026.md).
@@ -44,14 +45,6 @@ import {
 } from "../../calculos-hato.ts";
 import { construirHatoConfigDesdeFilas } from "../../hato-config-desde-tabla.ts";
 
-import {
-  construirCallbackDeshacerEvento,
-  construirCallbackDeshacerTratamiento,
-} from "../eventoHatoUndo.ts";
-import {
-  mensajeResolverUsuarioTelegram,
-  resolverUsuarioTelegram,
-} from "../resolverUsuarioTelegram.ts";
 import { ofrecerPasosPendientes, type PasoTratamientoPendiente } from "../confirmarPasoTratamiento.ts";
 import {confirmBirth} from '../birthCreation.ts';
 import { confirmTreatment, readOriginalTreatmentAnimal } from '../treatmentCreation.ts';
@@ -279,7 +272,7 @@ export async function eventoHatoConversation(
   conversation: Conversation<BotContext>,
   ctx: BotContext,
 ) {
-  let escrito = false;
+
   try {
     // ── Paso 1: ¿qué pasó? ────────────────────────────────────────────
     const kbTipo = new InlineKeyboard()
@@ -394,9 +387,9 @@ export async function eventoHatoConversation(
       vaca = encontradas[Number(cbVaca.callbackQuery.data.replace("vaca_", ""))];
     }
 
-    const observedAnimal = (def.esTratamiento||clave==='parto') ? await conversation.external(() =>
+    const observedAnimal = await conversation.external(() =>
       readOriginalTreatmentAnimal(getSupabaseAdmin(),ctx,vaca!.animal_id)
-    ) : null;
+    );
 
     const estadoActual = derivarEstadoReproductivo(vaca.fila, config, hoyBogota());
 
@@ -440,10 +433,6 @@ export async function eventoHatoConversation(
         ),
       });
       if (!continuar) return;
-      // El paso anterior ya tuvo su mensaje de éxito. La escritura del
-      // tratamiento NUEVO todavía no ocurrió: un fallo no debe decir que
-      // este segundo registro quedó guardado.
-      escrito = false;
     }
 
     // ── Paso 4: fecha ─────────────────────────────────────────────────
@@ -902,145 +891,12 @@ export async function eventoHatoConversation(
     // Parto and its optional retained calf use one protected original private action.
     if(clave==='parto')return await confirmBirth(conversation,ctx,getSupabaseAdmin,{version:1,animalId:vaca!.animal_id,fecha,criaDestino:criaDestino as 'retenida'|'hembra_vendida'|'macho_vendido'|'muerta'|'aborto'|null,observedAnimal:observedAnimal!});
 
-    const kbConfirmar = new InlineKeyboard()
-      .text("✅ Guardar", "ok")
-      .text("❌ Cancelar", "cancel_flow");
-    await ctx.reply(`${resumen}\n\n¿Guardo?`, {
-      reply_markup: kbConfirmar,
-      parse_mode: "Markdown",
-    });
+    return await confirmQuick(conversation,ctx,getSupabaseAdmin,{version:1,animalId:vaca!.animal_id,fecha,kind:clave as 'monta'|'inseminacion'|'secado'|'aborto',toroId:toro?.id??null,pajillaId:toro?.pajillaId??null,observedAnimal:observedAnimal!});
 
-    const cbOk = await conversation.waitForCallbackQuery(["ok", "cancel_flow"]);
-    await cbOk.answerCallbackQuery();
-    if (cbOk.callbackQuery.data === "cancel_flow") {
-      await ctx.reply("Nada se guardó.");
-      return conversation.halt();
-    }
-
-    // ── Paso 8: escribir ──────────────────────────────────────────────
-    const guardado = await conversation.external(async () => {
-      const sb = getSupabaseAdmin();
-      // `ctx.telegramUser` es flavor propio y no sobrevive el replay del
-      // plugin de conversaciones (hallazgo 2026-08-28 en excepcionDavid;
-      // issue #273). `ctx.from.id` sí es nativo de grammY. Se reconsulta
-      // acá, en el instante de escribir: si se leyera al entrar al flujo,
-      // un replay tardío dejaría created_by y registrado_por en NULL —
-      // que es lo que quedó en las dos filas de Martha del 2026-09-08.
-      const resuelto = await resolverUsuarioTelegram(sb, ctx.from?.id);
-      if (!resuelto.ok) {
-        throw new Error(mensajeResolverUsuarioTelegram(resuelto.motivo));
-      }
-      const { usuarioId, nombreDisplay } = resuelto;
-
-      const datosEvento: Record<string, unknown> = {
-        origen: "telegram",
-        registrado_por: nombreDisplay,
-      };
-
-      const { data, error } = await sb
-        .from("hato_eventos")
-        .insert({
-          animal_id: vaca!.animal_id,
-          tipo: def.tipo,
-          fecha,
-          // El humano estuvo ahí: la fecha es exacta, no una reconstrucción
-          // a partir de una planilla.
-          fecha_confianza: "exacta",
-          tipo_servicio: def.tipoServicio ?? null,
-          toro_id: toro?.id ?? null,
-          cria_destino: criaDestino,
-          cria_id: null,
-          fuente: "telegram",
-          // chequeo_vaca_id se deja NULL: es lo que vuelve este evento
-          // intocable por fn_hato_commit_chequeo (065).
-          datos: datosEvento,
-          created_by: usuarioId,
-        })
-        .select("id")
-        .single();
-      if (error) {
-        // 23505 = `hato_eventos_manual_unico` (139). Llega acá solo si Martha
-        // pasó por encima del aviso del paso 6, o si otro registró lo mismo
-        // mientras ella confirmaba. No es un error técnico que reportar.
-        if ((error as { code?: string }).code === "23505") {
-          throw new Error(
-            "Este evento ya estaba registrado para esta vaca en esta fecha. No se guardó de nuevo, así que no hay nada que deshacer.",
-          );
-        }
-        throw new Error(`No se pudo guardar: ${error.message}`);
-      }
-
-      // Uso de pajilla: se registra DESPUÉS del evento y su fallo no tumba el
-      // evento — la preñez es el hecho importante, el descuento de inventario
-      // es contabilidad que Martha puede corregir.
-      let usoId: string | null = null;
-      if (toro?.pajillaId) {
-        const { data: uso, error: usoErr } = await sb
-          .from("hato_pajillas_uso")
-          .insert({
-            pajilla_id: toro.pajillaId,
-            fecha_uso: fecha,
-            animal_id: vaca!.animal_id,
-            created_by: usuarioId,
-          })
-          .select("id")
-          .single();
-        if (usoErr) {
-          // 23505 = `hato_pajillas_uso_unico` (139): esa pajilla ya estaba
-          // descontada para esta vaca y esta fecha. El inventario ya es
-          // correcto, así que no hay nada que arreglar ni que reportar.
-          const yaDescontada = (usoErr as { code?: string }).code === "23505";
-          console.error(
-            yaDescontada
-              ? "[Telegram] La pajilla ya estaba descontada para esta vaca y fecha; no se descuenta de nuevo."
-              : `[Telegram] No se pudo descontar la pajilla: ${usoErr.message}`,
-          );
-        } else {
-          usoId = uso!.id as string;
-          // Anotar el id en datos: el callback de Deshacer ya no cabe dos
-          // UUID (límite de 64 bytes). Si este UPDATE falla, el handler
-          // busca el uso por vaca+fecha+cercanía temporal.
-          const { error: linkErr } = await sb
-            .from("hato_eventos")
-            .update({ datos: { ...datosEvento, pajilla_uso_id: usoId } })
-            .eq("id", data!.id);
-          if (linkErr) {
-            console.error(
-              "[Telegram] No se pudo anotar pajilla_uso_id en el evento:",
-              linkErr.message,
-            );
-          }
-        }
-      }
-      return { tratamientoId: null, eventoId: data!.id as string, usoId, cria: null, errorCria: null };
-    });
-    escrito = true;
-
-    const textoExito =
-      `✅ Registrado.\n\n${resumen}\n\nSi te equivocaste de vaca, usa Deshacer.\nUsa /start para volver al menú.`;
-    const textoExitoSinBoton =
-      `✅ Registrado.\n\n${resumen}\n\nEl registro quedó guardado. Usa /start para volver al menú.`;
-    try {
-      const kbDeshacer = new InlineKeyboard().text(
-        "↩️ Deshacer",
-        guardado.tratamientoId
-          ? construirCallbackDeshacerTratamiento(guardado.tratamientoId)
-          : construirCallbackDeshacerEvento(guardado.eventoId!),
-      );
-      await ctx.reply(textoExito, { reply_markup: kbDeshacer, parse_mode: "Markdown" });
-    } catch (replyErr: unknown) {
-      const msgReply = replyErr instanceof Error ? replyErr.message : "Error desconocido";
-      console.error("[Telegram] Evento hato: escrito, fallo al enviar Deshacer:", msgReply);
-      await ctx.reply(textoExitoSinBoton, { parse_mode: "Markdown" });
-    }
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Conversation already halted") return;
     const msg = err instanceof Error ? err.message : "Error desconocido";
     console.error("[Telegram] Evento hato conversation error:", msg);
-    if (escrito) {
-      await ctx.reply("✅ El registro quedó guardado. Usa /start para volver al menú.");
-      return;
-    }
     await ctx.reply(`Error registrando el evento: ${msg}\n\nUsa /start para volver al menú.`);
   }
 }

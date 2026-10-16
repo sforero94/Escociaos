@@ -21,3 +21,5 @@ October15 clarification from Santiago (Option1): a new manual Hato alert of type
 
 
 October16 clarification from Santiago (Option1): Estado is read-only in the general Editar animal dialog. Real state changes use only the dedicated sale, death and reactivation flows. Historical state corrections require separate review with Santiago. No history rewrite, invented income or invented events is authorized. The general editor must omit estado from its write payload, including stale or extra runtime fields. Remaining database writer retirement and general-edit CAS/retry/audit remain separate required gates.
+
+October16 clarification from Santiago (10:53 ET, Option1, `hato_quick_event_selected_pajilla_failure_policy`): a Telegram insemination with an explicitly selected pajilla lot commits its clinical event and pajilla usage all-or-nothing. A known usage/link failure rolls back both; the user can review and retry the same original action. Zero/negative stock is warning-only. Historical events/usages stay unchanged; no inferred historical association or repair is authorized. Unknown outcomes require recovery of the original action, never automatic replacement.

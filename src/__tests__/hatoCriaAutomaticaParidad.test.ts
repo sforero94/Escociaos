@@ -99,8 +99,8 @@ describe('criaAutomatica — los escritores la usan de verdad', () => {
 
   it.each(CONVERSACIONES)('%s prepara parto/cría antes de cualquier escritor directo', (rel) => {
     const src=leer(rel);expect(src).toContain("if(clave==='parto')return await confirmBirth");
-    expect(src.indexOf("if(clave==='parto')return await confirmBirth")).toBeLessThan(src.indexOf('const guardado = await conversation.external'));
-    expect(src).not.toMatch(/crearFichaCriaConReintento\(|debeCrearFichaCria\(|errBorrarCria/);
+    expect(src.indexOf("if(clave==='parto')return await confirmBirth")).toBeLessThan(src.indexOf('return await confirmQuick('));
+    expect(src).not.toMatch(/crearFichaCriaConReintento\(|debeCrearFichaCria\(|errBorrarCria|\.insert\(/);
     const protocol=leer(rel.replace('/conversations/eventoHato.ts','/birthCreationProtocol.ts'));
     for(const helper of ['construirFichaCria','calcularSiguienteChapetaCria','elegirToroDelServicio'])expect(protocol).toContain(helper+'(');
     expect(protocol).toContain("'fn_hato_birth_telegram'");

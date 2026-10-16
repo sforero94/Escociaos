@@ -231,7 +231,13 @@ describe('regla: nunca ctx.telegramUser.usuario_id en escrituras ni write-gates'
     for (const rel of CONVERSACIONES) {
       it(`${arbol}/${rel} atribuye vía resolverUsuarioTelegram`, () => {
         const fuente = sinComentarios(leer(`${arbol}/${rel}`));
-        expect(fuente).toContain('resolverUsuarioTelegram');
+        if(rel==='conversations/eventoHato.ts'){
+          expect(fuente).toContain('confirmQuick(conversation,ctx,getSupabaseAdmin');
+          expect(fuente).not.toMatch(/\.insert\(|\.update\(|\.delete\(/);
+          const sql=leer('src/sql/security-candidates/hato-quick-telegram.sql');
+          expect(sql).toContain('hato_treatment_creation.telegram_actor(p_sender,p_chat,p_message)');
+          expect(sql).toContain('Quick final authority/source mismatch');
+        }else expect(fuente).toContain('resolverUsuarioTelegram');
         expect(fuente).not.toMatch(USUARIO_ID_DEL_FLAVOR);
       });
     }
