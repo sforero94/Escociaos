@@ -111,7 +111,6 @@ const DEUDA_TABLA_CRUDA: readonly string[] = [
   'components/hato/PajillasView.tsx',
   'components/hato/components/ChequeoDiffReview.tsx',
   'components/hato/components/ProduccionQuincenalDialog.tsx',
-  'components/hato/components/RankingVacas.tsx',
   'components/hato/components/RevisionPesajeFoto.tsx',
   'components/inventory/InventoryList.tsx',
   'components/inventory/PurchaseHistory.tsx',
@@ -267,13 +266,16 @@ describe('trinquete: <table> crudo solo se permite si está declarado en DEUDA_T
       expect(realSources.has(UI_TABLE_REL)).toBe(false);
     });
 
-    it('el conteo de deuda real de hoy es 34 (visible en el diff si alguien lo cambia sin querer)', () => {
+    it('el conteo de deuda real de hoy es 33 (visible en el diff si alguien lo cambia sin querer)', () => {
+      // Bajó de 34 a 33: Producción v2 del hato (2026-10-16) borró
+      // `components/hato/components/RankingVacas.tsx`; su reemplazo, el top 5
+      // / bottom 5 de `ProduccionPesadaBloque`, no usa tabla.
       // Bajó de 35 a 34: Fase 6 de docs/plan_verificacion_inventario.md borró
       // `components/inventory/NuevaVerificacion.tsx` (D-T11 del brief técnico
       // -- creaba 226 renglones sin selección posible, fuera de alcance del
       // rediseño; su reemplazo, `fn_ronda_abrir`, no tiene UI de conteo
       // producto-por-producto).
-      expect(DEUDA_TABLA_CRUDA.length).toBe(34);
+      expect(DEUDA_TABLA_CRUDA.length).toBe(33);
     });
 
     it('regla 1 — ningún archivo con <table> crudo fuera de la lista declarada', () => {

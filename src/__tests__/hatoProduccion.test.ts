@@ -19,6 +19,8 @@ import {
   vejezPesajes,
   fechaAnclaProduccion,
   proyectarHato,
+  proyeccionVacasCongeladas,
+  litrosProyectadosVaca,
   promedioLitrosPorVaca,
   tendenciaSemanalVaca,
   reconstruirEstadoAFecha,
@@ -517,6 +519,14 @@ describe('proyectarHato -- tramo proyectado (hato congelado + tendencia por vaca
     expect(s1.litrosDia).toBeCloseTo(22, 10); // 20 + 2*1
     expect(s2.litrosDia).toBeCloseTo(24, 10); // 20 + 2*2
     expect(s1.planas).toEqual([]);
+    const vacas = proyeccionVacasCongeladas({
+      pesajes: serieVaca('v1', 20, 2),
+      fechaReferencia: '2026-07-28',
+      semanasTendencia: 4,
+    });
+    expect(vacas).toHaveLength(1);
+    expect(litrosProyectadosVaca(vacas[0], 1)).toBeCloseTo(s1.litrosDia ?? 0, 10);
+    expect(litrosProyectadosVaca(vacas[0], 2)).toBeCloseTo(s2.litrosDia ?? 0, 10);
   });
 
   it('el numero de vacas NO cambia en el horizonte: es el del ultimo pesaje', () => {

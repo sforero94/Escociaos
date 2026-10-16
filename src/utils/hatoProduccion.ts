@@ -574,7 +574,15 @@ export function ventanaDiasRanking(ventana: VentanaRanking, fechaReferencia: str
 /** Subconjunto de `hato_pesajes_leche` (migración 054/061) que este motor
  * consume -- litros/vaca/día de pesaje, NUNCA litros/quincena (ver cabecera
  * de este archivo, trampa de unidades R-4). */
-export type PesajeLecheVaca = Pick<HatoPesajeLeche, 'animal_id' | 'fecha' | 'litros_total'>;
+export type PesajeLecheVaca = Pick<HatoPesajeLeche, 'animal_id' | 'fecha' | 'litros_total'> & {
+  /** Opcionales: el ranking no los usa. La vista de litros pesados sí, para
+   * dejar fuera un turno incompleto (solo AM o solo PM). */
+  litros_am?: number | null;
+  litros_pm?: number | null;
+  /** `hato_pesajes_leche.fuente` (web | telegram | foto | importacion). Lo
+   * usa Cargas para decir por dónde entró cada pesaje. */
+  fuente?: string | null;
+};
 
 export interface OpcionesRendimientoVaca {
   /** Ventana móvil en semanas para el promedio "actual". Default 4
@@ -897,6 +905,75 @@ export function tendenciaSemanalVaca(puntos: Array<{ semana: number; litros: num
   return num / den;
 }
 
+/** Una vaca del hato congelado, con la recta que `proyectarHato` le aplica.
+ * Extraída para que la vista por vaca use la MISMA pendiente y el MISMO
+ * ancla que el total del hato -- no una segunda fórmula. */
+export interface ProyeccionVacaCongelada {
+  animalId: string;
+  /** Litros del último pesaje de la vaca dentro de la ventana de tendencia. */
+  base: number;
+  /** Litros por semana. `0` cuando no hay dos puntos (`plana`). */
+  pendiente: number;
+  plana: boolean;
+}
+
+/** `max(0, último_valor + pendiente × k)`. `k` es el número de semanas
+ * hacia adelante desde el ancla (1 = la primera semana proyectada). */
+export function litrosProyectadosVaca(vaca: Pick<ProyeccionVacaCongelada, 'base' | 'pendiente'>, k: number): number {
+  return Math.max(0, vaca.base + vaca.pendiente * k);
+}
+
+/**
+ * Hato congelado en las vacas del último pesaje (ventana [ancla−6, ancla]),
+ * cada una con su tendencia de `semanasTendencia`. Es el corazón de
+ * `proyectarHato`: el total proyectado de una semana es la suma de
+ * `litrosProyectadosVaca` sobre este arreglo, y nada más.
+ */
+export function proyeccionVacasCongeladas(input: {
+  pesajes: PesajeLecheVaca[];
+  fechaReferencia: string;
+  semanasTendencia?: number;
+}): ProyeccionVacaCongelada[] {
+  const { pesajes, fechaReferencia, semanasTendencia = 4 } = input;
+  const inicioSemana0 = sumarDias(fechaReferencia, -6);
+  const rosterUltimoPesaje = [
+    ...new Set(pesajes.filter((p) => p.fecha >= inicioSemana0 && p.fecha <= fechaReferencia).map((p) => p.animal_id)),
+  ];
+
+  // Valor por (vaca, semana) dentro de la ventana de tendencia. Se PROMEDIA
+  // si una vaca tiene dos pesajes en la misma semana -- sumarlos diría que
+  // produjo el doble ese día, que es la trampa de unidades del módulo en
+  // miniatura.
+  const puntosPorVaca = new Map<string, Map<number, number[]>>();
+  const inicioTendencia = sumarDias(fechaReferencia, -(semanasTendencia * 7 - 1));
+  for (const p of pesajes) {
+    if (p.fecha < inicioTendencia || p.fecha > fechaReferencia) continue;
+    const semana = -Math.floor(diferenciaDias(p.fecha, fechaReferencia) / 7);
+    if (!puntosPorVaca.has(p.animal_id)) puntosPorVaca.set(p.animal_id, new Map());
+    const porSemana = puntosPorVaca.get(p.animal_id)!;
+    if (!porSemana.has(semana)) porSemana.set(semana, []);
+    porSemana.get(semana)!.push(p.litros_total);
+  }
+
+  const proyecciones: ProyeccionVacaCongelada[] = [];
+  for (const animalId of rosterUltimoPesaje) {
+    const porSemana = puntosPorVaca.get(animalId);
+    if (!porSemana) continue;
+    const puntos = [...porSemana.entries()]
+      .map(([semana, litros]) => ({ semana, litros: litros.reduce((a, b) => a + b, 0) / litros.length }))
+      .sort((a, b) => a.semana - b.semana);
+    const ultimo = puntos[puntos.length - 1];
+    const pendiente = tendenciaSemanalVaca(puntos);
+    proyecciones.push({
+      animalId,
+      base: ultimo.litros,
+      pendiente,
+      plana: puntos.length < 2,
+    });
+  }
+  return proyecciones;
+}
+
 /**
  * Serie del tracker: `ventanaMedidaSemanas` semanas MEDIDAS hacia atrás +
  * `horizonteSemanas` semanas PROYECTADAS hacia adelante, todo en litros/día
@@ -962,56 +1039,15 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
 
   if (horizonteSemanas < 1) return resultado;
 
-  // --- Hato congelado: las vacas del ÚLTIMO PESAJE ---------------------------
-  // La ventana de la semana 0 se recalcula aquí en vez de leerse del tramo
-  // de arriba a propósito: con `ventanaMedidaSemanas = 0` ese tramo no
-  // existe, y la proyección no debe depender de cuántas semanas medidas
-  // pidió dibujar el llamador.
-  const inicioSemana0 = sumarDias(fechaReferencia, -6);
-  const rosterUltimoPesaje = [
-    ...new Set(pesajes.filter((p) => p.fecha >= inicioSemana0 && p.fecha <= fechaReferencia).map((p) => p.animal_id)),
-  ];
-
-  // Valor por (vaca, semana) dentro de la ventana de tendencia. Se PROMEDIA
-  // si una vaca tiene dos pesajes en la misma semana -- sumarlos diría que
-  // produjo el doble ese día, que es la trampa de unidades del módulo en
-  // miniatura.
-  const puntosPorVaca = new Map<string, Map<number, number[]>>();
-  const inicioTendencia = sumarDias(fechaReferencia, -(semanasTendencia * 7 - 1));
-  for (const p of pesajes) {
-    if (p.fecha < inicioTendencia || p.fecha > fechaReferencia) continue;
-    const semana = -Math.floor(diferenciaDias(p.fecha, fechaReferencia) / 7);
-    if (!puntosPorVaca.has(p.animal_id)) puntosPorVaca.set(p.animal_id, new Map());
-    const porSemana = puntosPorVaca.get(p.animal_id)!;
-    if (!porSemana.has(semana)) porSemana.set(semana, []);
-    porSemana.get(semana)!.push(p.litros_total);
-  }
-
-  interface ProyeccionVaca {
-    animalId: string;
-    base: number;
-    pendiente: number;
-    plana: boolean;
-  }
-  const proyeccionesVaca: ProyeccionVaca[] = [];
-  for (const animalId of rosterUltimoPesaje) {
-    const porSemana = puntosPorVaca.get(animalId);
-    if (!porSemana) continue; // imposible por construcción (está en el roster), pero nunca se divide a ciegas
-    const puntos = [...porSemana.entries()]
-      .map(([semana, litros]) => ({ semana, litros: litros.reduce((a, b) => a + b, 0) / litros.length }))
-      .sort((a, b) => a.semana - b.semana);
-    const ultimo = puntos[puntos.length - 1];
-    const pendiente = tendenciaSemanalVaca(puntos);
-    proyeccionesVaca.push({
-      animalId,
-      base: ultimo.litros,
-      pendiente,
-      plana: puntos.length < 2,
-    });
-  }
+  // La ventana de la semana 0 se recalcula dentro de
+  // `proyeccionVacasCongeladas` en vez de leerse del tramo de arriba a
+  // propósito: con `ventanaMedidaSemanas = 0` ese tramo no existe, y la
+  // proyección no debe depender de cuántas semanas medidas pidió dibujar
+  // el llamador.
+  const proyeccionesVaca = proyeccionVacasCongeladas({ pesajes, fechaReferencia, semanasTendencia });
 
   // --- Semanas proyectadas: 1 .. horizonteSemanas -----------------------------
-  const idsRoster = new Set(rosterUltimoPesaje);
+  const idsRoster = new Set(proyeccionesVaca.map((v) => v.animalId));
   const planas = proyeccionesVaca.filter((v) => v.plana).map((v) => v.animalId);
 
   for (let k = 1; k <= horizonteSemanas; k++) {
@@ -1028,7 +1064,7 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
       }
     }
 
-    const litrosDia = proyeccionesVaca.reduce((acc, v) => acc + Math.max(0, v.base + v.pendiente * k), 0);
+    const litrosDia = proyeccionesVaca.reduce((acc, v) => acc + litrosProyectadosVaca(v, k), 0);
 
     resultado.push({
       semana: k,
@@ -1058,11 +1094,10 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
  *
  * El denominador es `vacasBase`, que bajo el método de proyección vigente
  * (hato congelado en el último pesaje) es siempre el conjunto exacto que
- * compone `litrosDia`, semana medida o proyectada. El tracker solo lo
- * grafica sobre las semanas MEDIDAS -- el promedio no se proyecta
- * (decisión del dueño 2026-08-29): con el hato congelado, proyectarlo
- * sería el total proyectado dividido entre una constante, o sea la misma
- * barra otra vez y no información nueva.
+ * compone `litrosDia`, semana medida o proyectada. El tracker de barras no
+ * lo graficaba en las semanas proyectadas (decisión del dueño 2026-08-29).
+ * La vista de litros pesados sí dibuja ese promedio proyectado, como línea
+ * punteada, y `totalLitrosMedidos` lo deja fuera de los totales.
  *
  * `null` -- nunca 0 -- cuando la semana no tiene dato o no tiene ninguna
  * vaca, misma regla que el resto del módulo.

@@ -4,6 +4,7 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
+  Upload,
   Package,
   Sprout,
   Activity,
@@ -117,6 +118,7 @@ const NAV: NavEntry[] = [
     id: 'hato', label: 'Hato Lechero', icon: CowIcon, modulo: 'hato_lechero', children: [
       { id: 'hato-tablero', label: 'Tablero', icon: LayoutDashboard, path: '/hato-lechero', exact: true },
       { id: 'hato-produccion', label: 'Producción', icon: TrendingUp, path: '/hato-lechero/produccion' },
+      { id: 'hato-cargas', label: 'Cargas', icon: Upload, path: '/hato-lechero/cargas' },
       { id: 'hato-hato', label: 'Hato', icon: Beef, path: '/hato-lechero/hato' },
       { id: 'hato-chequeos', label: 'Chequeos', icon: ClipboardCheck, path: '/hato-lechero/chequeos' },
       { id: 'hato-alertas', label: 'Alertas', icon: Bell, path: '/hato-lechero/alertas' },
