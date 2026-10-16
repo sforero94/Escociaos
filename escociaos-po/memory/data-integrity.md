@@ -806,3 +806,10 @@ Clima: 09-21..27 todos 288 lecturas, ok salvo 09-26 reconstruido 0,00. Candado 1
 - TECNICA: para auditar un dia 'reconstruido' mirar la fila de 00:00:02 Bogota y su lluvia_diaria_actualizada_en (la poda de las 05:15Z borra las primeras lecturas del dia anterior). [corrida: 2026-10-15-jueves]
 - Navegacion: hato_alertas_tick_runs usa `ejecutado_at`; telegram_alertas_suscripciones usa `alerta_clave` + `telegram_usuario_id`; clima_resumen_diario no tiene updated_at. [corrida: 2026-10-15-jueves]
 - Lineas base: hato_eventos 796 · animales 180 · chv 1.513 · pesajes 706 · tratamientos 27 · alertas 128 · tick_runs 48 · quincenal 85 · capturas_foto 7 · hato_correcciones 21 · monitoreos 4.270 (86 ronda NULL) · mov_inventario 170 · md 189 / mdp 823 · compras 32 · rt 3.167 · fin_gastos 4.592 · fin_ingresos 235 · gan_movimientos 56 · aplicaciones 21 (1 abierta) · globalgap_correcciones 165 · clima_resumen_diario 1.964 · logs_auditoria 0 · ledger max 20261012154108. [corrida: 2026-10-15-jueves]
+
+## Corrida 2026-10-16-viernes
+- `lotes` no tiene triggers: un UPDATE no deja rastro en globalgap_correcciones ni hato_correcciones; el respaldo en `respaldos` es el unico registro. 16 FK entrantes; unica vista dependiente `vista_tareas_resumen`. [corrida: 2026-10-16-viernes]
+- Evidencia de erradicacion de lotes: tarea «Socas», tipo «Erradicacion», en registros_trabajo. Pedregal 02-12; La Union 03-30..04-08; Irlanda 03-27..07-18 (cosecha 06-06); Acueducto 05-20..07-17; Santa Rosa sin registros. [corrida: 2026-10-16-viernes]
+- po_sonda acepta el fichero entero de una migracion (varios bloques DO) como UN elemento del arreglo de pasos. [corrida: 2026-10-16-viernes]
+- Una guarda que pasa una linea base entre bloques DO con set_config NO es «solo RAISE» y falla con 22P02 fuera de una transaccion: la revision adversarial la tumbo en la 181. Usar guardas autocontenidas por bloque. [corrida: 2026-10-16-viernes]
+- Antes de un cambio de datos sobre `lotes.activo`, listar los ~12 lectores que filtran `activo=true`; useCostoKg saca el lote de TODOS los anios. [corrida: 2026-10-16-viernes]

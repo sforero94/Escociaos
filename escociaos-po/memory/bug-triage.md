@@ -831,3 +831,8 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - #327 (alerta de silencio de la estacion) revisado: sin defecto que dispare (arboles identicos; gate fuera del try; claim upsert ignoreDuplicates; claim liberado si nadie recibe; join por FK de 096). #326 es solo DROP FUNCTION, 0 referencias. [corrida: 2026-10-15-jueves]
 - Punto ciego conocido, NO defecto hoy: `clima_lecturas.timestamp` viene de `ecowitt.time` (hora de respuesta, clima.tsx:142). Si Ecowitt devolviera datos viejos no vacios, el aviso de silencio no dispararia. Detectar: `timestamp - lluvia_diaria_actualizada_en` crece por horas (hoy max 0,04 h). [corrida: 2026-10-15-jueves]
 - chat_messages 0 filas desde 10-12; telegram_mensajes solo registra salientes. [corrida: 2026-10-15-jueves]
+
+## Corrida 2026-10-16-viernes
+- ESCO-153 en PR #330: `handleChatMessage` comprueba propiedad con `conversacionPerteneceAUsuario` (`chat-propiedad.ts`, puro, dos arboles) antes de leer/escribir `chat_*`; 404 si falla. El service role salta la RLS de `chat_*`, asi que este chequeo es la unica frontera; no re-filar como hueco de RLS. Guarda: `escoChatPropiedadConversacion.test.ts`. [corrida: 2026-10-16-viernes]
+- ESCO-139 codigo en PR #331: `cargarLotesCosto` degrada en 42703/PGRST204 a `activo=true` con periodo completo; las cifras cambian solo cuando la 182 escribe fechas. [corrida: 2026-10-16-viernes]
+- El cliente Supabase tipado da TS2352 cuando un select nombra una columna ausente de `database.ts`; una columna de migracion sin aplicar necesita `as unknown as T`. [corrida: 2026-10-16-viernes]
