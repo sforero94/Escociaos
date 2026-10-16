@@ -118,10 +118,16 @@ describe('criaAutomatica — los escritores la usan de verdad', () => {
     expect(sql).toContain('Only provably standalone Telegram events');
   });
 
-  it('el navegador crea la ficha al marcar "parida"', () => {
-    const src = leer('src/components/hato/hooks/useMarcarCicloHato.ts');
-    expect(src).toContain("@/utils/hato/criaAutomatica");
-    expect(src).toMatch(/crearFichaCriaConReintento\(/);
-    expect(src).toMatch(/debeCrearFichaCria\(/);
+  it('el navegador revisa la ficha y guarda parto/cría por un solo protocolo atómico', () => {
+    const reader=leer('src/components/hato/hooks/useMarcarCicloHato.ts');
+    expect(reader).not.toMatch(/\.insert\(|\.delete\(|crearFichaCriaConReintento\(/);
+    const dialog=leer('src/components/hato/components/MarcarCicloDialog.tsx');
+    expect(dialog).toContain('useCycle()');expect(dialog).toContain("cycle.run('prepare'");expect(dialog).toContain('Confirmar marca revisada');
+    const protocol=leer('src/utils/hato/hatoCycleProtocol.ts');
+    for(const helper of ['calcularSiguienteChapetaCria','elegirToroDelServicio','construirFichaCria'])expect(protocol).toContain(helper+'(');
+    expect(protocol).toContain("'fn_hato_cycle_web'");
+    const sql=leer('src/sql/security-candidates/hato-cycle.sql');
+    expect(sql).toContain('INSERT INTO public.hato_animales');expect(sql).toContain('INSERT INTO public.hato_eventos');expect(sql).toContain('Cycle final audit/target/calf mismatch');
+    expect(sql).not.toMatch(/DELETE FROM public\.(?:hato_animales|hato_eventos)/);
   });
 });

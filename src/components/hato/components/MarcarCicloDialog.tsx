@@ -16,7 +16,7 @@
 // Cabecera fija "Estado actual: {antes} → quedará: {despues}"
 // (`proyectarEstadoTrasMarca`) -- hace visible D-5 sin explicárselo a nadie.
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -42,7 +42,12 @@ import {
 } from '@/utils/hatoCicloManual';
 import { chipEstadoReproductivo } from '@/utils/hatoUi';
 import { obtenerFechaHoy } from '@/utils/fechas';
-import { mensajeCriaCreada, NOMBRE_CRIA_SIN_NOMBRE } from '@/utils/hato/criaAutomatica';
+import { NOMBRE_CRIA_SIN_NOMBRE } from '@/utils/hato/criaAutomatica';
+import {useCycle} from '../hooks/useCycle';
+import {canonicalCycleInput,cycleIntent} from '@/utils/hato/hatoCycleProtocol';
+import {construirHatoConfigDesdeFilas,type FilaHatoConfig} from '@/utils/hatoConfigDesdeTabla';
+import {useFormDraft} from '@/hooks/useFormDraft';
+import type {EstadoActualHatoRow} from '@/utils/calculosHato';
 import type { CriaDestino } from '@/types/hato';
 
 const MARCAS: { value: MarcaCiclo; label: string }[] = [
@@ -94,12 +99,13 @@ interface MarcarCicloDialogProps {
   onGuardado: () => void;
 }
 
-export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: MarcarCicloDialogProps) {
+function CycleDialog({ open, onOpenChange, animalId, onGuardado }: MarcarCicloDialogProps) {
   const { profile, isLoading: authLoading, hasRole } = useAuth();
+  const cycle=useCycle(),guardando=cycle.busy;
   // Solo carga mientras el diálogo está abierto -- evita 3 queries por cada
   // fila del hato si este componente se monta una sola vez y se reutiliza
   // para "acción por fila" (AnimalesList).
-  const { fila, config, loading, error, marcarCiclo, guardando } = useMarcarCicloHato(open ? animalId : undefined);
+  const { fila, config, loading, error, observedAnimal } = useMarcarCicloHato(open ? animalId : undefined);
 
   const [marca, setMarca] = useState<MarcaCiclo>('preñada');
   const [fecha, setFecha] = useState(obtenerFechaHoy());
@@ -110,22 +116,7 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
   const [anclaFechaServicio, setAnclaFechaServicio] = useState(obtenerFechaHoy());
   const [anclaMeses, setAnclaMeses] = useState<number | undefined>(undefined);
 
-  // Reinicia el formulario cada vez que se abre -- evita arrastrar una marca
-  // a medio llenar de una apertura anterior (mismo patrón que el resto del
-  // módulo: EditarAnimalDialog, MuerteAnimalDialog, etc.).
-  useEffect(() => {
-    if (open) {
-      setMarca('preñada');
-      setFecha(obtenerFechaHoy());
-      setFechaAproximada(false);
-      setCriaDestino('retenida');
-      setNota('');
-      setModoAncla('ninguna');
-      setAnclaFechaServicio(obtenerFechaHoy());
-      setAnclaMeses(undefined);
-    }
-  }, [open, animalId]);
-
+  // Owner/target/open remount boundaries isolate drafts and original attempts.
   const puedeGerencia = hasRole(['Gerencia']);
   const hoy = obtenerFechaHoy();
 
@@ -166,33 +157,19 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
     (validacion?.bloqueos.length ?? 1) === 0 &&
     !anclaIncompleta;
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!puedeGuardar) return;
-    const resultado = await marcarCiclo(input);
-    if (!resultado.ok) {
-      toast.error(resultado.error ?? 'Error desconocido registrando la marca del ciclo');
-      return;
-    }
-    toast.success(
-      resultado.criaCreada ? `Ciclo actualizado. ${mensajeCriaCreada(resultado.criaCreada.numero)}` : 'Ciclo actualizado',
-    );
-    if (resultado.avisoCria) {
-      // ESCO-135: el parto quedó, la ficha de la ternera no. Se dice en voz alta.
-      toast.error(`El parto quedó guardado, pero NO se creó la ficha de la ternera: ${resultado.avisoCria}`, {
-        duration: 15000,
-      });
-    }
-    onGuardado();
-    onOpenChange(false);
-  };
-
+  const draft=useFormDraft('hato-cycle:'+animalId,{marca,fecha,fechaAproximada,criaDestino,nota,modoAncla,anclaFechaServicio,anclaMeses},{enabled:open});
+  const restoreDraft=()=>{const d=draft.draftData;if(!d)return;setMarca(d.marca);setFecha(d.fecha);setFechaAproximada(d.fechaAproximada);setCriaDestino(d.criaDestino);setNota(d.nota);setModoAncla(d.modoAncla);setAnclaFechaServicio(d.anclaFechaServicio);setAnclaMeses(d.anclaMeses);draft.acceptDraft();};
+  const handleSubmit=async(e:FormEvent)=>{e.preventDefault();if(!puedeGuardar||!observedAnimal||!animalId)return;try{await cycle.run('prepare',cycleIntent({version:1,animalId,observedAnimal,input:canonicalCycleInput(input)}));}catch(e){toast.error(e instanceof Error?e.message:'Conserve el intento original.');}};
+  const action=async(mode:'post'|'status'|'resolve'|'new')=>{try{await cycle.run(mode);if(mode==='new'){draft.clearDraft();if(cycle.attempt?.result?.state==='committed')onGuardado();onOpenChange(false);}}catch(e){toast.error(e instanceof Error?e.message:'Conserve el intento original.');}};
+  const captured=cycle.attempt?.result;
+  let reviewWarnings:string[]|null=null,reviewProjection:ReturnType<typeof proyectarEstadoTrasMarca>|null=null;
+  if(captured?.original&&captured.intent){try{const c=construirHatoConfigDesdeFilas(captured.original.config as unknown as FilaHatoConfig[]);const r=validarMarcaCiclo({...captured.intent.input,criaDestino:captured.intent.input.criaDestino??undefined,ancla:{modo:captured.intent.input.ancla.modo,fechaServicio:captured.intent.input.ancla.fechaServicio??undefined,mesesPrenez:captured.intent.input.ancla.mesesPrenez??undefined}},captured.original.view as unknown as EstadoActualHatoRow,c,{rol:profile?.rol??'',hoy:captured.effectiveDate!});if(!r.bloqueos.length){reviewWarnings=r.advertencias;reviewProjection=proyectarEstadoTrasMarca(captured.original.view as unknown as EstadoActualHatoRow,captured.intent.input.marca,captured.intent.input.fecha,c,captured.effectiveDate!);}}catch{/* Missing source config is not replaced with invented defaults. */}}
   // Contenido de acceso denegado/skeleton/error: sin DialogFooter propio --
   // el usuario cierra con la X del panel (siempre presente en DialogContent).
   const mostrarFormulario = !authLoading && puedeGerencia && !loading && !error && fila && config;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value=>{if(!value&&!guardando){if(!cycle.attempt)draft.clearDraft();onOpenChange(false);}}}>
       {/* `md`, no `sm`: con la marca "Preñada"/"Confirmada" y una vaca sin
           ancla de servicio conocida, el formulario suma el bloque "¿Desde
           cuándo está servida?" a fecha+checkbox+nota -- en `sm` (384px de
@@ -205,6 +182,20 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
           </DialogHeader>
 
           <DialogBody className="space-y-4">
+            <Button type="button" disabled={guardando||!puedeGerencia} onClick={()=>void action('status')}>Recuperar intento original</Button>
+            {cycle.error&&<p role="alert">{cycle.error}</p>}
+            {draft.hasDraft&&!cycle.attempt&&<div><p>Hay una marca guardada de esta cuenta.</p><Button type="button" onClick={restoreDraft}>Restaurar borrador</Button><Button type="button" onClick={draft.discardDraft}>Descartar borrador</Button></div>}
+            {cycle.attempt&&<section aria-label="Revisión de ciclo"><p>Animal capturado: #{String(captured?.original?.graph.animal.numero??'—')} {String(captured?.original?.graph.animal.nombre??'')} · {cycle.attempt.key}</p><p>Fecha del hecho: {cycle.attempt.intent.input.fecha}. Revisión válida para: {captured?.effectiveDate??'por verificar'}.</p>
+              <p>Marca: {cycle.attempt.intent.input.marca}. Destino: {cycle.attempt.intent.input.criaDestino??'No aplica'}. Nota: {cycle.attempt.intent.input.nota||'Sin nota'}.</p>{reviewProjection&&<p>Estado capturado: {reviewProjection.antes} → quedará: {reviewProjection.despues}</p>}
+              <p>{captured?.state==='committed'?'Registrado y verificado':captured?.state==='canceled'?'Cancelado':captured?.state==='pending'?'Pendiente de confirmación':'Por verificar'}</p>
+              {captured?.plan?.events.map(e=><p key={String(e.id)}>{String(e.tipo)} · {String(e.fecha)} · {String(e.fecha_confianza)}</p>)}
+              {captured?.plan?.calf&&<p>Se creará la ternera #{String(captured.plan.calf.numero)} SIN NOMBRE, madre #{String(captured.original?.graph.animal.numero)}, padre {captured.plan.calf.padre_toro_id?String(captured.original?.toros.find(t=>t.id===captured.plan!.calf!.padre_toro_id)?.nombre??'Referencia registrada'):'Sin registrar'}. Parto y ficha se guardan juntos.</p>}
+              {reviewWarnings?.map(w=><p key={w}>{w}</p>)}{captured?.state==='pending'&&reviewWarnings===null&&<p role="alert">No pude comprobar la configuración original. Recupere o cancele este intento.</p>}
+              <Button type="button" disabled={guardando||captured?.state!=='pending'||reviewWarnings===null||!puedeGerencia} onClick={()=>void action('post')}>Confirmar marca revisada</Button>
+              <Button type="button" disabled={guardando||!['pending','unknown'].includes(captured?.state??'unknown')} onClick={()=>void action('resolve')}>Cancelar intento original</Button>
+              <Button type="button" disabled={guardando||!['committed','canceled'].includes(captured?.state??'')} onClick={()=>void action('new')}>Finalizar intento verificado</Button>
+            </section>}
+            <fieldset disabled={guardando||!!cycle.attempt||draft.hasDraft} className="contents">
             {authLoading || (puedeGerencia && loading) ? (
               <MarcarCicloSkeleton />
             ) : !puedeGerencia ? (
@@ -333,16 +324,17 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
                 )}
               </>
             )}
+            </fieldset>
           </DialogBody>
 
           {mostrarFormulario && (
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
+              <Button type="button" variant="outline" onClick={() => {if(!cycle.attempt)draft.clearDraft();onOpenChange(false);}} disabled={guardando}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={!puedeGuardar}>
+              <Button type="submit" disabled={!puedeGuardar||!!cycle.attempt||draft.hasDraft}>
                 {guardando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Guardar
+                Revisar marca
               </Button>
             </DialogFooter>
           )}
@@ -351,3 +343,5 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
     </Dialog>
   );
 }
+
+export function MarcarCicloDialog(props:MarcarCicloDialogProps){const {user}=useAuth();return props.open?<CycleDialog key={(user?.id??'signed-out')+':'+props.animalId} {...props}/>:null;}

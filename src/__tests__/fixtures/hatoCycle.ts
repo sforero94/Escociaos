@@ -1,0 +1,12 @@
+import {prepared as deathPrepared,OWNER,KEY,ANIMAL} from './hatoDeath';
+import {expectedCyclePlan,type CycleIntent,type CycleResult} from '@/utils/hato/hatoCycleProtocol';
+export {OWNER,OTHER,KEY,ANIMAL} from './hatoDeath';
+export const config={razas:['jersey'],meses_secado_por_raza:{jersey:2,_default:2},meses_gestacion_default:9,umbral_partos_reemplazo:9,ventana_proxima_secar_dias:30,ventana_proximo_parir_dias:30,dias_parto_proximo_alerta:14,dias_servicio_sin_confirmacion:45,dias_rechequeo_due:60,dias_espera_voluntaria_post_parto:90};
+export const view={animal_id:ANIMAL,...deathPrepared().original!.animal,num_partos:0,ultimo_chequeo_fecha:null,ultimo_servicio_fecha:null,ultimo_parto_fecha:null,ultimo_secado_real_fecha:null,ultima_confirmacion_prenez_fecha:null,ultimo_evento_fecha:null,ultima_confirmacion_prenez_metodo:null,ultimo_aborto_fecha:null,ultimo_estado_chequeo:null};
+export const intent:CycleIntent={version:1,animalId:ANIMAL,observedAnimal:deathPrepared().original!.animal,input:{marca:'parida',fecha:'2026-10-14',fechaConfianza:'exacta',criaDestino:'retenida',nota:'Synthetic retained birth',ancla:{modo:'ninguna',fechaServicio:null,mesesPrenez:null}}};
+export function prepared(key=KEY,p=intent):CycleResult{
+ const graph=deathPrepared().original!;graph.animal=structuredClone(p.observedAnimal);const original={graph,animals:[graph.animal],config:Object.entries(config).map(([clave,valor])=>({clave,valor})),toros:[],view:{...view,animal_id:p.animalId}};
+ const ids={events:p.input.ancla.modo==='ninguna'?['70000000-0000-4000-8000-000000000071']:['70000000-0000-4000-8000-000000000070','70000000-0000-4000-8000-000000000071'],calf:p.input.criaDestino==='retenida'?'70000000-0000-4000-8000-000000000072':null};
+ return {version:1,requestKey:key,owner:OWNER,state:'pending',intent:structuredClone(p),original,plan:expectedCyclePlan(p,original,ids,OWNER),effectiveDate:'2026-10-16',receipt:null};
+}
+export function committed(r=prepared()):CycleResult{const q=structuredClone(r),time='2026-10-16T13:00:00.123456+00:00';q.state='committed';q.receipt={version:1,requestKey:q.requestKey,owner:OWNER,intent:q.intent!,original:q.original!,plan:q.plan!,effectiveDate:q.effectiveDate!,actor:{origin:'web',profileId:OWNER},recordedAt:time,after:{...structuredClone(q.original!.graph),events:[...q.original!.graph.events,...q.plan!.events.map((e):Record<string,unknown>=>({...e,created_at:time}))].sort((a,b)=>String(a.id).localeCompare(String(b.id)))},calf:q.plan!.calf?{...q.plan!.calf,created_at:time}:null};return q;}

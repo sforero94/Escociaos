@@ -1,0 +1,30 @@
+import {beforeEach,afterEach,it,expect,vi} from 'vitest';
+import {create,act,type ReactTestRenderer} from 'react-test-renderer';
+import {MarcarCicloDialog} from '@/components/hato/components/MarcarCicloDialog';
+import {prepared,committed,OWNER,KEY,config,view} from './fixtures/hatoCycle';
+import type {CycleResult,CycleIntent} from '@/utils/hato/hatoCycleProtocol';
+import {pendingCycleBrowser} from '@/utils/hato/hatoCycleBrowserAttempt';
+import type {HatoAnimalRow} from '@/types/hato';
+const state=vi.hoisted(()=>({client:null as unknown}));
+vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:OWNER},profile:{rol:'Gerencia'},isLoading:false,hasRole:()=>true})}));
+vi.mock('@/utils/supabase/client',()=>({getSupabase:()=>state.client}));
+vi.mock('@/utils/fechas',()=>({obtenerFechaHoy:()=> '2026-10-14'}));
+vi.mock('@/components/hato/hooks/useMarcarCicloHato',()=>({useMarcarCicloHato:()=>({fila:view,config,loading:false,error:null,observedAnimal:prepared().original!.graph.animal,marcarCiclo:vi.fn(async()=>({ok:false})),guardando:false})}));
+vi.mock('sonner',()=>({toast:{success:vi.fn(),error:vi.fn()}}));
+vi.mock('@/components/ui/dialog',()=>{const F=({children}:{children?:React.ReactNode})=><div>{children}</div>;return {Dialog:F,DialogContent:F,DialogHeader:F,DialogTitle:F,DialogBody:F,DialogFooter:F};});
+vi.mock('@/components/ui/select',()=>{const F=({children}:{children?:React.ReactNode})=><div>{children}</div>;return {Select:F,SelectContent:F,SelectItem:F,SelectTrigger:F,SelectValue:F};});
+let renderer:ReactTestRenderer|undefined,saved:CycleResult|null;const refresh=vi.fn();
+const animal=prepared().original!.graph.animal as unknown as HatoAnimalRow;
+beforeEach(()=>{saved=null;refresh.mockClear();vi.stubGlobal('window',new EventTarget());const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:unknown,_o:unknown,fn:()=>unknown)=>fn()}});vi.spyOn(crypto,'randomUUID').mockReturnValue(KEY);state.client={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>{if(a.p_action==='prepare')saved=prepared(String(a.p_request_key),a.p_intent as CycleIntent);if(a.p_action==='post')saved=committed(saved!);return {data:saved,error:null};})};});
+afterEach(async()=>{await act(async()=>renderer?.unmount());renderer=undefined;vi.unstubAllGlobals();vi.restoreAllMocks();});
+const mount=async()=>{await act(async()=>{renderer=create(<MarcarCicloDialog open animalId={animal.id} onOpenChange={()=>{}} onGuardado={refresh}/>);});await act(async()=>{renderer!.root.findAll(n=>n.props.type==='single'&&typeof n.props.onValueChange==='function')[0].props.onValueChange('parida');});};
+const click=async(label:string)=>act(async()=>{renderer!.root.findAllByType('button').find(b=>b.children.join('')===label)!.props.onClick();});
+it('prepares captured cycle/date/calf review before a separate confirmation and verified completion',async()=>{
+ await mount();await act(async()=>renderer!.root.findByType('form').props.onSubmit({preventDefault(){}}));expect(saved?.state).toBe('pending');expect(refresh).not.toHaveBeenCalled();expect(JSON.stringify(renderer!.toJSON())).toContain('Revisión de ciclo');expect(JSON.stringify(renderer!.toJSON())).toContain('Parto y ficha se guardan juntos');
+ await click('Confirmar marca revisada');expect(saved?.state).toBe('committed');await click('Finalizar intento verificado');expect(refresh).toHaveBeenCalledOnce();expect(pendingCycleBrowser(OWNER)).toBeNull();
+});
+it('lost response keeps original key and remount recovers without another post',async()=>{
+ await mount();await act(async()=>renderer!.root.findByType('form').props.onSubmit({preventDefault(){}}));
+ const client=state.client as {rpc:ReturnType<typeof vi.fn>},impl=client.rpc.getMockImplementation() as (n:string,a:Record<string,unknown>)=>Promise<unknown>;client.rpc.mockImplementation(async(n,a)=>{const r=await impl(n,a);if(a.p_action==='post')throw Error('lost');return r;});
+ await click('Confirmar marca revisada');expect(pendingCycleBrowser(OWNER)?.key).toBe(KEY);await act(async()=>renderer!.unmount());await mount();await click('Recuperar intento original');expect(JSON.stringify(renderer!.toJSON())).toContain('Registrado y verificado');await click('Finalizar intento verificado');expect(client.rpc.mock.calls.filter(c=>c[1].p_action==='post')).toHaveLength(1);expect(refresh).toHaveBeenCalledOnce();
+});

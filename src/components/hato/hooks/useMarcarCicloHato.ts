@@ -1,33 +1,9 @@
-// ARCHIVO: components/hato/hooks/useMarcarCicloHato.ts
-// DESCRIPCIÓN: T4a (S3, docs/plan_hato_ciclo_manual_override.md §3.4) --
-// I/O de `MarcarCicloDialog`. Dos responsabilidades:
-//   1. Cargar la `EstadoActualHatoRow` + `HatoConfig` de UN animal -- lo que
-//      `validarMarcaCiclo`/`proyectarEstadoTrasMarca` (hatoCicloManual.ts)
-//      necesitan para construir el "Estado actual → quedará" y las
-//      advertencias ANTES de guardar. Fetch propio, independiente de
-//      `useHatoAnimal`/`useHatoAnimales` (mismo criterio que
-//      `useVentaAnimalesHato.ts`: cada hook trae solo lo que necesita).
-//   2. Escribir la marca: UN solo `.insert([...])` de 1-2 eventos (§3.3,
-//      atomicidad) con `created_by` explícito -- `hato_eventos` NO tiene
-//      trigger de atribución (ninguna de 040/050/063/074 lo cubre).
-//
-// `getSupabase() as any`: `src/types/database.ts` (generado) no incluye
-// las tablas hato_* -- mismo workaround que el resto del módulo.
-
+// Cycle reader and compatible stale-writer refusal. Mutations use useCycle.
 import { useState, useCallback, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hatoConfigDesdeTabla';
 import type { EstadoActualHatoRow, HatoConfig } from '@/utils/calculosHato';
-import { construirEventosMarcaCiclo, type InputMarcaCiclo } from '@/utils/hatoCicloManual';
-import {
-  CHAPETA_PROVISIONAL_DESDE,
-  crearFichaCriaConReintento,
-  debeCrearFichaCria,
-  elegirToroDelServicio,
-  type FilaChapeta,
-  type ServicioMadre,
-} from '@/utils/hato/criaAutomatica';
 import type { EstadoActualHatoViewRow, HatoAnimalRow } from '@/types/hato';
 
 function filaDesdeVista(animal: HatoAnimalRow, vista: EstadoActualHatoViewRow | null): EstadoActualHatoRow {
@@ -74,68 +50,17 @@ export interface ResultadoMarcarCiclo {
   avisoCria?: string;
 }
 
-/**
- * Crea la ficha de la ternera retenida (ESCO-135): lee la finca de la madre
- * y sus servicios (para el toro padre, solo si no hay que adivinarlo), y
- * delega chapeta + reintento ante 23505 en `crearFichaCriaConReintento`.
- */
-async function crearFichaTernera(
-  supabase: any, // eslint-disable-line @typescript-eslint/no-explicit-any
-  madreId: string,
-  input: InputMarcaCiclo,
-  createdBy: string | null,
-): Promise<{ id: string; numero: number }> {
-  const [madreRes, serviciosRes] = await Promise.all([
-    supabase.from('hato_animales').select('finca_id').eq('id', madreId).maybeSingle(),
-    supabase
-      .from('hato_eventos')
-      .select('fecha, toro_id')
-      .eq('animal_id', madreId)
-      .eq('tipo', 'servicio')
-      .lt('fecha', input.fecha),
-  ]);
-  if (madreRes.error) throw new Error(`No se pudo leer la madre: ${madreRes.error.message}`);
-  if (serviciosRes.error) throw new Error(`No se pudieron leer los servicios: ${serviciosRes.error.message}`);
-
-  return crearFichaCriaConReintento(
-    {
-      leerChapetasActivas: async () => {
-        const { data, error } = await supabase
-          .from('hato_animales')
-          .select('numero, estado')
-          .eq('estado', 'activa')
-          .lt('numero', CHAPETA_PROVISIONAL_DESDE);
-        if (error) throw new Error(`No se pudieron leer las chapetas: ${error.message}`);
-        return (data ?? []) as FilaChapeta[];
-      },
-      insertar: async (fila) => {
-        const { data, error } = await supabase.from('hato_animales').insert(fila).select('id').single();
-        if (error) return { error: { code: error.code, message: error.message } };
-        return { id: data.id as string };
-      },
-    },
-    {
-      madreId,
-      fincaId: (madreRes.data?.finca_id as string | null | undefined) ?? null,
-      fechaParto: input.fecha,
-      fechaPartoConfianza: input.fechaConfianza,
-      padreToroId: elegirToroDelServicio((serviciosRes.data ?? []) as ServicioMadre[], input.fecha),
-      createdBy,
-      fuente: 'web',
-    },
-  );
-}
-
 export function useMarcarCicloHato(animalId: string | undefined) {
   const { user } = useAuth();
   const [fila, setFila] = useState<EstadoActualHatoRow | null>(null);
   const [config, setConfig] = useState<HatoConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [guardando, setGuardando] = useState(false);
+  const [observedAnimal,setObservedAnimal]=useState<Record<string,unknown>|null>(null);
 
   const cargar = useCallback(async () => {
     if (!animalId) {
+      setObservedAnimal(null);
       setFila(null);
       setConfig(null);
       return;
@@ -158,6 +83,7 @@ export function useMarcarCicloHato(animalId: string | undefined) {
       if (configError) throw configError;
       if (!animal) throw new Error('No se encontró el animal solicitado.');
 
+      setObservedAnimal(animal);
       setFila(filaDesdeVista(animal as HatoAnimalRow, (vista ?? null) as EstadoActualHatoViewRow | null));
       setConfig(construirHatoConfigDesdeFilas((configRows ?? []) as FilaHatoConfig[]));
     } catch (err) {
@@ -165,67 +91,13 @@ export function useMarcarCicloHato(animalId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [animalId]);
+  }, [animalId,user?.id]);
 
   useEffect(() => {
     cargar();
   }, [cargar]);
 
-  const marcarCiclo = useCallback(
-    async (input: InputMarcaCiclo): Promise<ResultadoMarcarCiclo> => {
-      if (!animalId) return { ok: false, error: 'Falta el animal' };
-      setGuardando(true);
-      try {
-        const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-
-        // ESCO-135 -- ficha de la ternera retenida, ANTES del parto, para que
-        // el parto nazca con `cria_id` en el mismo INSERT (sin un UPDATE
-        // posterior que la traza de la 084 registraría como corrección). Si
-        // la ficha falla, el parto se guarda igual y el fallo se devuelve en
-        // `avisoCria` -- nunca en silencio.
-        let cria: { id: string; numero: number } | null = null;
-        let avisoCria: string | undefined;
-        if (input.marca === 'parida' && debeCrearFichaCria(input.criaDestino)) {
-          try {
-            cria = await crearFichaTernera(supabase, animalId, input, user?.id ?? null);
-          } catch (errCria) {
-            avisoCria = errCria instanceof Error ? errCria.message : 'Error desconocido creando la ficha de la ternera';
-          }
-        }
-
-        const eventos = construirEventosMarcaCiclo(input).map((evento) => ({
-          ...evento,
-          ...(evento.tipo === 'parto' && cria ? { cria_id: cria.id } : {}),
-          animal_id: animalId,
-          created_by: user?.id ?? null,
-        }));
-        // Un solo INSERT con N filas -- una sentencia, una transacción
-        // (§3.3: nunca dos llamadas sueltas para esto).
-        const { error: insertError } = await supabase.from('hato_eventos').insert(eventos);
-        if (insertError) {
-          if (cria) {
-            // El parto no entró: la ficha recién creada quedaría huérfana.
-            const { error: borrarError } = await supabase.from('hato_animales').delete().eq('id', cria.id);
-            if (borrarError) {
-              throw new Error(
-                `No se pudo guardar el parto, y la ficha de la ternera #${cria.numero} quedó creada sin parto. Bórrala desde su hoja de vida. (${insertError.message})`,
-              );
-            }
-          }
-          throw insertError;
-        }
-        return { ok: true, criaCreada: cria ?? undefined, avisoCria };
-      } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : 'Error desconocido registrando la marca del ciclo',
-        };
-      } finally {
-        setGuardando(false);
-      }
-    },
-    [animalId, user],
-  );
-
-  return { fila, config, loading, error, marcarCiclo, guardando, reload: cargar };
+  /** Stale direct writer refuses: actual dialog uses prepared useCycle. */
+  const marcarCiclo=useCallback(async()=>({ok:false,error:'Use la marca con revisión preparada y recuperación del intento original.'}),[]);
+  return {fila,config,loading,error,observedAnimal,marcarCiclo,guardando:false,reload:cargar};
 }
