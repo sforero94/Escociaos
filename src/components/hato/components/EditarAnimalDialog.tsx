@@ -131,7 +131,7 @@ function AnimalEditor({
       : undefined;
   const opcionesMadre = madreGuardadaFaltante ? [madreGuardadaFaltante, ...madres] : madres;
 
-  const draft=useFormDraft('hato-animal-edit:'+animal.id,{form,observed},{enabled:open&&!edit.attempt});
+  const draft=useFormDraft('hato-animal-edit:'+animal.id,{form,observed},{enabled:open});
   const actualizarCampo = <K extends keyof FormState>(campo: K, valor: FormState[K]) => {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   };

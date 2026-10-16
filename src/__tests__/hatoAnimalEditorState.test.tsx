@@ -3,9 +3,10 @@ import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {create,act,type ReactTestRenderer} from 'react-test-renderer';
 import {EditarAnimalDialog} from '@/components/hato/components/EditarAnimalDialog';
 import {useActualizarHatoAnimal,type HatoAnimalEdicion} from '@/components/hato/hooks/useActualizarHatoAnimal';
-import {prepared,committed,OWNER,KEY} from './fixtures/hatoAnimalEdit';
+import {prepared,committed,OWNER,OTHER,KEY} from './fixtures/hatoAnimalEdit';
 import type {AnimalEditResult,AnimalEditIntent} from '@/utils/hato/hatoAnimalEditProtocol';
 import {pendingAnimalEditBrowser} from '@/utils/hato/hatoAnimalEditBrowserAttempt';
+import {draftStorageKey,writeOwnedDraft} from '@/utils/draftStorage';
 import type {HatoAnimalRow} from '@/types/hato';
 const state=vi.hoisted(()=>({client:null as unknown}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:OWNER},hasRole:()=>true})}));
@@ -16,8 +17,8 @@ vi.mock('@/components/ui/dialog',()=>{const F=({children}:{children?:React.React
 vi.mock('@/components/ui/select',()=>{const F=({children}:{children?:React.ReactNode})=><div>{children}</div>;return {Select:F,SelectContent:F,SelectItem:F,SelectTrigger:F,SelectValue:F};});
 let renderer:ReactTestRenderer|undefined,saved:AnimalEditResult|null;const refresh=vi.fn();
 const animal=prepared().original!.animal as unknown as HatoAnimalRow;
-beforeEach(()=>{saved=null;refresh.mockClear();vi.stubGlobal('window',new EventTarget());const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:unknown,_o:unknown,fn:()=>unknown)=>fn()}});vi.spyOn(crypto,'randomUUID').mockReturnValue(KEY);state.client={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>{if(a.p_action==='prepare')saved=prepared(String(a.p_request_key),a.p_intent as AnimalEditIntent);if(a.p_action==='post')saved=committed(saved!);return {data:saved,error:null};})};});
-afterEach(async()=>{await act(async()=>renderer?.unmount());renderer=undefined;vi.unstubAllGlobals();vi.restoreAllMocks();});
+beforeEach(()=>{saved=null;refresh.mockClear();vi.stubGlobal('window',new EventTarget());const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:unknown,_o:unknown,fn:()=>unknown)=>fn()}});vi.spyOn(crypto,'randomUUID').mockReturnValue(KEY);state.client={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>{if(a.p_action==='prepare')saved=prepared(String(a.p_request_key),a.p_intent as AnimalEditIntent);if(a.p_action==='post')saved=committed(saved!);if(a.p_action==='resolve')saved={...saved!,state:'canceled',receipt:null};return {data:saved,error:null};})};});
+afterEach(async()=>{await act(async()=>renderer?.unmount());renderer=undefined;vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();});
 const mount=async()=>act(async()=>{renderer=create(<EditarAnimalDialog open animal={animal} onOpenChange={()=>{}} onGuardado={refresh}/>);});
 const click=async(label:string)=>act(async()=>{renderer!.root.findAllByType('button').find(b=>b.children.join('')===label)!.props.onClick();});
 it('shows current state read-only and normal edits never write lifecycle state/date',async()=>{
@@ -35,4 +36,24 @@ it('stale direct hook refuses before any client access or mutation',async()=>{
  let api!:ReturnType<typeof useActualizarHatoAnimal>;function Hook(){const current=useActualizarHatoAnimal();useLayoutEffect(()=>{api=current;});return null;}
  await act(async()=>{renderer=create(<Hook/>);});
  await act(async()=>{expect((await api.actualizar(animal.id,{} as HatoAnimalEdicion)).ok).toBe(false);});expect((state.client as {rpc:ReturnType<typeof vi.fn>}).rpc).not.toHaveBeenCalled();
+});
+
+it.each(['committed','canceled'])('clears the original owner draft only after verified %s completion, without resaving or touching another owner',async terminal=>{
+ vi.useFakeTimers();const own=draftStorageKey(OWNER,'hato-animal-edit:'+animal.id)!,other=draftStorageKey(OTHER,'hato-animal-edit:'+animal.id)!;
+ writeOwnedDraft(other,OTHER,{sentinel:'Keep another account draft'});const preserved=localStorage.getItem(other);
+ await mount();await act(async()=>renderer!.root.findByProps({id:'editar-animal-nombre'}).props.onChange({target:{value:'Reviewed renamed animal'}}));await act(async()=>{vi.advanceTimersByTime(1001);});
+ expect(JSON.parse(localStorage.getItem(own)!).data.form.nombre).toBe('Reviewed renamed animal');
+ await act(async()=>renderer!.root.findByType('form').props.onSubmit({preventDefault(){}}));expect(saved?.state).toBe('pending');expect(localStorage.getItem(own)).not.toBeNull();
+ await click(terminal==='committed'?'Confirmar edición revisada':'Cancelar intento original');expect(saved?.state).toBe(terminal);expect(localStorage.getItem(own)).not.toBeNull();
+ await click('Finalizar intento verificado');expect(localStorage.getItem(own)).toBeNull();expect(localStorage.getItem(other)).toBe(preserved);expect(pendingAnimalEditBrowser(OWNER)).toBeNull();
+ await act(async()=>{vi.advanceTimersByTime(2000);});expect(localStorage.getItem(own)).toBeNull();expect(localStorage.getItem(other)).toBe(preserved);
+ expect(refresh).toHaveBeenCalledTimes(terminal==='committed'?1:0);
+});
+it('retains the owner draft and original UUID through an unknown post and remount',async()=>{
+ vi.useFakeTimers();const own=draftStorageKey(OWNER,'hato-animal-edit:'+animal.id)!;
+ await mount();await act(async()=>renderer!.root.findByProps({id:'editar-animal-nombre'}).props.onChange({target:{value:'Keep uncertain draft'}}));await act(async()=>{vi.advanceTimersByTime(1001);});const raw=localStorage.getItem(own);expect(raw).not.toBeNull();
+ await act(async()=>renderer!.root.findByType('form').props.onSubmit({preventDefault(){}}));const key=pendingAnimalEditBrowser(OWNER)!.key;
+ const client=state.client as {rpc:ReturnType<typeof vi.fn>},impl=client.rpc.getMockImplementation() as (n:string,a:Record<string,unknown>)=>Promise<unknown>;client.rpc.mockImplementation((n,a)=>a.p_action==='post'?Promise.reject(Error('unknown outcome')):impl(n,a));
+ await click('Confirmar edición revisada');expect(localStorage.getItem(own)).toBe(raw);expect(pendingAnimalEditBrowser(OWNER)?.key).toBe(key);
+ await act(async()=>renderer!.unmount());await mount();await click('Recuperar intento original');expect(pendingAnimalEditBrowser(OWNER)?.result?.state).toBe('pending');expect(localStorage.getItem(own)).toBe(raw);expect(refresh).not.toHaveBeenCalled();
 });
