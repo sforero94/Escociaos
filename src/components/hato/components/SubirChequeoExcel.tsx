@@ -624,6 +624,8 @@ export function SubirChequeoExcel({
         nombreImpreso={filaParaReactivar?.nombreImpreso ?? ''}
         candidatos={filaParaReactivar?.candidatosInactivos ?? []}
         fechaChequeo={revision.fechaChequeoValida}
+        rowContext={filaParaReactivar}
+        onVerificado={() => revision.recargarEstado()}
         onReactivado={(animal) => {
           if (filaParaReactivar) {
             // El animal reactivado ya lleva su propia caravana real -- se

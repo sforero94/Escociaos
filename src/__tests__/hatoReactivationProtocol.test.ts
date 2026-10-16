@@ -1,0 +1,21 @@
+import {it,expect,vi,beforeEach,afterEach} from 'vitest';
+import {reactivationIntent,validateReactivationResult,type ReactivationResult} from '@/utils/hato/hatoReactivationProtocol';
+import {runReactivationBrowser,pendingReactivationBrowser} from '@/utils/hato/hatoReactivationBrowserAttempt';
+import {prepared,committed,intent,OWNER,KEY,OTHER} from './fixtures/hatoReactivation';
+const validate=(r:ReactivationResult)=>validateReactivationResult(r,OWNER,KEY,intent);
+beforeEach(()=>{const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:unknown,_o:unknown,fn:()=>unknown)=>fn()}});});
+afterEach(()=>vi.unstubAllGlobals());
+it.each(['vendida','muerta','descartada'])('accepts %s return while preserving original notes and related rows',estado=>{const p={...intent,observedCandidate:{...intent.observedCandidate,estado}},r=committed(prepared(KEY,p));expect(validateReactivationResult(r,OWNER,KEY,p).state).toBe('committed');expect(r.receipt!.after.animal.notas).toContain('  Original notes  \n\n\nReactivada');});
+it.each(['actor','date','identity','notes','audit','events','time','graph','effective-date'])('rejects %s proof drift',field=>{const r=committed(),q=r.receipt!;if(field==='actor')q.actor.profileId=OTHER;if(field==='date')q.after.animal.fecha_estado='2026-10-13';if(field==='identity')q.after.animal.nombre='Different animal';if(field==='notes')q.after.animal.notas=String(q.after.animal.notas).trim();if(field==='audit')q.correction.corregido_por=OTHER;if(field==='events')q.after.events.push({id:OTHER});if(field==='time')q.recordedAt='not a time';if(field==='graph')q.after.headers.push({id:OTHER,animal_id:intent.animalId});if(field==='effective-date')q.effectiveDate='2026-10-15';expect(()=>validate(r)).toThrow('original');});
+it.each([{...intent,fechaChequeo:'2026-02-30'},{...intent,motivo:' untrimmed '},{...intent,motivo:'x'.repeat(4001)},{...intent,animalId:OTHER},{...intent,observedCandidate:{...intent.observedCandidate,estado:'activa'}}])('rejects invalid prospective intent',p=>expect(()=>reactivationIntent(p)).toThrow());
+it('keeps original UUID after lost post and clears only verified terminal status',async()=>{
+ let saved:ReactivationResult|null=null,lose=true;const calls:string[]=[];
+ const c={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>{calls.push(String(a.p_action));if(a.p_action==='prepare')saved=prepared(String(a.p_request_key));if(a.p_action==='post'){saved=committed(saved!);if(lose){lose=false;throw Error('lost response');}}return {data:saved,error:null};})};
+ const p=await runReactivationBrowser(c,OWNER,intent,'prepare',()=>true);await expect(runReactivationBrowser(c,OWNER,null,'post',()=>true,p)).rejects.toThrow();expect(pendingReactivationBrowser(OWNER)?.key).toBe(p!.key);
+ const recovered=await runReactivationBrowser(c,OWNER,null,'status',()=>true);expect(recovered?.result?.state).toBe('committed');await runReactivationBrowser(c,OWNER,null,'new',()=>true,recovered);expect(pendingReactivationBrowser(OWNER)).toBeNull();expect(calls).toEqual(['prepare','post','status','status']);
+});
+it('refuses unreviewed posting/account switches and preserves corrupt original storage',async()=>{
+ const c={auth:{getUser:vi.fn(async()=>({data:{user:{id:OWNER}},error:null}))},rpc:vi.fn(async(_n:string,a:Record<string,unknown>)=>({data:prepared(String(a.p_request_key)),error:null}))};
+ const p=await runReactivationBrowser(c,OWNER,intent,'prepare',()=>true);await expect(runReactivationBrowser(c,OWNER,null,'post',()=>true)).rejects.toThrow();expect(c.rpc).toHaveBeenCalledTimes(1);c.auth.getUser.mockResolvedValue({data:{user:{id:OTHER}},error:null});await expect(runReactivationBrowser(c,OWNER,null,'status',()=>true)).rejects.toThrow();expect(pendingReactivationBrowser(OWNER)?.key).toBe(p!.key);
+ localStorage.setItem(`hato_reactivation_v1:${OWNER}`,'{bad');expect(()=>pendingReactivationBrowser(OWNER)).toThrow();expect(localStorage.getItem(`hato_reactivation_v1:${OWNER}`)).toBe('{bad');
+});

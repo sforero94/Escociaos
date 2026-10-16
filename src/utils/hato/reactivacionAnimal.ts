@@ -56,7 +56,7 @@ export interface InputNotaReactivacion {
  * blanco (mismo separador que la migración 153: `notas || E'\n\n...'`).
  */
 export function construirNotaReactivacion(input: InputNotaReactivacion): string {
-  const previas = (input.notasPrevias ?? '').trim();
+  const previas = input.notasPrevias ?? ''; // Preserve the complete original note, including whitespace.
 
   const antes = input.fechaEstadoAnterior
     ? `antes ${input.estadoAnterior} desde ${input.fechaEstadoAnterior}`
