@@ -7,7 +7,7 @@
 
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CalendarDays, Droplet, Loader2, TrendingUp } from 'lucide-react';
 import { formatNumber } from '@/utils/format';
 import {
@@ -24,6 +24,8 @@ import { HatoKpiCard } from '../HatoKpiCard';
 import { deltaContraAnterior } from './kpiDelta';
 
 const COLOR_APROXIMADO = '#BFD97D';
+/** Línea de litros por vaca: el olivo oscuro contrasta con las barras claras. */
+const COLOR_POR_VACA = '#4A6512';
 
 export function etiquetaVacaHato(animalId: string, identidad: IdentidadAnimalHato | undefined): string {
   if (!identidad) return 'Vaca sin ficha';
@@ -168,14 +170,14 @@ export function ProduccionPesadaBloque({
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-semibold text-gray-900">Litros pesados del hato al día, en cada pesaje</p>
+            <p className="mb-2 text-sm font-semibold text-gray-900">Litros pesados del hato al día y por vaca, en cada pesaje</p>
             {barras.length === 0 ? (
               <p className="py-8 text-sm text-gray-400">Sin pesajes en el período.</p>
             ) : (
               <>
-                <div className="h-56">
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barras} margin={{ top: 8, right: 8, bottom: 16, left: 8 }}>
+                    <ComposedChart data={barras} margin={{ top: 8, right: 8, bottom: 16, left: 8 }}>
                       <CartesianGrid stroke="#F3F4F6" vertical={false} />
                       <XAxis
                         dataKey="etiqueta"
@@ -185,26 +187,57 @@ export function ProduccionPesadaBloque({
                         label={{ value: 'Fecha del pesaje', position: 'insideBottom', offset: -10, fontSize: 11, fill: '#9CA3AF' }}
                       />
                       <YAxis
+                        yAxisId="hato"
                         tick={{ fontSize: 11, fill: '#9CA3AF' }}
                         stroke="#E5E7EB"
                         width={56}
                         tickFormatter={(v: number) => `${formatNumber(v)} L`}
                       />
+                      <YAxis
+                        yAxisId="vaca"
+                        orientation="right"
+                        tick={{ fontSize: 11, fill: COLOR_POR_VACA }}
+                        stroke="#E5E7EB"
+                        width={48}
+                        domain={[0, 'auto']}
+                        tickFormatter={(v: number) => `${formatNumber(v)} L`}
+                      />
                       <Tooltip
-                        formatter={(v: number, _n, item) => [
-                          `${formatNumber(v)} L · ${(item?.payload as { nVacas?: number })?.nVacas ?? 0} vacas`,
-                          'Pesado',
-                        ]}
+                        formatter={(v: number, _nombre, item) =>
+                          item?.dataKey === 'litrosPorVaca'
+                            ? [`${formatNumber(v, 1)} L`, 'Por vaca']
+                            : [`${formatNumber(v)} L · ${(item?.payload as { nVacas?: number })?.nVacas ?? 0} vacas`, 'Hato al día']
+                        }
                         cursor={{ fill: '#F8FAF5' }}
+                        contentStyle={{ fontSize: 12 }}
+                        itemStyle={{ color: '#374151' }}
+                      />
+                      <Legend
+                        verticalAlign="top"
+                        height={24}
+                        iconSize={10}
+                        wrapperStyle={{ fontSize: 11 }}
+                        formatter={(valor: string) => <span className="text-gray-600">{valor}</span>}
                       />
                       <Bar
+                        yAxisId="hato"
+                        name="Hato al día (eje izq.)"
                         dataKey="litros"
                         fill={COLOR_APROXIMADO}
                         radius={[4, 4, 0, 0]}
                         cursor="pointer"
                         onClick={(d: { fecha?: string }) => d?.fecha && onFechaClick(d.fecha)}
                       />
-                    </BarChart>
+                      <Line
+                        yAxisId="vaca"
+                        name="Por vaca (eje der.)"
+                        dataKey="litrosPorVaca"
+                        stroke={COLOR_POR_VACA}
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: COLOR_POR_VACA }}
+                        connectNulls={false}
+                      />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">

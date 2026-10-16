@@ -266,7 +266,9 @@ export interface ResumenPesado {
   vacasPesadas: number;
   /** Fechas de pesaje en el período. */
   nPesajes: number;
-  barras: Array<{ fecha: string; litros: number; nVacas: number }>;
+  /** `litrosPorVaca` = litros del hato ese día ÷ vacas pesadas ese día;
+   * `null` sin vacas (nunca 0). */
+  barras: Array<{ fecha: string; litros: number; nVacas: number; litrosPorVaca: number | null }>;
 }
 
 export function resumirPesadoPeriodo(pesajes: readonly PesajeLitros[], rango: RangoFecha): ResumenPesado {
@@ -277,7 +279,12 @@ export function resumirPesadoPeriodo(pesajes: readonly PesajeLitros[], rango: Ra
     litrosPorVaca: resumen.litrosPorVaca,
     vacasPesadas: resumen.vacasPesadas,
     nPesajes: n,
-    barras: resumen.puntos.map((p) => ({ fecha: p.fecha, litros: p.litros, nVacas: p.vacas.length })),
+    barras: resumen.puntos.map((p) => ({
+      fecha: p.fecha,
+      litros: p.litros,
+      nVacas: p.vacas.length,
+      litrosPorVaca: p.vacas.length === 0 ? null : p.litros / p.vacas.length,
+    })),
   };
 }
 

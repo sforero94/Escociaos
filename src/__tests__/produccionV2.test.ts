@@ -123,6 +123,8 @@ describe('producción pesada — aproximado', () => {
     expect(r.litrosHatoDia).toBe((30 + 18) / 2);
     expect(r.litrosPorVaca).toBe(48 / 3);
     expect(r.vacasPesadas).toBe(2);
+    // Línea por vaca: litros del día ÷ vacas pesadas ese día.
+    expect(r.barras.map((b) => b.litrosPorVaca)).toEqual([15, 18]);
   });
 
   it('ranking con semanas desde el último parto ANTERIOR al último pesaje', () => {
