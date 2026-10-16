@@ -227,9 +227,10 @@ describe('lista de subidas del mes', () => {
     expect(html).toContain('aria-expanded="false"');
   });
 
-  it('la semana no descarta y la página de producción lista las subidas', () => {
+  it('la semana no descarta y Cargas lista las subidas', () => {
     const dialogo = readFileSync(join(__dirname, '../components/hato/components/DetallePesajeSemanalDialog.tsx'), 'utf8');
-    const pagina = readFileSync(join(__dirname, '../components/hato/ProduccionView.tsx'), 'utf8');
+    // Producción v2 solo consulta: las subidas viven en Cargas › Historial de subidas.
+    const pagina = readFileSync(join(__dirname, '../components/hato/components/cargas/HistorialSubidas.tsx'), 'utf8');
     const ui = readFileSync(join(__dirname, '../components/hato/components/SubidasPesajeMes.tsx'), 'utf8');
     const hook = readFileSync(join(__dirname, '../components/hato/hooks/useSubidasPesajeMes.ts'), 'utf8');
     const semana = readFileSync(join(__dirname, '../components/hato/hooks/useDetallePesajeSemana.ts'), 'utf8');

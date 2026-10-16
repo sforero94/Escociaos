@@ -56,6 +56,7 @@ const HojaDeVida = lazy(() => import('./components/hato/HojaDeVida').then(m => (
 const ChequeosList = lazy(() => import('./components/hato/ChequeosList').then(m => ({ default: m.ChequeosList })));
 const ChequeoDetalle = lazy(() => import('./components/hato/ChequeoDetalle').then(m => ({ default: m.ChequeoDetalle })));
 const HatoProduccionView = lazy(() => import('./components/hato/ProduccionView').then(m => ({ default: m.ProduccionView })));
+const HatoCargasView = lazy(() => import('./components/hato/CargasView').then(m => ({ default: m.CargasView })));
 const AlertasView = lazy(() => import('./components/hato/AlertasView').then(m => ({ default: m.AlertasView })));
 const PajillasView = lazy(() => import('./components/hato/PajillasView').then(m => ({ default: m.PajillasView })));
 const GanadoDashboard = lazy(() => import('./components/ganado/GanadoDashboard').then(m => ({ default: m.GanadoDashboard })));
@@ -170,6 +171,7 @@ function LayoutRoutes() {
             <Route path="hato-lechero">
               <Route index element={<HatoDashboard />} />
               <Route path="produccion" element={<HatoProduccionView />} />
+              <Route path="cargas" element={<HatoCargasView />} />
               <Route path="hato">
                 <Route index element={<AnimalesList />} />
                 <Route path=":id" element={<HojaDeVida />} />

@@ -579,6 +579,9 @@ export type PesajeLecheVaca = Pick<HatoPesajeLeche, 'animal_id' | 'fecha' | 'lit
    * dejar fuera un turno incompleto (solo AM o solo PM). */
   litros_am?: number | null;
   litros_pm?: number | null;
+  /** `hato_pesajes_leche.fuente` (web | telegram | foto | importacion). Lo
+   * usa Cargas para decir por dónde entró cada pesaje. */
+  fuente?: string | null;
 };
 
 export interface OpcionesRendimientoVaca {

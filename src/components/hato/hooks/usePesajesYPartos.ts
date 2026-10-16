@@ -21,6 +21,7 @@ interface FilaPesajeCruda {
   litros_total: number | string;
   litros_am: number | string | null;
   litros_pm: number | string | null;
+  fuente: string | null;
 }
 
 function numero(valor: number | string | null): number | null {
@@ -38,6 +39,7 @@ function pesajeDesdeCruda(fila: FilaPesajeCruda): PesajeLecheVaca | null {
     litros_total: litros,
     litros_am: numero(fila.litros_am),
     litros_pm: numero(fila.litros_pm),
+    fuente: fila.fuente,
   };
 }
 
@@ -49,6 +51,9 @@ export interface PesajesYPartos {
    * saben tratar esa ausencia (decisión 11: siguen visibles, nunca se les
    * imputa una fecha). */
   partos: Map<string, string>;
+  /** `animal_id` -> TODAS sus fechas de parto. Producción v2 necesita el
+   * último parto ANTERIOR a un pesaje, no el último de todos. */
+  partosPorAnimal: Map<string, string[]>;
   loading: boolean;
   error: string | null;
   reload: () => void;
@@ -57,6 +62,7 @@ export interface PesajesYPartos {
 export function usePesajesYPartos(): PesajesYPartos {
   const [pesajes, setPesajes] = useState<PesajeLecheVaca[]>([]);
   const [partos, setPartos] = useState<Map<string, string>>(new Map());
+  const [partosPorAnimal, setPartosPorAnimal] = useState<Map<string, string[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,7 +78,7 @@ export function usePesajesYPartos(): PesajesYPartos {
         fetchAll<FilaPesajeCruda>((desde, hasta) =>
           supabase
             .from('hato_pesajes_leche')
-            .select('animal_id, fecha, litros_total, litros_am, litros_pm')
+            .select('animal_id, fecha, litros_total, litros_am, litros_pm, fuente')
             .order('fecha', { ascending: true })
             .range(desde, hasta),
         ),
@@ -89,11 +95,16 @@ export function usePesajesYPartos(): PesajesYPartos {
       setPesajes(pesajesRes.filas.map(pesajeDesdeCruda).filter((fila): fila is PesajeLecheVaca => fila != null));
 
       const mapaPartos = new Map<string, string>();
+      const todosPartos = new Map<string, string[]>();
       for (const p of partosRes.filas) {
         const actual = mapaPartos.get(p.animal_id);
         if (!actual || p.fecha > actual) mapaPartos.set(p.animal_id, p.fecha);
+        const lista = todosPartos.get(p.animal_id);
+        if (lista) lista.push(p.fecha);
+        else todosPartos.set(p.animal_id, [p.fecha]);
       }
       setPartos(mapaPartos);
+      setPartosPorAnimal(todosPartos);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido cargando pesajes/partos del hato');
     } finally {
@@ -105,5 +116,5 @@ export function usePesajesYPartos(): PesajesYPartos {
     reload();
   }, [reload]);
 
-  return { pesajes, partos, loading, error, reload };
+  return { pesajes, partos, partosPorAnimal, loading, error, reload };
 }

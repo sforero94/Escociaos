@@ -20,7 +20,7 @@ export interface IdentidadAnimalHato {
 
 export function useDatosProduccionPorVaca() {
   const { animales, loading: loadingAnimales, error: errorAnimales, reload: reloadAnimales } = useHatoAnimales();
-  const { pesajes, partos, loading: loadingPesajes, error: errorPesajes, reload: reloadPesajes } = usePesajesYPartos();
+  const { pesajes, partos, partosPorAnimal, loading: loadingPesajes, error: errorPesajes, reload: reloadPesajes } = usePesajesYPartos();
 
   // Universo de `proyectarHato` (§4.2c): SOLO vacas activas relevantes a
   // producción -- en ordeño (`hato`) o secas próximas a parir (`horro`).
@@ -59,6 +59,7 @@ export function useDatosProduccionPorVaca() {
   return {
     pesajes,
     partos,
+    partosPorAnimal,
     estadosReproductivos,
     identidadPorAnimal,
     loading: loadingAnimales || loadingPesajes,
