@@ -38,7 +38,7 @@ export function useHatoPajillas() {
   const [animales, setAnimales] = useState<AnimalPickerPajillas[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [guardando, setGuardando] = useState(false);
+  const guardando=false;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -81,25 +81,10 @@ export function useHatoPajillas() {
     }
   }, [supabase]);
 
-  /** G1: registra un lote/compra de pajillas para un toro ya existente en el
-   * catálogo (G4) -- el toro se referencia por id, nunca texto suelto. */
-  const registrarCompra = useCallback(
-    async (toroId: string, cantidadInicial: number): Promise<ResultadoEscrituraPajillas> => {
-      setGuardando(true);
-      try {
-        const { error: insertError } = await supabase
-          .from('hato_pajillas')
-          .insert({ toro_id: toroId, cantidad_inicial: cantidadInicial });
-        if (insertError) throw insertError;
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido registrando la compra de pajillas' };
-      } finally {
-        setGuardando(false);
-      }
-    },
-    [supabase],
-  );
+  /** Stale direct lot signature; actual dialog uses prepared catalog creation. */
+  const registrarCompra=useCallback(async(toroId:string,cantidadInicial:number):Promise<ResultadoEscrituraPajillas>=>{
+    void toroId;void cantidadInicial;return {ok:false,error:'Prepare y revise el lote desde el diálogo actual; conserve el intento original.'};
+  },[]);
 
   /** Retained signature for stale source callers; actual dialog uses the prepared protocol. */
   const registrarUso = useCallback(async(pajillaId:string,fechaUso:string,animalId:string|null):Promise<ResultadoEscrituraPajillas>=>{

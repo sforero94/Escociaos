@@ -55,31 +55,10 @@ export function useHatoToros() {
     }
   }, [supabase]);
 
-  const crearToro = useCallback(
-    async (edicion: HatoToroEdicion): Promise<ResultadoEscrituraToro> => {
-      setGuardando(true);
-      try {
-        const { error: insertError } = await supabase.from('hato_toros').insert({
-          nombre: edicion.nombre.trim(),
-          tipo: edicion.tipo,
-          raza: edicion.raza,
-          activo: edicion.activo,
-        });
-        if (insertError) {
-          if (insertError.code === '23505') {
-            return { ok: false, esNombreDuplicado: true, error: `Ese toro ya existe: "${edicion.nombre.trim()}".` };
-          }
-          throw insertError;
-        }
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido creando el toro' };
-      } finally {
-        setGuardando(false);
-      }
-    },
-    [supabase],
-  );
+  /** Stale creation signature; editing remains its separate existing lane. */
+  const crearToro=useCallback(async(edicion:HatoToroEdicion):Promise<ResultadoEscrituraToro>=>{
+    void edicion;return {ok:false,error:'Prepare y revise el toro desde el diálogo actual; conserve el intento original.'};
+  },[]);
 
   const actualizarToro = useCallback(
     async (id: string, edicion: HatoToroEdicion): Promise<ResultadoEscrituraToro> => {

@@ -5,6 +5,7 @@
 // traduce a un mensaje en español por `useHatoToros.ts` -- el diálogo nunca
 // muestra el error crudo de Postgres y queda abierto para corregir.
 
+import {CatalogCreationDialog} from './CatalogCreationDialog';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,7 +49,7 @@ function edicionDesdeForm(form: FormState): HatoToroEdicion {
   };
 }
 
-export function ToroFormDialog({
+function ToroEditDialog({
   open,
   onOpenChange,
   toro,
@@ -60,7 +61,7 @@ export function ToroFormDialog({
   toro: HatoToroRow | null;
   onGuardado: () => void;
 }) {
-  const { crearToro, actualizarToro, guardando } = useHatoToros();
+  const { actualizarToro, guardando } = useHatoToros();
   const [form, setForm] = useState<FormState>(() => formDesdeToro(toro));
 
   useEffect(() => {
@@ -78,7 +79,8 @@ export function ToroFormDialog({
       return;
     }
     const edicion = edicionDesdeForm(form);
-    const resultado = toro ? await actualizarToro(toro.id, edicion) : await crearToro(edicion);
+    if(!toro)return;
+    const resultado = await actualizarToro(toro.id, edicion);
     if (!resultado.ok) {
       toast.error(resultado.error ?? 'Error desconocido guardando el toro');
       return;
@@ -147,3 +149,5 @@ export function ToroFormDialog({
     </Dialog>
   );
 }
+
+export function ToroFormDialog(props:Parameters<typeof ToroEditDialog>[0]){return props.toro?<ToroEditDialog key={props.toro.id} {...props}/>:<CatalogCreationDialog open={props.open} kind="toro" toros={[]} onOpenChange={props.onOpenChange} onGuardado={props.onGuardado}/>;}

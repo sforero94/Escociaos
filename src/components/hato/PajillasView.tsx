@@ -293,7 +293,7 @@ export function PajillasView() {
             toros={toros}
             registrarCompra={registrarCompra}
             guardando={guardando}
-            onGuardado={recargarPajillas}
+            onGuardado={recargarTodo}
           />
           <PajillaUsoDialog
             open={dialogUso.open}
