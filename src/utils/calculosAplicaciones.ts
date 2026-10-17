@@ -285,7 +285,7 @@ export function generarListaCompras(
     const costo_estimado = unidades_a_comprar * precio_presentacion;
 
     // Determinar alerta
-    let alerta: 'sin_precio' | 'sin_stock' | 'normal' = 'normal';
+    let alerta: 'sin_precio' | 'normal' = 'normal';
     if (!precio_presentacion || precio_presentacion === 0) {
       alerta = 'sin_precio';
       productos_sin_precio++;
@@ -324,11 +324,16 @@ export function generarListaCompras(
 
 /**
  * Extrae el tamaño numérico de una presentación comercial
- * Ejemplos: "Bulto de 25kg" -> 25, "Tarro de 1L" -> 1, "Bolsa 50kg" -> 50
+ * Ejemplos: "Bulto de 25kg" -> 25, "Tarro de 1L" -> 1, "Tarro 1,5 L" -> 1.5
+ * Sin número, vacía, o con tamaño <= 0 → 1 (nunca 0: es divisor; ESCO-151).
+ * Única copia: PasoListaCompras la importa de acá.
  */
-function extraerTamanoPresentacion(presentacion: string): number {
-  const match = presentacion.match(/(\d+\.?\d*)/);
-  return match ? parseFloat(match[1]) : 1;
+export function extraerTamanoPresentacion(presentacion: string | undefined): number {
+  if (!presentacion) return 1;
+  const normalizada = presentacion.replace(/,/g, '.');
+  const match = normalizada.match(/(\d+\.?\d*)/);
+  const valor = match ? parseFloat(match[1]) : 1;
+  return isNaN(valor) || valor <= 0 ? 1 : valor;
 }
 
 /**
