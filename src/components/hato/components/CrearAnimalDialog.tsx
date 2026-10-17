@@ -9,9 +9,9 @@
 // §0c/"Provisional-period guardrails") -- esa franja es para desempates de
 // importación y números de trabajo, nunca para una caravana que Martha va a
 // colgar de verdad. La colisión sobre `hato_animales_numero_activa_unique`
-// (23505) la valida el servidor vía `useCrearHatoAnimal`.
+// (23505) se valida en el protocolo preparado de registro.
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -20,7 +20,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCrearHatoAnimal } from '../hooks/useCrearHatoAnimal';
+import {useAnimalRegistration} from '../hooks/useAnimalRegistration';
+import {useAuth} from '@/contexts/AuthContext';
+import {useFormDraft} from '@/hooks/useFormDraft';
+import {animalRegistrationIntent} from '@/utils/hato/hatoAnimalRegistrationProtocol';
 import { ETAPAS } from './EditarAnimalDialog';
 import { esNumeroProvisional, RANGO_NUMEROS_PROVISIONALES } from '@/utils/importHato/overridesChapeta';
 import type { EtapaHato, OrigenAnimalHato } from '@/types/hato';
@@ -48,7 +51,7 @@ const FORM_INICIAL: FormState = {
   origen: 'compra',
 };
 
-export function CrearAnimalDialog({
+function AnimalRegistrationEditor({
   open,
   onOpenChange,
   onCreado,
@@ -67,26 +70,15 @@ export function CrearAnimalDialog({
    * `AnimalesList`). Sigue siendo un alta editable: nada se guarda solo. */
   prellenado?: { numero?: number | null; nombre?: string | null; etapa?: EtapaHato };
 }) {
-  const { crear, guardando } = useCrearHatoAnimal();
-  const [form, setForm] = useState<FormState>(FORM_INICIAL);
+  const registration=useAnimalRegistration(),guardando=registration.busy;
+  const [form, setForm] = useState<FormState>(()=>({...FORM_INICIAL,numero:prellenado?.numero??undefined,nombre:prellenado?.nombre??'',etapa:prellenado?.etapa??FORM_INICIAL.etapa}));
   const [errorNumero, setErrorNumero] = useState<string | null>(null);
 
-  // Reinicia el formulario cada vez que se abre -- evita arrastrar un alta
-  // sin guardar de una apertura anterior.
-  useEffect(() => {
-    if (open) {
-      setForm({
-        ...FORM_INICIAL,
-        numero: prellenado?.numero ?? FORM_INICIAL.numero,
-        nombre: prellenado?.nombre ?? FORM_INICIAL.nombre,
-        etapa: prellenado?.etapa ?? FORM_INICIAL.etapa,
-      });
-      setErrorNumero(null);
-    }
-    // `prellenado` es un objeto literal del caller: se lee al ABRIR, no en cada
-    // render (dependerlo re-crearía el formulario y borraría lo tecleado).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const draft=useFormDraft('hato-animal-registration',form,{enabled:open});
+  const captured=registration.attempt?.result,plan=captured?.plan;
+  const close=()=>{if(!guardando){if(!registration.attempt)draft.clearDraft();onOpenChange(false);}};
+  const restore=()=>{const d=draft.draftData;if(!d)return;try{animalRegistrationIntent({version:1,input:{numero:d.numero??null,nombre:d.nombre.trim()||null,etapa:d.etapa,raza:d.raza.trim()||null,fecha_nacimiento:d.fecha_nacimiento||null,origen:d.origen}});setForm(d);draft.acceptDraft();}catch{toast.error('Revise el borrador original antes de continuar.');}};
+  const action=async(mode:'post'|'status'|'resolve'|'new')=>{try{await registration.run(mode);if(mode==='new'){draft.clearDraft();if(captured?.state==='committed')onCreado();onOpenChange(false);}else if(mode==='status'&&captured?.state==='committed')toast.success('Registro verificado. Finalice para cerrar.');}catch(e){toast.error(e instanceof Error?e.message:'Conserve el intento original.');}};
 
   const actualizarCampo = <K extends keyof FormState>(campo: K, valor: FormState[K]) => {
     setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -103,33 +95,28 @@ export function CrearAnimalDialog({
     }
     setErrorNumero(null);
 
-    const resultado = await crear({
-      numero: form.numero ?? null,
-      nombre: form.nombre.trim() || null,
-      etapa: form.etapa,
-      raza: form.raza.trim() || null,
-      fecha_nacimiento: form.fecha_nacimiento || null,
-      origen: form.origen,
-    });
-    if (!resultado.ok) {
-      // Colisión de caravana u otro error: mensaje amigable, el diálogo
-      // queda abierto para corregir -- nunca se cierra en error.
-      toast.error(resultado.error ?? 'Error desconocido creando el animal');
-      return;
-    }
-    toast.success('Animal registrado');
-    onCreado();
-    onOpenChange(false);
+    try{await registration.run('prepare',animalRegistrationIntent({version:1,input:{numero:form.numero??null,nombre:form.nombre.trim()||null,etapa:form.etapa,raza:form.raza.trim()||null,fecha_nacimiento:form.fecha_nacimiento||null,origen:form.origen}}));}catch(e){toast.error(e instanceof Error?e.message:'Conserve y verifique el intento original.');}
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value=>{if(!value)close();}}>
       <DialogContent size="md">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
           <DialogHeader>
             <DialogTitle>Registrar animal</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
+            {draft.hasDraft&&!registration.attempt&&<div role="status"><p>Hay un borrador de esta cuenta.</p><Button type="button" onClick={restore}>Restaurar borrador</Button><Button type="button" onClick={draft.discardDraft}>Descartar borrador</Button></div>}
+            <Button type="button" disabled={guardando} onClick={()=>void action('status')}>Recuperar registro original</Button>
+            {registration.error&&<p role="alert">{registration.error}</p>}
+            {registration.attempt&&<section aria-label="Revisión del registro">
+              <p>Intento: {registration.attempt.key} · Estado: {captured?.state??'por verificar'}</p>
+              {plan&&<><p>Animal: {String(plan.nombre??'Sin nombre')} · Caravana: {String(plan.numero??'Sin caravana')}</p><p>Ficha reservada: {String(plan.id)}</p><p>Etapa: {String(plan.etapa)} · Sexo: {String(plan.sexo)} · Estado: {String(plan.estado)}</p><p>Raza: {String(plan.raza??'Sin registrar')} · Origen: {String(plan.origen)}</p><p>Nacimiento: {String(plan.fecha_nacimiento??'Sin registrar')} · Confianza de fecha: {String(plan.fecha_nacimiento_confianza)}</p><p>Confianza: {String(plan.confianza)} · Cuenta registradora: {String(plan.created_by)}</p><p>Revisión válida para: {captured?.effectiveDate}. Se crea únicamente esta ficha.</p></>}
+              <Button type="button" disabled={guardando||captured?.state!=='pending'} onClick={()=>void action('post')}>Confirmar registro revisado</Button>
+              <Button type="button" disabled={guardando||['committed','canceled'].includes(captured?.state??'')} onClick={()=>void action('resolve')}>Cancelar intento original</Button>
+              <Button type="button" disabled={guardando||!['committed','canceled'].includes(captured?.state??'')} onClick={()=>void action('new')}>Finalizar registro verificado</Button>
+            </section>}
+            <fieldset disabled={guardando||!!registration.attempt||draft.hasDraft} className="contents">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="crear-animal-numero">Número (caravana)</Label>
@@ -203,14 +190,15 @@ export function CrearAnimalDialog({
                 />
               </div>
             </div>
+            </fieldset>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
+            <Button type="button" variant="outline" onClick={close} disabled={guardando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={guardando}>
+            <Button type="submit" disabled={guardando||!!registration.attempt||draft.hasDraft}>
               {guardando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Registrar
+              Revisar registro
             </Button>
           </DialogFooter>
         </form>
@@ -218,3 +206,5 @@ export function CrearAnimalDialog({
     </Dialog>
   );
 }
+
+export function CrearAnimalDialog(props:Parameters<typeof AnimalRegistrationEditor>[0]){const {user,hasRole}=useAuth();if(!props.open||!user||!hasRole(['Administrador','Gerencia']))return null;return <AnimalRegistrationEditor key={`${user.id}:${JSON.stringify(props.prellenado??null)}`} {...props}/>;}
