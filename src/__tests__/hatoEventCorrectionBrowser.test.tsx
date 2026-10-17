@@ -1,3 +1,4 @@
+import {prepared as cyclePrepared,committed as cycleCommitted,intent as cycleIntent} from './fixtures/hatoCycle';
 import {useState} from 'react';
 import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {create,act,type ReactTestRenderer} from 'react-test-renderer';
@@ -39,3 +40,27 @@ it('storage loss while mounted restores only the reviewed original key before st
 it('another event cannot finalize or clear the original event attempt',async()=>{await runEventCorrectionBrowser(client(),OWNER,intent,'prepare',()=>true);await mount({...event,id:OTHER});await click('Recuperar intento original');expect(JSON.stringify(renderer!.toJSON())).toContain('Abra ese evento');expect(JSON.stringify(renderer!.toJSON())).not.toContain('Revisión de corrección');expect(pendingEventCorrectionBrowser(OWNER)?.intent.eventId).toBe(event.id);expect(refresh).not.toHaveBeenCalled();});
 
 it('animal-page recovery entry reopens original after deleted timeline row is absent',async()=>{await mount();await click('Revisar eliminación');const impl=client().rpc.getMockImplementation() as (n:string,a:Record<string,unknown>)=>Promise<unknown>;client().rpc.mockImplementation(async(n,a)=>{const r=await impl(n,a);if(a.p_action==='post')throw Error('lost');return r;});await click('Confirmar eliminación revisada');await act(async()=>renderer!.unmount());function Page(){const [selected,setSelected]=useState<HatoEventoRow|null>(null);return <><EventCorrectionRecoveryButton onRecover={setSelected}/><EditarEventoDialog open={!!selected} evento={selected} chequeoFecha={null} nombresToroPorId={{}} onOpenChange={()=>{}} onGuardado={refresh}/></>;}await act(async()=>{renderer=create(<Page/>);});expect(renderer!.root.findAllByType('form')).toHaveLength(0);await click('Recuperar corrección de evento');await click('Recuperar intento original');expect(JSON.stringify(renderer!.toJSON())).toContain('committed');await click('Finalizar intento verificado');expect(refresh).toHaveBeenCalledOnce();expect(client().rpc.mock.calls.filter(c=>c[1].p_action==='post')).toHaveLength(1);});
+
+for(const marca of ['preñada','confirmada'] as const)for(const modo of ['fecha_conocida','meses_prenez'] as const)for(const member of ['servicio','confirmacion_prenez'])for(const mode of ['edit','delete'] as const){
+ it(`cycle ${marca}/${modo}/${member}/${mode} reviews only the selected event and preserves its counterpart`,async()=>{
+  const creation=cycleCommitted(cyclePrepared(KEY,{...cycleIntent,input:{...cycleIntent.input,marca,criaDestino:null,ancla:{modo,fechaServicio:modo==='fecha_conocida'?'2026-01-15':null,mesesPrenez:modo==='meses_prenez'?3:null}}}));
+  const graph=creation.receipt!.after,target=graph.events.find(e=>e.tipo===member)!,partner=graph.events.find(e=>e.id!==target.id)!;
+  const impl=client().rpc.getMockImplementation() as (n:string,a:Record<string,unknown>)=>Promise<unknown>;
+  client().rpc.mockImplementation(async(n,a)=>{
+   await impl(n,a);saved!.original!.graph=structuredClone(graph);
+   if(saved!.receipt){const receipt=saved!.receipt;receipt.original=structuredClone(saved!.original!);const events=graph.events.filter(e=>e.id!==target.id);if(saved!.plan!.event)events.push(saved!.plan!.event);events.sort((a,b)=>String(a.id).localeCompare(String(b.id)));receipt.after={...structuredClone(saved!.original!),event:saved!.plan!.event,graph:{...structuredClone(graph),events}};}
+   return {data:saved,error:null};
+  });
+  await mount(target as unknown as HatoEventoRow);
+  if(mode==='edit'){
+   const day=new Date(String(target.fecha)+'T00:00:00Z');day.setUTCDate(day.getUTCDate()+1);
+   await act(async()=>renderer!.root.findByProps({id:'editar-evento-fecha'}).props.onChange({target:{value:day.toISOString().slice(0,10)}}));await prepare();
+  }else await click('Revisar eliminación');
+  expect(saved?.state).toBe('pending');expect(saved?.original?.graph).toEqual(graph);expect(saved?.intent?.eventId).toBe(target.id);expect(client().rpc.mock.calls.map(c=>c[1].p_action)).toEqual(['prepare']);
+  await click(mode==='edit'?'Confirmar corrección revisada':'Confirmar eliminación revisada');
+  expect(saved?.state).toBe('committed');expect(saved?.receipt?.after.graph.events.find(e=>e.id===partner.id)).toEqual(partner);
+  expect(saved?.receipt?.after.event).toEqual(saved?.plan?.event);expect(saved?.receipt?.original.graph).toEqual(graph);
+  if(mode==='edit'){expect(saved?.receipt?.after.event?.tipo_servicio).toBe(target.tipo_servicio);expect(saved?.receipt?.after.event?.toro_id).toBe(target.toro_id);expect(saved?.receipt?.after.event?.datos).toMatchObject(target.datos as Record<string,unknown>);}
+  await click('Finalizar intento verificado');expect(pendingEventCorrectionBrowser(OWNER)).toBeNull();expect(client().rpc.mock.calls.filter(c=>c[1].p_action==='post')).toHaveLength(1);expect(client().from).not.toHaveBeenCalled();expect(refresh).toHaveBeenCalledOnce();
+ });
+}
