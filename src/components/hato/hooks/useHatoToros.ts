@@ -36,7 +36,7 @@ export function useHatoToros() {
   const [toros, setToros] = useState<HatoToroRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [guardando, setGuardando] = useState(false);
+  const guardando=false;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -60,34 +60,10 @@ export function useHatoToros() {
     void edicion;return {ok:false,error:'Prepare y revise el toro desde el diálogo actual; conserve el intento original.'};
   },[]);
 
-  const actualizarToro = useCallback(
-    async (id: string, edicion: HatoToroEdicion): Promise<ResultadoEscrituraToro> => {
-      setGuardando(true);
-      try {
-        const { error: updateError } = await supabase
-          .from('hato_toros')
-          .update({
-            nombre: edicion.nombre.trim(),
-            tipo: edicion.tipo,
-            raza: edicion.raza,
-            activo: edicion.activo,
-          })
-          .eq('id', id);
-        if (updateError) {
-          if (updateError.code === '23505') {
-            return { ok: false, esNombreDuplicado: true, error: `Ese toro ya existe: "${edicion.nombre.trim()}".` };
-          }
-          throw updateError;
-        }
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido actualizando el toro' };
-      } finally {
-        setGuardando(false);
-      }
-    },
-    [supabase],
-  );
+  /** Stale direct edit signature; actual dialog uses prepared original recovery. */
+  const actualizarToro=useCallback(async(id:string,edicion:HatoToroEdicion):Promise<ResultadoEscrituraToro>=>{
+    void id;void edicion;return {ok:false,error:'Prepare y revise la edición desde el diálogo actual; conserve el intento original.'};
+  },[]);
 
   return { toros, loading, error, guardando, reload, crearToro, actualizarToro };
 }

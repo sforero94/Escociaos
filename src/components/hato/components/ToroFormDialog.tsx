@@ -1,153 +1,35 @@
-// ARCHIVO: components/hato/components/ToroFormDialog.tsx
-// DESCRIPCIÓN: Diálogo crear/editar de `hato_toros` (G4/V12, S10). Se abre
-// vacío para "Nuevo toro" o precargado con un `HatoToroRow` para "Editar".
-// La colisión de nombre (índice único `lower(nombre)`, migración 053) se
-// traduce a un mensaje en español por `useHatoToros.ts` -- el diálogo nunca
-// muestra el error crudo de Postgres y queda abierto para corregir.
-
+import {useState,type FormEvent} from 'react';
+import {toast} from 'sonner';
+import {useAuth} from '@/contexts/AuthContext';
+import {draftStorageKey,removeOwnedDraft} from '@/utils/draftStorage';
+import {useFormDraft} from '@/hooks/useFormDraft';
+import {catalogEditIntent,type CatalogEditIntent} from '@/utils/hato/hatoCatalogEditProtocol';
+import {useCatalogEdit} from '../hooks/useCatalogEdit';
 import {CatalogCreationDialog} from './CatalogCreationDialog';
-import { useEffect, useState, type FormEvent } from 'react';
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useHatoToros, type HatoToroEdicion } from '../hooks/useHatoToros';
-import type { HatoToroRow, TipoServicioHato } from '@/types/hato';
-
-const TIPOS: { value: string; label: string }[] = [
-  { value: 'sin_especificar', label: 'Sin especificar' },
-  { value: 'monta', label: 'Monta' },
-  { value: 'inseminacion', label: 'Inseminación' },
-];
-
-interface FormState {
-  nombre: string;
-  tipo: string;
-  raza: string;
-  activo: boolean;
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogBody,DialogFooter} from '@/components/ui/dialog';
+import {Button} from '@/components/ui/button';
+import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
+import {Switch} from '@/components/ui/switch';
+import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
+import type {HatoToroRow} from '@/types/hato';
+interface Props {open:boolean;onOpenChange:(v:boolean)=>void;toro:HatoToroRow|null;onGuardado:()=>void}
+function Editor({toro,onOpenChange,onGuardado}:Props&{toro:HatoToroRow}){
+ const edit=useCatalogEdit(),[observedBull]=useState(()=>({id:toro.id,nombre:toro.nombre,tipo:toro.tipo,raza:toro.raza,activo:toro.activo})),[form,setForm]=useState(()=>({nombre:toro.nombre,tipo:toro.tipo??'sin_especificar',raza:toro.raza??'',activo:toro.activo}));
+ const [restored,setRestored]=useState<CatalogEditIntent['observedBull']|null>(null);
+ const draft=useFormDraft('hato-bull-edit:'+toro.id,{observedBull:restored??observedBull,form}),attempt=edit.attempt,result=attempt?.result,after=result?.plan?.row,before=result?.original?.toros.find(t=>t.id===attempt?.intent.bullId);
+ const intent=()=>catalogEditIntent({version:1,bullId:toro.id,observedBull:restored??observedBull,changes:{nombre:form.nombre.trim(),tipo:form.tipo==='sin_especificar'?null:form.tipo,raza:form.raza.trim()||null,activo:form.activo}});
+ const action=async(mode:'post'|'status'|'resolve'|'new')=>{try{await edit.run(mode);if(mode==='new'){if(attempt?.intent.bullId===toro.id)draft.clearDraft();else if(attempt)removeOwnedDraft(draftStorageKey(attempt.owner,'hato-bull-edit:'+attempt.intent.bullId));if(result?.state==='committed')onGuardado();onOpenChange(false);}}catch(e){toast.error(e instanceof Error?e.message:'Conserve y verifique la edición original.');}};
+ const close=()=>{if(!edit.busy){if(!attempt)draft.clearDraft();onOpenChange(false);}};
+ const submit=async(e:FormEvent)=>{e.preventDefault();try{await edit.run('prepare',intent());}catch(e){toast.error(e instanceof Error?e.message:'Conserve la edición original.');}};
+ const restore=()=>{try{const d=draft.draftData;if(!d)return;catalogEditIntent({version:1,bullId:toro.id,observedBull:d.observedBull,changes:{nombre:d.form.nombre.trim(),tipo:d.form.tipo==='sin_especificar'?null:d.form.tipo,raza:d.form.raza.trim()||null,activo:d.form.activo}});setRestored(d.observedBull);setForm(d.form);draft.acceptDraft();}catch{toast.error('Revise el borrador original.');}};
+ return <Dialog open onOpenChange={v=>{if(!v)close();}}><DialogContent size="sm"><form onSubmit={submit} className="flex flex-col flex-1 min-h-0 gap-4"><DialogHeader><DialogTitle>Editar toro</DialogTitle></DialogHeader><DialogBody className="space-y-4">
+ {draft.hasDraft&&!attempt&&<div><p>Hay un borrador de esta cuenta.</p><Button type="button" onClick={restore}>Restaurar borrador</Button><Button type="button" onClick={draft.discardDraft}>Descartar borrador</Button></div>}
+ <Button type="button" disabled={edit.busy} onClick={()=>void action('status')}>Recuperar edición original</Button>{edit.error&&<p role="alert">{edit.error}</p>}
+ {attempt&&<section aria-label="Revisión de edición"><p>Intento: {attempt.key} · Estado: {result?.state??'por verificar'} · Toro: {attempt.intent.bullId}</p>{after&&before&&<><p>Nombre: {String(before.nombre)} → {String(after.nombre)}</p><p>Tipo: {String(before.tipo??'Sin especificar')} → {String(after.tipo??'Sin especificar')}</p><p>Raza: {String(before.raza??'Sin registrar')} → {String(after.raza??'Sin registrar')}</p><p>Activo: {String(before.activo)} → {String(after.activo)}</p><p>Cuenta que edita: {attempt.owner} · Revisión válida para: {result?.effectiveDate}</p><p>Se conserva el registro de creación y toda la historia vinculada.</p></>}
+ <Button type="button" disabled={edit.busy||result?.state!=='pending'} onClick={()=>void action('post')}>Confirmar edición revisada</Button><Button type="button" disabled={edit.busy||['committed','canceled'].includes(result?.state??'')} onClick={()=>void action('resolve')}>Cancelar intento original</Button><Button type="button" disabled={edit.busy||!['committed','canceled'].includes(result?.state??'')} onClick={()=>void action('new')}>Finalizar edición verificada</Button></section>}
+ <fieldset disabled={edit.busy||!!attempt||draft.hasDraft} className="contents"><Label htmlFor="toro-nombre">Nombre</Label><Input id="toro-nombre" value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))}/><Label htmlFor="toro-tipo">Tipo de servicio</Label><Select value={form.tipo} onValueChange={v=>setForm(f=>({...f,tipo:v as typeof f.tipo}))}><SelectTrigger id="toro-tipo"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="sin_especificar">Sin especificar</SelectItem><SelectItem value="monta">Monta</SelectItem><SelectItem value="inseminacion">Inseminación</SelectItem></SelectContent></Select>
+ <Label htmlFor="toro-raza">Raza</Label><Input id="toro-raza" value={form.raza} onChange={e=>setForm(f=>({...f,raza:e.target.value}))}/><Label htmlFor="toro-activo">Activo</Label><Switch id="toro-activo" checked={form.activo} onCheckedChange={v=>setForm(f=>({...f,activo:v}))}/></fieldset>
+ </DialogBody><DialogFooter><Button type="button" variant="outline" disabled={edit.busy} onClick={close}>Cerrar</Button><Button type="submit" disabled={edit.busy||!!attempt||draft.hasDraft}>Revisar edición</Button></DialogFooter></form></DialogContent></Dialog>;
 }
-
-function formDesdeToro(toro: HatoToroRow | null): FormState {
-  return {
-    nombre: toro?.nombre ?? '',
-    tipo: toro?.tipo ?? 'sin_especificar',
-    raza: toro?.raza ?? '',
-    activo: toro?.activo ?? true,
-  };
-}
-
-function edicionDesdeForm(form: FormState): HatoToroEdicion {
-  return {
-    nombre: form.nombre.trim(),
-    tipo: form.tipo === 'sin_especificar' ? null : (form.tipo as TipoServicioHato),
-    raza: form.raza.trim() || null,
-    activo: form.activo,
-  };
-}
-
-function ToroEditDialog({
-  open,
-  onOpenChange,
-  toro,
-  onGuardado,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** `null` = creando un toro nuevo; un `HatoToroRow` = editando uno existente. */
-  toro: HatoToroRow | null;
-  onGuardado: () => void;
-}) {
-  const { actualizarToro, guardando } = useHatoToros();
-  const [form, setForm] = useState<FormState>(() => formDesdeToro(toro));
-
-  useEffect(() => {
-    if (open) setForm(formDesdeToro(toro));
-  }, [open, toro]);
-
-  const actualizarCampo = <K extends keyof FormState>(campo: K, valor: FormState[K]) => {
-    setForm((prev) => ({ ...prev, [campo]: valor }));
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!form.nombre.trim()) {
-      toast.error('El nombre del toro es obligatorio');
-      return;
-    }
-    const edicion = edicionDesdeForm(form);
-    if(!toro)return;
-    const resultado = await actualizarToro(toro.id, edicion);
-    if (!resultado.ok) {
-      toast.error(resultado.error ?? 'Error desconocido guardando el toro');
-      return;
-    }
-    toast.success(toro ? 'Toro actualizado' : 'Toro creado');
-    onGuardado();
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
-          <DialogHeader>
-            <DialogTitle>{toro ? 'Editar toro' : 'Nuevo toro'}</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="toro-nombre">Nombre</Label>
-              <Input
-                id="toro-nombre"
-                value={form.nombre}
-                onChange={(e) => actualizarCampo('nombre', e.target.value)}
-                placeholder="Ej. Fabace"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="toro-tipo">Tipo de servicio</Label>
-              <Select value={form.tipo} onValueChange={(v) => actualizarCampo('tipo', v)}>
-                <SelectTrigger id="toro-tipo">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPOS.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="toro-raza">Raza</Label>
-              <Input
-                id="toro-raza"
-                value={form.raza}
-                onChange={(e) => actualizarCampo('raza', e.target.value)}
-                placeholder="Opcional"
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-              <Label htmlFor="toro-activo">Activo</Label>
-              <Switch id="toro-activo" checked={form.activo} onCheckedChange={(v) => actualizarCampo('activo', v)} />
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={guardando}>
-              {guardando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Guardar
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function ToroFormDialog(props:Parameters<typeof ToroEditDialog>[0]){return props.toro?<ToroEditDialog key={props.toro.id} {...props}/>:<CatalogCreationDialog open={props.open} kind="toro" toros={[]} onOpenChange={props.onOpenChange} onGuardado={props.onGuardado}/>;}
+export function ToroFormDialog(props:Props){const {user,hasRole}=useAuth();if(!props.toro)return <CatalogCreationDialog open={props.open} kind="toro" toros={[]} onOpenChange={props.onOpenChange} onGuardado={props.onGuardado}/>;if(!props.open||!user||!hasRole(['Administrador','Gerencia']))return null;return <Editor key={`${user.id}:${props.toro.id}`} {...props} toro={props.toro}/>;}
