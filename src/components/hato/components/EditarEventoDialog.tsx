@@ -1,3 +1,4 @@
+import {CycleBirthUndoDialog,isCycleRetainedBirth} from './CycleBirthUndoDialog';
 import { useState, type FormEvent } from 'react';
 import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -255,7 +256,7 @@ function EventEditor({open,onOpenChange,evento:initial,nombresToroPorId,onGuarda
 
 /** A different account, event or opening cannot reuse an earlier mounted review. */
 export function EditarEventoDialog(props:EditarEventoDialogProps){
- const {user}=useAuth();return props.open&&props.evento?<EventEditor key={(user?.id??'signed-out')+':'+props.evento.id} {...props} evento={props.evento}/>:null;
+ const {user}=useAuth();if(!props.open||!props.evento)return null;const key=(user?.id??'signed-out')+':'+props.evento.id;return isCycleRetainedBirth(props.evento)?<CycleBirthUndoDialog key={key} {...props} evento={props.evento}/>:<EventEditor key={key} {...props} evento={props.evento}/>;
 }
 
 /** Independent entry survives a deleted event disappearing from the timeline. */

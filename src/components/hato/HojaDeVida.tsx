@@ -1,3 +1,4 @@
+import {CycleBirthUndoRecoveryButton} from './components/CycleBirthUndoDialog';
 // ARCHIVO: components/hato/HojaDeVida.tsx
 // DESCRIPCIÓN: Ruta `/hato-lechero/hato/:id` (S4, plan §7.5 pantalla ③).
 // Ficha completa de un animal: identidad + franja de estadísticas + timeline
@@ -365,6 +366,7 @@ export function HojaDeVida() {
             onGuardado={recargarTratamientos}
           />
           <EventCorrectionRecoveryButton onRecover={setEventoSeleccionado}/>
+          <CycleBirthUndoRecoveryButton onRecover={setEventoSeleccionado}/>
           <EditarEventoDialog
             open={!!eventoSeleccionado}
             onOpenChange={(o) => {
