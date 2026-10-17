@@ -49,6 +49,14 @@ describe('endpoints de chequeo — histórico de hato_chequeo_vacas paginado', (
   it.each(FICHEROS)('%s pagina la lectura del histórico', (ruta) => {
     const fuente = readFileSync(resolve(__dirname, '../..', ruta), 'utf-8');
 
+    if(ruta.endsWith('hato-chequeo-commit.ts')){
+      expect(fuente).toContain('prepareTrustedChequeo');
+      expect(fuente).not.toContain(".from('hato_chequeo_vacas')");
+      const sql=readFileSync(resolve(__dirname,'../sql/security-candidates/hato-chequeo-integrity.sql'),'utf8');
+      expect(sql).toContain("jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM public.hato_chequeo_vacas t");
+      expect(sql).not.toMatch(/FROM public\.hato_chequeo_vacas t\s+LIMIT/i);
+      return;
+    }
     expect(fuente).toContain("import { paginarSelect } from './paginar-select.ts';");
 
     // Cada bloque `.from('hato_chequeo_vacas')` tiene que cerrar en `.range(`.

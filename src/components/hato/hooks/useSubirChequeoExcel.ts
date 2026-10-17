@@ -23,6 +23,7 @@
 // endpoints exigen rol Administrador/Gerencia).
 
 import { useState, useCallback } from 'react';
+import {useChequeo} from './useChequeo';
 import { getSupabase } from '@/utils/supabase/client';
 import { getSupabaseConfig } from '@/utils/supabase/config';
 import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
@@ -30,7 +31,7 @@ import type { ResultadoDiffChequeo } from '@/utils/importHato/diffChequeo';
 import type { FilaChequeoNormalizada, ManifiestoHoja, FilaTerneraNormalizada, FilaSubtablaNormalizada } from '@/utils/importHato/tipos';
 import type { FilaRechazadaCommit } from '@/utils/importHato/commitChequeo';
 import type { AnimalFueraDelRoster } from '@/utils/importHato/ocrChequeo';
-import { verificarReemplazoChequeo, ErrorConfirmacionReemplazoChequeo, type ReemplazoChequeo } from '@/utils/hato/reemplazoChequeo';
+import { type ReemplazoChequeo } from '@/utils/hato/reemplazoChequeo';
 
 const edgeFunctionBase = () => `${getSupabaseConfig().url}/functions/v1`;
 
@@ -148,7 +149,9 @@ export function useSubirChequeoExcel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<PreviewChequeoRespuesta | null>(null);
-  const [comprometiendo, setComprometiendo] = useState(false);
+  const chequeo=useChequeo();
+  const runChequeo=chequeo.run;
+  const comprometiendo=chequeo.busy;
   const [errorCommit, setErrorCommit] = useState<string | null>(null);
   const [filasRechazadas, setFilasRechazadas] = useState<FilaRechazadaCommit[] | null>(null);
   const [commitResultado, setCommitResultado] = useState<CommitChequeoRespuesta | null>(null);
@@ -297,62 +300,15 @@ export function useSubirChequeoExcel() {
         throw new Error('No hay filas sin_cambio/cambio para aprobar en este diff.');
       }
 
-      setComprometiendo(true);
-      setErrorCommit(null);
-      setFilasRechazadas(null);
-      setCommitResultado(null);
-      try {
-        await verificarReemplazoChequeo(fechaChequeo, opciones?.reemplazoConfirmado);
-        const token = await obtenerTokenSesion();
-        const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/chequeo/commit`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            archivo: resultado.archivo,
-            generadoEn: resultado.generadoEn,
-            chequeo: { fecha: fechaChequeo, veterinario: veterinario ?? null },
-            filas: filasAprobables,
-            // Solo la ruta por foto trae una captura que cerrar.
-            capturaId: resultado.capturaId ?? null,
-          }),
-        });
-
-        const resultadoCuerpo = await leerCuerpoEdgeFunction<{
-          success?: boolean;
-          error?: string;
-          filasRechazadas?: FilaRechazadaCommit[];
-        }>(res);
-        if (!resultadoCuerpo.ok) {
-          throw new Error(resultadoCuerpo.mensaje);
-        }
-        const body = resultadoCuerpo.body;
-        if (res.status === 409 && Array.isArray(body?.filasRechazadas)) {
-          throw new ErrorCommitChequeoRechazado(
-            body.error || 'El hato cambió desde la vista previa -- revisa de nuevo antes de aprobar.',
-            body.filasRechazadas as FilaRechazadaCommit[],
-          );
-        }
-        if (!res.ok || !body?.success) {
-          throw new Error(body?.error || `El servidor respondió ${res.status} al aprobar el chequeo.`);
-        }
-
-        setCommitResultado(body as CommitChequeoRespuesta);
-        return body as CommitChequeoRespuesta;
-      } catch (err) {
-        if (err instanceof ErrorConfirmacionReemplazoChequeo) throw err;
-        if (err instanceof ErrorCommitChequeoRechazado) {
-          setErrorCommit(err.message);
-          setFilasRechazadas(err.filasRechazadas);
-        } else {
-          setErrorCommit(err instanceof Error ? err.message : 'Error desconocido aprobando el chequeo');
-        }
-        throw err;
-      } finally {
-        setComprometiendo(false);
-      }
-    },
-    [resultado],
+      setErrorCommit(null);setFilasRechazadas(null);
+      return runChequeo('prepare',{version:1,archivo:resultado.archivo,generadoEn:resultado.generadoEn,chequeo:{fecha:fechaChequeo,veterinario:veterinario??null},filas:filasAprobables,capturaId:resultado.capturaId??null});
+    },[resultado,runChequeo],
   );
+  const accionChequeo=useCallback(async(mode:'post'|'status'|'resolve'|'new')=>{
+   const result=await runChequeo(mode);if(result?.result?.state==='committed'){
+    const receipt=result.result.receipt!;setCommitResultado({success:true,chequeoId:String(receipt.after.header.id),filasEscritas:receipt.after.details.length,eventosEscritos:receipt.after.events.length,torosCreados:receipt.after.bulls.length});
+   }return result;
+  },[runChequeo]);
 
   const limpiar = useCallback(() => {
     setResultado(null);
@@ -366,12 +322,14 @@ export function useSubirChequeoExcel() {
     subir,
     subirFotos,
     comprometer,
+    accionChequeo,
+    intentoChequeo:chequeo.attempt,
     limpiar,
     loading,
     error,
     resultado,
     comprometiendo,
-    errorCommit,
+    errorCommit:errorCommit??chequeo.error,
     filasRechazadas,
     commitResultado,
   };

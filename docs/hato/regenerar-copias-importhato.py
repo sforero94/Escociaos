@@ -54,6 +54,8 @@ MODULOS = [
     'overridesChapeta.ts',
     'diffChequeo.ts',
     'commitChequeo.ts',
+    'preparedChequeo.ts',
+    'preparedChequeoRpc.ts',
     # Fase 3b de docs/plan_chequeo_captura_foto.md: la ruta de carga POR FOTO
     # (`hato-chequeo-foto.ts`) necesita la lógica pura de roster/ancla/matriz
     # cruda del mismo lado que el resto del pipeline.
@@ -85,6 +87,8 @@ RE_FROM = re.compile(r"from '([^']+)'")
 
 
 def reescribir_import(spec: str, archivo: str) -> str:
+    if spec == '@/utils/hatoConfigDesdeTabla':
+        return '../hato-config-desde-tabla.ts'
     if spec == '@/utils/calculosHato':
         return '../calculos-hato.ts'
     if spec.startswith('./'):

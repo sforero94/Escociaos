@@ -1,3 +1,4 @@
+import {ChequeoConfirmationPanel} from './ChequeoConfirmationPanel';
 // ARCHIVO: components/hato/components/SubirChequeoExcel.tsx
 //
 // Fase 3b -- DOS RUTAS DE ENTRADA, un solo flujo. El modo por defecto es
@@ -89,7 +90,7 @@ function textoMotivoNoPromovible(motivo: string): string {
  * entera antes de subir 20MB para recibir un rechazo. */
 const MAX_FOTOS = 6;
 
-export function SubirChequeoExcel({
+function ChequeoImportEditor({
   open,
   onOpenChange,
   onCompletado,
@@ -109,6 +110,8 @@ export function SubirChequeoExcel({
     subir,
     subirFotos,
     comprometer,
+    accionChequeo,
+    intentoChequeo,
     limpiar,
     loading,
     error,
@@ -178,7 +181,7 @@ export function SubirChequeoExcel({
             : null;
 
   const handleAprobar = async (reemplazoConfirmado?: ReemplazoChequeo) => {
-    if (bloqueoAprobacion) return;
+    if (bloqueoAprobacion || intentoChequeo) return;
     try {
       await comprometer({
         veterinario: veterinario.trim() || undefined,
@@ -271,6 +274,7 @@ export function SubirChequeoExcel({
             <DialogTitle>Subir chequeo veterinario</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
+            <ChequeoConfirmationPanel attempt={intentoChequeo} busy={comprometiendo} onAction={accionChequeo}/>
             {!resultado && (
               <div className="flex items-center gap-3">
                 <CapturaArchivo
@@ -556,7 +560,7 @@ export function SubirChequeoExcel({
                   title={bloqueoAprobacion ?? undefined}
                 >
                   {comprometiendo && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {comprometiendo ? 'Aprobando...' : `Aprobar (${filasAprobables})`}
+                  {comprometiendo ? 'Preparando...' : `Revisar chequeo (${filasAprobables})`}
                 </Button>
               </>
             )}
@@ -641,3 +645,5 @@ export function SubirChequeoExcel({
     </>
   );
 }
+
+export function SubirChequeoExcel(props:Parameters<typeof ChequeoImportEditor>[0]){const {user}=useAuth();if(!props.open||!user)return null;return <ChequeoImportEditor key={user.id} {...props}/>;}

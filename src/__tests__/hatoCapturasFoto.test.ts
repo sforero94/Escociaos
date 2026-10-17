@@ -272,8 +272,12 @@ describe('rutas de foto — el intento se registra ANTES del OCR', () => {
 
   it.each(ARBOLES)('%s cierra la captura en el commit de chequeo', (arbol) => {
     const fuente = leer(`${arbol}/hato-chequeo-commit.ts`);
-    expect(fuente).toContain("desenlace: 'ok'");
-    expect(fuente).toContain('filasEscritas: resultado.filasEscritas');
+    expect(fuente).toContain('prepareTrustedChequeo');
+    expect(fuente).not.toContain('cerrarCapturaConFallo');
+    const sql=leer('src/sql/security-candidates/hato-chequeo-integrity.sql');
+    expect(sql).toContain("UPDATE public.hato_capturas_foto SET desenlace='ok'");
+    expect(sql).toContain('created_by=p_expected_owner');
+    expect(sql).toContain('Chequeo capture suppressed/mutated');
   });
 
   it('los dos árboles quedan idénticos en los ficheros tocados', () => {
