@@ -179,6 +179,22 @@ export interface LoteInfoCosto {
   nombre: string;
   /** Ároles totales (GENERATED column en DB). NULL o 0 → excluir de asignación overhead. */
   total_arboles: number;
+  /**
+   * `lotes.activo`. Ausente = activo (lectura degradada mientras la migración 181
+   * no esté aplicada: sólo se leen lotes activos).
+   */
+  activo?: boolean;
+  /**
+   * `lotes.fecha_erradicacion` (AAAA-MM-DD). NULL/ausente = sin fecha conocida.
+   * Decide los días activos del lote en el prorrateo por árbol-día (ESCO-139).
+   */
+  fecha_erradicacion?: string | null;
+}
+
+/** Período cerrado [inicio, fin], ambas fechas AAAA-MM-DD inclusive. */
+export interface PeriodoCosto {
+  inicio: string;
+  fin: string;
 }
 
 /** Resultado de costo por lote para un año. */

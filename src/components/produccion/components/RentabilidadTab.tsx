@@ -135,7 +135,7 @@ function DisclaimersPanel() {
       </div>
       <p>• Costo/kg por lote disponible desde 2026 (mano de obra desde oct-2025, aplicaciones desde dic-2025).</p>
       <p>• Distribucion por cosecha proporcional a los kilos registrados en cada tipo (Principal / Traviesa).</p>
-      <p>• Gastos generales (overhead) distribuidos proporcionalmente al numero de arboles por lote.</p>
+      <p>• Gastos generales (overhead) distribuidos por arboles × dias activos del lote en el año: un lote erradicado solo carga los dias anteriores a su fecha de erradicacion.</p>
       <p>• Lotes con 0 arboles registrados se excluyen del calculo de overhead.</p>
       <p>• Precio de venta: promedio ponderado por kg de fin_ingresos (negocio Aguacate Hass) del mismo año.</p>
     </div>
