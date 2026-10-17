@@ -1,0 +1,33 @@
+import {validateCycleResult,sameCycle as sameBirth,type CycleClient,type CycleOriginal,type CycleResult} from './hatoCycleProtocol';
+import {validAlertResponseAnimal,type JsonRow} from './alertResponseProtocol';
+export interface CycleBirthUndoOriginal {creation:CycleResult;snapshot:CycleOriginal;event:JsonRow;calf:JsonRow}
+export interface CycleBirthUndoReceipt {version:1;requestKey:string;actor:{origin:'web';profileId:string};owner:string;eventId:string;original:CycleBirthUndoOriginal;effectiveDate:string;recordedAt:string;after:{event:null;calf:null;graph:CycleOriginal['graph'];animals:JsonRow[]};corrections:JsonRow[];footprints:{before:string;after:string}}
+export interface CycleBirthUndoResult {version:1;requestKey:string;actor:{origin:'web';profileId:string};owner:string;eventId:string|null;original:CycleBirthUndoOriginal|null;effectiveDate:string|null;state:'unknown'|'pending'|'committed'|'canceled';receipt:CycleBirthUndoReceipt|null}
+const obj=(x:unknown):x is JsonRow=>!!x&&typeof x==='object'&&!Array.isArray(x);
+const keys=(x:unknown,k:string[]):x is JsonRow=>obj(x)&&Object.keys(x).sort().join('|')===[...k].sort().join('|');
+const uuid=(x:unknown):x is string=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(x);
+const date=(x:unknown):x is string=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Number.isFinite(Date.parse(x+'T00:00:00Z'))&&new Date(x+'T00:00:00Z').toISOString()===x+'T00:00:00.000Z';
+const rows=(x:unknown):x is JsonRow[]=>Array.isArray(x)&&x.every(v=>obj(v)&&uuid(v.id))&&new Set(x.map(v=>v.id)).size===x.length&&sameBirth(x,[...x].sort((a,b)=>String(a.id).localeCompare(String(b.id))));
+const fail=():never=>{throw Error('No pude verificar el deshacer original del parto y su cría. Conserve el intento original; no prepare un reemplazo.');};
+export function validateCycleBirthUndoResult(x:unknown,owner:string,key:string,eventId?:string):CycleBirthUndoResult{
+ if(!uuid(owner)||!uuid(key))return fail();
+ if(!keys(x,['version','requestKey','actor','owner','eventId','original','effectiveDate','state','receipt'])||x.version!==1||x.owner!==owner||x.requestKey!==key||!sameBirth(x.actor,{origin:'web',profileId:owner})||!['unknown','pending','committed','canceled'].includes(String(x.state)))return fail();
+ if(x.original===null||x.eventId===null||x.effectiveDate===null){if(x.original!==null||x.eventId!==null||x.effectiveDate!==null||!['unknown','canceled'].includes(String(x.state))||x.receipt!==null)return fail();return x as unknown as CycleBirthUndoResult;}
+ if(!uuid(x.eventId)||(eventId&&x.eventId!==eventId)||!date(x.effectiveDate)||x.state==='unknown'||!keys(x.original,['creation','snapshot','event','calf']))return fail();
+ const b=x.original,c=b.creation;if(!obj(c)||!uuid(c.owner)||!uuid(c.requestKey))return fail();const creation=validateCycleResult(c,c.owner,c.requestKey);
+ if(creation.state!=='committed'||(creation.intent!.input.marca!=='parida'||creation.intent!.input.criaDestino!=='retenida'||creation.plan!.events.length!==1)||!creation.receipt!.calf||!obj(b.event)||b.event.id!==x.eventId||!sameBirth(b.event,creation.receipt!.after.events.find(e=>e.id===x.eventId))||!sameBirth(b.calf,creation.receipt!.calf)||!obj(b.calf)||b.calf.nombre!=='SIN NOMBRE'||b.calf.estado!=='activa'||b.calf.madre_id!==b.event.animal_id||b.event.cria_id!==b.calf.id||!obj(b.calf.import_meta)||b.calf.import_meta.origen!=='parto_automatico')return fail();
+ const s=b.snapshot;if(!keys(s,['graph','animals','config','toros','view'])||!sameBirth(s.graph,creation.receipt!.after)||creation.receipt!.after.animal.estado!=='activa'||!rows(s.animals)||!s.animals.every(validAlertResponseAnimal)||!s.animals.some(a=>sameBirth(a,creation.receipt!.after.animal))||!s.animals.some(a=>sameBirth(a,b.calf))||!Array.isArray(s.config)||!s.config.every(obj)||!rows(s.toros)||!obj(s.view)||s.view.animal_id!==creation.intent!.animalId)return fail();
+ const result=x as unknown as CycleBirthUndoResult;if(result.state!=='committed'){if(result.receipt!==null)return fail();return result;}
+ const q=result.receipt,o=result.original!;
+ if(!keys(q,['version','requestKey','actor','owner','eventId','original','effectiveDate','recordedAt','after','corrections','footprints'])||q.version!==1||q.requestKey!==result.requestKey||!sameBirth(q.actor,result.actor)||q.owner!==owner||q.eventId!==result.eventId||!sameBirth(q.original,o)||q.effectiveDate!==result.effectiveDate||typeof q.recordedAt!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(q.recordedAt)||!Number.isFinite(Date.parse(q.recordedAt)))return fail();
+ const graph={...o.snapshot.graph,events:o.snapshot.graph.events.filter(e=>e.id!==result.eventId)},animals=o.snapshot.animals.filter(a=>a.id!==o.calf.id);
+ if(!sameBirth(q.after,{event:null,calf:null,graph,animals})||!Array.isArray(q.corrections)||q.corrections.length!==2||new Set(q.corrections.map(t=>t.id)).size!==2)return fail();
+ for(const [index,table,row,animalId] of [[0,'hato_eventos',o.event,o.event.animal_id],[1,'hato_animales',o.calf,o.calf.id]] as const){const trace=q.corrections[index];if(!obj(trace)||!uuid(trace.id)||!sameBirth(trace,{id:trace.id,tabla:table,fila_id:row.id,operacion:'delete',datos_anteriores:row,datos_nuevos:null,animal_id:animalId,corregido_por:owner,corregido_en:q.recordedAt,motivo:null}))return fail();}
+ // Domain rows stay private; only the native rehearsal independently reconstructs these digests.
+ if(!keys(q.footprints,['before','after'])||![q.footprints.before,q.footprints.after].every(v=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v))||q.footprints.before===q.footprints.after)return fail();return result;
+}
+export async function cycleBirthUndoWeb(c:CycleClient,owner:string,key:string,mode:'prepare'|'post'|'status'|'resolve',eventId:string|null=null,expected?:CycleBirthUndoResult){
+ if(!uuid(owner)||!uuid(key)||!['prepare','post','status','resolve'].includes(mode)||(mode==='prepare'?!uuid(eventId):eventId!==null))return fail();
+ const r=await c.rpc('fn_hato_cycle_birth_undo_web',{p_action:mode,p_request_key:key,p_event_id:eventId,p_expected_owner:owner});if(r.error)throw Error('Resultado desconocido. Verifique el intento original, sin reemplazarlo.');const result=validateCycleBirthUndoResult(r.data,owner,key,expected?.eventId??eventId??undefined);
+ if(expected&&(expected.owner!==owner||expected.requestKey!==key||!sameBirth(expected.actor,result.actor)||(expected.state!=='unknown'&&(!sameBirth(expected.original,result.original)||expected.effectiveDate!==result.effectiveDate||(['committed','canceled'].includes(expected.state)&&!sameBirth(expected,result))))))return fail();return result;
+}
