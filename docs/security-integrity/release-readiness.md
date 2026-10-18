@@ -168,3 +168,6 @@ October17 ordinary catalog writer retirement: candidate42 revokes ordinary catal
 
 
 October17 milk admission: all42candidates/application writers/grants unchanged. Frozen36native/2actual shared-TS caller/252source hashes/four snapshot hashes/cleanup and fresh6,147App/29Python/typecheck/lint PASS. Local probes reproduce stale quincena overwrite, suppressed paired-income inconsistencies, partial service weighing and zero-row success miscount. See hato-milk-admission-checkpoint.md/replay.json. Protected milk foundation, actual caller cutovers, finance/backfill/Storage coordination and compatible retirement remain required; no live migration/deployment authorized.
+
+
+October18 protected milk weighing SQL foundation: candidate43 after42coordinated candidates, current-actor/source/day/observed-row CAS, captured accepted/rejected review, atomic exact rows/corrections/trusted audit and original recovery. Frozen66native/four admission probes/254source hashes/four snapshot hashes/cleanup and fresh6,147App/29Python/typecheck/lint PASS. See hato-milk-weighing-checkpoint.md/replay.json. Actual milk clients/grants remain unchanged; browser/Telegram/week edit/discard/capture/Storage/finance/backfill cutovers, hosted/global/readers/capacity/recovery remain gates. No live application/deployment authorized.
