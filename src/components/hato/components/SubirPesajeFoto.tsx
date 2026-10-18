@@ -34,6 +34,7 @@
 // (`construirDiffPesajeManual`) y una celda sin dato se queda sin dato.
 
 import { useState, useEffect } from 'react';
+import {MilkWeighingConfirmationPanel} from './MilkWeighingConfirmationPanel';
 import { Camera, Loader2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -101,6 +102,7 @@ export function SubirPesajeFoto({
   onCompletado?: () => void;
 }) {
   const {
+    weighing,
     subirFotos,
     iniciarManual,
     comprometer,
@@ -112,7 +114,7 @@ export function SubirPesajeFoto({
     comprometiendo,
     errorCommit,
     commitResultado,
-  } = useSubirPesajeFoto();
+  } = useSubirPesajeFoto(open);
   const produccion = useProduccionHato();
   const { profile } = useAuth();
   // Mismo conjunto de roles que la RLS de escritura de `hato_*` (migración 053).
@@ -147,6 +149,7 @@ export function SubirPesajeFoto({
   const titulo = modo === 'manual' ? 'Ingresar pesaje a mano' : 'Cargar pesaje mensual por foto';
 
   const handleClose = (nextOpen: boolean) => {
+    if(comprometiendo)return;
     if (!nextOpen) {
       setFotos([]);
       setAvisoFotos(null);
@@ -486,6 +489,7 @@ export function SubirPesajeFoto({
             </div>
           )}
 
+          <MilkWeighingConfirmationPanel attempt={weighing.attempt} busy={weighing.busy} error={weighing.error} onAction={async mode=>{const r=await weighing.run(mode,mode==='prepare'?weighing.attempt!.intent:null);if(mode==='new'){limpiar();onCompletado?.();}return r;}}/>
           {commitResultado && (
             <div className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
               <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -493,7 +497,7 @@ export function SubirPesajeFoto({
                 Pesaje guardado — {commitResultado.guardados} celda(s) ({commitResultado.creados} nueva(s),{' '}
                 {commitResultado.actualizados} actualizada(s)).
                 {commitResultado.celdasRechazadas.length > 0 &&
-                  ` ${commitResultado.celdasRechazadas.length} celda(s) se rechazaron: el hato cambió desde la vista previa.`}
+                  ` ${commitResultado.celdasRechazadas.length} celda(s) se excluyeron en la revisión capturada.`}
               </p>
             </div>
           )}
@@ -520,7 +524,7 @@ export function SubirPesajeFoto({
               onEditarCelda={handleEditarCelda}
               onAgregarVaca={handleAgregarVaca}
               onQuitarVaca={handleQuitarVaca}
-              editable={puedeEscribir && !comprometiendo}
+              editable={puedeEscribir && !comprometiendo && weighing.attempt===null}
             />
           )}
         </DialogBody>
@@ -562,11 +566,11 @@ export function SubirPesajeFoto({
               <Button
                 type="button"
                 onClick={handleAprobar}
-                disabled={!puedeEscribir || comprometiendo || celdasParaCommit.length === 0}
+                disabled={!puedeEscribir || comprometiendo || celdasParaCommit.length === 0 || weighing.attempt!==null}
                 title={motivoSoloLectura ?? undefined}
               >
                 {comprometiendo && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {comprometiendo ? 'Guardando...' : `Aprobar (${celdasParaCommit.length})`}
+                {comprometiendo ? 'Preparando...' : `Revisar antes de guardar (${celdasParaCommit.length})`}
               </Button>
             </>
           )}

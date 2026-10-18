@@ -1,0 +1,1148 @@
+[
+  {
+    "plan": {
+      "capture": null,
+      "weekday": 3,
+      "accepted": [
+        {
+          "cell": {
+            "am": 0.1,
+            "pm": 0.2,
+            "date": "2026-10-07",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": {
+              "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+              "fecha": "2026-10-07",
+              "fuente": "historico",
+              "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "litros_am": 1,
+              "litros_pm": 1,
+              "created_at": "2026-10-18T05:50:08.361136-04:00",
+              "created_by": "10000000-0000-4000-8000-000000000001",
+              "litros_total": 2
+            }
+          },
+          "after": {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "web",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 0.1,
+            "litros_pm": 0.2,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 0.3
+          },
+          "before": {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "historico",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 1,
+            "litros_pm": 1,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 2
+          }
+        },
+        {
+          "cell": {
+            "am": 8,
+            "pm": 2,
+            "date": "2026-10-14",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": null
+          },
+          "after": {
+            "id": "a51e06b1-d039-42c3-b6c8-e011569ea578",
+            "fecha": "2026-10-14",
+            "fuente": "web",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 8,
+            "litros_pm": 2,
+            "created_at": null,
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 10
+          },
+          "before": null
+        }
+      ],
+      "rejected": [
+        {
+          "cell": {
+            "am": 8,
+            "pm": 2,
+            "date": "2026-10-15",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": null
+          },
+          "reason": "current_roster_or_weekday"
+        }
+      ]
+    },
+    "owner": "10000000-0000-4000-8000-000000000001",
+    "state": "committed",
+    "intent": {
+      "year": 2026,
+      "cells": [
+        {
+          "am": 0.1,
+          "pm": 0.2,
+          "date": "2026-10-07",
+          "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "observed": {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "historico",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 1,
+            "litros_pm": 1,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 2
+          }
+        },
+        {
+          "am": 8,
+          "pm": 2,
+          "date": "2026-10-14",
+          "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "observed": null
+        },
+        {
+          "am": 8,
+          "pm": 2,
+          "date": "2026-10-15",
+          "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "observed": null
+        }
+      ],
+      "month": 10,
+      "version": 1,
+      "captureId": null
+    },
+    "receipt": {
+      "plan": {
+        "capture": null,
+        "weekday": 3,
+        "accepted": [
+          {
+            "cell": {
+              "am": 0.1,
+              "pm": 0.2,
+              "date": "2026-10-07",
+              "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "observed": {
+                "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+                "fecha": "2026-10-07",
+                "fuente": "historico",
+                "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+                "litros_am": 1,
+                "litros_pm": 1,
+                "created_at": "2026-10-18T05:50:08.361136-04:00",
+                "created_by": "10000000-0000-4000-8000-000000000001",
+                "litros_total": 2
+              }
+            },
+            "after": {
+              "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+              "fecha": "2026-10-07",
+              "fuente": "web",
+              "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "litros_am": 0.1,
+              "litros_pm": 0.2,
+              "created_at": "2026-10-18T05:50:08.361136-04:00",
+              "created_by": "10000000-0000-4000-8000-000000000001",
+              "litros_total": 0.3
+            },
+            "before": {
+              "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+              "fecha": "2026-10-07",
+              "fuente": "historico",
+              "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "litros_am": 1,
+              "litros_pm": 1,
+              "created_at": "2026-10-18T05:50:08.361136-04:00",
+              "created_by": "10000000-0000-4000-8000-000000000001",
+              "litros_total": 2
+            }
+          },
+          {
+            "cell": {
+              "am": 8,
+              "pm": 2,
+              "date": "2026-10-14",
+              "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "observed": null
+            },
+            "after": {
+              "id": "a51e06b1-d039-42c3-b6c8-e011569ea578",
+              "fecha": "2026-10-14",
+              "fuente": "web",
+              "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "litros_am": 8,
+              "litros_pm": 2,
+              "created_at": null,
+              "created_by": "10000000-0000-4000-8000-000000000001",
+              "litros_total": 10
+            },
+            "before": null
+          }
+        ],
+        "rejected": [
+          {
+            "cell": {
+              "am": 8,
+              "pm": 2,
+              "date": "2026-10-15",
+              "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "observed": null
+            },
+            "reason": "current_roster_or_weekday"
+          }
+        ]
+      },
+      "actor": {
+        "origin": "web",
+        "profileId": "10000000-0000-4000-8000-000000000001"
+      },
+      "after": [
+        {
+          "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+          "fecha": "2026-10-07",
+          "fuente": "web",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 0.1,
+          "litros_pm": 0.2,
+          "created_at": "2026-10-18T05:50:08.361136-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 0.3
+        },
+        {
+          "id": "a51e06b1-d039-42c3-b6c8-e011569ea578",
+          "fecha": "2026-10-14",
+          "fuente": "web",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 8,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T05:50:09.638248-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 10
+        }
+      ],
+      "owner": "10000000-0000-4000-8000-000000000001",
+      "before": [
+        {
+          "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+          "fecha": "2026-10-07",
+          "fuente": "historico",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 1,
+          "litros_pm": 1,
+          "created_at": "2026-10-18T05:50:08.361136-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 2
+        }
+      ],
+      "intent": {
+        "year": 2026,
+        "cells": [
+          {
+            "am": 0.1,
+            "pm": 0.2,
+            "date": "2026-10-07",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": {
+              "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+              "fecha": "2026-10-07",
+              "fuente": "historico",
+              "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "litros_am": 1,
+              "litros_pm": 1,
+              "created_at": "2026-10-18T05:50:08.361136-04:00",
+              "created_by": "10000000-0000-4000-8000-000000000001",
+              "litros_total": 2
+            }
+          },
+          {
+            "am": 8,
+            "pm": 2,
+            "date": "2026-10-14",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": null
+          },
+          {
+            "am": 8,
+            "pm": 2,
+            "date": "2026-10-15",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": null
+          }
+        ],
+        "month": 10,
+        "version": 1,
+        "captureId": null
+      },
+      "capture": {
+        "after": null,
+        "before": null
+      },
+      "version": 1,
+      "original": {
+        "rows": [
+          {
+            "id": "28155484-4501-4f92-a6b0-10af62f9cec2",
+            "fecha": "2026-10-14",
+            "fuente": "web",
+            "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+            "litros_am": 9,
+            "litros_pm": null,
+            "created_at": "2026-10-18T05:50:01.722622-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 9
+          },
+          {
+            "id": "b167935d-5792-4b44-a84e-278db2e44caf",
+            "fecha": "2026-10-07",
+            "fuente": "web",
+            "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+            "litros_am": 8,
+            "litros_pm": 2,
+            "created_at": "2026-10-18T05:49:42.44202-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 10
+          },
+          {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "historico",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 1,
+            "litros_pm": 1,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 2
+          }
+        ],
+        "config": [
+          {
+            "id": "dfc361ca-4e73-405c-bff9-3f223d4dec5b",
+            "clave": "dia_pesaje_semanal",
+            "valor": {
+              "iso": 3
+            },
+            "created_at": "2026-10-18T05:49:42.44202-04:00",
+            "updated_at": "2026-10-18T05:49:42.44202-04:00",
+            "updated_by": null,
+            "descripcion": null
+          }
+        ],
+        "animals": [
+          {
+            "id": "1893cc42-f2e8-4e59-9eb1-8cf687f6e82b",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic combined animal",
+            "numero": 1,
+            "origen": null,
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:49:38.228374-04:00",
+            "created_by": null,
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "5487fd44-9a56-4d2e-9dff-88506978aad9",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "vendida",
+            "nombre": "Synthetic pre-retirement sale",
+            "numero": 795,
+            "origen": null,
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:48:27.937035-04:00",
+            "created_by": null,
+            "import_meta": null,
+            "fecha_estado": "2026-10-18",
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic actual browser milk cow",
+            "numero": 88991,
+            "origen": "compra",
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic protected milk cow",
+            "numero": null,
+            "origen": "compra",
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:49:42.44202-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          }
+        ]
+      },
+      "footprints": {
+        "after": "a02a5f3621ddbab0e5bf21137c2e7f270a607da80ee460ce64336383aa4ab136",
+        "before": "239c4bff0fa7aa6bfa7ecdf39aa51550c723079deed5932e0bf0202d3d3e3b58"
+      },
+      "recordedAt": "2026-10-18T05:50:09.638248-04:00",
+      "requestKey": "76d98d2f-744f-46cf-890a-8d1d19c1ab1c",
+      "corrections": [
+        {
+          "id": "46e5e3eb-bfbf-482e-8b5e-c8ef4cbb53ab",
+          "tabla": "hato_pesajes_leche",
+          "motivo": null,
+          "fila_id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "operacion": "update",
+          "corregido_en": "2026-10-18T05:50:09.638248-04:00",
+          "datos_nuevos": {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "web",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 0.1,
+            "litros_pm": 0.2,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 0.3
+          },
+          "corregido_por": "10000000-0000-4000-8000-000000000001",
+          "datos_anteriores": {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "historico",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 1,
+            "litros_pm": 1,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 2
+          }
+        }
+      ],
+      "effectiveDate": "2026-10-18"
+    },
+    "version": 1,
+    "original": {
+      "rows": [
+        {
+          "id": "28155484-4501-4f92-a6b0-10af62f9cec2",
+          "fecha": "2026-10-14",
+          "fuente": "web",
+          "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+          "litros_am": 9,
+          "litros_pm": null,
+          "created_at": "2026-10-18T05:50:01.722622-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 9
+        },
+        {
+          "id": "b167935d-5792-4b44-a84e-278db2e44caf",
+          "fecha": "2026-10-07",
+          "fuente": "web",
+          "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+          "litros_am": 8,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T05:49:42.44202-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 10
+        },
+        {
+          "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+          "fecha": "2026-10-07",
+          "fuente": "historico",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 1,
+          "litros_pm": 1,
+          "created_at": "2026-10-18T05:50:08.361136-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 2
+        }
+      ],
+      "config": [
+        {
+          "id": "dfc361ca-4e73-405c-bff9-3f223d4dec5b",
+          "clave": "dia_pesaje_semanal",
+          "valor": {
+            "iso": 3
+          },
+          "created_at": "2026-10-18T05:49:42.44202-04:00",
+          "updated_at": "2026-10-18T05:49:42.44202-04:00",
+          "updated_by": null,
+          "descripcion": null
+        }
+      ],
+      "animals": [
+        {
+          "id": "1893cc42-f2e8-4e59-9eb1-8cf687f6e82b",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic combined animal",
+          "numero": 1,
+          "origen": null,
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:49:38.228374-04:00",
+          "created_by": null,
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "5487fd44-9a56-4d2e-9dff-88506978aad9",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "vendida",
+          "nombre": "Synthetic pre-retirement sale",
+          "numero": 795,
+          "origen": null,
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:48:27.937035-04:00",
+          "created_by": null,
+          "import_meta": null,
+          "fecha_estado": "2026-10-18",
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic actual browser milk cow",
+          "numero": 88991,
+          "origen": "compra",
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:50:08.361136-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic protected milk cow",
+          "numero": null,
+          "origen": "compra",
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:49:42.44202-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        }
+      ]
+    },
+    "requestKey": "76d98d2f-744f-46cf-890a-8d1d19c1ab1c",
+    "acknowledged": false,
+    "effectiveDate": "2026-10-18"
+  },
+  {
+    "plan": {
+      "capture": {
+        "id": "588b0fdd-dcf8-4431-b342-93e164ad7642",
+        "mes": 10,
+        "anio": 2026,
+        "tipo": "pesaje",
+        "fecha": null,
+        "modelo": null,
+        "origen": "web",
+        "detalle": null,
+        "creado_en": "2026-10-18T05:50:08.361136-04:00",
+        "desenlace": "pendiente",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "storage_ok": true,
+        "storage_rutas": [],
+        "actualizado_en": "2026-10-18T05:50:08.361136-04:00",
+        "filas_escritas": null,
+        "storage_bucket": "hato-pesajes-fotos",
+        "fotos_recibidas": 1,
+        "storage_prefijo": "synthetic-browser",
+        "celdas_leidas_ocr": null,
+        "celdas_confirmadas": null
+      },
+      "weekday": 3,
+      "accepted": [
+        {
+          "cell": {
+            "am": 0.1,
+            "pm": 0.2,
+            "date": "2026-10-21",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": null
+          },
+          "after": {
+            "id": "aafba67d-61fb-4997-a9c9-d817b57fbd9b",
+            "fecha": "2026-10-21",
+            "fuente": "web",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 0.1,
+            "litros_pm": 0.2,
+            "created_at": null,
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 0.3
+          },
+          "before": null
+        }
+      ],
+      "rejected": []
+    },
+    "owner": "10000000-0000-4000-8000-000000000001",
+    "state": "committed",
+    "intent": {
+      "year": 2026,
+      "cells": [
+        {
+          "am": 0.1,
+          "pm": 0.2,
+          "date": "2026-10-21",
+          "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "observed": null
+        }
+      ],
+      "month": 10,
+      "version": 1,
+      "captureId": "588b0fdd-dcf8-4431-b342-93e164ad7642"
+    },
+    "receipt": {
+      "plan": {
+        "capture": {
+          "id": "588b0fdd-dcf8-4431-b342-93e164ad7642",
+          "mes": 10,
+          "anio": 2026,
+          "tipo": "pesaje",
+          "fecha": null,
+          "modelo": null,
+          "origen": "web",
+          "detalle": null,
+          "creado_en": "2026-10-18T05:50:08.361136-04:00",
+          "desenlace": "pendiente",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "storage_ok": true,
+          "storage_rutas": [],
+          "actualizado_en": "2026-10-18T05:50:08.361136-04:00",
+          "filas_escritas": null,
+          "storage_bucket": "hato-pesajes-fotos",
+          "fotos_recibidas": 1,
+          "storage_prefijo": "synthetic-browser",
+          "celdas_leidas_ocr": null,
+          "celdas_confirmadas": null
+        },
+        "weekday": 3,
+        "accepted": [
+          {
+            "cell": {
+              "am": 0.1,
+              "pm": 0.2,
+              "date": "2026-10-21",
+              "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "observed": null
+            },
+            "after": {
+              "id": "aafba67d-61fb-4997-a9c9-d817b57fbd9b",
+              "fecha": "2026-10-21",
+              "fuente": "web",
+              "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+              "litros_am": 0.1,
+              "litros_pm": 0.2,
+              "created_at": null,
+              "created_by": "10000000-0000-4000-8000-000000000001",
+              "litros_total": 0.3
+            },
+            "before": null
+          }
+        ],
+        "rejected": []
+      },
+      "actor": {
+        "origin": "web",
+        "profileId": "10000000-0000-4000-8000-000000000001"
+      },
+      "after": [
+        {
+          "id": "aafba67d-61fb-4997-a9c9-d817b57fbd9b",
+          "fecha": "2026-10-21",
+          "fuente": "web",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 0.1,
+          "litros_pm": 0.2,
+          "created_at": "2026-10-18T05:50:09.868035-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 0.3
+        }
+      ],
+      "owner": "10000000-0000-4000-8000-000000000001",
+      "before": [],
+      "intent": {
+        "year": 2026,
+        "cells": [
+          {
+            "am": 0.1,
+            "pm": 0.2,
+            "date": "2026-10-21",
+            "animalId": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "observed": null
+          }
+        ],
+        "month": 10,
+        "version": 1,
+        "captureId": "588b0fdd-dcf8-4431-b342-93e164ad7642"
+      },
+      "capture": {
+        "after": {
+          "id": "588b0fdd-dcf8-4431-b342-93e164ad7642",
+          "mes": 10,
+          "anio": 2026,
+          "tipo": "pesaje",
+          "fecha": null,
+          "modelo": null,
+          "origen": "web",
+          "detalle": null,
+          "creado_en": "2026-10-18T05:50:08.361136-04:00",
+          "desenlace": "ok",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "storage_ok": true,
+          "storage_rutas": [],
+          "actualizado_en": "2026-10-18T05:50:09.868035-04:00",
+          "filas_escritas": 1,
+          "storage_bucket": "hato-pesajes-fotos",
+          "fotos_recibidas": 1,
+          "storage_prefijo": "synthetic-browser",
+          "celdas_leidas_ocr": null,
+          "celdas_confirmadas": 1
+        },
+        "before": {
+          "id": "588b0fdd-dcf8-4431-b342-93e164ad7642",
+          "mes": 10,
+          "anio": 2026,
+          "tipo": "pesaje",
+          "fecha": null,
+          "modelo": null,
+          "origen": "web",
+          "detalle": null,
+          "creado_en": "2026-10-18T05:50:08.361136-04:00",
+          "desenlace": "pendiente",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "storage_ok": true,
+          "storage_rutas": [],
+          "actualizado_en": "2026-10-18T05:50:08.361136-04:00",
+          "filas_escritas": null,
+          "storage_bucket": "hato-pesajes-fotos",
+          "fotos_recibidas": 1,
+          "storage_prefijo": "synthetic-browser",
+          "celdas_leidas_ocr": null,
+          "celdas_confirmadas": null
+        }
+      },
+      "version": 1,
+      "original": {
+        "rows": [
+          {
+            "id": "28155484-4501-4f92-a6b0-10af62f9cec2",
+            "fecha": "2026-10-14",
+            "fuente": "web",
+            "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+            "litros_am": 9,
+            "litros_pm": null,
+            "created_at": "2026-10-18T05:50:01.722622-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 9
+          },
+          {
+            "id": "a51e06b1-d039-42c3-b6c8-e011569ea578",
+            "fecha": "2026-10-14",
+            "fuente": "web",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 8,
+            "litros_pm": 2,
+            "created_at": "2026-10-18T05:50:09.638248-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 10
+          },
+          {
+            "id": "b167935d-5792-4b44-a84e-278db2e44caf",
+            "fecha": "2026-10-07",
+            "fuente": "web",
+            "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+            "litros_am": 8,
+            "litros_pm": 2,
+            "created_at": "2026-10-18T05:49:42.44202-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 10
+          },
+          {
+            "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+            "fecha": "2026-10-07",
+            "fuente": "web",
+            "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "litros_am": 0.1,
+            "litros_pm": 0.2,
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 0.3
+          }
+        ],
+        "config": [
+          {
+            "id": "dfc361ca-4e73-405c-bff9-3f223d4dec5b",
+            "clave": "dia_pesaje_semanal",
+            "valor": {
+              "iso": 3
+            },
+            "created_at": "2026-10-18T05:49:42.44202-04:00",
+            "updated_at": "2026-10-18T05:49:42.44202-04:00",
+            "updated_by": null,
+            "descripcion": null
+          }
+        ],
+        "animals": [
+          {
+            "id": "1893cc42-f2e8-4e59-9eb1-8cf687f6e82b",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic combined animal",
+            "numero": 1,
+            "origen": null,
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:49:38.228374-04:00",
+            "created_by": null,
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "5487fd44-9a56-4d2e-9dff-88506978aad9",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "vendida",
+            "nombre": "Synthetic pre-retirement sale",
+            "numero": 795,
+            "origen": null,
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:48:27.937035-04:00",
+            "created_by": null,
+            "import_meta": null,
+            "fecha_estado": "2026-10-18",
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic actual browser milk cow",
+            "numero": 88991,
+            "origen": "compra",
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:50:08.361136-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic protected milk cow",
+            "numero": null,
+            "origen": "compra",
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-18T05:49:42.44202-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          }
+        ]
+      },
+      "footprints": {
+        "after": "636a6fe87d17eb270b7dbb3024c45a438dcd903223accbc9e0e06e57c215965e",
+        "before": "a02a5f3621ddbab0e5bf21137c2e7f270a607da80ee460ce64336383aa4ab136"
+      },
+      "recordedAt": "2026-10-18T05:50:09.868035-04:00",
+      "requestKey": "c6e93673-8d40-4c0a-a8e4-aa97b65719f4",
+      "corrections": [],
+      "effectiveDate": "2026-10-18"
+    },
+    "version": 1,
+    "original": {
+      "rows": [
+        {
+          "id": "28155484-4501-4f92-a6b0-10af62f9cec2",
+          "fecha": "2026-10-14",
+          "fuente": "web",
+          "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+          "litros_am": 9,
+          "litros_pm": null,
+          "created_at": "2026-10-18T05:50:01.722622-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 9
+        },
+        {
+          "id": "a51e06b1-d039-42c3-b6c8-e011569ea578",
+          "fecha": "2026-10-14",
+          "fuente": "web",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 8,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T05:50:09.638248-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 10
+        },
+        {
+          "id": "b167935d-5792-4b44-a84e-278db2e44caf",
+          "fecha": "2026-10-07",
+          "fuente": "web",
+          "animal_id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+          "litros_am": 8,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T05:49:42.44202-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 10
+        },
+        {
+          "id": "bffae902-0064-4fbe-95b5-ba0062e025a6",
+          "fecha": "2026-10-07",
+          "fuente": "web",
+          "animal_id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "litros_am": 0.1,
+          "litros_pm": 0.2,
+          "created_at": "2026-10-18T05:50:08.361136-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 0.3
+        }
+      ],
+      "config": [
+        {
+          "id": "dfc361ca-4e73-405c-bff9-3f223d4dec5b",
+          "clave": "dia_pesaje_semanal",
+          "valor": {
+            "iso": 3
+          },
+          "created_at": "2026-10-18T05:49:42.44202-04:00",
+          "updated_at": "2026-10-18T05:49:42.44202-04:00",
+          "updated_by": null,
+          "descripcion": null
+        }
+      ],
+      "animals": [
+        {
+          "id": "1893cc42-f2e8-4e59-9eb1-8cf687f6e82b",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic combined animal",
+          "numero": 1,
+          "origen": null,
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:49:38.228374-04:00",
+          "created_by": null,
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "5487fd44-9a56-4d2e-9dff-88506978aad9",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "vendida",
+          "nombre": "Synthetic pre-retirement sale",
+          "numero": 795,
+          "origen": null,
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:48:27.937035-04:00",
+          "created_by": null,
+          "import_meta": null,
+          "fecha_estado": "2026-10-18",
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "a9a80fcd-569f-430f-bfbe-7585f2bf7c45",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic actual browser milk cow",
+          "numero": 88991,
+          "origen": "compra",
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:50:08.361136-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "caff8627-9369-42ea-a4f5-2b2c29d574da",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic protected milk cow",
+          "numero": null,
+          "origen": "compra",
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T05:49:42.44202-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        }
+      ]
+    },
+    "requestKey": "c6e93673-8d40-4c0a-a8e4-aa97b65719f4",
+    "acknowledged": false,
+    "effectiveDate": "2026-10-18"
+  }
+]
