@@ -1,3 +1,4 @@
+import {handleMilkRecovery} from './milkWeighing.ts';
 import {handleBirthUndoRecovery} from './birthUndo.ts';
 import {handleQuickUndoRecovery} from './quickUndo.ts';
 import {handleQuickRecovery} from './quickCreation.ts';
@@ -272,6 +273,8 @@ function getBot(): Bot<BotContext> {
     if(!ctx.callbackQuery?.data?.startsWith('htc:'))return next();
     await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
   });
+
+  bot.use(async(ctx,next)=>{await handleMilkRecovery(ctx,next,getSupabaseAdmin());});
 
   bot.use(async(ctx,next)=>{await handleQuickUndoRecovery(ctx,next,getSupabaseAdmin());});
   bot.use(async(ctx,next)=>{await handleQuickRecovery(ctx,next,getSupabaseAdmin());});

@@ -1,60 +1,14 @@
-// telegram/conversations/pesajeLeche.ts — N11-N13 de
-// `docs/plan_hato_telegram_estados_agosto_2026.md` §3 Capa 2 / §8.2.
-//
-// REEMPLAZA la conversación anterior (vaca-por-vaca, ~65 preguntas por
-// chat: inviable en el corral) por el MISMO flujo de foto que ya usa la
-// ruta web (`SubirPesajeFoto.tsx` -> `POST /hato/pesaje/foto` ->
-// `POST /hato/pesaje/commit`): Fernando fotografía la planilla mensual (1
-// a 6 fotos, por franjas si hace falta), el bot muestra en texto plano lo
-// que leyó, Fernando corrige en LENGUAJE NATURAL (decisión D-C del dueño,
-// "MONZA sem 2 AM son 6.5 y BONITA no se pesó") y solo tras un "ok"
-// explícito se persiste -- por celda, no todo-o-nada.
-//
-// N11 — NO es un segundo lector de celdas ni un segundo armado de roster:
-// toda la orquestación (Storage, modelo de visión, ancla por nombre, diff)
-// viene de `../../hato-pesaje-pipeline.ts::ejecutarPipelinePesajeFoto`, la
-// MISMA función que usa el endpoint HTTP. `anio`/`mes` se preguntan acá con
-// un default sensato al mes en curso -- nunca se adivinan del papel (la
-// planilla nunca trae fecha legible por sí sola sin ese dato).
-//
-// N12 — La interpretación de la corrección en texto libre es una llamada al
-// modelo (`../../hato-pesaje-pipeline.ts::llamarModeloCorreccionPesaje`)
-// seguida de la validación PURA `interpretarCorreccionPesaje`
-// (`../../importHato/ocrPesajeCorreccion.ts`, testeada desde Vitest): un
-// ítem que no ancla a una vaca del roster, a una semana válida o a un valor
-// interpretable NUNCA se aplica -- se reporta como no entendido y se vuelve
-// a preguntar. Nada se escribe antes del "ok" explícito; el loop
-// corregir/mostrar se puede repetir cuantas veces haga falta.
-//
-// N13 — El commit reusa la MISMA revalidación fresca de
-// `hato-pesaje-commit.ts` vía `ejecutarCommitPesaje` (vaca sigue activa,
-// fecha sigue siendo una ocurrencia real del mes) -- por CELDA, una celda
-// inválida se rechaza sola. `fuente: 'telegram'` y `created_by` EXPLÍCITO
-// desde `telegram_usuarios.usuario_id` (riesgo R-6 del plan: el bot escribe
-// con service_role, `auth.uid()` es NULL, ningún trigger de atribución se
-// dispara solo).
-//
-// REPLAY-SAFETY (grammy conversations): cada webhook es una invocación
-// nueva de la function serverless -- el estado de la conversación se
-// reconstruye REEJECUTANDO esta función desde el principio, reproduciendo
-// los resultados ya cacheados de cada `conversation.external()`/`wait()`.
-// Eso impone dos reglas that este archivo respeta:
-//   1. Todo resultado de `external()` debe ser JSON-serializable (viaja por
-//      el storage jsonb de `telegram_conversations`). Los bytes de las
-//      fotos NUNCA salen de un `external()` como valor de retorno -- se
-//      descargan y se consumen DENTRO del mismo `external()` que llama al
-//      pipeline, nunca por separado.
-//   2. Mientras una conversación está activa, `bot.command("cancelar")`
-//      global NUNCA se dispara (el plugin de conversaciones consume el
-//      update antes) -- cada paso que espera texto o foto reconoce
-//      "cancelar"/"/cancelar" por su cuenta (`esCancelacionTexto`).
-
+// Shared photo OCR/natural-language corrections produce a proposal only.
+// The final handoff prepares a source-bound native milk review in an outside
+// context. A separate original-private-message confirmation posts the accepted
+// selection atomically; session-independent recovery never repeats OCR or writes.
+// Photo bytes stay inside conversation.external; only JSON proposals are replayed.
+import {beginMilk,nativeMilkSource,milkAction} from '../milkWeighing.ts';
 import { Conversation } from "npm:@grammyjs/conversations@2";
 import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
 import {
-  ejecutarCommitPesaje,
   ejecutarPipelinePesajeFoto,
   llamarModeloCorreccionPesaje,
   MAXIMO_FOTOS_PESAJE,
@@ -421,7 +375,7 @@ export async function pesajeLecheConversation(
     // ── Paso 4/5: mostrar resumen + loop de corrección en texto libre (N12,
     //    decisión D-C) hasta un "ok" explícito. Nada se escribe antes. ─────
     const kbGuardar = new InlineKeyboard()
-      .text("✅ Guardar", "guardar_pesaje")
+      .text("Revisar antes de guardar", "guardar_pesaje")
       .text("❌ Cancelar", "cancel_flow");
 
     const advertenciasIniciales = construirAdvertenciasLectura(lectura.resultado);
@@ -507,41 +461,10 @@ export async function pesajeLecheConversation(
       return;
     }
 
-    const commit = await conversation.external(async () => {
-      const sb = getSupabaseAdmin();
-      return await ejecutarCommitPesaje({
-        supabase: sb,
-        anio: anioFinal,
-        mes: mesFinal,
-        celdas: celdasParaGuardar,
-        createdBy: usuarioId,
-        fuente: "telegram",
-        // Cierra la fila que abrió el pipeline al subir la foto.
-        capturaId: lectura.resultado.capturaId,
-      });
+    await conversation.external(async outside=>{
+      const sb=getSupabaseAdmin(),source=await nativeMilkSource(sb,milkAction(outside));
+      return beginMilk(outside,sb,{version:1,year:anioFinal,month:mesFinal,captureId:lectura.resultado.capturaId??null,cells:celdasParaGuardar.map(c=>({animalId:c.animalId,date:c.fecha,am:c.litrosAm,pm:c.litrosPm,observed:source.rows.find(r=>r.animal_id===c.animalId&&r.fecha===c.fecha)??null}))});
     });
-
-    if (!commit.ok) {
-      const rechazadas = "celdasRechazadas" in commit ? commit.celdasRechazadas : [];
-      await ctx.reply(
-        `❌ No se pudo guardar: ${commit.error}${
-          rechazadas.length > 0 ? `\n\nRechazadas:\n${rechazadas.map((r) => `  - ${r.motivo}`).join("\n")}` : ""
-        }`,
-      );
-      return;
-    }
-
-    const resumenFinal = [
-      `✅ Pesaje de *${nombreMes(mesFinal)} ${anioFinal}* guardado: ${commit.guardados} celda(s) (${commit.actualizados} actualizadas, ${commit.creados} nuevas).`,
-      commit.celdasRechazadas.length > 0
-        ? `⚠️ ${commit.celdasRechazadas.length} celda(s) rechazadas al guardar:\n${commit.celdasRechazadas.map((r) => `  - ${r.motivo}`).join("\n")}`
-        : null,
-      "",
-      "Usa /pesaje para cargar otra planilla, o /start para el menú.",
-    ]
-      .filter((b): b is string => b !== null)
-      .join("\n");
-    await enviarPorPartes(ctx, resumenFinal, { parse_mode: "Markdown" });
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Conversation already halted") return;
     const msg = err instanceof Error ? err.message : "Error desconocido";
