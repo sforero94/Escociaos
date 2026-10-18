@@ -1,0 +1,11 @@
+# Narrow obsolete chequeo RPC retirement — locally verified
+
+After validated caller ebd156e; candidate41 follows40. The sale RPC is already retired by the earlier sale front; this unit targets only fn_hato_commit_chequeo(jsonb,uuid).
+
+Inventory: current runtime source/mirrors contain no literal legacy RPC calls after the prepared handler cutover; remaining occurrences are historical comments/contracts/migrations and deliberately local security probes. Historical scripts/import-hato/load.ts still directly creates bulls and writes other import rows; preserve that service/import lane. No direct catalog/table grant retirement or broad dynamic-function/deployed-version closure is claimed.
+
+Pins original legacy body/configuration/owner/grants plus all12prepared chequeo helper/entry body/configuration/owner/definer identities. Replaces legacy body with an invoker refusal and revokes PUBLIC/anon/authenticated/service execution. Protected web/prepare/source and final result returns bind an exact retired-body/authority/grant guard; restored privilege alone cannot make the stub mutate rows. Native matrix/admission/late-grant fault proofs and actual prepared handler/SDK compatibility pass frozen certification. Table/column ACLs and all domain/control rows must remain unchanged by installation.
+
+Final unchanged-source replay exits0:64aggregate native assertions,12actual handler/SDK assertions, three installation rollback probes,171matching source hashes and verified database cleanup. Four private snapshot hashes match. Native1 passed behavior but correctly refused certification after inventory/ACL edits; final supersedes it. Full300files/6,147App tests PASS64.07s;29Python,typecheck and lint0errors/870warnings PASS. Logs /tmp/escocia-chequeo-retirement-{native-final,tests,python,typecheck,lint}.log. Native300s SIGINT/cleanup, SDK90s, App150s, static120s and Python60s bounds retained.
+
+Next: ordinary catalog table/column writer retirement with current caller/service/import and effective privilege proofs, preserving the historical import lane; then milk and remaining implementation order. Hosted drain/global/runtime/readers/capacity/coherent recovery remain open. This candidate is not applied live. Never production, merge, deploy, live migration or usage bypass.

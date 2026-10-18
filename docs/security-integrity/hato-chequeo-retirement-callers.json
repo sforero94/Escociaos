@@ -1,0 +1,53 @@
+{
+  "legacy_literal_rpc_callers": [],
+  "catalog_direct_literal_writers": [
+    {
+      "file": "scripts/import-hato/load.ts",
+      "line": 233,
+      "method": "insert"
+    }
+  ],
+  "reviewed_catalog_static_legacy_function_callers": [],
+  "source_hashes": {
+    "src/components/configuracion/hooks/useAjustesHato.ts": "b8eb93a493e725b3e2a636114b496025eab43a8f02e3f05fb67531d4ad78d57e",
+    "src/components/hato/PajillasView.tsx": "51c5f2c5510d9cb4bb4938eed0fcdf943412daeb34a44391ccb6c1629dbc1dad",
+    "src/components/hato/components/GenealogiaArbol.tsx": "f32e24f54ae86f4579d7123dc705c8afdead2917e35247316ffdc96c8b614a0e",
+    "src/components/hato/hooks/useActualizarHatoAnimal.ts": "a7c901df41b8c5c448fd7beb4c20dd08e0185c75d49c259d70b915ccbad429ad",
+    "src/components/hato/hooks/useAnimalesParaPlanillaChequeo.ts": "81d51d2992d3b621b1d9c7448915fc702ed1ab2417233788fe8488a3fdbe5e48",
+    "src/components/hato/hooks/useCandidatosGenealogia.ts": "8a6a078e4fb42674479f59cc1ae4cc2e3b1ed02fdf9275b21fbc946d3ba7483e",
+    "src/components/hato/hooks/useHatoAnimal.ts": "bb23871af1fbf482fb5dd752a4fa9edeba6f31d1e2a5bcc97dd8611a66f75629",
+    "src/components/hato/hooks/useHatoPajillas.ts": "d5c82bd241ec6d3b12daeae6c9b2c9dc4b0bf3dbf5af0d30dbf2ab43e70c5a23",
+    "src/components/hato/hooks/useHatoToros.ts": "fdfb72608884fab55bdd401412da72df13b0072789564825dc19f17a411e201e",
+    "src/components/hato/hooks/useRevisionChequeo.ts": "ff32e96b7cb2c7a8858267d006e6e79c31544cfdba03d4929baf1c9d76fcbdef",
+    "src/supabase/functions/server/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "src/supabase/functions/server/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "src/supabase/functions/server/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "src/supabase/functions/server/hato-chequeo-foto.ts": "ac001ef1bdba669f81b293f61e0e2194b3591a48cf6c5a557ae457b9fa7a8d9b",
+    "src/supabase/functions/server/importHato/commitChequeo.ts": "8bbc34a22ccb273aac5d5119ab9f1c4b677a107d8a35102a64e9e01c9f665aa7",
+    "src/supabase/functions/server/importHato/ocrChequeo.ts": "8b1c9f40cf7f041e40279149e76af8af5234f66a78ffc634fefdfb5c3f8424cb",
+    "src/supabase/functions/server/importHato/parseToro.ts": "ac7d453a1b981c3b4aac7b2c1b5f8cef4275d4c2322e89b41468f06fbe51ca24",
+    "src/supabase/functions/server/index.tsx": "74e1521c8701cbdd6433a99e7f41fbc3f61a6f40b6d9cb3df8d4fd20b41dcfaf",
+    "src/supabase/functions/server/telegram/conversations/eventoHato.ts": "5ec824c30a617ac901add76e0c8fc68425e1d1b55c97cbed5e0bc424ef81f4d5",
+    "src/types/hato.ts": "635fe4ab7e7bc84b143c7b794ed9b00474cd9895cede691f52f751b83f93cfdd",
+    "src/utils/calculosHato.ts": "351bfe58e40cb4de04368c1bb9e5ff76d1ced9616204ee40409c2df4ea27a426",
+    "src/utils/hato/hatoCatalogCreationProtocol.ts": "dc48e4885b99c26cd31dca5fbbb54bc8b195364285c8439a090b343cd2806df2",
+    "src/utils/hato/hatoCatalogEditProtocol.ts": "b8d3716b6bb053ea8af345209bfbbe2a9fcf04bf80fbd449d9fa2895015e1514",
+    "src/utils/hatoCorreccionChequeo.ts": "72b1f9a309afab3fc8a8a8ab05aed01175a0a7ba91d10bc59bf9c6c91531dfe6",
+    "src/utils/importHato/commitChequeo.ts": "2596ccb0207af1e5a65d932a64c77a69b0ad866117fbe41fc07d64e65cf77037",
+    "src/utils/importHato/ocrChequeo.ts": "84f5fbdfc3ab133eef8dcaccae3d494d4aba96c3eafac4076d73e1acb5e3fd00",
+    "src/utils/importHato/parseToro.ts": "485004a31f244e5370cd290cf296101f8c708d224d14b824ec652ff63db3d598",
+    "src/utils/importHato/recomputarPartosCercanos.ts": "29150d14ca69255f9218a358e45f1d3b7a27519c95c5d92663ae8df3023d3c91",
+    "src/utils/importHato/resolver.ts": "109710e37d6c5699013287d9dd83fbf9744a5b1d28709eae8a1e2072b9ebe45e",
+    "supabase/functions/make-server-1ccce916/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "supabase/functions/make-server-1ccce916/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "supabase/functions/make-server-1ccce916/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "supabase/functions/make-server-1ccce916/hato-chequeo-foto.ts": "ac001ef1bdba669f81b293f61e0e2194b3591a48cf6c5a557ae457b9fa7a8d9b",
+    "supabase/functions/make-server-1ccce916/importHato/commitChequeo.ts": "4e39e514d9f3056caede01321518540ad5ad7b1bedea8ca8e3c48ac6218e842a",
+    "supabase/functions/make-server-1ccce916/importHato/ocrChequeo.ts": "89f2f1b5cfa24a6d6bf816b42938db73287667f872a19b01471793f4986daca8",
+    "supabase/functions/make-server-1ccce916/importHato/parseToro.ts": "3e6e9d3cf9217ed0039994a84cb61c97aa2975bf75708bc6b002191c5b94c16e",
+    "supabase/functions/make-server-1ccce916/index.ts": "f6771f2e5f984386bedb8a9100db1c145c2fb58c6280419e6128d7181be5c461",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/eventoHato.ts": "5ec824c30a617ac901add76e0c8fc68425e1d1b55c97cbed5e0bc424ef81f4d5",
+    "scripts/import-hato/load.ts": "1630cbbb822f9d1bd4473ad948d45c3a4af81eb3a73d6931f252a86a93396b87"
+  },
+  "scope": "Bounded TypeScript AST literal-call inventory plus original local metadata function text; excludes synthetic security probes/tests/vendor/migrations. Dynamic SQL/aliases/deployed versions and global ordinary-role matrix remain open. No production queries."
+}
