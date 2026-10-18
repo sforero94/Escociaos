@@ -1,0 +1,105 @@
+{
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd",
+    "live-catalog-storage-supplement-private.json": "ad2da7b29adc7a4862ba2a95f2d4b94478692576f0a60608b5802b6ba997da0f",
+    "live-catalog-storage-buckettype-private.json": "4be583c2797519625fb260e15f4fc4d726cea970bb790e1f327809723d2b6843"
+  },
+  "source_hashes": {
+    "scripts/security/storage-schema-replay.py": "098d9961005077b7d8898a370590e0f35ab691e3e2a79bbfa5640bbe4f670b05",
+    "scripts/security/storage-schema-preflight.py": "ae7a46ddfb7b878623aa8ffa2fef158e72f3878a86870b7f85a52d1cd525890f",
+    "scripts/security/schema-replay.py": "929b4a07ad541eb864362f2ce11f9664dfc27be91bc8c687458ba90a25477f82"
+  },
+  "storage_baseline": {
+    "passed": true,
+    "counts": {
+      "relations": 8,
+      "columns": 73,
+      "constraints": 20,
+      "indexes": 20,
+      "triggers": 7,
+      "functions": 19,
+      "policies": 28,
+      "acl_checks": 29,
+      "default_acl_checks": 3,
+      "type authority": 1,
+      "enum_labels": 3
+    },
+    "mismatches": []
+  },
+  "domain_baseline": {
+    "exported_property_parity_passed": true,
+    "verified_counts": {
+      "columns": 2026,
+      "source_constraint_ddl_canonicalizations": 2,
+      "constraints": 508,
+      "secondary_index_key_label_differences": 2,
+      "indexes": 353,
+      "triggers": 78,
+      "policies": 314,
+      "relations": 170,
+      "functions": 72,
+      "views": 7,
+      "enums": 23,
+      "roles": 32,
+      "memberships": 22,
+      "object_acl_checks": 249,
+      "column_acl_checks": 3,
+      "schema_acl_checks": 2,
+      "default_acl_checks": 6,
+      "user_rewrite_rules": 0
+    },
+    "mismatches": []
+  },
+  "metadata_admission": {
+    "reconciliation_passed": true,
+    "reconciliation_mismatches": [],
+    "storage_counts": {
+      "relations": 8,
+      "columns": 73,
+      "constraints": 20,
+      "indexes": 20,
+      "triggers": 7,
+      "functions": 19,
+      "rewrite_rules": 0,
+      "inheritance": 0,
+      "default_acls": 3
+    },
+    "storage_policy_count": 28,
+    "missing_type_dependencies": [],
+    "exact_replay_admission_passed": true,
+    "limits": [
+      "This is structural dependency admission, not a reconstructed native Storage baseline or protected caller cutover.",
+      "Existing public/respaldos reconstruction, hosted Auth/Storage API/object bytes, ordinary-role/global/runtime/capacity/recovery are not newly certified.",
+      "Legacy capture/row/object provenance stays unknown; no production query or history repair."
+    ]
+  },
+  "temporary_database_stopped_and_removed": true,
+  "local_ddl_roundtrip_probes": [
+    {
+      "label": "column nullability",
+      "detected_sections": [
+        "columns"
+      ]
+    },
+    {
+      "label": "owner drift",
+      "detected_sections": [
+        "ACLs",
+        "relations"
+      ]
+    },
+    {
+      "label": "enum order",
+      "detected_sections": [
+        "enum"
+      ]
+    }
+  ],
+  "limits": [
+    "Exact metadata replay only; hosted Auth/Storage API/objects/bytes/runtime not certified.",
+    "No product/caller/SQL candidate/grant cutover or production query. Legacy provenance remains unknown."
+  ]
+}
