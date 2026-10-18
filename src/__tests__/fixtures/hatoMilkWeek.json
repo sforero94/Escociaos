@@ -1,0 +1,552 @@
+{
+  "plan": {
+    "changes": [
+      {
+        "after": {
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "fecha": "2026-10-14",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 0.1,
+          "litros_pm": 0.2,
+          "created_at": "2026-10-18T08:33:09.194366-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 0.3
+        },
+        "before": {
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "fecha": "2026-10-14",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 1,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T08:33:09.194366-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 3
+        }
+      },
+      {
+        "after": {
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "fecha": "2026-10-15",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": null,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.347031-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 7.5
+        },
+        "before": {
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "fecha": "2026-10-15",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": null,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.347031-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 6
+        }
+      },
+      {
+        "after": null,
+        "before": {
+          "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+          "fecha": "2026-10-16",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 4,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.509887-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 4
+        }
+      }
+    ]
+  },
+  "owner": "10000000-0000-4000-8000-000000000002",
+  "state": "committed",
+  "intent": {
+    "end": "2026-10-18",
+    "start": "2026-10-12",
+    "changes": [
+      {
+        "am": 0.1,
+        "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+        "pm": 0.2,
+        "total": 0.3,
+        "remove": false
+      },
+      {
+        "am": null,
+        "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+        "pm": null,
+        "total": 7.5,
+        "remove": false
+      },
+      {
+        "am": null,
+        "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+        "pm": null,
+        "total": null,
+        "remove": true
+      }
+    ],
+    "version": 1,
+    "observed": [
+      {
+        "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+        "fecha": "2026-10-14",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 1,
+        "litros_pm": 2,
+        "created_at": "2026-10-18T08:33:09.194366-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 3
+      },
+      {
+        "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+        "fecha": "2026-10-15",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": null,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.347031-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 6
+      },
+      {
+        "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+        "fecha": "2026-10-16",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 4,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.509887-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 4
+      }
+    ]
+  },
+  "receipt": {
+    "plan": {
+      "changes": [
+        {
+          "after": {
+            "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+            "fecha": "2026-10-14",
+            "fuente": "synthetic-original",
+            "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+            "litros_am": 0.1,
+            "litros_pm": 0.2,
+            "created_at": "2026-10-18T08:33:09.194366-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 0.3
+          },
+          "before": {
+            "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+            "fecha": "2026-10-14",
+            "fuente": "synthetic-original",
+            "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+            "litros_am": 1,
+            "litros_pm": 2,
+            "created_at": "2026-10-18T08:33:09.194366-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 3
+          }
+        },
+        {
+          "after": {
+            "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+            "fecha": "2026-10-15",
+            "fuente": "synthetic-original",
+            "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+            "litros_am": null,
+            "litros_pm": null,
+            "created_at": "2026-10-18T08:33:09.347031-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 7.5
+          },
+          "before": {
+            "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+            "fecha": "2026-10-15",
+            "fuente": "synthetic-original",
+            "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+            "litros_am": null,
+            "litros_pm": null,
+            "created_at": "2026-10-18T08:33:09.347031-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 6
+          }
+        },
+        {
+          "after": null,
+          "before": {
+            "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+            "fecha": "2026-10-16",
+            "fuente": "synthetic-original",
+            "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+            "litros_am": 4,
+            "litros_pm": null,
+            "created_at": "2026-10-18T08:33:09.509887-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000001",
+            "litros_total": 4
+          }
+        }
+      ]
+    },
+    "actor": {
+      "origin": "web",
+      "profileId": "10000000-0000-4000-8000-000000000002"
+    },
+    "after": [
+      {
+        "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+        "fecha": "2026-10-14",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 0.1,
+        "litros_pm": 0.2,
+        "created_at": "2026-10-18T08:33:09.194366-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 0.3
+      },
+      {
+        "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+        "fecha": "2026-10-15",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": null,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.347031-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 7.5
+      }
+    ],
+    "owner": "10000000-0000-4000-8000-000000000002",
+    "before": [
+      {
+        "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+        "fecha": "2026-10-14",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 1,
+        "litros_pm": 2,
+        "created_at": "2026-10-18T08:33:09.194366-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 3
+      },
+      {
+        "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+        "fecha": "2026-10-15",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": null,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.347031-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 6
+      },
+      {
+        "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+        "fecha": "2026-10-16",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 4,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.509887-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 4
+      }
+    ],
+    "intent": {
+      "end": "2026-10-18",
+      "start": "2026-10-12",
+      "changes": [
+        {
+          "am": 0.1,
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "pm": 0.2,
+          "total": 0.3,
+          "remove": false
+        },
+        {
+          "am": null,
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "pm": null,
+          "total": 7.5,
+          "remove": false
+        },
+        {
+          "am": null,
+          "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+          "pm": null,
+          "total": null,
+          "remove": true
+        }
+      ],
+      "version": 1,
+      "observed": [
+        {
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "fecha": "2026-10-14",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 1,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T08:33:09.194366-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 3
+        },
+        {
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "fecha": "2026-10-15",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": null,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.347031-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 6
+        },
+        {
+          "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+          "fecha": "2026-10-16",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 4,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.509887-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 4
+        }
+      ]
+    },
+    "version": 1,
+    "original": {
+      "rows": [
+        {
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "fecha": "2026-10-14",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 1,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T08:33:09.194366-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 3
+        },
+        {
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "fecha": "2026-10-15",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": null,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.347031-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 6
+        },
+        {
+          "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+          "fecha": "2026-10-16",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 4,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.509887-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 4
+        }
+      ],
+      "animals": [
+        {
+          "id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic week milk cow",
+          "numero": 88993,
+          "origen": "compra",
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-18T08:32:41.892321-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        }
+      ]
+    },
+    "footprints": {
+      "after": "8665e54b5ba7a3ad532fcd80ffea5ec86ddc7b8619fe6fbd91d5d5cc9f29cd3b",
+      "before": "a11d56b0cc30bd0683efcb48b687b62d7e4631f8a10c549d4e18f4c165dcb66e"
+    },
+    "recordedAt": "2026-10-18T08:33:10.852827-04:00",
+    "requestKey": "8b92a65a-87fa-4be4-b23e-3d31eee15857",
+    "corrections": [
+      {
+        "id": "08034f8f-a159-48cf-b100-60edff0ab431",
+        "tabla": "hato_pesajes_leche",
+        "motivo": null,
+        "fila_id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "operacion": "update",
+        "corregido_en": "2026-10-18T08:33:10.852827-04:00",
+        "datos_nuevos": {
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "fecha": "2026-10-14",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 0.1,
+          "litros_pm": 0.2,
+          "created_at": "2026-10-18T08:33:09.194366-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 0.3
+        },
+        "corregido_por": "10000000-0000-4000-8000-000000000002",
+        "datos_anteriores": {
+          "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+          "fecha": "2026-10-14",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 1,
+          "litros_pm": 2,
+          "created_at": "2026-10-18T08:33:09.194366-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 3
+        }
+      },
+      {
+        "id": "885fb199-b148-4c8d-8af8-919b2375a853",
+        "tabla": "hato_pesajes_leche",
+        "motivo": null,
+        "fila_id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "operacion": "delete",
+        "corregido_en": "2026-10-18T08:33:10.852827-04:00",
+        "datos_nuevos": null,
+        "corregido_por": "10000000-0000-4000-8000-000000000002",
+        "datos_anteriores": {
+          "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+          "fecha": "2026-10-16",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": 4,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.509887-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 4
+        }
+      },
+      {
+        "id": "f53530c1-ab9e-4dd6-8a7f-c3714d02a0f3",
+        "tabla": "hato_pesajes_leche",
+        "motivo": null,
+        "fila_id": "318968c3-ed1f-4305-9661-7bcef666c163",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "operacion": "update",
+        "corregido_en": "2026-10-18T08:33:10.852827-04:00",
+        "datos_nuevos": {
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "fecha": "2026-10-15",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": null,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.347031-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 7.5
+        },
+        "corregido_por": "10000000-0000-4000-8000-000000000002",
+        "datos_anteriores": {
+          "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+          "fecha": "2026-10-15",
+          "fuente": "synthetic-original",
+          "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+          "litros_am": null,
+          "litros_pm": null,
+          "created_at": "2026-10-18T08:33:09.347031-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000001",
+          "litros_total": 6
+        }
+      }
+    ],
+    "effectiveDate": "2026-10-18"
+  },
+  "version": 1,
+  "original": {
+    "rows": [
+      {
+        "id": "018ac62e-6fa7-433a-a59a-53b43e2312c8",
+        "fecha": "2026-10-14",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 1,
+        "litros_pm": 2,
+        "created_at": "2026-10-18T08:33:09.194366-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 3
+      },
+      {
+        "id": "318968c3-ed1f-4305-9661-7bcef666c163",
+        "fecha": "2026-10-15",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": null,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.347031-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 6
+      },
+      {
+        "id": "c348d0ed-2918-4acc-b6bf-e279eec5ca3b",
+        "fecha": "2026-10-16",
+        "fuente": "synthetic-original",
+        "animal_id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "litros_am": 4,
+        "litros_pm": null,
+        "created_at": "2026-10-18T08:33:09.509887-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "litros_total": 4
+      }
+    ],
+    "animals": [
+      {
+        "id": "79e18cb7-9e93-4b41-9838-633c3e0b9af4",
+        "raza": null,
+        "sexo": "hembra",
+        "etapa": "vaca",
+        "notas": null,
+        "estado": "activa",
+        "nombre": "Synthetic week milk cow",
+        "numero": 88993,
+        "origen": "compra",
+        "finca_id": null,
+        "madre_id": null,
+        "padre_id": null,
+        "confianza": "alta",
+        "created_at": "2026-10-18T08:32:41.892321-04:00",
+        "created_by": "10000000-0000-4000-8000-000000000001",
+        "import_meta": null,
+        "fecha_estado": null,
+        "etapa_forzada": false,
+        "padre_toro_id": null,
+        "fecha_nacimiento": null,
+        "fecha_nacimiento_confianza": "desconocida"
+      }
+    ]
+  },
+  "requestKey": "8b92a65a-87fa-4be4-b23e-3d31eee15857",
+  "acknowledged": false,
+  "effectiveDate": "2026-10-18"
+}

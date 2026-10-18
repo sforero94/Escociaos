@@ -1,3 +1,4 @@
+import {MilkWeekConfirmationPanel} from './MilkWeekConfirmationPanel';
 // ARCHIVO: components/hato/components/DetallePesajeSemanalDialog.tsx
 // DESCRIPCIÓN: al tocar una barra MEDIDA del tracker, abre la semana
 // completa: mañana y tarde en la misma tabla, al lado de la planilla.
@@ -415,9 +416,8 @@ export function DetallePesajeSemanalDialog({
     }
     const ok = await detalle.guardar(resultado.plan);
     if (ok) {
-      toast.success('Pesaje actualizado');
+      toast.info('Revise la corrección preparada antes de confirmar.');
       setEditando(false);
-      onCambio();
     }
   };
 
@@ -434,6 +434,7 @@ export function DetallePesajeSemanalDialog({
     <>
       <Dialog open={abierto} onOpenChange={(open) => { if (!open) onCerrar(); }}>
         <DialogContent size="xl">
+          {puedeGerencia&&<MilkWeekConfirmationPanel attempt={detalle.week.attempt} busy={detalle.week.busy} error={detalle.week.error} onAction={async mode=>{const result=await detalle.week.run(mode,mode==='prepare'?detalle.week.attempt?.intent??null:null);if(result?.result?.state==='committed'){await detalle.recargar();onCambio();toast.success('Corrección semanal verificada');}if(mode==='new'){setEditando(false);setBorradores(filasOrdenadas.map(borradorInicial));}}}/>}
           {detalle.cargando ? (
             <>
               <DialogHeader>
@@ -456,9 +457,9 @@ export function DetallePesajeSemanalDialog({
               fotosDelMes={fotos.delMes}
               urls={detalle.urls}
               autorNombre={autorNombre}
-              puedeGerencia={puedeGerencia}
+              puedeGerencia={puedeGerencia&&!detalle.week.attempt&&!detalle.week.busy}
               editando={editando}
-              guardando={detalle.guardando}
+              guardando={detalle.guardando||detalle.week.busy||!!detalle.week.attempt}
               error={detalle.error}
               onCambiar={cambiar}
               onEditar={() => setEditando(true)}

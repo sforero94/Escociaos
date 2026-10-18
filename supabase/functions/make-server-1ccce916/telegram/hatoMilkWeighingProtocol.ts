@@ -16,7 +16,7 @@ const time=(x:unknown):x is string=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}T/.t
 const date=(x:unknown):x is string=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Number.isFinite(Date.parse(x+'T00:00:00Z'))&&new Date(x+'T00:00:00Z').toISOString()===x+'T00:00:00.000Z';
 const nullable=(x:unknown,p:(v:unknown)=>boolean)=>x===null||p(x);
 const fail=():never=>{throw Error('No pude verificar el pesaje original. Consérvelo y recupérelo antes de continuar.');};
-const milkRow=(r:unknown):r is JsonRow=>keys(r,['id','animal_id','fecha','litros_am','litros_pm','litros_total','fuente','created_at','created_by'])&&uuid(r.id)&&uuid(r.animal_id)&&date(r.fecha)&&nullable(r.litros_am,num)&&nullable(r.litros_pm,num)&&num(r.litros_total)&&r.litros_total>=0&&nullable(r.fuente,v=>typeof v==='string')&&nullable(r.created_at,time)&&nullable(r.created_by,uuid);
+export const milkRow=(r:unknown):r is JsonRow=>keys(r,['id','animal_id','fecha','litros_am','litros_pm','litros_total','fuente','created_at','created_by'])&&uuid(r.id)&&uuid(r.animal_id)&&date(r.fecha)&&nullable(r.litros_am,num)&&nullable(r.litros_pm,num)&&num(r.litros_total)&&r.litros_total>=0&&nullable(r.fuente,v=>typeof v==='string')&&nullable(r.created_at,time)&&nullable(r.created_by,uuid);
 const animalKeys=['id','numero','nombre','sexo','etapa','raza','estado','fecha_estado','fecha_nacimiento','fecha_nacimiento_confianza','madre_id','padre_toro_id','padre_id','finca_id','origen','confianza','import_meta','notas','created_at','created_by','etapa_forzada'];
 function uniqueRows(x:unknown,p:(v:unknown)=>boolean):x is JsonRow[]{return Array.isArray(x)&&x.every(p)&&new Set(x.map(v=>v.id)).size===x.length;}
 export function validateMilkWeighingSnapshot(x:unknown):MilkWeighingSnapshot{

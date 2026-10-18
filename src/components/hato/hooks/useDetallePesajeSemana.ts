@@ -6,7 +6,11 @@
 // No borra objetos de Storage. Una captura es la planilla del mes, no un
 // pesaje. El camino de Telegram (`/pesaje`) no pasa por aquí.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {useAuth} from '@/contexts/AuthContext';
+import {useMilkWeek} from './useMilkWeek';
+import {milkWeekIntent,milkWeekSource,type MilkWeekIntent} from '@/utils/hato/hatoMilkWeekProtocol';
+import type {MilkWeekClient} from '@/utils/hato/hatoMilkWeekProtocol';
 import { getSupabase } from '@/utils/supabase/client';
 import {
   mesesDelRango,
@@ -16,8 +20,6 @@ import {
   type PlanEscrituraPesaje,
 } from '@/utils/hato/detallePesajeSemanal';
 
-const SELECT_FILA =
-  'id, animal_id, fecha, litros_total, litros_am, litros_pm, fuente, created_at, created_by';
 const SELECT_CAPTURA =
   'id, anio, mes, storage_bucket, storage_rutas, storage_ok, created_by, creado_en, origen, desenlace';
 const SEGUNDOS_URL = 60 * 60;
@@ -63,6 +65,8 @@ export interface DetallePesajeSemanaEstado {
   autores: Map<string, string>;
   urls: Record<string, string>;
   guardar: (plan: PlanEscrituraPesaje) => Promise<boolean>;
+  week: ReturnType<typeof useMilkWeek>;
+  recargar: () => Promise<void>;
 }
 
 function numero(valor: number | string | null): number | null {
@@ -100,28 +104,12 @@ function capturaDesdeCruda(fila: CapturaCruda): CapturaPesajeCandidata {
   };
 }
 
-async function aplicarPlan(plan: PlanEscrituraPesaje): Promise<void> {
-  if (plan.actualizaciones.length === 0 && plan.borrarIds.length === 0) return;
-  // `hato_*` no está en database.ts — mismo workaround que usePesajesYPartos.
-  const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  for (const actualizacion of plan.actualizaciones) {
-    const { error } = await supabase
-      .from('hato_pesajes_leche')
-      .update({
-        litros_am: actualizacion.litros_am,
-        litros_pm: actualizacion.litros_pm,
-        litros_total: actualizacion.litros_total,
-      })
-      .eq('id', actualizacion.id);
-    if (error) throw new Error(error.message);
-  }
-  if (plan.borrarIds.length > 0) {
-    const { error } = await supabase.from('hato_pesajes_leche').delete().in('id', plan.borrarIds);
-    if (error) throw new Error(error.message);
-  }
-}
-
 export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): DetallePesajeSemanaEstado {
+  const {user,hasRole}=useAuth();
+  const writer=hasRole(['Gerencia']);
+  const week=useMilkWeek(consulta!==null,consulta?`${consulta.fechaReferencia}|${consulta.semana}`:'');
+  const generation=useRef({number:0});
+  useLayoutEffect(()=>{const guard=generation.current;guard.number++;setFilas([]);setCapturas([]);setUrls({});setInicio(null);setFin(null);setError(null);setCargando(false);setGuardando(false);return()=>{guard.number++;};},[user?.id,consulta?.fechaReferencia,consulta?.semana,writer]);
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,11 +125,12 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
 
   const cargar = useCallback(async () => {
     if (fechaReferencia == null || semana == null) return;
-    const rango = rangoSemanaMedida(fechaReferencia, semana);
-    const meses = mesesDelRango(rango.inicio, rango.fin);
+    const owner=user?.id,epoch=generation.current.number;const current=()=>generation.current.number===epoch;if(!owner)return;
     setCargando(true);
     setError(null);
     try {
+      const rango = rangoSemanaMedida(fechaReferencia, semana);
+      const meses = mesesDelRango(rango.inicio, rango.fin);
       const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
       let capturasQuery = supabase.from('hato_capturas_foto').select(SELECT_CAPTURA).eq('tipo', 'pesaje');
       if (meses.length === 1) {
@@ -153,17 +142,12 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
       }
 
       const [pesajesRes, capturasRes] = await Promise.all([
-        supabase
-          .from('hato_pesajes_leche')
-          .select(SELECT_FILA)
-          .gte('fecha', rango.inicio)
-          .lte('fecha', rango.fin),
+        writer?milkWeekSource(getSupabase() as unknown as MilkWeekClient,owner,rango.inicio,rango.fin):(async()=>{const q=await supabase.from('hato_pesajes_leche').select('id,animal_id,fecha,litros_total,litros_am,litros_pm,fuente,created_at,created_by').gte('fecha',rango.inicio).lte('fecha',rango.fin);if(q.error)throw Error(q.error.message);return {rows:q.data??[]};})(),
         capturasQuery,
       ]);
-      if (pesajesRes.error) throw new Error(pesajesRes.error.message);
       if (capturasRes.error) throw new Error(capturasRes.error.message);
 
-      const filasNuevas = ((pesajesRes.data ?? []) as FilaCruda[]).map(filaDesdeCruda);
+      const filasNuevas = (pesajesRes.rows as unknown as FilaCruda[]).map(filaDesdeCruda);
       const capturasNuevas = ((capturasRes.data ?? []) as CapturaCruda[]).map(capturaDesdeCruda);
 
       const ids = new Set<string>();
@@ -201,6 +185,7 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
       }
       await Promise.all(firmas);
 
+      if(!current())return;
       setInicio(rango.inicio);
       setFin(rango.fin);
       setFilas(filasNuevas);
@@ -208,11 +193,11 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
       setAutores(autoresNuevos);
       setUrls(urlsNuevas);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron cargar los pesajes.');
+      if(current())setError(err instanceof Error ? err.message : 'No se pudieron cargar los pesajes.');
     } finally {
-      setCargando(false);
+      if(current())setCargando(false);
     }
-  }, [fechaReferencia, semana]);
+  }, [fechaReferencia, semana,user?.id,writer]);
 
   useEffect(() => {
     if (fechaReferencia == null || semana == null) {
@@ -229,20 +214,22 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
 
   const escribir = useCallback(
     async (plan: PlanEscrituraPesaje): Promise<boolean> => {
+      const epoch=generation.current.number,current=()=>generation.current.number===epoch;
       setGuardando(true);
       setError(null);
       try {
-        await aplicarPlan(plan);
-        await cargar();
-        return true;
+        if(!inicio||!fin)throw Error('Recargue la semana antes de revisar.');
+        const intent:MilkWeekIntent=milkWeekIntent({version:1,start:inicio,end:fin,observed:[...filas].sort((a,b)=>a.id.localeCompare(b.id)),changes:[...plan.actualizaciones.map(a=>({id:a.id,remove:false,am:a.litros_am,pm:a.litros_pm,total:a.litros_total})),...plan.borrarIds.map(id=>({id,remove:true,am:null,pm:null,total:null}))]});
+        await week.prepare(intent);
+        return current();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo guardar el pesaje.');
+        if(current())setError(err instanceof Error ? err.message : 'No se pudo guardar el pesaje.');
         return false;
       } finally {
-        setGuardando(false);
+        if(current())setGuardando(false);
       }
     },
-    [cargar],
+    [inicio,fin,filas,week],
   );
 
   return {
@@ -256,5 +243,7 @@ export function useDetallePesajeSemana(consulta: ConsultaDetallePesaje | null): 
     autores,
     urls,
     guardar: escribir,
+    week,
+    recargar:cargar,
   };
 }
