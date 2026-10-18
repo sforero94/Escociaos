@@ -1,0 +1,20 @@
+-- Derived catalog fingerprint query; contains no exported definitions or domain rows.
+WITH targets AS (
+ SELECT c.oid,n.nspname,c.relname,c.relowner,c.relacl,c.relrowsecurity,c.relforcerowsecurity,c.relkind
+ FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE (n.nspname='storage' AND c.relkind IN('r','p')) OR c.oid='public.hato_capturas_foto'::regclass
+), sections AS (
+ SELECT 'relations' label,coalesce(jsonb_agg(jsonb_build_array(nspname,relname,pg_get_userbyid(relowner),relacl,relrowsecurity,relforcerowsecurity,relkind) ORDER BY nspname,relname),'[]') value FROM targets
+ UNION ALL SELECT 'columns',coalesce(jsonb_agg(jsonb_build_array(t.nspname,t.relname,a.attname,a.attnum,format_type(a.atttypid,a.atttypmod),a.attnotnull,a.attgenerated,a.attidentity,pg_get_expr(d.adbin,d.adrelid),a.attacl,a.attcollation::regcollation::text) ORDER BY t.nspname,t.relname,a.attnum),'[]') FROM targets t JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum>0 AND NOT a.attisdropped LEFT JOIN pg_attrdef d ON d.adrelid=t.oid AND d.adnum=a.attnum
+ UNION ALL SELECT 'constraints',coalesce(jsonb_agg(jsonb_build_array(t.nspname,t.relname,c.conname,pg_get_constraintdef(c.oid),c.convalidated,c.condeferrable,c.condeferred) ORDER BY t.nspname,t.relname,c.conname),'[]') FROM targets t JOIN pg_constraint c ON c.conrelid=t.oid
+ UNION ALL SELECT 'indexes',coalesce(jsonb_agg(jsonb_build_array(t.nspname,t.relname,i.indexrelid::regclass::text,pg_get_indexdef(i.indexrelid),i.indisvalid,i.indisready,i.indislive,i.indimmediate,i.indisunique,i.indisprimary,i.indnullsnotdistinct) ORDER BY t.nspname,t.relname,i.indexrelid::regclass::text),'[]') FROM targets t JOIN pg_index i ON i.indrelid=t.oid
+ UNION ALL SELECT 'triggers',coalesce(jsonb_agg(jsonb_build_array(t.nspname,t.relname,g.tgname,pg_get_triggerdef(g.oid),g.tgenabled) ORDER BY t.nspname,t.relname,g.tgname),'[]') FROM targets t JOIN pg_trigger g ON g.tgrelid=t.oid AND NOT g.tgisinternal
+ UNION ALL SELECT 'policies',coalesce(jsonb_agg(jsonb_build_array(p.schemaname,p.tablename,p.policyname,p.permissive,p.roles,p.cmd,p.qual,p.with_check) ORDER BY p.schemaname,p.tablename,p.policyname),'[]') FROM pg_policies p JOIN targets t ON t.nspname=p.schemaname AND t.relname=p.tablename
+ UNION ALL SELECT 'functions',coalesce(jsonb_agg(jsonb_build_array(n.nspname,f.proname,pg_get_function_identity_arguments(f.oid),pg_get_userbyid(f.proowner),f.prosecdef,f.proconfig,f.proacl,md5(f.prosrc),f.provolatile,f.prokind) ORDER BY n.nspname,f.proname,pg_get_function_identity_arguments(f.oid)),'[]') FROM pg_proc f JOIN pg_namespace n ON n.oid=f.pronamespace WHERE n.nspname='storage' OR f.oid IN(SELECT tgfoid FROM pg_trigger WHERE tgrelid IN(SELECT oid FROM targets) AND NOT tgisinternal)
+ UNION ALL SELECT 'rules',coalesce(jsonb_agg(jsonb_build_array(t.nspname,t.relname,r.rulename,md5(pg_get_ruledef(r.oid))) ORDER BY t.nspname,t.relname,r.rulename),'[]') FROM pg_rewrite r JOIN targets t ON t.oid=r.ev_class
+ UNION ALL SELECT 'inheritance',coalesce(jsonb_agg(jsonb_build_array(i.inhrelid::regclass::text,i.inhparent::regclass::text) ORDER BY i.inhrelid::regclass::text,i.inhparent::regclass::text),'[]') FROM pg_inherits i WHERE i.inhrelid IN(SELECT oid FROM targets) OR i.inhparent IN(SELECT oid FROM targets)
+ UNION ALL SELECT 'schema',jsonb_build_array(pg_get_userbyid(n.nspowner),n.nspacl) FROM pg_namespace n WHERE n.nspname='storage'
+ UNION ALL SELECT 'enum',coalesce(jsonb_agg(jsonb_build_array(t.typname,pg_get_userbyid(t.typowner),t.typacl,e.enumlabel,e.enumsortorder) ORDER BY t.typname,e.enumsortorder),'[]') FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace LEFT JOIN pg_enum e ON e.enumtypid=t.oid WHERE n.nspname='storage' AND (t.typname IN('buckettype','_buckettype') OR t.typtype='e')
+ UNION ALL SELECT 'default_acl',coalesce(jsonb_agg(jsonb_build_array(pg_get_userbyid(d.defaclrole),d.defaclobjtype,d.defaclacl) ORDER BY pg_get_userbyid(d.defaclrole),d.defaclobjtype),'[]') FROM pg_default_acl d JOIN pg_namespace n ON n.oid=d.defaclnamespace WHERE n.nspname='storage'
+)
+SELECT md5(jsonb_object_agg(label,value)::text) FROM sections;
