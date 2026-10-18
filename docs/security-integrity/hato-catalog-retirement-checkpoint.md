@@ -1,0 +1,11 @@
+# Ordinary catalog writer retirement — locally verified
+
+After cb30d11; candidate42 follows41coordinated candidates. Target ordinary PUBLIC/anon/authenticated INSERT/UPDATE/DELETE/TRUNCATE and column INSERT/UPDATE on hato_toros/hato_pajillas. Preserve service grants and historical scripts/import-hato/load.ts SELECT/INSERT. Existing browser forms use protected creation/edit; obsolete direct helpers refuse. Literal AST inventory finds only the historical import bull writer. Dynamic aliases/deployed versions/global function reachability remain separate.
+
+Pin original owner/RLS/table/column ACLs and four actual prepared catalog entry bodies/config/owners; require prior chequeo retirement. Entry/final-return guards on catalog creation/edit and chequeo service/web reject effective inherited/table/column/PUBLIC write restoration, including late audit regrants. SELECT and other privileges retained; no history or unrelated grants changed. Actual SDK/native replay, admission/full-state/ACL rollback and service preservation certification pass.
+
+Bound native300s SIGINT/cleanup, SDK90s, App150s, static120s/Python60s. Four private local metadata exports only; never production/merge/deploy/live migration/usage bypass. No private exports committed. Next milk writers after compatible retirement, then remaining ledger order.
+
+Frozen native1 exits0:103aggregate native assertions,24creation/12edit actual SDK and12inherited chequeo SDK assertions, three new admission rollback probes,178matching source hashes/four private snapshot hashes and verified temporary database cleanup. Service historical bull INSERT and ordinary SELECT retained. Direct ordinary writes deny; restored table/column/PUBLIC/inherited grants and late creation/edit audit regrants refuse/roll back. Original pending actions then post successfully. Actual caller recovery/strict native audit proof remains compatible.
+
+Full300files/6,147App tests PASS30.07s;29Python,typecheck and lint0errors/870warnings PASS. Logs /tmp/escocia-catalog-retirement-{native1,tests,python,typecheck,lint}.log. REFERENCES/TRIGGER/MAINTAIN and dynamic/global/hosted reachability remain separate gates. Next milk pesajes/quincena-income admission and coordinated writers, then remaining ledger order. Candidate is not applied live.
