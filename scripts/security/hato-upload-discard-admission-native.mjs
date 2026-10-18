@@ -1,0 +1,30 @@
+// Reproduce actual legacy discard against installed SDK + contained synthetic transports only.
+import fs from 'node:fs';import path from 'node:path';import ts from 'typescript';import {createClient} from '@supabase/supabase-js';
+const cache=new Map();function load(name){let f=path.resolve(name);if(!path.extname(f))f+='.ts';if(!f.startsWith(path.resolve('src/utils/hato')+path.sep))throw Error('Unexpected source');if(cache.has(f))return cache.get(f);const e={};cache.set(f,e);new Function('exports','require',ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(e,n=>{if(n.startsWith('@/'))return load('src/'+n.slice(2));if(!n.startsWith('.'))throw Error('Unexpected package');return load(path.resolve(path.dirname(f),n));});return e;}
+const h=load('src/utils/hato/subidasPesajeMes.ts'),checks=[],check=(v,label)=>{if(!v)throw Error(label);checks.push(label);};
+const uuid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const capture=(id,time,owner=uuid(10))=>({id,anio:2026,mes:10,creadoEn:time,createdBy:owner,origen:'web',desenlace:'ok',storageBucket:'hato-pesajes-fotos',storageRutas:['pesaje-foto/synthetic-shared/pagina-1.jpg'],storageOk:true,filasEscritas:1});
+const a=capture(uuid(1),'2026-10-10T12:00:00Z'),b={...capture(uuid(2),'2026-10-10T12:03:00Z',uuid(11)),origen:'telegram',filasEscritas:0},row={id:uuid(3),fecha:'2026-10-07',created_at:'2026-10-10T12:00:30Z',created_by:uuid(11),fuente:'telegram'};
+const linked=h.ligarFilasASubidas([a,b],[row]),chosen=linked.find(s=>s.filaIds.includes(row.id));check(chosen.captura.id===a.id&&chosen.captura.createdBy!==row.created_by&&chosen.captura.origen!==row.fuente,'closest timestamp selects another author/origin despite absence of provenance');
+check(h.motivoBloqueoDescarte(linked,a.id)===null,'guessed matching row count is accepted as discard eligibility');
+check(h.rutasFotoABorrar(a)[0]===h.rutasFotoABorrar(b)[0],'two capture rows can request removal of the same Storage path');
+const unknown={...a,filasEscritas:null},unknownLink=h.ligarFilasASubidas([unknown],[row]);check(h.motivoBloqueoDescarte(unknownLink,a.id)===null,'unknown written count does not establish no historical writes');
+const source=fs.readFileSync('src/components/hato/hooks/useSubidasPesajeMes.ts','utf8'),sf=ts.createSourceFile('useSubidasPesajeMes.ts',source,ts.ScriptTarget.Latest,true);let code='';const visit=n=>{if(ts.isVariableDeclaration(n)&&n.name.getText(sf)==='descartar'&&ts.isCallExpression(n.initializer))code=n.initializer.arguments[0].getText(sf);ts.forEachChild(n,visit);};visit(sf);if(!code)throw Error('Actual discard callback missing');const compiled=ts.transpileModule(`const handler=${code}`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const scenarios=[];
+for(const fault of ['milk_rejected','capture_rejected','storage_unknown','milk_unknown','shared_path_success']){
+ const state={object:true,milk:true,capture:true},requests=[];let failed=false;
+ const sdk=createClient('https://discard.invalid','synthetic',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:async(url,init)=>{const u=new URL(String(url));if(u.origin!=='https://discard.invalid')throw Error('Hosted transport forbidden');const method=init?.method??'GET';requests.push({path:u.pathname,method});const response=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+  if(u.pathname==='/storage/v1/object/hato-pesajes-fotos'&&method==='DELETE'){state.object=false;if(fault==='storage_unknown'&&!failed){failed=true;throw Error('Synthetic accepted removal reply lost');}return response([{name:a.storageRutas[0]}]);}
+  if(u.pathname==='/rest/v1/hato_pesajes_leche'&&method==='DELETE'){if(fault==='milk_rejected')return response({message:'Synthetic rejected milk delete',code:'42501'},403);state.milk=false;if(fault==='milk_unknown'&&!failed){failed=true;throw Error('Synthetic committed milk delete reply lost');}return response([{id:row.id}]);}
+  if(u.pathname==='/rest/v1/hato_pesajes_leche'&&method==='GET')return response(state.milk?[{id:row.id}]:[]);
+  if(u.pathname==='/rest/v1/hato_capturas_foto'&&method==='DELETE'){if(fault==='capture_rejected')return response({message:'Synthetic rejected capture delete',code:'42501'},403);state.capture=false;return response([{id:a.id}]);}
+  throw Error('Unexpected synthetic request');}}});
+ let shown=structuredClone(linked);const handler=new Function('subidas','bloqueos','setError','setDescartando','setSubidas','setTick','getSupabase','rutasFotoABorrar','BUCKET_PESAJES','mensajeErrorDescarte','deleteDevolvioFilas',compiled+';return handler;')(shown,new Map(),()=>{},()=>{},fn=>{shown=fn(shown);},()=>{},()=>sdk,h.rutasFotoABorrar,h.BUCKET_PESAJES,h.mensajeErrorDescarte,v=>Array.isArray(v)&&v.length>0);
+ const result=await handler(a.id);scenarios.push({fault,resultOk:result.ok,objectPresent:state.object,milkPresent:state.milk,capturePresent:state.capture,requests});
+ if(fault==='milk_rejected')check(!result.ok&&!state.object&&state.milk&&state.capture,'actual SDK caller removes raw object before milk rejection, leaving partial state');
+ if(fault==='capture_rejected')check(!result.ok&&!state.object&&!state.milk&&state.capture,'actual SDK caller leaves deleted object and milk when final capture deletion is rejected');
+ if(fault==='storage_unknown')check(!result.ok&&!state.object&&state.milk&&state.capture,'accepted Storage removal with lost reply is classified as failed discard while object is absent');
+ if(fault==='milk_unknown')check(!result.ok&&!state.object&&!state.milk&&state.capture,'accepted milk deletion with lost reply leaves capture and uncertain partial outcome');
+ if(fault==='shared_path_success')check(result.ok&&!state.object&&!state.milk&&!state.capture&&shown.some(s=>s.captura.id===b.id)&&b.storageRutas.includes(a.storageRutas[0]),'actual successful discard can remove an object still referenced by another capture');
+}
+process.stdout.write(JSON.stringify({assertions:checks.length,checks,scenarios})+'\n');

@@ -1,0 +1,162 @@
+{
+  "scope": "Source/provenance admission only; no product/candidate/grant change or protected discard cutover. No production connection or domain rows.",
+  "coordinated_candidate_count": 46,
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd"
+  },
+  "source_hashes": {
+    "scripts/security/hato-upload-discard-admission.py": "9d08110043e47efc813919b598d4ea01506650db91c627e3fa071e8bfa08e2ec",
+    "scripts/security/hato-upload-discard-admission-native.mjs": "a71dace6308b6dae5886405e9b191233226fd3988df16c9e17262a1b62e4d01e",
+    "src/components/hato/hooks/useSubidasPesajeMes.ts": "aa9fc1a97da4297747d4c3508c5910cfe7160b410931ac758b2c157ae2a363d5",
+    "src/components/hato/components/SubidasPesajeMes.tsx": "acb6233570dead1c8bf849de61e26ecc834a344108d2695a9ea15bcb2df14939",
+    "src/utils/hato/subidasPesajeMes.ts": "7a789edc314a1d5910a1e8b83270e7c6c5a22d578df3cfc2b8c90e7561503bf5",
+    "src/utils/hato/detallePesajeSemanal.ts": "30b5790d9205d0816577db1c92f21c172453a03d914146d42f8d487875091a60",
+    "src/supabase/functions/server/hato-capturas-foto.ts": "4ac91ad446495f0fef6003dc9aacea096e27ae36dbf226e2a5618d50ad2901e7",
+    "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts": "4ac91ad446495f0fef6003dc9aacea096e27ae36dbf226e2a5618d50ad2901e7",
+    "src/supabase/functions/server/hato-pesaje-pipeline.ts": "d5e88de9482482b70f90edd78fee9c4ed8506b41b4aa5bd820c25ac131858b4f",
+    "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts": "d5e88de9482482b70f90edd78fee9c4ed8506b41b4aa5bd820c25ac131858b4f",
+    "src/sql/security-candidates/hato-milk-weighing.sql": "d221a79a0b8cfce41a0997e328e6766a626ddcfb2617873b086053c4e4c26cac",
+    "src/sql/security-candidates/hato-milk-weighing-browser.sql": "5034130ef96e1933b18144e3b444132f74ccfa9afaaba88e06c6a2b64bde3191",
+    "src/sql/security-candidates/hato-milk-weighing-telegram.sql": "f9d674ad6a10aeeafb1a40a98990c0f966396f8d9d2095c47e43acd677fafc5d",
+    "src/sql/security-candidates/hato-milk-week.sql": "9db020586c844a2156f63da54cd5ca4c872a4fcedfb75bb5615a67eeee398aaf",
+    "src/sql/migrations/086_storage_pesajes_fotos.sql": "79a179e4444a7d2fa4c2c3c8b4f4b00a911214e7e718c96b2a23c1f923b53ba4",
+    "src/sql/migrations/146_hato_capturas_foto.sql": "c8177ace1eff62c04e628d0400c0f2ec2262715a84f4937fb603fb9cdad98c99",
+    "src/sql/migrations/171_descartar_subida_pesaje.sql": "01fa4abe0a41dbf9fc905915ec3ae91e728b4450fabf8ef71a5a7c692bcbdb4a"
+  },
+  "storage_metadata_coverage": {
+    "relations": 8,
+    "columns": 0,
+    "constraints": 0,
+    "indexes": 0,
+    "triggers": 7,
+    "functions": 0
+  },
+  "storage_policies_present": 28,
+  "milk_has_capture_foreign_key_column": false,
+  "capture_has_stored_path_claim_columns": true,
+  "provenance": {
+    "legacy": "Unknown: timestamp proximity/author/count and path strings cannot prove row or immutable object ownership. Do not reconstruct links or repair history.",
+    "protected_milk_receipts": "Candidates44/45 bind full capture before/after and per-cell insert/update before/after; distinct from legacy capture guesses. They do not certify Storage object identity/bytes/version.",
+    "storage_boundary": "Four exports contain partial Storage relation flags/trigger bindings/policies but omit columns/constraints/index definitions/Storage function bodies needed for an exact baseline; local replay cannot invent the missing structure."
+  },
+  "actual_sdk_reproduction": {
+    "assertions": 9,
+    "checks": [
+      "closest timestamp selects another author/origin despite absence of provenance",
+      "guessed matching row count is accepted as discard eligibility",
+      "two capture rows can request removal of the same Storage path",
+      "unknown written count does not establish no historical writes",
+      "actual SDK caller removes raw object before milk rejection, leaving partial state",
+      "actual SDK caller leaves deleted object and milk when final capture deletion is rejected",
+      "accepted Storage removal with lost reply is classified as failed discard while object is absent",
+      "accepted milk deletion with lost reply leaves capture and uncertain partial outcome",
+      "actual successful discard can remove an object still referenced by another capture"
+    ],
+    "scenarios": [
+      {
+        "fault": "milk_rejected",
+        "resultOk": false,
+        "objectPresent": false,
+        "milkPresent": true,
+        "capturePresent": true,
+        "requests": [
+          {
+            "path": "/storage/v1/object/hato-pesajes-fotos",
+            "method": "DELETE"
+          },
+          {
+            "path": "/rest/v1/hato_pesajes_leche",
+            "method": "DELETE"
+          }
+        ]
+      },
+      {
+        "fault": "capture_rejected",
+        "resultOk": false,
+        "objectPresent": false,
+        "milkPresent": false,
+        "capturePresent": true,
+        "requests": [
+          {
+            "path": "/storage/v1/object/hato-pesajes-fotos",
+            "method": "DELETE"
+          },
+          {
+            "path": "/rest/v1/hato_pesajes_leche",
+            "method": "DELETE"
+          },
+          {
+            "path": "/rest/v1/hato_capturas_foto",
+            "method": "DELETE"
+          }
+        ]
+      },
+      {
+        "fault": "storage_unknown",
+        "resultOk": false,
+        "objectPresent": false,
+        "milkPresent": true,
+        "capturePresent": true,
+        "requests": [
+          {
+            "path": "/storage/v1/object/hato-pesajes-fotos",
+            "method": "DELETE"
+          }
+        ]
+      },
+      {
+        "fault": "milk_unknown",
+        "resultOk": false,
+        "objectPresent": false,
+        "milkPresent": false,
+        "capturePresent": true,
+        "requests": [
+          {
+            "path": "/storage/v1/object/hato-pesajes-fotos",
+            "method": "DELETE"
+          },
+          {
+            "path": "/rest/v1/hato_pesajes_leche",
+            "method": "DELETE"
+          }
+        ]
+      },
+      {
+        "fault": "shared_path_success",
+        "resultOk": true,
+        "objectPresent": false,
+        "milkPresent": false,
+        "capturePresent": false,
+        "requests": [
+          {
+            "path": "/storage/v1/object/hato-pesajes-fotos",
+            "method": "DELETE"
+          },
+          {
+            "path": "/rest/v1/hato_pesajes_leche",
+            "method": "DELETE"
+          },
+          {
+            "path": "/rest/v1/hato_capturas_foto",
+            "method": "DELETE"
+          }
+        ]
+      }
+    ]
+  },
+  "required_contract": [
+    "Refuse legacy/ambiguous/changed associations; never infer provenance from the 36-hour helper.",
+    "Use trusted protected original receipts for exact milk membership and preserved history; refuse overwritten/mixed historical cases absent explicit reviewed treatment.",
+    "Fresh Gerencia, captured target/source CAS, exact mutation/readback/trusted audit and durable original recovery for database discard.",
+    "Storage action requires reviewed object/path/ownership/privilege baseline and one original permission/outcome protocol; unknown outcomes never allocate replacement or resend blindly.",
+    "Retain capture/original proof and raw evidence until each explicitly authorized disposition is verifiable; Storage and database are not a shared transaction."
+  ],
+  "limits": [
+    "Synthetic installed SDK transports only; counterexamples demonstrate existing caller behavior, not hosted Storage guarantees.",
+    "No Storage schema/privilege or deployed API semantics invented. Need authorized local structure-only supplement before exact Storage baseline/cutover.",
+    "No runtime/ordinary-role/global/recovery or production certification."
+  ]
+}
