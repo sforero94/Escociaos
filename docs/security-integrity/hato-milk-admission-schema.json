@@ -1,0 +1,150 @@
+{
+  "tables": {
+    "hato_pesajes_leche": {
+      "column_names": [
+        "id",
+        "animal_id",
+        "fecha",
+        "litros_am",
+        "litros_pm",
+        "litros_total",
+        "fuente",
+        "created_at",
+        "created_by"
+      ],
+      "constraint_count": 5,
+      "trigger_names": [
+        "trg_hato_correccion"
+      ]
+    },
+    "hato_produccion_quincenal": {
+      "column_names": [
+        "id",
+        "anio",
+        "mes",
+        "quincena",
+        "fecha_inicio",
+        "fecha_fin",
+        "litros_total",
+        "litros_pomar_confirmado",
+        "num_vacas_ordeno",
+        "notas",
+        "fuente",
+        "created_at",
+        "created_by",
+        "fin_ingreso_id",
+        "origen_dato",
+        "num_vacas_ordeno_origen",
+        "updated_at",
+        "updated_by",
+        "precio_bruto_litro"
+      ],
+      "constraint_count": 13,
+      "trigger_names": [
+        "trg_hato_correccion"
+      ]
+    },
+    "fin_ingresos": {
+      "column_names": [
+        "id",
+        "fecha",
+        "negocio_id",
+        "region_id",
+        "categoria_id",
+        "nombre",
+        "comprador_id",
+        "valor",
+        "medio_pago_id",
+        "observaciones",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+        "url_factura",
+        "cantidad",
+        "precio_unitario",
+        "cosecha",
+        "alianza",
+        "cliente",
+        "finca",
+        "cabezas"
+      ],
+      "constraint_count": 10,
+      "trigger_names": [
+        "fin_ingresos_updated_at",
+        "trg_set_cosecha_aguacate",
+        "trigger_set_ingreso_created_by"
+      ]
+    },
+    "hato_config": {
+      "column_names": [
+        "id",
+        "clave",
+        "valor",
+        "descripcion",
+        "created_at",
+        "updated_at",
+        "updated_by"
+      ],
+      "constraint_count": 2,
+      "trigger_names": [
+        "update_hato_config_updated_at"
+      ]
+    },
+    "hato_capturas_foto": {
+      "column_names": [
+        "id",
+        "creado_en",
+        "actualizado_en",
+        "tipo",
+        "origen",
+        "desenlace",
+        "anio",
+        "mes",
+        "fecha",
+        "storage_bucket",
+        "storage_prefijo",
+        "storage_rutas",
+        "storage_ok",
+        "fotos_recibidas",
+        "modelo",
+        "celdas_leidas_ocr",
+        "celdas_confirmadas",
+        "filas_escritas",
+        "detalle",
+        "created_by"
+      ],
+      "constraint_count": 11,
+      "trigger_names": []
+    }
+  },
+  "reviewed_invariants": [
+    "Pesaje identity is unique per animal/date; litros_total is ordinary numeric, not generated.",
+    "Measured quincena stores litres on its linked income; own litros_total is NULL; derived monthly rows store own total.",
+    "Quincena period is unique per year/month/half; linked income FK uses ON DELETE RESTRICT.",
+    "Income has positive-value check and references business, region, income category, payment medium, optional buyer and Auth identities."
+  ],
+  "legacy_functions": [
+    {
+      "name": "fn_hato_eliminar_quincena_venta",
+      "args": "p_quincena_id uuid",
+      "security_definer": false,
+      "owner": "postgres",
+      "search_path": [
+        "search_path=public, pg_temp"
+      ],
+      "definition_sha256": "2b1d5d0e828ee9e866871db5a1934b427ef1a2737d3557b894a8d88c1b9efabd"
+    },
+    {
+      "name": "fn_hato_guardar_quincena_venta",
+      "args": "payload jsonb",
+      "security_definer": false,
+      "owner": "postgres",
+      "search_path": [
+        "search_path=public, pg_temp"
+      ],
+      "definition_sha256": "a68a2823793e477cb018e15dd0063dcfa8f0427a6f8431b514281400ee58058e"
+    }
+  ],
+  "scope": "Derived authorized local metadata facts only; no domain rows or private definitions. No runtime change or production certification."
+}

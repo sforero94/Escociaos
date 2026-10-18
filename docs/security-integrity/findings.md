@@ -44,3 +44,6 @@ October14 effective local permission proof:44native assertions after nine candid
 
 
 October14 coordinated retirement prepared: native84assertions/nine observed lock races pass after denying ordinary/service stock table/column mutation and old treatment RPC EXECUTE. All nine protected protocols, financial preservation and invoker177 still operate. Closure/plan guards now require the complete retired boundary and refuse grant drift. Candidate remains unapplied; direct clinical creation/step/lifecycle writes, other cattle/financial writers, inactive/missing-profile readers and hosted/recovery gates remain open. See coordinated-writer-retirement-checkpoint.md.
+
+
+October17 milk admission delta: current local legacy quincena RPCs lack original-source CAS and exact paired-row readback; actual shared weighing caller can retain an earlier committed cell after a later request fails and can report a suppressed UPDATE as saved. These synthetic cases are executable on the verified42-candidate replay, not claims of production incidents. Caller/schema inventory and full evidence are in hato-milk-admission-checkpoint.md/replay.json; protected milk implementation and writer cutovers remain open.

@@ -1,0 +1,199 @@
+{
+  "direct_literal_writers": [
+    {
+      "file": "src/components/finanzas/components/CargaMasivaIngresos.tsx",
+      "line": 497,
+      "table": "fin_ingresos",
+      "method": "insert"
+    },
+    {
+      "file": "src/components/finanzas/components/IngresoForm.tsx",
+      "line": 267,
+      "table": "fin_ingresos",
+      "method": "update"
+    },
+    {
+      "file": "src/components/finanzas/components/IngresoForm.tsx",
+      "line": 274,
+      "table": "fin_ingresos",
+      "method": "insert"
+    },
+    {
+      "file": "src/components/finanzas/components/IngresosBatchTable.tsx",
+      "line": 267,
+      "table": "fin_ingresos",
+      "method": "insert"
+    },
+    {
+      "file": "src/components/hato/hooks/useDetallePesajeSemana.ts",
+      "line": 108,
+      "table": "hato_pesajes_leche",
+      "method": "update"
+    },
+    {
+      "file": "src/components/hato/hooks/useDetallePesajeSemana.ts",
+      "line": 119,
+      "table": "hato_pesajes_leche",
+      "method": "delete"
+    },
+    {
+      "file": "src/components/hato/hooks/useSubidasPesajeMes.ts",
+      "line": 213,
+      "table": "hato_pesajes_leche",
+      "method": "delete"
+    },
+    {
+      "file": "src/components/hato/hooks/useSubidasPesajeMes.ts",
+      "line": 233,
+      "table": "hato_capturas_foto",
+      "method": "delete"
+    },
+    {
+      "file": "src/supabase/functions/server/hato-pesaje-pipeline.ts",
+      "line": 725,
+      "table": "hato_pesajes_leche",
+      "method": "update"
+    },
+    {
+      "file": "src/supabase/functions/server/hato-pesaje-pipeline.ts",
+      "line": 745,
+      "table": "hato_pesajes_leche",
+      "method": "insert"
+    },
+    {
+      "file": "src/supabase/functions/server/telegram/conversations/ingreso.ts",
+      "line": 705,
+      "table": "fin_ingresos",
+      "method": "insert"
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts",
+      "line": 725,
+      "table": "hato_pesajes_leche",
+      "method": "update"
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts",
+      "line": 745,
+      "table": "hato_pesajes_leche",
+      "method": "insert"
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts",
+      "line": 705,
+      "table": "fin_ingresos",
+      "method": "insert"
+    },
+    {
+      "file": "scripts/import-hato/backfill-leche.ts",
+      "line": 180,
+      "table": "hato_pesajes_leche",
+      "method": "update"
+    },
+    {
+      "file": "scripts/import-hato/backfill-leche.ts",
+      "line": 201,
+      "table": "hato_pesajes_leche",
+      "method": "insert"
+    }
+  ],
+  "literal_rpc_callers": [
+    {
+      "file": "src/components/hato/hooks/useProduccionHato.ts",
+      "line": 277,
+      "rpc": "fn_hato_guardar_quincena_venta"
+    },
+    {
+      "file": "src/components/hato/hooks/useProduccionHato.ts",
+      "line": 312,
+      "rpc": "fn_hato_eliminar_quincena_venta"
+    }
+  ],
+  "source_hashes": {
+    "src/components/configuracion/hooks/useAjustesHato.ts": "b8eb93a493e725b3e2a636114b496025eab43a8f02e3f05fb67531d4ad78d57e",
+    "src/components/dashboard/hooks/useDinero.ts": "3073152fbb0b518f52e97e0df5db2ce4e40bd4fc28825d9446ed607501cd09b6",
+    "src/components/dashboard/hooks/useSaludDatos.ts": "95c828dec84e026a76559e0bf6f3ed80ca2b659a5b90254be4dd4cd4c6bae26c",
+    "src/components/finanzas/ReportesView.tsx": "f1888b5df1ffc2351a9009dba489fbc3239a6e8f858db482e43fa135543e302a",
+    "src/components/finanzas/components/CargaMasivaIngresos.tsx": "899e52aecaaa933ea910d27c723ff56f197b303d422f1db96aaaf185df4d89a6",
+    "src/components/finanzas/components/IngresoDetalleDialog.tsx": "9dec8b1c320c38cd0ce5afac448c223f28ed130e1c79bf1a83b4e093ddaf5f4c",
+    "src/components/finanzas/components/IngresoForm.tsx": "25ee4962d06265a6f97255b62a793e1ba2b0a59718e4baab8a52bd65ec9bdc5d",
+    "src/components/finanzas/components/IngresosBatchTable.tsx": "ba89894baa72a64efa472ac1a7093516154caa4f94d1f09d09724598e62ce35c",
+    "src/components/finanzas/components/IngresosList.tsx": "5d4b9ea311e20a9db4a0ffd271a6753b14407ba08bdcc18e3bc2e9b8c053913d",
+    "src/components/finanzas/hooks/useDashboardData.ts": "5bc5ddb555e2dce5144a89dcc89ec2907c99bae68ce2ab2f842e5535670ba740",
+    "src/components/finanzas/hooks/useReportesFinancierosData.ts": "d5df1fbddaf86bafe25de13e729ba088e29fe9983cc6badb7e1d2362e8e53ab7",
+    "src/components/hato/HatoDashboard.tsx": "d0222aeb7ce00d79ce0c42c68c1c336bdb2c1dd0edea1badf2c6de5c74db7544",
+    "src/components/hato/HojaDeVida.tsx": "d40e513c0b19a073f4d969f3964fc908dd449797e6304fd923bafcfdd1c57ca6",
+    "src/components/hato/ProduccionView.tsx": "8bd2aa3ae99ea180845077dee2293c2eb2e8c215302e9f0a07f10119d0db1692",
+    "src/components/hato/components/CurvaSemanalProduccion.tsx": "fe6fd6f70a54e088f9107e9eb5a47f0e00ab55bd1f04c70bf71e1b4a13dc41b2",
+    "src/components/hato/components/KpisVentaHato.tsx": "a09e75f12bd58463c299b5af0019873e5dba28fba5bbeaf8033f4b53fb72c2fe",
+    "src/components/hato/components/ProduccionQuincenalDialog.tsx": "4e617c8ad7968d1c32ea49ae0370f607cb037042f47d5fa59193bcf9a791bb1c",
+    "src/components/hato/components/VentaAnimalesHatoDialog.tsx": "f98bcc449c74303d00c373f4b5cb5811a1502a260299126a86fe98995e8afef9",
+    "src/components/hato/components/VentaQuincenalCard.tsx": "4f1d0a40f862e5c81c0466edf735fc323392161eb9f8d31783c87aa85511b913",
+    "src/components/hato/hooks/useAnimalesParaPlanillaChequeo.ts": "81d51d2992d3b621b1d9c7448915fc702ed1ab2417233788fe8488a3fdbe5e48",
+    "src/components/hato/hooks/useDatosProduccionPorVaca.ts": "fba7b10391cc0a54790bc0938bfd4ec18227a9ac8ef7237079a14c11ba802b2b",
+    "src/components/hato/hooks/useDetallePesajeSemana.ts": "01c51b3d2045b224eabac90c5fd92e256158f766860327f475e620fc8db4b623",
+    "src/components/hato/hooks/useFinCatalogosVenta.ts": "f603504ac64f35d244e57d7ee59d21ade6e9e79a4f81f1477399ece82c66abf0",
+    "src/components/hato/hooks/useOcrLiquidacionPomar.ts": "c2ad2d07b4d09bd8d72890432f8d7a8792b9a904a02e8f694e725aae5a485967",
+    "src/components/hato/hooks/usePesajesVaca.ts": "8fa99dc2798502e55b25b8607e3d8d5433f8ea3e87c3d3877639f1597b86ee3c",
+    "src/components/hato/hooks/usePesajesYPartos.ts": "b3987ba50e34b53dabf2e449efc58ba98cc244b501a75e8e7751404f597b7051",
+    "src/components/hato/hooks/useProduccionHato.ts": "c7c6252d361906eb6e6c1e89718e75be10588738c72f2abd913abf6cf320abbb",
+    "src/components/hato/hooks/useRepartoVentasHato.ts": "53c8604051f52e95d6e05032bbf620fa0508010be00ff19330a4c2f13951d031",
+    "src/components/hato/hooks/useSubidasPesajeMes.ts": "aa9fc1a97da4297747d4c3508c5910cfe7160b410931ac758b2c157ae2a363d5",
+    "src/components/hato/hooks/useSubirPesajeFoto.ts": "a5e675712a20b596f823e1c42552a76b9e074ecf2032da0b4300f7f556572463",
+    "src/components/hato/hooks/useVentaAnimalesHato.ts": "e5fa8b9df4e615ec5f33e53b00b209c771d31bd9828898841337f389564b696a",
+    "src/components/produccion/components/RentabilidadTab.tsx": "c1bd3f80da9fd086aff1808359ea7232177718f75f525e5619c19003e3ef750d",
+    "src/supabase/functions/server/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "src/supabase/functions/server/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "src/supabase/functions/server/esco-consultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "src/supabase/functions/server/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "src/supabase/functions/server/hato-pesaje-commit.ts": "e521eee456e931422cac256b54059360129bc8c5f656017e2492abca65124615",
+    "src/supabase/functions/server/hato-pesaje-foto.ts": "cc596f32465dd1949b69ec57b5b4c8b0876086a61427384bad25e9756232e13d",
+    "src/supabase/functions/server/hato-pesaje-pipeline.ts": "d5e88de9482482b70f90edd78fee9c4ed8506b41b4aa5bd820c25ac131858b4f",
+    "src/supabase/functions/server/hato-produccion-quincena-foto.ts": "ee807128f0140618a01ccc48b974f4e031bd64610ae559219c2016195a72e642",
+    "src/supabase/functions/server/importHato/ocrPesaje.ts": "c7c8590c5dce909b2e43e6a8e60c9b8de72a7c38b3c73a3ea084d97d8f286815",
+    "src/supabase/functions/server/index.tsx": "74e1521c8701cbdd6433a99e7f41fbc3f61a6f40b6d9cb3df8d4fd20b41dcfaf",
+    "src/supabase/functions/server/reportes-financieros.ts": "fe6c7a282f5dedd2fed36fa59b94698d3b3b3a4a417c839c943778da99f2a1a8",
+    "src/supabase/functions/server/telegram/conversations/ingreso.ts": "40f0cf1b404d931fd3234cf6a2106d65a3bbd0230fa8a73124d4eb3e233ba473",
+    "src/supabase/functions/server/telegram/conversations/pesajeLeche.ts": "22f29b00fa21364acc226f474667cda5de4586c13b743f89b706c9d17e5b8cbc",
+    "src/types/database.ts": "c1230a47dc0f7a95bf0d31aeb53d9cc2624c62911dc9735e5556aaa579b4552e",
+    "src/types/hato.ts": "635fe4ab7e7bc84b143c7b794ed9b00474cd9895cede691f52f751b83f93cfdd",
+    "src/types/reportesFinancieros.ts": "e6522234d50e5338397e1a1258c2e8bd972cf826ebc764793323e3deb30c1ffc",
+    "src/utils/ajustesHatoValidacion.ts": "b40cc4e089a901133fb99091ec404367a0b104a20770d16bcd52f6cb7a6085a5",
+    "src/utils/calculosDinero.ts": "bf7d3e8ec43ac4c8d322fee548d7e696b02dec5fe13c36e32a9eb482f69e2747",
+    "src/utils/calculosFlujoCaja.ts": "baec2dcef6ad9f43f9cfb27e8eb7bf723dec5cb0840c4157b5ed3e72a909f222",
+    "src/utils/calculosHato.ts": "351bfe58e40cb4de04368c1bb9e5ff76d1ced9616204ee40409c2df4ea27a426",
+    "src/utils/calculosPyG.ts": "1c07e88b3b42080eb110131fc41494650e07c17b40e33757ccdd6593fee09e6d",
+    "src/utils/escoConsultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "src/utils/graficoLitrosQuincenal.ts": "039c1c998403952b957900bb266571b65a2fb5cc9a014bc58e4c5c2c0d439a56",
+    "src/utils/hato/capturasFoto.ts": "845153d2432182ef1e8507aa34dac1fba8608ed9fbc3a1497937adca27f9b16d",
+    "src/utils/hato/plDesdePesajes.ts": "7dbda93ac4b9761a95fbaa133f9a4a3c6acc0663a3698d1f1efa9bc46ddc0455",
+    "src/utils/hato/subidasPesajeMes.ts": "7a789edc314a1d5910a1e8b83270e7c6c5a22d578df3cfc2b8c90e7561503bf5",
+    "src/utils/hatoCorrecciones.ts": "fc43d252159ab646bc5e1dda27aa2c7289fc470a1b49f02620660a964423d6c9",
+    "src/utils/hatoProduccion.ts": "0cce39496d2bf456756ae6aa8da504f69c66ca61287f72e7a2e835dca08afe7c",
+    "src/utils/hatoProduccionBackfill.ts": "8538488f57957824ccabf3f9799547bf166ec2785100bda1449853f4860a3550",
+    "src/utils/importHato/ocrPesaje.ts": "cc4f2abfaad2445c40c1a839e287bfd548ba580ed5d15d1b100714cd68da8fab",
+    "src/utils/importHato/pesajesLeche.ts": "16d07614b8641e3d188dba852d5351eea7f4ce9551896ba4aba150643928d904",
+    "src/utils/novedades/catalogo.ts": "53bf4bda8d8fe2cbd1b1c1748edab9eb60b1c259f3b4487e33301c994013a3f4",
+    "src/utils/novedades/frases.ts": "fd2aaf9fb611b6cfd5ea7579e3a6efe73b8ac302005b257ec886efc8fa243446",
+    "src/utils/novedades/fuentes/hatoPesajesLeche.ts": "8f415c46ee65d9b268441becbe4d2db8cabff78dd1d1aa6b6d2727243cd276dc",
+    "src/utils/novedades/tipos.ts": "10782cc9dd42eb21fa2dd8f0f37964a5d8a56e65a9b41c58bec2af8500d1d908",
+    "src/utils/periodosReporte.ts": "1be23f41fff26512d3e91b838d4ebd9451583dc62be915ab25f7d8931ae48873",
+    "src/utils/reportesFinancierosComun.ts": "f214a77d082462ff10308c02e47d6e0feefbc46a4363449a008424c26683dd24",
+    "supabase/functions/make-server-1ccce916/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "supabase/functions/make-server-1ccce916/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "supabase/functions/make-server-1ccce916/esco-consultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "supabase/functions/make-server-1ccce916/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "supabase/functions/make-server-1ccce916/hato-pesaje-commit.ts": "e521eee456e931422cac256b54059360129bc8c5f656017e2492abca65124615",
+    "supabase/functions/make-server-1ccce916/hato-pesaje-foto.ts": "cc596f32465dd1949b69ec57b5b4c8b0876086a61427384bad25e9756232e13d",
+    "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts": "d5e88de9482482b70f90edd78fee9c4ed8506b41b4aa5bd820c25ac131858b4f",
+    "supabase/functions/make-server-1ccce916/hato-produccion-quincena-foto.ts": "ee807128f0140618a01ccc48b974f4e031bd64610ae559219c2016195a72e642",
+    "supabase/functions/make-server-1ccce916/importHato/ocrPesaje.ts": "1482f05aa2f036e1ae29f74d319b080e098570e0c5da54bc257d074b5d5ddf85",
+    "supabase/functions/make-server-1ccce916/index.ts": "f6771f2e5f984386bedb8a9100db1c145c2fb58c6280419e6128d7181be5c461",
+    "supabase/functions/make-server-1ccce916/reportes-financieros.ts": "fe6c7a282f5dedd2fed36fa59b94698d3b3b3a4a417c839c943778da99f2a1a8",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts": "40f0cf1b404d931fd3234cf6a2106d65a3bbd0230fa8a73124d4eb3e233ba473",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/pesajeLeche.ts": "22f29b00fa21364acc226f474667cda5de4586c13b743f89b706c9d17e5b8cbc",
+    "scripts/import-hato/backfill-leche.ts": "6847c1cc9001527201acacf3773d3eabcef9515b5601fe2a099975c9808dd493",
+    "scripts/import-hato/backfill-quincenas-leche.ts": "ce03978de408675f59bc70c20cd3a91e6c1508d1ce2c0d5930cf7b649d879d40"
+  },
+  "scope": "Bounded literal TypeScript AST inventory; dynamic/aliased SQL, hosted versions and global function reachability remain open. No production access."
+}
