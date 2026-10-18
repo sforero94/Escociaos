@@ -1,0 +1,60 @@
+{
+  "reconciliation_passed": true,
+  "reconciliation_mismatches": [],
+  "storage_counts": {
+    "relations": 8,
+    "columns": 73,
+    "constraints": 20,
+    "indexes": 20,
+    "triggers": 7,
+    "functions": 19,
+    "rewrite_rules": 0,
+    "inheritance": 0,
+    "default_acls": 3
+  },
+  "storage_policy_count": 28,
+  "missing_type_dependencies": [
+    {
+      "type": "storage.buckettype",
+      "dependent_columns": [
+        {
+          "table": "buckets",
+          "column": "type"
+        },
+        {
+          "table": "buckets_analytics",
+          "column": "type"
+        },
+        {
+          "table": "buckets_vectors",
+          "column": "type"
+        }
+      ],
+      "required_metadata": [
+        "actual pg_type kind/definition",
+        "ordered enum labels if enum",
+        "owner and ACL"
+      ]
+    }
+  ],
+  "exact_replay_admission_passed": false,
+  "limits": [
+    "This is structural dependency admission, not a reconstructed native Storage baseline or protected caller cutover.",
+    "Existing public/respaldos reconstruction, hosted Auth/Storage API/object bytes, ordinary-role/global/runtime/capacity/recovery are not newly certified.",
+    "Legacy capture/row/object provenance stays unknown; no production query or history repair."
+  ],
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd",
+    "live-catalog-storage-supplement-private.json": "ad2da7b29adc7a4862ba2a95f2d4b94478692576f0a60608b5802b6ba997da0f"
+  },
+  "source_hashes": {
+    "scripts/security/storage-schema-preflight.py": "16baf24fd29d59b569f919f0ac017ac99afd3f4e689e0702d9615faa85ad0c2b",
+    "scripts/security/schema-replay.py": "929b4a07ad541eb864362f2ce11f9664dfc27be91bc8c687458ba90a25477f82",
+    "scripts/security/tests/test_storage_schema_preflight.py": "c17ac2568ade82554ab3eb7f209753fb6c440e409e2c15b29c1d94b578cd1fe9"
+  },
+  "database_connection_attempted": false,
+  "coordinated_candidate_count": 46
+}
