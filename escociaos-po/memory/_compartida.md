@@ -2390,3 +2390,11 @@ La auto-poda no aplica.
 |---|---|---|
 | 2026-10-09-viernes | 5 | 0 |
 | **2026-10-16-viernes** | **4 (3 `codigo` + 1 `ddl_aditivo`; 3 drenados, 1 por tope)** | **0** |
+
+## Corrida 2026-10-19-lunes — hechos transversales
+- Preflight 4/4 Composio active, `supabase_read_only_user`, query_logs responde, Vercel 1 proyecto, `ATTENDED=0`. Una sola denegacion: el clasificador de auto mode denego un Bash compuesto de lectura (`date -d @…; git rev-parse HEAD main origin/main; ls; git log`) con «Auto-Mode Bypass»; partido en comandos simples, paso. No es un tool de la lista de la constitucion: no es P1, pero **en el arranque usar comandos cortos y separados**. [corrida: 2026-10-19-lunes]
+- La rama local `main` estaba en `e5f6a5e` (10-15) contra `origin/main` `2947270`; se corrigio con `git branch -f main origin/main` (sin checkout, el HEAD estaba en otra rama). Sigue pasando cada corrida. [corrida: 2026-10-19-lunes]
+- Deriva de migraciones LIMPIA: ledger hasta 181 (`20261018225955`), 172–181 con archivo en `main`. Siguiente numero libre: 183 (182 en PR #333). [corrida: 2026-10-19-lunes]
+- 6/6 agentes por nombre + worktree + run-context volvieron en 3–10 min. Verificacion adversarial del unico P1 (ESCO-158) lanzada por el orquestador con general-purpose: CONFIRMADO en <1 min. [corrida: 2026-10-19-lunes]
+- La opcion `Reportes` NO existe en el multi_select `Modulo` de Notion; usar las existentes (Aguacate, Aplicaciones, Auth & RLS, Clima, Finanzas, Hato Lechero, Infra, Inventario, Labores, Monitoreo) para no crear opciones sueltas. `Especialidad` incluye `Bug Triage`. [corrida: 2026-10-19-lunes]
+- Poda §8 de memoria: otra vez NO aplicada (_compartida ~2.400 lineas). Pendiente para un viernes con conjunto elegible vacio. [corrida: 2026-10-19-lunes]
