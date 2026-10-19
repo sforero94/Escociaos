@@ -401,3 +401,12 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
 - #311 Esco: las 22 herramientas nuevas tocan fin_*/hato_* pero NO usuarios/empleados/contratistas/telegram_usuarios. Audiencia = Gerencia (web: authenticateUser chat.tsx:248; Telegram: módulo consultas, hoy solo Martha y Santiago). Gap latente = ESCO-117; no re-filar. [corrida: 2026-10-12-lunes]
 - Filado ESCO-153 (P3 codigo): handleChatMessage (chat.tsx:4058-4150) usa body.conversation_id con service role sin verificar dueño; la RLS sí lo exige. Telegram no afectado. [corrida: 2026-10-12-lunes]
 - Nota: authenticateUser del chat no mira usuarios.activo (misma ventana que ESCO-119, mitigada por el baneo de auth). No hallazgo. [corrida: 2026-10-12-lunes]
+
+## Corrida 2026-10-19-lunes
+- sin_hallazgos. Baseline: 114 tablas public / 114 con RLS / 315 politicas / 16 SECURITY DEFINER (0 sin search_path). Delta vs 10-12: +1 tabla (clima_avisos, mig 180). Advisors security: 4 categorias, ninguna nueva; rls_enabled_no_policy 56. [corrida: 2026-10-19-lunes]
+- Estado aceptado: clima_avisos = tabla public rls_enabled_no_policy, deny-all correcto (anon sin SELECT/INSERT). No re-barrer. [corrida: 2026-10-19-lunes]
+- Always-true de escritura: 0 por 7.a corrida. Padron 6G+4A sin cambio; auth.users 10, ultima alta 2026-08-30. npm audit runtime: los mismos 9 por 7.a corrida. [corrida: 2026-10-19-lunes]
+- ESCO-153 verificado en vivo (v275) y CERRADO (Arreglado): metodo reutilizable = get_edge_function del slug, guardar a fichero, parsear con python y comparar cada files[].content contra supabase/functions/make-server-1ccce916/ del worktree. Probe de CONTENIDO, nunca de escritura. 78 ficheros desplegados, 0 diferencias. [corrida: 2026-10-19-lunes]
+- PR #335 (Hato Produccion v2/Cargas) no trae migracion ni edge: ruta cargas bajo ModuleGuard hato_lechero; ventas tras RoleGuard Gerencia; signed URL de hato-liquidaciones-fotos acotada por la politica Admin+Gerencia del bucket. No re-barrer salvo cambio. [corrida: 2026-10-19-lunes]
+- Los 3 JWT del arbol: info.tsx (role anon) y Layout.tsx:473/:541 (URL firmada de photos/ehlogo.png). Estado conocido. [corrida: 2026-10-19-lunes]
+- Trampa SQL: en pg_policy, polcmd es tipo "char"; concatenarlo con || da 42725. Castear polcmd::text. [corrida: 2026-10-19-lunes]

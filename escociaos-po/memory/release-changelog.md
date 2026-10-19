@@ -615,3 +615,11 @@ mensual sigue siendo la unica legible.**
 - Orden 180 → deploy correcto: ledger 15:41:08Z, edge 15:41:28Z (20 s). [corrida: 2026-10-15-jueves]
 - ESCO-154 y ESCO-138 cerrados Arreglado. ESCO-152 sigue In progress: mitad de codigo entregada pero sin ejercitar (clima_avisos 0 filas). Para cerrar: primera alerta real + mitad de mantenimiento (decision). [corrida: 2026-10-15-jueves]
 - query_logs: `request.path` no existe en edge_logs; usar source='function_edge_logs' con positionCaseInsensitive(event_message,'clima/sync'). `gh pr list` falla (GraphQL 403); usar `gh api repos/.../pulls?state=open`. [corrida: 2026-10-15-jueves]
+
+## Corrida 2026-10-19-lunes
+- Linea base: HEAD 2947270 · edge v275 (2026-10-18T23:01:23Z) · migraciones hasta 181 (ledger 20261018225955), 0 aplicadas sin fichero · Vercel prod = 2947270 · PR abiertos: #324 (draft, Codex), #333 (182, espera fechas), #336, #337 (Bug Triage de hoy). Nada pendiente de despliegue. [corrida: 2026-10-19-lunes]
+- Lag edge: #330 merge 10-17 20:26Z → v275 10-18 23:01Z = 26 h 35 min. La 181 se aplico 1 min 28 s antes del deploy, en sesion en vivo. [corrida: 2026-10-19-lunes]
+- La 181 no tiene entrada en CLAUDE.md y su cabecera dice «ESCRITA, SIN APLICAR» (patron ESCO-147). Bajo el umbral de 7 dias: no se filo. Revisar el jueves 10-22; si sigue sin entrada el lunes 10-26, filar. [corrida: 2026-10-19-lunes]
+- ESCO-143: database.ts ya no tiene clima_avisos (180) ni lotes.fecha_erradicacion (181). Comprobar con `grep -c '      <tabla>: {' src/types/database.ts`. [corrida: 2026-10-19-lunes]
+- ESCO-152: patron de cortes jueves a sabado (10-01/02, 08/09/10, 16/17); el 10-09 no tiene fila de resumen. Consulta: `clima_resumen_diario` con `cobertura_hueco_max_min` y `extract(isodow from fecha)`. [corrida: 2026-10-19-lunes]
+- Desde 10-03, `reconstruido` aparece en 8 de 12 dias completos (apoyo a ESCO-155). [corrida: 2026-10-19-lunes]

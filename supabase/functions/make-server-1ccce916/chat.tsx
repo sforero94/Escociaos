@@ -65,6 +65,7 @@ import {
   type HatoProduccionQuincenalDbRow,
 } from './hato-aggregation.ts';
 import { formatearRespuestaEsco } from './informes-visita.ts';
+import { conversacionPerteneceAUsuario } from './chat-propiedad.ts';
 
 // ============================================================================
 // TIPOS
@@ -4057,6 +4058,15 @@ export async function handleChatMessage(c: Context) {
 
   let conversationId = body.conversation_id;
   let isNew = false;
+
+  // ESCO-153: la service role se salta la RLS de chat_*; la propiedad se
+  // comprueba aquí, antes de cualquier lectura o escritura.
+  if (conversationId) {
+    const propia = await conversacionPerteneceAUsuario(conversationId, userId, supabaseQuery);
+    if (!propia) {
+      return c.json({ error: 'Conversacion no encontrada' }, 404);
+    }
+  }
 
   // Create conversation if needed
   if (!conversationId) {

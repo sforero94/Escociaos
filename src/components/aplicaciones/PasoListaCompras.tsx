@@ -11,7 +11,7 @@ import {
 import { getSupabase } from '../../utils/supabase/client';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
-import { calcularTotalesGlobalesProductos, generarListaCompras } from '../../utils/calculosAplicaciones';
+import { calcularTotalesGlobalesProductos, extraerTamanoPresentacion, generarListaCompras } from '../../utils/calculosAplicaciones';
 import { formatearMoneda, formatearNumero } from '../../utils/format';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
@@ -136,14 +136,6 @@ export function PasoListaCompras({
       setItemsEditables(editables);
     }
     setModoEdicion(false);
-  };
-
-  const extraerTamanoPresentacion = (presentacion: string | undefined): number => {
-    if (!presentacion) return 1;
-    const normalizada = presentacion.replace(/,/g, '.');
-    const match = normalizada.match(/(\d+\.?\d*)/);
-    const valor = match ? parseFloat(match[1]) : 1;
-    return isNaN(valor) || valor <= 0 ? 1 : valor;
   };
 
   const editarCantidad = (

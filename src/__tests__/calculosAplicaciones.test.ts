@@ -15,6 +15,7 @@ import {
   calcularTotalesProductos,
   calcularTotalesGlobalesProductos,
   generarListaCompras,
+  extraerTamanoPresentacion,
   validarLoteFumigacion,
   validarProductoFumigacion,
   validarProductoFertilizacion,
@@ -295,8 +296,8 @@ describe('generarListaCompras', () => {
       unidades_a_comprar: 6,
       precio_presentacion: 100000,
       costo_estimado: 600000,
-      // COMPORTAMIENTO ACTUAL: 'sin_stock' existe en el tipo pero nunca se asigna;
-      // un producto sin existencias solo cuenta en productos_sin_stock.
+      // Un producto sin existencias solo cuenta en productos_sin_stock; la alerta
+      // por ítem es 'sin_precio' o 'normal' ('sin_stock' salió del tipo, ESCO-151).
       alerta: 'normal',
       unidad: 'Kilos',
       permitido_gerencia: true,
@@ -343,24 +344,39 @@ describe('generarListaCompras', () => {
     expect(r.costo_total_estimado).toBe(1235);
   });
 
-  it('COMPORTAMIENTO ACTUAL, posible defecto: la coma decimal colombiana corta la presentación', () => {
-    // "Tarro 1,5 L" se lee como 1 (el regex solo acepta punto decimal), así que se
-    // compran 3 tarros para 3 L faltantes en vez de 2.
+  it('la coma decimal colombiana se lee como decimal en la presentación (ESCO-151)', () => {
+    // ESCO-151: antes "Tarro 1,5 L" se leía como 1 y se compraban 3 tarros para
+    // 3 L faltantes. Ahora el util es el mismo que PasoListaCompras: 1,5 → 2 tarros.
     const r = generarListaCompras(
       [producto({ cantidad_total_necesaria: 3 })],
       [catalogo({ presentacion_comercial: 'Tarro 1,5 L', precio_presentacion: 10000 })],
     );
-    expect(r.items[0].unidades_a_comprar).toBe(3);
-    expect(r.costo_total_estimado).toBe(30000);
+    expect(r.items[0].unidades_a_comprar).toBe(2);
+    expect(r.costo_total_estimado).toBe(20000);
   });
 
-  it('COMPORTAMIENTO ACTUAL, posible defecto: una presentación de "0" da unidades infinitas', () => {
+  it('una presentación de "0" se trata como unidad de 1, nunca Infinity (ESCO-151)', () => {
+    // ESCO-151: antes daba unidades_a_comprar = Infinity y costo Infinity.
     const r = generarListaCompras(
       [producto({ cantidad_total_necesaria: 3 })],
       [catalogo({ presentacion_comercial: 'Bulto 0 kg', precio_presentacion: 10000 })],
     );
-    expect(r.items[0].unidades_a_comprar).toBe(Infinity);
-    expect(r.costo_total_estimado).toBe(Infinity);
+    expect(r.items[0].unidades_a_comprar).toBe(3);
+    expect(r.costo_total_estimado).toBe(30000);
+  });
+});
+
+describe('extraerTamanoPresentacion (ESCO-151, única copia)', () => {
+  it.each([
+    ['Bulto de 25kg', 25],
+    ['Galón 3.785 L', 3.785],
+    ['Tarro 1,5 L', 1.5],
+    ['Caneca', 1],
+    ['Bulto 0 kg', 1],
+    ['', 1],
+    [undefined, 1],
+  ])('%s → %s', (presentacion, esperado) => {
+    expect(extraerTamanoPresentacion(presentacion)).toBe(esperado);
   });
 });
 

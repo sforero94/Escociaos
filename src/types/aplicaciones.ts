@@ -118,7 +118,7 @@ export interface ItemListaCompras {
   precio_presentacion?: number;     // Precio por bulto/envase completo
   costo_estimado?: number;
 
-  alerta?: 'sin_precio' | 'sin_stock' | 'normal';
+  alerta?: 'sin_precio' | 'normal';
   permitido_gerencia?: boolean;
 }
 

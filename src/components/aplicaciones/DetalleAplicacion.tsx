@@ -485,7 +485,7 @@ export function DetalleAplicacion({
           unidades_a_comprar: c.unidades_a_comprar,
           presentacion_comercial: c.presentacion_comercial ?? '',
           costo_estimado: c.costo_estimado ?? undefined,
-          alerta: (c.alerta as 'sin_precio' | 'sin_stock' | 'normal') ?? undefined,
+          alerta: (c.alerta as 'sin_precio' | 'normal') ?? undefined,
         })),
         costo_total_estimado: compras.reduce((sum, c) => sum + (c.costo_estimado || 0), 0),
         productos_sin_precio: compras.filter(c => !c.costo_estimado || c.costo_estimado === 0).length,

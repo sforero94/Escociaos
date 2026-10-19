@@ -831,3 +831,16 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - #327 (alerta de silencio de la estacion) revisado: sin defecto que dispare (arboles identicos; gate fuera del try; claim upsert ignoreDuplicates; claim liberado si nadie recibe; join por FK de 096). #326 es solo DROP FUNCTION, 0 referencias. [corrida: 2026-10-15-jueves]
 - Punto ciego conocido, NO defecto hoy: `clima_lecturas.timestamp` viene de `ecowitt.time` (hora de respuesta, clima.tsx:142). Si Ecowitt devolviera datos viejos no vacios, el aviso de silencio no dispararia. Detectar: `timestamp - lluvia_diaria_actualizada_en` crece por horas (hoy max 0,04 h). [corrida: 2026-10-15-jueves]
 - chat_messages 0 filas desde 10-12; telegram_mensajes solo registra salientes. [corrida: 2026-10-15-jueves]
+
+## Corrida 2026-10-16-viernes
+- ESCO-153 en PR #330: `handleChatMessage` comprueba propiedad con `conversacionPerteneceAUsuario` (`chat-propiedad.ts`, puro, dos arboles) antes de leer/escribir `chat_*`; 404 si falla. El service role salta la RLS de `chat_*`, asi que este chequeo es la unica frontera; no re-filar como hueco de RLS. Guarda: `escoChatPropiedadConversacion.test.ts`. [corrida: 2026-10-16-viernes]
+- ESCO-139 codigo en PR #331: `cargarLotesCosto` degrada en 42703/PGRST204 a `activo=true` con periodo completo; las cifras cambian solo cuando la 182 escribe fechas. [corrida: 2026-10-16-viernes]
+- El cliente Supabase tipado da TS2352 cuando un select nombra una columna ausente de `database.ts`; una columna de migracion sin aplicar necesita `as unknown as T`. [corrida: 2026-10-16-viernes]
+
+## Corrida 2026-10-19-lunes
+- Baseline main@2947270 VERDE: vitest 208 ficheros / 4.265 pruebas, tsc 0, lint 0 errores / 910 warnings. [corrida: 2026-10-19-lunes]
+- ESCO-159 / PR #336: `aplicaciones.blanco_biologico` es TEXT con arreglo JSON serializado (22/22 filas). Todo lector hace JSON.parse; los fixtures que lo ponen como arreglo esconden el defecto. `aplicaciones_mezclas` tiene `nombre_mezcla`/`numero_mezcla`. [corrida: 2026-10-19-lunes]
+- Tecnica: edge_logs 400 + postgres_logs en la misma ventana dan el mensaje exacto. `log_attributes['request.path']` hace fallar query_logs; usar `event_message`. [corrida: 2026-10-19-lunes]
+- fn_cerrar_aplicacion 400 a las 00:47Z (Microman 80,2 > saldo 80,00); el usuario corrigio en 4 min. Patron ESCO-129, no filado. [corrida: 2026-10-19-lunes]
+- BUG_REPORT.md refrescado en PR #337 (issue 7 = PR #336). Si #336 se fusiona, marcar issue 7 corregido. [corrida: 2026-10-19-lunes]
+- #335 (Hato Produccion v2/Cargas): hooks usan fetchAll; cero firmas de error en 24 h. Sin revision profunda (3,7k lineas) — pendiente. [corrida: 2026-10-19-lunes]

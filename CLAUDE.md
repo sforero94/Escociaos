@@ -126,7 +126,7 @@ Per-user module visibility governs 4 modules: **`aguacate`, `hato_lechero`, `gan
 - `Monitor` role is unaffected: still fully blocked by `ProtectedRoute` (Telegram-only).
 - Deactivated accounts (`usuarios.activo = false`): `ProtectedRoute` shows a «cuenta desactivada» screen (ESCO-81 / migration 137). The real gate is RLS via `get_user_role()` returning NULL.
 
-Sidebar structure (`Layout.tsx` `NAV`): Tablero General · **Aguacate** (group: Labores, Monitoreo, Informes visita, Aplicaciones, Inventario, Clima, Producción, Reportes) · **Hato Lechero** (group: Tablero, Producción, Hato, Chequeos, Alertas, Pajillas) · Ganado · **Finanzas** (group: Dashboard, Gastos, Ingresos, Reportes, Presupuesto, Configuración) · Configuración.
+Sidebar structure (`Layout.tsx` `NAV`): Tablero General · **Aguacate** (group: Labores, Monitoreo, Informes visita, Aplicaciones, Inventario, Clima, Producción, Reportes) · **Hato Lechero** (group: Tablero, Producción, Cargas, Hato, Chequeos, Alertas, Pajillas) · Ganado · **Finanzas** (group: Dashboard, Gastos, Ingresos, Reportes, Presupuesto, Configuración) · Configuración.
 
 Design/implementation plan: `docs/plan_sidebar_modulos.md`.
 

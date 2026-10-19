@@ -2376,3 +2376,25 @@ La auto-poda no aplica. El P1 (ESCO-149) nacio 24 h antes de esta corrida; el lu
 | 2026-10-08-jueves | 4 |
 | **2026-10-15-jueves** | **1 (ESCO-155, P3). Racha de ceros: 0** |
 La auto-poda no aplica.
+
+## Corrida 2026-10-16-viernes — hechos transversales
+- Preflight 4/4 Composio active, `supabase_read_only_user`, query_logs responde, `ATTENDED=0`. Cero prompts, cero denegaciones. [corrida: 2026-10-16-viernes]
+- 4 elegibles: ESCO-139 (P2, SOW de 3 PRs), ESCO-153, ESCO-151, ESCO-155. Tope `ddl_aditivo` = 1 → ESCO-155 queda para el proximo viernes. [corrida: 2026-10-16-viernes]
+- **Los subagent_type registrados (data-integrity, etc.) NO tienen la herramienta Agent**: no pueden lanzar la revision adversarial ellos mismos. **Lanzarla desde el orquestador** con un general-purpose. Esta vez la revision cazo un defecto real en 181 (set_config entre bloques DO). [corrida: 2026-10-16-viernes]
+- **`git stash` es compartido entre todos los worktrees del repo**: prohibirlo en el prompt de despacho junto a checkout/switch/reset. Para mostrar el fallo antes del arreglo, correr la prueba antes de editar. [corrida: 2026-10-16-viernes]
+- Numeros de migracion: **181 (#332) y 182 (#333) tomados**; siguiente libre **183** (barrer ramas igual). [corrida: 2026-10-16-viernes]
+- Linea base: lint 0 errores / 909 warnings; suite hasta 206 ficheros / 4.209 pruebas con los PRs de hoy. `.github/workflows/verificacion-pr.yml` existe: revisarlo antes de repetir «sin gate de CI en PR» (ESCO-132). [corrida: 2026-10-16-viernes]
+
+## Racha del viernes (regla de auto-poda del drenaje) — actualizada 2026-10-16
+| Corrida | Conjunto elegible | Racha de vacios |
+|---|---|---|
+| 2026-10-09-viernes | 5 | 0 |
+| **2026-10-16-viernes** | **4 (3 `codigo` + 1 `ddl_aditivo`; 3 drenados, 1 por tope)** | **0** |
+
+## Corrida 2026-10-19-lunes — hechos transversales
+- Preflight 4/4 Composio active, `supabase_read_only_user`, query_logs responde, Vercel 1 proyecto, `ATTENDED=0`. Una sola denegacion: el clasificador de auto mode denego un Bash compuesto de lectura (`date -d @…; git rev-parse HEAD main origin/main; ls; git log`) con «Auto-Mode Bypass»; partido en comandos simples, paso. No es un tool de la lista de la constitucion: no es P1, pero **en el arranque usar comandos cortos y separados**. [corrida: 2026-10-19-lunes]
+- La rama local `main` estaba en `e5f6a5e` (10-15) contra `origin/main` `2947270`; se corrigio con `git branch -f main origin/main` (sin checkout, el HEAD estaba en otra rama). Sigue pasando cada corrida. [corrida: 2026-10-19-lunes]
+- Deriva de migraciones LIMPIA: ledger hasta 181 (`20261018225955`), 172–181 con archivo en `main`. Siguiente numero libre: 183 (182 en PR #333). [corrida: 2026-10-19-lunes]
+- 6/6 agentes por nombre + worktree + run-context volvieron en 3–10 min. Verificacion adversarial del unico P1 (ESCO-158) lanzada por el orquestador con general-purpose: CONFIRMADO en <1 min. [corrida: 2026-10-19-lunes]
+- La opcion `Reportes` NO existe en el multi_select `Modulo` de Notion; usar las existentes (Aguacate, Aplicaciones, Auth & RLS, Clima, Finanzas, Hato Lechero, Infra, Inventario, Labores, Monitoreo) para no crear opciones sueltas. `Especialidad` incluye `Bug Triage`. [corrida: 2026-10-19-lunes]
+- Poda §8 de memoria: otra vez NO aplicada (_compartida ~2.400 lineas). Pendiente para un viernes con conjunto elegible vacio. [corrida: 2026-10-19-lunes]

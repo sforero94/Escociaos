@@ -23,6 +23,38 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-19 — corrida lunes
+
+**Five PRs merged** (#329–#332 on 2026-10-17, #335 on 2026-10-16) and **one migration
+applied** (181, ledger `20261018225955`). Everything is live. The frontend is on `2947270`
+(Vercel `dpl_DtQPa2P72Ytn6bNKvvWzYuVp4jRW`, READY/PROMOTED, includes all five PRs). The edge
+function `make-server-1ccce916` is v275 (2026-10-18T23:01:23Z), 26 h 35 min after #330
+merged. Migration 181 went in 1 min 28 s before that deploy; the edge code does not
+depend on it. Nothing waits for a deploy.
+
+### Hato Lechero
+- Producción and Cargas are now two pages. `/hato-lechero/produccion` only shows figures: one period selector (last 3 months or year to date), each figure against the same span a year or 3 months back, sales (real data, Gerencia only) kept apart from weighed milk (approximate), and a cow comparison with gaps, never zeros (#335).
+- The new page `/hato-lechero/cargas` (new sidebar item, phone first) lists what is missing now: milk sale per fortnight, weighing days of the month, animal sales, and an upload history with a link to each photo (#335).
+- Martha can now continue a milk-sale upload she left half done. The fortnight dialog keeps a draft, the cow count is optional, and a fortnight saved without it shows "Falta # de vacas" on its card (#335).
+- Removed from Producción: the 2-week projection, the productivity tracker, the cow ranking, the sales KPIs and the Registrar tab (#335).
+
+### Aguacate · Aplicaciones
+- The shopping list of an application no longer shows infinite units and cost for a product with a "0" presentation, and reads "1,5 L" as 1.5, not 1 (ESCO-151, #329).
+
+### Aguacate · Producción
+- The cost/kg overhead split now weighs each lote by trees × days active in the year, and reads inactive lotes too (ESCO-139, #331). **No figure changes yet**: every `lotes.fecha_erradicacion` is NULL, so lotes 8/9/10 still count the full year. The change shows when Santiago's eradication dates load (migration 182, PR #333, open).
+
+### Esco
+- Esco web chat now rejects a `conversation_id` that belongs to another user, so a user cannot continue or load someone else's conversation (ESCO-153, #330, edge v275).
+
+### Interno
+- Migration 181 adds `lotes.fecha_erradicacion` (nullable, additive, 0 rows changed) (ESCO-139, #332). Caution zone: migration. **`CLAUDE.md` has no ledger entry for 181 yet**, and the file header still says "ESCRITA, SIN APLICAR".
+- CLAUDE.md sidebar line and `src/components/hato/CLAUDE.md` updated for Producción v2 + Cargas (#335). Caution zone: Hato module contract.
+- Drift-detector state updated (`2947270`, bot commit).
+
+### Requiere despliegue manual
+- None.
+
 ## 2026-10-15 — corrida jueves
 
 A short window: **four PRs merged** (#325–#328), all on 2026-10-12, and **two migrations
