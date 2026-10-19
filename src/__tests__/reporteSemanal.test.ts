@@ -620,6 +620,81 @@ describe('fetchAplicacionesPlaneadas', () => {
     expect(resultado[0].costoTotalEstimado).toBe(430000); // 250000 + 180000
   });
 
+  // Regresión 2026-10-19: aplicaciones.blanco_biologico es TEXT con un arreglo
+  // JSON serializado (CalculadoraAplicaciones hace JSON.stringify). El reporte
+  // pasaba el string entero ('[]' o '["uuid"]') a .in('id', …) y PostgREST
+  // respondía 400 "invalid input syntax for type uuid" — los blancos nunca salían.
+  it('parsea blanco_biologico guardado como texto JSON', async () => {
+    const appChain = createChainableMock({
+      data: [{ ...MOCK_APLICACIONES_PLANEADAS[0], blanco_biologico: '["plaga-1"]' }],
+      error: null,
+    });
+    const plagasChain = createChainableMock({ data: [{ id: 'plaga-1', nombre: 'Monalonion' }], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'aplicaciones') return appChain;
+      if (table === 'plagas_enfermedades_catalogo') return plagasChain;
+      return createChainableMock();
+    });
+
+    const resultado = await fetchAplicacionesPlaneadas();
+
+    expect(plagasChain.in).toHaveBeenCalledWith('id', ['plaga-1']);
+    expect(resultado[0].blancosBiologicos).toEqual(['Monalonion']);
+  });
+
+  it('no consulta el catálogo de plagas cuando blanco_biologico es "[]"', async () => {
+    const appChain = createChainableMock({
+      data: [{ ...MOCK_APLICACIONES_PLANEADAS[0], blanco_biologico: '[]' }],
+      error: null,
+    });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'aplicaciones') return appChain;
+      return createChainableMock();
+    });
+
+    const resultado = await fetchAplicacionesPlaneadas();
+
+    expect(mockFrom).not.toHaveBeenCalledWith('plagas_enfermedades_catalogo');
+    expect(resultado[0].blancosBiologicos).toEqual([]);
+  });
+
+  // Regresión 2026-10-19: aplicaciones_mezclas no tiene `nombre` ni `numero_orden`
+  // (sus columnas son nombre_mezcla / numero_mezcla). La consulta daba 400 y el
+  // asistente del reporte mostraba siempre "0 mezclas".
+  it('lee las mezclas con las columnas reales de aplicaciones_mezclas', async () => {
+    const appChain = createChainableMock({ data: MOCK_APLICACIONES_PLANEADAS, error: null });
+    const plagasChain = createChainableMock({ data: [{ id: 'plaga-1', nombre: 'Monalonion' }], error: null });
+    const mezclasChain = createChainableMock({
+      data: [{
+        id: 'mez-1',
+        nombre_mezcla: 'Mezcla 1',
+        numero_mezcla: 1,
+        aplicacion_id: 'app-1',
+        aplicaciones_productos: [{ producto_nombre: 'Imidacloprid', dosis_por_caneca: 50, unidad_dosis: 'cc' }],
+      }],
+      error: null,
+    });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'aplicaciones') return appChain;
+      if (table === 'plagas_enfermedades_catalogo') return plagasChain;
+      if (table === 'aplicaciones_mezclas') return mezclasChain;
+      return createChainableMock();
+    });
+
+    const resultado = await fetchAplicacionesPlaneadas();
+
+    const seleccion = String(mezclasChain.select.mock.calls[0][0]);
+    expect(seleccion).toMatch(/\bnombre_mezcla\b/);
+    expect(seleccion).toMatch(/\bnumero_mezcla\b/);
+    expect(seleccion).not.toMatch(/\bnombre,|\bnumero_orden\b/);
+    expect(mezclasChain.order).toHaveBeenCalledWith('numero_mezcla', { ascending: true });
+    expect(resultado[0].mezclas).toEqual([
+      { nombre: 'Mezcla 1', productos: [{ nombre: 'Imidacloprid', dosis: '50 cc/caneca' }] },
+    ]);
+  });
+
   it('retorna lista vacía cuando no hay aplicaciones planeadas', async () => {
     const appChain = createChainableMock({ data: [], error: null });
     mockFrom.mockReturnValue(appChain);
