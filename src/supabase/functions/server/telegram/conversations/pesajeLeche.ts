@@ -1,3 +1,5 @@
+import {beginNativePhoto,nativePhoto,renderNativePhoto} from '../milkPhoto.ts';
+import {downloadNativePhoto,nativePhotoOCR} from '../../hato-pesaje-telegram.ts';
 // Shared photo OCR/natural-language corrections produce a proposal only.
 // The final handoff prepares a source-bound native milk review in an outside
 // context. A separate original-private-message confirmation posts the accepted
@@ -9,12 +11,10 @@ import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
 import {
-  ejecutarPipelinePesajeFoto,
   llamarModeloCorreccionPesaje,
   MAXIMO_FOTOS_PESAJE,
   TIPOS_ACEPTADOS_FOTO_PESAJE,
   type CeldaCommitPesajeEntrada,
-  type FotoPesajeEntrada,
   type PipelinePesajeFotoResultado,
 } from "../../hato-pesaje-pipeline.ts";
 import {
@@ -170,16 +170,6 @@ interface FotoTelegramReferencia {
   fileId: string;
   tipo: string;
   nombre: string;
-}
-
-async function descargarBytesTelegram(fileId: string, botToken: string): Promise<Uint8Array> {
-  const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
-  const fileData = await fileRes.json();
-  const filePath = fileData?.result?.file_path;
-  if (!filePath) throw new Error(`Telegram no devolvió la ruta del archivo ${fileId}`);
-  const descarga = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
-  if (!descarga.ok) throw new Error(`No se pudo descargar el archivo de Telegram (${descarga.status})`);
-  return new Uint8Array(await descarga.arrayBuffer());
 }
 
 // ============================================================================
@@ -339,35 +329,24 @@ export async function pesajeLecheConversation(
 
     // ── Paso 3: descargar + correr el pipeline (N11) ──────────────────
     await ctx.replyWithChatAction("upload_photo");
-    const anioFinal = anio;
-    const mesFinal = mes;
-    const lectura = await conversation.external(async () => {
-      const sb = getSupabaseAdmin();
-      const fotosEntrada: FotoPesajeEntrada[] = [];
-      for (let i = 0; i < fotos.length; i++) {
-        const bytes = await descargarBytesTelegram(fotos[i].fileId, botToken);
-        fotosEntrada.push({ pagina: i + 1, nombre: fotos[i].nombre, tipo: fotos[i].tipo, bytes });
-      }
-      // `origen: 'telegram'` + `createdBy` alimentan el registro del intento
-      // (`hato_capturas_foto`, migración 146): este es el MISMO pipeline que
-      // usa el endpoint web, así que sin declarar el origen las dos vías
-      // quedarían indistinguibles en el registro.
-      return await ejecutarPipelinePesajeFoto({
-        supabase: sb,
-        apiKey,
-        fotos: fotosEntrada,
-        anio: anioFinal,
-        mes: mesFinal,
-        origen: "telegram",
-        createdBy: usuarioId,
-      });
+    let anioFinal = anio;
+    let mesFinal = mes;
+    const retained = await conversation.external(async outside => {
+      const sb=getSupabaseAdmin(),existing=await nativePhoto(sb,milkAction(outside),'recover');
+      if(existing.result){await renderNativePhoto(outside,existing);return existing;}
+      const photos=[];
+      for(const foto of fotos)photos.push({bytes:await downloadNativePhoto(foto.fileId,botToken),mime:foto.tipo});
+      return beginNativePhoto(outside,sb,{year:anioFinal,month:mesFinal,photos},v=>nativePhotoOCR(sb,v));
     });
+    const lectura=retained?.result?.preview?.outcome as {ok:false;error:string}|{ok:true;resultado:PipelinePesajeFotoResultado}|undefined;
+    if(!lectura){await ctx.reply('Consulte el mensaje original de las fotos. No vuelva a enviarlas.');return;}
 
     if (!lectura.ok) {
-      await ctx.reply(`❌ No se pudo leer la planilla: ${lectura.error}\n\nUsa /pesaje para intentar de nuevo.`);
+      await ctx.reply(`❌ No se pudo leer la planilla: ${lectura.error}\n\nConsulte y cierre explícitamente la lectura original antes de otra carga.`);
       return;
     }
 
+    anioFinal=lectura.resultado.anio;mesFinal=lectura.resultado.mes;
     const roster = construirRosterPesaje(lectura.resultado.rosterAnimales);
     const fechasPorSemana = lectura.resultado.fechasPorSemana;
     let diffActual = lectura.resultado.diff;

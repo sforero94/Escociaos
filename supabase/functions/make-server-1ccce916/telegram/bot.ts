@@ -1,3 +1,5 @@
+import {handlePhotoRecovery} from './milkPhoto.ts';
+import {nativePhotoOCR} from '../hato-pesaje-telegram.ts';
 import {handleMilkRecovery} from './milkWeighing.ts';
 import {handleBirthUndoRecovery} from './birthUndo.ts';
 import {handleQuickUndoRecovery} from './quickUndo.ts';
@@ -274,6 +276,7 @@ function getBot(): Bot<BotContext> {
     await handleTreatmentRecovery(ctx,next,getSupabaseAdmin());
   });
 
+  bot.use(async(ctx,next)=>{const sb=getSupabaseAdmin();await handlePhotoRecovery(ctx,next,sb,v=>nativePhotoOCR(sb,v));});
   bot.use(async(ctx,next)=>{await handleMilkRecovery(ctx,next,getSupabaseAdmin());});
 
   bot.use(async(ctx,next)=>{await handleQuickUndoRecovery(ctx,next,getSupabaseAdmin());});
