@@ -147,7 +147,7 @@ describe('lista de subidas del mes', () => {
     expect(html).toContain('Subió Fernando Jimenez');
     expect(html).toContain('Desde Telegram');
     expect(html).toContain('Falló el OCR');
-    expect(html).toContain('Sin litros ligados');
+    expect(html).toContain('Pesajes sujetos a verificación protegida');
     expect(html).toContain('2 fotos');
     expect(html).toContain('Descartar esta subida');
     expect(html).toContain('border-red-600');
@@ -176,7 +176,7 @@ describe('lista de subidas del mes', () => {
     expect(html).toContain('Subió Martha Vega');
     expect(html).toContain('Desde la web');
     expect(html).toContain('Falló el OCR');
-    expect(html).toContain('Sin litros ligados');
+    expect(html).toContain('Pesajes sujetos a verificación protegida');
     expect(html).toContain('Descartar esta subida');
   });
 
@@ -199,12 +199,10 @@ describe('lista de subidas del mes', () => {
     expect(dialogo).not.toContain('Borrar este pesaje');
     expect(pagina).toContain('<SubidasPesajeMes');
     expect(ui).toContain('toast.error');
-    expect(hook).toContain('rutasFotoABorrar');
-    expect(hook).toContain('mensajeErrorDescarte');
-    expect(hook).toContain(".from(BUCKET_PESAJES).remove(");
-    expect(hook).toContain('fetchAll');
-    expect(hook).toContain('siguen');
-    expect(hook).toContain("setSubidas((prev) => prev.filter");
+    expect(hook).toContain('runDiscard');
+    expect(hook).not.toMatch(/\.remove\s*\(|\.delete\s*\(/);
+    expect(hook).not.toContain('ligarFilasASubidas');
+    expect(ui).toContain('Confirmar descarte de los pesajes revisados');
     expect(hook).not.toContain('pesajeLeche');
     expect(semana).not.toMatch(/\.remove\s*\(/);
     const sql = readFileSync(join(__dirname, '../sql/migrations/171_descartar_subida_pesaje.sql'), 'utf8');

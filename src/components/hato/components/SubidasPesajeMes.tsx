@@ -8,11 +8,10 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { diaBogota, horaBogota, obtenerFechaHoy } from '@/utils/fechas';
 import { formatLongDate, formatShortDate } from '@/utils/format';
-import { textoDescartarSubida, BUCKET_PESAJES, type SubidaLigada } from '@/utils/hato/subidasPesajeMes';
+import { BUCKET_PESAJES, type SubidaLigada } from '@/utils/hato/subidasPesajeMes';
 import { useSubidasPesajeMes } from '../hooks/useSubidasPesajeMes';
 
 const ETIQUETA_SIN_AUTOR = 'Sin autor registrado';
@@ -62,7 +61,7 @@ export function filasVisibles(
     const url = ruta && captura.storageBucket === BUCKET_PESAJES ? (urls[`${captura.id}:${ruta}`] ?? null) : null;
     const rango =
       subida.desde == null
-        ? 'Sin litros ligados'
+        ? 'Pesajes sujetos a verificación protegida'
         : subida.desde === subida.hasta
           ? `Litros del ${formatShortDate(subida.desde)}`
           : `Litros del ${formatShortDate(subida.desde)} al ${formatShortDate(subida.hasta ?? subida.desde)}`;
@@ -141,29 +140,11 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
   const mes = parseInt(mesTexto, 10);
   const periodoValido = Number.isFinite(anio) && Number.isFinite(mes) && mes >= 1 && mes <= 12;
   const estado = useSubidasPesajeMes(anio, mes);
-  const [confirmarId, setConfirmarId] = useState<string | null>(null);
 
   const visibles = filasVisibles(estado.subidas, estado.autores, estado.urls);
-  const elegida = estado.subidas.find((subida) => subida.captura.id === confirmarId) ?? null;
-  const descripcion = elegida
-    ? textoDescartarSubida(
-        elegida.filaIds.length,
-        elegida.desde ? formatShortDate(elegida.desde) : null,
-        elegida.hasta ? formatShortDate(elegida.hasta) : null,
-      )
-    : '';
-
-  const descartar = async (id: string) => {
-    if (!puedeGerencia) return;
-    setConfirmarId(null);
-    const resultado = await estado.descartar(id);
-    if (resultado.ok) {
-      toast.success('Subida descartada');
-      onCambio();
-      return;
-    }
-    toast.error(resultado.error ?? 'No se pudo descartar la subida.');
-  };
+  const revisar=async(id:string)=>{const r=await estado.descartar(id);if(!r.ok)toast.error(r.error??'No se pudo preparar el descarte.');};
+  const accion=async(mode:'post'|'status'|'resolve'|'new')=>{const r=await estado.accionDescarte(mode);if(!r.ok)toast.error(r.error??'Conserve el intento original.');else if(mode==='post'){toast.success('Descarte registrado; fotos e historial conservados');onCambio();}};
+  const attempt=estado.discardAttempt;
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -194,23 +175,22 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
           subidas={visibles}
           puedeGerencia={puedeGerencia}
           descartando={estado.descartando}
-          onDescartar={setConfirmarId}
+          onDescartar={id=>{void revisar(id);}}
         />
       )}
       {!puedeGerencia && !estado.cargando && (
         <p className="mt-3 text-xs text-gray-500">Solo Gerencia puede descartar una subida.</p>
       )}
-      <ConfirmDialog
-        open={confirmarId != null}
-        onOpenChange={(open) => { if (!open) setConfirmarId(null); }}
-        title="Descartar esta subida"
-        description={descripcion}
-        confirmLabel="Descartar"
-        destructive
-        onConfirm={() => {
-          if (confirmarId) void descartar(confirmarId);
-        }}
-      />
+      {puedeGerencia&&<div className="mt-3 space-y-2 rounded border p-3 text-sm">
+        <p>El descarte conserva fotos, captura e historial. Solo admite pesajes nuevos e intactos con procedencia protegida verificable.</p>
+        <Button disabled={estado.descartando} onClick={()=>{void accion('status');}}>Consultar descarte original</Button>
+        {!attempt&&<Button disabled={estado.descartando} onClick={()=>{void accion('resolve');}}>Cancelar intento original sin resultado verificado</Button>}
+        {attempt&&<><p>Original: {attempt.request_key} · {attempt.state}</p>
+          {attempt.source&&<><p>Captura: {attempt.capture_id}</p><ul>{(attempt.source.rows as Array<Record<string,unknown>>).map(row=><li key={String(row.id)}>{String(row.animal_id)} · {String(row.fecha)} · AM {String(row.litros_am??'sin dato')} / PM {String(row.litros_pm??'sin dato')} · total {String(row.litros_total)}</li>)}</ul></>}
+          {attempt.state==='pending'?<><Button disabled={estado.descartando} onClick={()=>{void accion('post');}}>Confirmar descarte de los pesajes revisados</Button><Button disabled={estado.descartando} onClick={()=>{void accion('resolve');}}>Cancelar descarte original</Button></>:<Button disabled={estado.descartando} onClick={()=>{void accion('new');}}>Reconocer resultado y cerrar intento</Button>}
+        </>}
+      </div>}
+
     </section>
   );
 }

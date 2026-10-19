@@ -1,0 +1,16 @@
+import {describe,it,expect,vi,afterEach} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {validateDiscard,runDiscard,type DiscardClient} from '../utils/hato/hatoUploadDiscard';
+const fixture=()=>JSON.parse(readFileSync('src/__tests__/fixtures/hatoUploadDiscard.json','utf8'));
+afterEach(()=>vi.unstubAllGlobals());
+const setup=()=>{const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:string,_o:unknown,fn:()=>unknown)=>fn()}});return store;};
+describe('protected retained-evidence discard proof and original recovery',()=>{
+ it('reconstructs the exact native source and nested trusted deletion receipts',()=>{const r=fixture();expect(validateDiscard(r,r.owner_id,r.request_key)).toEqual(r);expect(r.receipt.retained).toBe(true);expect(r.receipt.removed.length).toBeGreaterThan(0);});
+ it.each(['owner','capture','row','retention','week','trace','originalUpdate','path','key','extra'])('refuses forged %s proof',kind=>{const r=fixture(),owner=r.owner_id,key=r.request_key;
+  if(kind==='owner')r.owner_id=r.capture_id;if(kind==='capture')r.source.capture.created_by=r.capture_id;if(kind==='row')r.receipt.removed[0].litros_total=999;if(kind==='retention')r.receipt.retained=false;if(kind==='week')r.receipt.weekReceipts=[];if(kind==='trace')r.receipt.corrections[0].corregido_por=r.capture_id;if(kind==='originalUpdate')r.source.milk.plan.accepted[0].before=r.source.rows[0];if(kind==='path')r.source.upload.paths[0]='legacy/guessed';if(kind==='key')r.plan[0].key=r.capture_id;if(kind==='extra')r.clientActor=owner;
+  expect(()=>validateDiscard(r,owner,key)).toThrow();
+ });
+ it('keeps corrupt owner storage without allocating or sending a replacement',async()=>{const r=fixture(),store=setup(),raw='{broken',rpc=vi.fn();store.set('hato_upload_discard_v1:'+r.owner_id,raw);const c={rpc,auth:{getUser:async()=>({data:{user:{id:r.owner_id}},error:null})}};await expect(runDiscard(c,r.owner_id,'prepare',()=>true,r.capture_id)).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();expect([...store.values()]).toEqual([raw]);});
+ it('late authenticated owner change refuses before post and preserves original anchor',async()=>{const r=fixture(),store=setup();r.state='pending';r.receipt=null;store.set('hato_upload_discard_v1:'+r.owner_id,JSON.stringify({owner:r.owner_id,key:r.request_key,capture:r.capture_id}));let auths=0;const rpc=vi.fn(async()=>({data:r,error:null})),c={rpc,auth:{getUser:async()=>({data:{user:{id:++auths===3?r.capture_id:r.owner_id}},error:null})}};await expect(runDiscard(c,r.owner_id,'post',()=>true,undefined,r)).rejects.toThrow();expect(rpc.mock.calls).toHaveLength(1);expect(store.size).toBe(1);});
+ it('independent terminal recovery is read-only and does not allocate another UUID',async()=>{const r=fixture(),store=setup(),rpc=vi.fn(async()=>({data:r,error:null}));const c={rpc,auth:{getUser:async()=>({data:{user:{id:r.owner_id}},error:null})}} satisfies DiscardClient;expect(await runDiscard(c,r.owner_id,'status',()=>true)).toEqual(r);expect(rpc.mock.calls).toHaveLength(1);expect(store.size).toBe(1);});
+});

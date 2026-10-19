@@ -1,33 +1,19 @@
-// ARCHIVO: components/hato/hooks/useSubidasPesajeMes.ts
-// DESCRIPCIÓN: lee las subidas de planilla de un mes y, si Gerencia
-// descarta una, borra su foto, los litros ligados y la fila de
-// `hato_capturas_foto`. La liga vive en `subidasPesajeMes.ts`.
-//
-// El DELETE de la captura exige la migración 171 (Gerencia). La foto
-// ya era borrable por Gerencia (migración 086). Los litros ya eran
-// borrables por la RLS de `hato_pesajes_leche` (054). No se toca Telegram.
+import {useAuth} from '@/contexts/AuthContext';
+import {runDiscard,type DiscardResult,type DiscardClient} from '@/utils/hato/hatoUploadDiscard';
+// Lists retained capture history; discard authority comes only from protected receipts.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState,useLayoutEffect,useRef } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { deleteDevolvioFilas } from '@/utils/supabase/deleteDevolvioFilas';
-import { fetchAll } from '@/utils/supabase/fetchAll';
 import {
   BUCKET_PESAJES,
-  ligarFilasASubidas,
-  mensajeErrorDescarte,
   mesesAlrededor,
-  motivoBloqueoDescarte,
-  rutasFotoABorrar,
   subidasDelMes,
-  ventanaCreatedAt,
   type CapturaSubida,
-  type FilaSubida,
   type SubidaLigada,
 } from '@/utils/hato/subidasPesajeMes';
 
 const SELECT_CAPTURA =
   'id, anio, mes, storage_bucket, storage_rutas, storage_ok, created_by, creado_en, origen, desenlace, filas_escritas';
-const SELECT_FILA = 'id, fecha, created_at, created_by, fuente';
 const SEGUNDOS_URL = 60 * 60;
 
 interface CapturaCruda {
@@ -44,14 +30,6 @@ interface CapturaCruda {
   filas_escritas: number | null;
 }
 
-interface FilaCruda {
-  id: string;
-  fecha: string;
-  created_at: string;
-  created_by: string | null;
-  fuente: string | null;
-}
-
 export interface ResultadoDescarte {
   ok: boolean;
   error: string | null;
@@ -65,6 +43,8 @@ export interface SubidasPesajeMesEstado {
   autores: Map<string, string>;
   urls: Record<string, string>;
   descartar: (capturaId: string) => Promise<ResultadoDescarte>;
+  discardAttempt:DiscardResult|null;
+  accionDescarte:(mode:'post'|'status'|'resolve'|'new')=>Promise<ResultadoDescarte>;
 }
 
 function capturaDesdeCruda(fila: CapturaCruda): CapturaSubida {
@@ -90,8 +70,8 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
   const [subidas, setSubidas] = useState<SubidaLigada[]>([]);
   const [autores, setAutores] = useState<Map<string, string>>(new Map());
   const [urls, setUrls] = useState<Record<string, string>>({});
-  // Subidas que no se pueden descartar sin dañar litros de otra subida.
-  const [bloqueos, setBloqueos] = useState<Map<string, string>>(new Map());
+  // Historical display blocking is not discard authority; protected RPC decides eligibility.
+
   const [tick, setTick] = useState(0);
 
   const cargar = useCallback(async () => {
@@ -114,22 +94,6 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
       if (errorCapturas) throw new Error(errorCapturas.message);
 
       const capturas = ((capturasData ?? []) as CapturaCruda[]).map(capturaDesdeCruda);
-      const ventana = ventanaCreatedAt(capturas.map((c) => c.creadoEn));
-      let filas: FilaSubida[] = [];
-      if (ventana && capturas.length > 0) {
-        const pagina = await fetchAll<FilaCruda>((desde, hasta) =>
-          supabase
-            .from('hato_pesajes_leche')
-            .select(SELECT_FILA)
-            .gte('created_at', ventana.desde)
-            .lte('created_at', ventana.hasta)
-            .order('id', { ascending: true })
-            .range(desde, hasta),
-        );
-        if (pagina.truncado) throw new Error('Hay demasiados pesajes en esta ventana.');
-        filas = pagina.filas;
-      }
-
       const ids = new Set<string>();
       for (const captura of capturas) if (captura.createdBy) ids.add(captura.createdBy);
       const autoresNuevos = new Map<string, string>();
@@ -164,14 +128,9 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
       }
       await Promise.all(firmas);
 
-      const ligadas = ligarFilasASubidas(capturas, filas);
-      const bloqueosNuevos = new Map<string, string>();
-      for (const subida of ligadas) {
-        const motivo = motivoBloqueoDescarte(ligadas, subida.captura.id);
-        if (motivo) bloqueosNuevos.set(subida.captura.id, motivo);
-      }
+      const ligadas:SubidaLigada[]=capturas.map(captura=>({captura,filaIds:[],desde:null,hasta:null}));
       setSubidas(subidasDelMes(ligadas, anio, mes));
-      setBloqueos(bloqueosNuevos);
+
       setAutores(autoresNuevos);
       setUrls(urlsNuevas);
     } catch (err) {
@@ -186,68 +145,16 @@ export function useSubidasPesajeMes(anio: number, mes: number): SubidasPesajeMes
     void cargar();
   }, [cargar, tick]);
 
-  const descartar = useCallback(
-    async (capturaId: string): Promise<ResultadoDescarte> => {
-      const fallo = (error: string): ResultadoDescarte => {
-        setError(error);
-        return { ok: false, error };
-      };
-      const subida = subidas.find((item) => item.captura.id === capturaId);
-      if (!subida) return fallo('Esta subida ya no está en la lista.');
-      const bloqueo = bloqueos.get(capturaId);
-      if (bloqueo) return fallo(bloqueo);
-      setDescartando(true);
-      setError(null);
-      try {
-        const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-        const { captura, filaIds } = subida;
-        const rutas = rutasFotoABorrar(captura);
-        if (rutas.length > 0) {
-          if (captura.storageBucket !== BUCKET_PESAJES) {
-            return fallo('Esta subida no está en el bucket de pesajes.');
-          }
-          const { error: errorFoto } = await supabase.storage.from(BUCKET_PESAJES).remove(rutas);
-          if (errorFoto) return fallo(errorFoto.message ?? 'No se pudo borrar la foto.');
-        }
-        if (filaIds.length > 0) {
-          const { data, error: errorFilas } = await supabase
-            .from('hato_pesajes_leche')
-            .delete()
-            .in('id', filaIds)
-            .select('id');
-          if (errorFilas) return fallo(errorFilas.message);
-          const borrados = new Set(((data ?? []) as Array<{ id: string }>).map((fila) => fila.id));
-          // Un reintento llega con litros ya borrados. Solo falla si alguna fila sigue.
-          const faltantes = filaIds.filter((id) => !borrados.has(id));
-          if (faltantes.length > 0) {
-            const { data: siguen, error: errorSiguen } = await supabase
-              .from('hato_pesajes_leche')
-              .select('id')
-              .in('id', faltantes);
-            if (errorSiguen) return fallo(errorSiguen.message);
-            if (Array.isArray(siguen) && siguen.length > 0) {
-              return fallo('No se pudieron borrar todos los litros de esta subida.');
-            }
-          }
-        }
-        const { data: dataCaptura, error: errorCaptura } = await supabase
-          .from('hato_capturas_foto')
-          .delete()
-          .eq('id', capturaId)
-          .select('id');
-        if (errorCaptura) return fallo(mensajeErrorDescarte(errorCaptura, false));
-        if (!deleteDevolvioFilas(dataCaptura)) return fallo(mensajeErrorDescarte(null, true));
-        setSubidas((prev) => prev.filter((item) => item.captura.id !== capturaId));
-        setTick((n) => n + 1);
-        return { ok: true, error: null };
-      } catch (err) {
-        return fallo(err instanceof Error ? err.message : 'No se pudo descartar la subida.');
-      } finally {
-        setDescartando(false);
-      }
-    },
-    [subidas, bloqueos],
-  );
+  const {user,hasRole}=useAuth();const allowed=hasRole(['Gerencia']);const generation=useRef({value:0});const [discardAttempt,setDiscardAttempt]=useState<DiscardResult|null>(null);
+  useLayoutEffect(()=>{const g=generation.current;g.value++;setDiscardAttempt(null);setDescartando(false);return()=>{g.value++;};},[user?.id,allowed]);
+  const run=useCallback(async(mode:'prepare'|'post'|'status'|'resolve'|'new',capture?:string):Promise<ResultadoDescarte>=>{
+   const owner=user?.id,n=generation.current.value;if(!owner||!allowed)return {ok:false,error:'Solo Gerencia puede descartar una subida.'};setDescartando(true);setError(null);
+   try{const r=await runDiscard(getSupabase() as unknown as DiscardClient,owner,mode,()=>generation.current.value===n,capture,discardAttempt);if(generation.current.value!==n)throw Error('La sesión cambió.');setDiscardAttempt(r);if(r?.state==='committed')setTick(t=>t+1);return {ok:true,error:null};}
+   catch(e){const message=e instanceof Error?e.message:'Conserve y consulte el descarte original.';if(generation.current.value===n)setError(message);return {ok:false,error:message};}
+   finally{if(generation.current.value===n)setDescartando(false);}
+  },[user?.id,allowed,discardAttempt]);
+  const descartar=useCallback((capture:string)=>run('prepare',capture),[run]);
+  const accionDescarte=useCallback((mode:'post'|'status'|'resolve'|'new')=>run(mode),[run]);
 
-  return { cargando, descartando, error, subidas, autores, urls, descartar };
+  return { cargando, descartando, error, subidas, autores, urls, descartar,discardAttempt,accionDescarte };
 }

@@ -111,12 +111,9 @@ describe('el hook consulta el bloqueo antes de borrar nada', () => {
   });
 
   it('el bloqueo va antes del borrado de la foto y de los litros', () => {
-    const cuerpo = fuente.slice(fuente.indexOf('const descartar = useCallback'));
-    expect(cuerpo).toContain('bloqueos.get(capturaId)');
-    expect(cuerpo).toContain('.remove(rutas)');
-    expect(cuerpo).toContain(".from('hato_pesajes_leche')");
-    const bloqueo = cuerpo.indexOf('bloqueos.get(capturaId)');
-    expect(bloqueo).toBeLessThan(cuerpo.indexOf('.remove(rutas)'));
-    expect(bloqueo).toBeLessThan(cuerpo.indexOf(".from('hato_pesajes_leche')"));
+    expect(fuente).toContain('runDiscard');
+    expect(fuente).not.toMatch(/\.remove\s*\(|\.delete\s*\(/);
+    expect(fuente).not.toContain('bloqueos.get(capturaId)');
+
   });
 });

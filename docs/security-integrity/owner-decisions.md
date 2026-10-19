@@ -26,3 +26,6 @@ October16 clarification from Santiago (10:53 ET, Option1, `hato_quick_event_sele
 
 
 October17 clarification from Santiago (Option1, `hato_chequeo_linked_birth_replacement_policy`): on chequeo reapproval, an existing linked birth with identical birth facts keeps its original event UUID and `cria_id`; only its association to the replacement chequeo detail may change. If that linked birth changes or is missing, refuse the entire replacement for separate review with Santiago. Never delete, detach or recreate calves; no invented historical provenance or repair.
+
+
+October19 clarification from Santiago (08:38 ET, Option1, `hato_upload_discard_raw_retention_policy`): protected upload discard retains original raw photos, capture and immutable proof as history and records disposition separately in trusted audit. Atomically remove only milk rows newly inserted by that unique protected upload and still unchanged. Legacy/ambiguous/changed rows, preexisting updates and unknown outcomes are never discarded. No physical Storage/capture deletion, inferred provenance or historical repair.
