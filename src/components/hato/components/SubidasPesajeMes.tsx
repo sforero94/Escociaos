@@ -1,8 +1,9 @@
 // ARCHIVO: components/hato/components/SubidasPesajeMes.tsx
 // DESCRIPCIÓN: lista las planillas subidas del mes en Producción.
-// Gerencia descarta una subida (foto + litros ligados). El resto del
+// Gerencia descarta solo pesajes probados; fotos/captura quedan como historial. El resto del
 // mes queda. Issue #297.
 
+import type {UploadDisposition} from '@/utils/hato/hatoUploadHistory';
 import { useState } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,15 +49,17 @@ export interface SubidaVisible {
   rango: string;
   fotos: number;
   url: string | null;
+  discarded?:boolean;
 }
 
 export function filasVisibles(
   subidas: readonly SubidaLigada[],
   autores: ReadonlyMap<string, string>,
   urls: Readonly<Record<string, string>>,
+  dispositions:ReadonlyMap<string,UploadDisposition>=new Map(),
 ): SubidaVisible[] {
   return subidas.map((subida) => {
-    const { captura } = subida;
+    const { captura } = subida;const disposition=dispositions.get(captura.id);
     const ruta = captura.storageRutas[0];
     const url = ruta && captura.storageBucket === BUCKET_PESAJES ? (urls[`${captura.id}:${ruta}`] ?? null) : null;
     const rango =
@@ -70,8 +73,9 @@ export function filasVisibles(
       autor: (captura.createdBy && autores.get(captura.createdBy)) || ETIQUETA_SIN_AUTOR,
       cuando: `${formatLongDate(diaBogota(captura.creadoEn))} a las ${horaBogota(captura.creadoEn)}`,
       origen: etiquetaOrigen(captura.origen),
-      estado: ESTADO[captura.desenlace] ?? 'Sin estado',
-      rango,
+      estado: disposition?'Pesajes descartados · fotos e historial conservados':(ESTADO[captura.desenlace] ?? 'Sin estado'),
+      discarded:!!disposition,
+      rango:disposition?`${disposition.removedCount} pesajes descartados el ${formatLongDate(diaBogota(disposition.discardedAt))}`:rango,
       fotos: captura.storageRutas.length,
       url,
     };
@@ -113,7 +117,7 @@ export function ListaSubidasMes({
               {subida.fotos > 1 ? ` · ${subida.fotos} fotos` : ''}
             </p>
           </div>
-          {puedeGerencia && (
+          {puedeGerencia && !subida.discarded && (
             <Button
               type="button"
               variant="outline"
@@ -141,7 +145,7 @@ export function SubidasPesajeMes({ onCambio }: { onCambio: () => void }) {
   const periodoValido = Number.isFinite(anio) && Number.isFinite(mes) && mes >= 1 && mes <= 12;
   const estado = useSubidasPesajeMes(anio, mes);
 
-  const visibles = filasVisibles(estado.subidas, estado.autores, estado.urls);
+  const visibles = filasVisibles(estado.subidas, estado.autores, estado.urls,estado.dispositions);
   const revisar=async(id:string)=>{const r=await estado.descartar(id);if(!r.ok)toast.error(r.error??'No se pudo preparar el descarte.');};
   const accion=async(mode:'post'|'status'|'resolve'|'new')=>{const r=await estado.accionDescarte(mode);if(!r.ok)toast.error(r.error??'Conserve el intento original.');else if(mode==='post'){toast.success('Descarte registrado; fotos e historial conservados');onCambio();}};
   const attempt=estado.discardAttempt;

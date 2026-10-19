@@ -1,0 +1,7 @@
+# Retained-discard history and bounded writer inventory
+
+Validated. Preserve Santiago's Option1 raw/capture/immutable evidence retention. Candidate52 adds a minimal authenticated active-profile history reader tied to exact reviewed proof-writer/config/policy baseline. Actual history loader pages all captures, verifies disposition before/after signed previews and fences stale owner/month results; committed captures retain previews and hide repeat discard. Unknown/legacy absence never proves zero milk rows.
+
+No direct grants or legacy routes retired in this front. Bounded AST inventory explicitly preserves import/service and shared chequeo/quincena capture paths; legacy HTTP milk commit remains reachable and requires a separate compatible retirement. Exact ACL, runtime/global/capacity/recovery and quincena-income gates remain open. Local six private snapshots only; never production.
+
+27 focused tests, full310files/6317App62.93s with2workers/unchanged deadlines,42Python,typecheck and lint0errors/871warnings pass. Frozen replay PASS119native/7actual-history SDK assertions,344matching source hashes/six snapshots,52coordinated candidates and verified database cleanup. First run passed prior checks and new reader negatives, then refused synthetic pagination captures missing required storage_bucket/storage_prefijo. Fixture now supplies synthetic required metadata; no installation/no-row-change guard weakened. No private files committed.
