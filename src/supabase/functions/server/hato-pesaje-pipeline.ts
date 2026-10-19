@@ -176,7 +176,7 @@ export interface PipelinePesajeFotoResultado {
 
 export type ResultadoPipelinePesajeFoto =
   | { ok: true; resultado: PipelinePesajeFotoResultado }
-  | { ok: false; status: 422 | 500 | 502; error: string };
+  | { ok: false; status: 422 | 500 | 502; error: string; uncertain?: boolean };
 
 interface LlamadaModeloOk {
   ok: true;
@@ -184,6 +184,7 @@ interface LlamadaModeloOk {
 }
 interface LlamadaModeloError {
   ok: false;
+  uncertain?: boolean;
   pagina: number;
   error: string;
 }
@@ -234,18 +235,22 @@ async function leerFotoConModelo(
       }),
       signal: controller.signal,
     });
+    const reader=respuesta.body?.getReader();if(!reader)throw Error('Respuesta del modelo vacía');const chunks:Uint8Array[]=[];let length=0;
+    try{while(true){const part=await reader.read();if(part.done)break;length+=part.value.length;if(length>2097152){controller.abort();throw Error('Respuesta del modelo demasiado grande');}chunks.push(part.value);}}finally{reader.releaseLock();}
+    const raw=new Uint8Array(length);let offset=0;for(const chunk of chunks){raw.set(chunk,offset);offset+=chunk.length;}const rawText=new TextDecoder().decode(raw);
     clearTimeout(timeoutId);
 
     if (!respuesta.ok) {
-      const detalle = await respuesta.text().catch(() => '');
+      const detalle = rawText;
       return {
         ok: false,
         pagina: foto.pagina,
         error: `el modelo de visión respondió ${respuesta.status}: ${detalle.slice(0, 300)}`,
+        uncertain: respuesta.status>=500,
       };
     }
 
-    const resultado = await respuesta.json();
+    const resultado = JSON.parse(rawText);
     const contenido = resultado?.choices?.[0]?.message?.content;
     if (typeof contenido !== 'string' || contenido.trim() === '') {
       return { ok: false, pagina: foto.pagina, error: 'el modelo de visión devolvió una respuesta vacía' };
@@ -260,7 +265,7 @@ async function leerFotoConModelo(
         : err instanceof Error
           ? err.message
           : String(err);
-    return { ok: false, pagina: foto.pagina, error: mensaje };
+    return { ok: false, pagina: foto.pagina, error: mensaje, uncertain: true };
   }
 }
 
@@ -287,6 +292,8 @@ export async function ejecutarPipelinePesajeFoto(params: {
    * -- los dos usan este MISMO pipeline, así que sin declararlo las dos
    * vías quedarían indistinguibles en el registro. */
   origen?: OrigenCapturaFoto;
+  /** Trusted verified upload only: skip Storage and best-effort capture writes. */
+  protectedCapture?: {id:string;prefix:string;paths:string[]};
   /** Usuario verificado que sube la foto, para `created_by`. */
   createdBy?: string | null;
 }): Promise<ResultadoPipelinePesajeFoto> {
@@ -296,10 +303,13 @@ export async function ejecutarPipelinePesajeFoto(params: {
   const generadoEn = new Date().toISOString();
 
   // --- 1. Guardar la capa cruda ANTES de leerla -----------------------------
-  const prefijoStorage = `pesaje-foto/${generadoEn.replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
+  const prefijoStorage = params.protectedCapture?.prefix ?? `pesaje-foto/${generadoEn.replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
   const rutasStorage: Array<string | null> = [];
   const erroresStorage: string[] = [];
-  for (const foto of fotos) {
+  if(params.protectedCapture){
+    if(params.protectedCapture.paths.length!==fotos.length)throw Error('Original photo pages changed');
+    rutasStorage.push(...params.protectedCapture.paths);
+  }else for (const foto of fotos) {
     const ruta = `${prefijoStorage}/pagina-${foto.pagina}.${extensionDeTipo(foto.tipo, foto.nombre)}`;
     const { error } = await supabase.storage
       .from(BUCKET_FOTOS_PESAJE)
@@ -317,7 +327,7 @@ export async function ejecutarPipelinePesajeFoto(params: {
   // TODAVÍA no corrió, así que un fallo del modelo -- el caso que motivó el
   // hallazgo -- queda registrado igual. Si este registro falla, `capturaId`
   // es `null` y el pipeline sigue exactamente como antes.
-  const capturaId = await registrarCapturaFoto({
+  const capturaId = params.protectedCapture?.id ?? await registrarCapturaFoto({
     supabase,
     tipo: 'pesaje',
     origen,
@@ -336,7 +346,7 @@ export async function ejecutarPipelinePesajeFoto(params: {
     error: string,
     desenlace: 'ocr_fallo' | 'error',
   ): Promise<ResultadoPipelinePesajeFoto> => {
-    await cerrarCapturaFoto({ supabase, capturaId, desenlace, detalle: error });
+    if(!params.protectedCapture)await cerrarCapturaFoto({ supabase, capturaId, desenlace, detalle: error });
     return { ok: false, status, error };
   };
 
@@ -384,6 +394,7 @@ export async function ejecutarPipelinePesajeFoto(params: {
     fotos.map((foto) => leerFotoConModelo(foto, fotos.length, prompt, esquema, apiKey)),
   );
 
+  if(params.protectedCapture&&resultados.some(r=>!r.ok&&r.uncertain))return {ok:false,status:502,error:'Resultado de lectura incierto. Conserve y consulte la carga original.',uncertain:true};
   const lecturas: LecturaOcrPesajePagina[] = [];
   const erroresLectura: string[] = [];
   for (const resultado of resultados) {
@@ -452,7 +463,7 @@ export async function ejecutarPipelinePesajeFoto(params: {
   // nadie aprobó", las dos causas que hoy se ven iguales. Un 0 acá es un
   // cero MEDIDO, no un hueco -- por eso la columna es NULL hasta este punto.
   const celdasLeidasOcr = diff.filter((c) => c.litrosAm !== null || c.litrosPm !== null).length;
-  await cerrarCapturaFoto({ supabase, capturaId, desenlace: 'pendiente', celdasLeidasOcr });
+  if(!params.protectedCapture)await cerrarCapturaFoto({ supabase, capturaId, desenlace: 'pendiente', celdasLeidasOcr });
 
   return {
     ok: true,

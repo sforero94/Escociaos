@@ -1,3 +1,4 @@
+import {photoBrowserRequest} from './hatoPhotoBrowserServer.ts';
 import { perfilAplicacionActivo } from './perfilAplicacionActivo.ts';
 // hato-pesaje-foto.ts — S5 de `docs/plan_hato_ronda_agosto_2026.md`: `POST
 // /make-server-1ccce916/hato/pesaje/foto`.
@@ -46,10 +47,6 @@ import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   ejecutarPipelinePesajeFoto,
-  MAXIMO_FOTOS_PESAJE,
-  TAMANO_MAXIMO_FOTO_PESAJE_BYTES,
-  TIPOS_ACEPTADOS_FOTO_PESAJE,
-  type FotoPesajeEntrada,
 } from './hato-pesaje-pipeline.ts';
 
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo set de escritura del módulo (053), igual que chequeo/foto.
@@ -99,117 +96,10 @@ async function verificarAcceso(
 // Handler principal
 // ---------------------------------------------------------------------------
 export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
-  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
-  if (!apiKey) {
-    return respuestaError(
-      c,
-      503,
-      'La lectura por foto no está disponible: falta el secreto OPENROUTER_API_KEY en la edge function.',
-    );
-  }
-
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  );
-
-  const acceso = await verificarAcceso(c, supabase);
-  if (acceso instanceof Response) return acceso;
-
-  // --- 1. Leer las fotos + anio/mes (REQUERIDOS, ver cabecera) -------------
-  let campoFotos: unknown;
-  let anio: number;
-  let mes: number;
-  try {
-    const body = await c.req.parseBody({ all: true });
-    campoFotos = body['fotos'];
-
-    const anioTexto = body['anio'];
-    const mesTexto = body['mes'];
-    anio = typeof anioTexto === 'string' ? parseInt(anioTexto, 10) : NaN;
-    mes = typeof mesTexto === 'string' ? parseInt(mesTexto, 10) : NaN;
-  } catch (err) {
-    return respuestaError(
-      c,
-      400,
-      `No se pudo leer el cuerpo multipart: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  if (!Number.isInteger(anio) || anio < 2020 || anio > 2100) {
-    return respuestaError(c, 400, "El campo 'anio' es requerido y debe ser un año válido -- la planilla no trae fecha legible por sí sola.");
-  }
-  if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
-    return respuestaError(c, 400, "El campo 'mes' es requerido y debe estar entre 1 y 12.");
-  }
-
-  const archivos = (Array.isArray(campoFotos) ? campoFotos : [campoFotos]).filter(
-    (v): v is File => v instanceof File,
-  );
-  if (archivos.length === 0) {
-    return respuestaError(c, 400, 'Faltan las fotos de la planilla (multipart/form-data, campo "fotos").');
-  }
-  if (archivos.length > MAXIMO_FOTOS_PESAJE) {
-    return respuestaError(c, 400, `Se aceptan máximo ${MAXIMO_FOTOS_PESAJE} fotos por carga (llegaron ${archivos.length}).`);
-  }
-
-  const fotos: FotoPesajeEntrada[] = [];
-  for (let i = 0; i < archivos.length; i++) {
-    const archivo = archivos[i];
-    if (archivo.size === 0) {
-      return respuestaError(c, 400, `La foto ${i + 1} ('${archivo.name}') está vacía.`);
-    }
-    if (archivo.size > TAMANO_MAXIMO_FOTO_PESAJE_BYTES) {
-      return respuestaError(
-        c,
-        400,
-        `La foto ${i + 1} ('${archivo.name}') supera el tamaño máximo de ${TAMANO_MAXIMO_FOTO_PESAJE_BYTES / 1024 / 1024} MB.`,
-      );
-    }
-    const tipo = (archivo.type || '').toLowerCase();
-    if (!TIPOS_ACEPTADOS_FOTO_PESAJE.has(tipo)) {
-      return respuestaError(
-        c,
-        400,
-        `La foto ${i + 1} ('${archivo.name}') es de tipo '${archivo.type || 'desconocido'}'. Formatos aceptados: JPEG, PNG, WEBP, HEIC.`,
-      );
-    }
-    fotos.push({
-      pagina: i + 1,
-      nombre: archivo.name || `pagina-${i + 1}`,
-      tipo: tipo === 'image/jpg' ? 'image/jpeg' : tipo,
-      bytes: new Uint8Array(await archivo.arrayBuffer()),
-    });
-  }
-
-  // --- 2. Pipeline compartido con el bot de Telegram (N11) ------------------
-  // `origen`/`createdBy` alimentan el registro del intento
-  // (`hato_capturas_foto`, migración 146): el pipeline lo inserta como
-  // `pendiente` apenas guarda la foto y ANTES de llamar al modelo, así que
-  // un fallo del OCR queda registrado igual. Ver `hato-capturas-foto.ts`.
-  const resultado = await ejecutarPipelinePesajeFoto({
-    supabase,
-    apiKey,
-    fotos,
-    anio,
-    mes,
-    origen: 'web',
-    createdBy: acceso.userId,
-  });
-  if (!resultado.ok) {
-    return respuestaError(c, resultado.status, resultado.error);
-  }
-
-  // --- 3. Respuesta: NUNCA escribe -------------------------------------------
-  return c.json({
-    success: true,
-    generadoEn: resultado.resultado.generadoEn,
-    anio: resultado.resultado.anio,
-    mes: resultado.resultado.mes,
-    // Viaja al commit, que cierra la fila con el desenlace real.
-    capturaId: resultado.resultado.capturaId,
-    fechasPorSemana: resultado.resultado.fechasPorSemana,
-    diff: resultado.resultado.diff,
-    ocr: resultado.resultado.ocr,
-  });
+ const supabase=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
+ const acceso=await verificarAcceso(c,supabase);if(acceso instanceof Response)return acceso;
+ return photoBrowserRequest(c.req.raw,acceso.userId,supabase,async verified=>{
+  const apiKey=Deno.env.get('OPENROUTER_API_KEY');if(!apiKey)return {ok:false,status:500,error:'La lectura por foto no está disponible.'};
+  return ejecutarPipelinePesajeFoto({supabase,apiKey,anio:verified.original.intent!.year,mes:verified.original.intent!.month,origen:'web',createdBy:acceso.userId,protectedCapture:{id:verified.original.requestKey,prefix:String(verified.original.receipt!.capture&& (verified.original.receipt!.capture as Record<string,unknown>).storage_prefijo),paths:verified.original.paths!},fotos:verified.photos.map(p=>({pagina:p.file.page,nombre:`pagina-${p.file.page}.${p.file.extension}`,tipo:p.file.mime,bytes:p.bytes}))});
+ });
 }

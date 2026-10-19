@@ -2,6 +2,7 @@ import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {useLayoutEffect} from 'react';
 import {create,act,type ReactTestRenderer} from 'react-test-renderer';
 import fixtures from './fixtures/hatoMilkWeighing.json';
+import photoFixture from './fixtures/hatoPhotoPreview.json';
 import {useSubirPesajeFoto} from '@/components/hato/hooks/useSubirPesajeFoto';
 import {MilkWeighingConfirmationPanel} from '@/components/hato/components/MilkWeighingConfirmationPanel';
 import {pendingMilkWeighingBrowser,runMilkWeighingBrowser,type MilkWeighingBrowserClient} from '@/utils/hato/hatoMilkWeighingBrowserAttempt';
@@ -18,7 +19,7 @@ const buttons=()=>renderer!.root.findAllByType('button');const button=(text:stri
 const cells=()=>original().intent!.cells.map(c=>({animalId:c.animalId,fecha:c.date,litrosAm:c.am,litrosPm:c.pm}));
 beforeEach(()=>{state.index=0;state.owner=fixtures[0].owner;state.allowed=true;saved=null;const store=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v),removeItem:(k:string)=>store.delete(k)});vi.stubGlobal('navigator',{locks:{request:async(_k:unknown,_o:unknown,fn:()=>unknown)=>fn()}});vi.spyOn(crypto,'randomUUID').mockImplementation(()=>original().requestKey as `${string}-${string}-${string}-${string}-${string}`);
  state.client={from:vi.fn(()=>{throw Error('Direct table writer forbidden');}),auth:{getUser:vi.fn(async()=>({data:{user:{id:state.owner}},error:null})),getSession:vi.fn(async()=>({data:{session:{access_token:'synthetic'}}}))},rpc:vi.fn(async(name:string,a:Record<string,unknown>)=>{if(name.endsWith('_source_web'))return {data:original().original,error:null};if(name.endsWith('_recover_web'))return {data:saved&&!saved.acknowledged?saved:null,error:null};if(a.p_action==='prepare')saved={...original(),state:'pending',receipt:null,acknowledged:false};if(a.p_action==='post')saved=original();if(a.p_action==='acknowledge')saved={...saved!,acknowledged:true};if(a.p_action==='resolve')saved={...saved!,state:'canceled',receipt:null};return {data:structuredClone(saved),error:null};})};
- vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({success:true,anio:2026,mes:10,capturaId:original().intent!.captureId}),{headers:{'Content-Type':'application/json'}})));
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(photoFixture).split(photoFixture.upload.owner).join(state.owner).split(photoFixture.preview.capture_after.id).join(original().intent!.captureId!),{headers:{'Content-Type':'application/json'}})));
 });
 afterEach(async()=>{if(renderer)await act(async()=>renderer!.unmount());renderer=undefined;vi.restoreAllMocks();vi.unstubAllGlobals();});
 const mount=async()=>{await act(async()=>{renderer=create(<Hook/>);});};

@@ -17,11 +17,12 @@
 // Mismo patrón de auth que `useSubirChequeoExcel.ts`/`ClimaCard.tsx`:
 // `Authorization: Bearer <session.access_token>`.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback,useLayoutEffect,useRef } from 'react';
+import {useAuth} from '@/contexts/AuthContext';
+import {pendingBrowserPhoto,runBrowserPhoto,type BrowserPhotoAttempt,type BrowserPhotoClient} from '@/utils/hato/hatoPhotoBrowserAttempt';
 import {useMilkWeighing} from './useMilkWeighing';
 import { getSupabase } from '@/utils/supabase/client';
 import { getSupabaseConfig } from '@/utils/supabase/config';
-import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 import type { CeldaDiffPesaje, SemanaPesaje } from '@/utils/importHato/ocrPesaje';
 import { construirDiffPesajeManual, type AnimalPesajeManual } from '@/utils/hato/pesajeManual';
 
@@ -113,56 +114,30 @@ export function useSubirPesajeFoto(enabled=true) {
   const committed=weighing.attempt?.result?.state==='committed'?weighing.attempt.result:null;
   const commitResultado:CommitPesajeRespuesta|null=committed?{success:true,guardados:committed.plan!.accepted.length,actualizados:committed.plan!.accepted.filter(a=>a.before!==null).length,creados:committed.plan!.accepted.filter(a=>a.before===null).length,celdasRechazadas:committed.plan!.rejected.map(r=>({animalId:r.cell.animalId,fecha:r.cell.date,motivo:'Fuera del roster o día configurado en la revisión capturada.'}))}:null;
 
-  async function obtenerTokenSesion(): Promise<string> {
-    const supabase = getSupabase();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      throw new Error('Sesión no válida -- vuelve a iniciar sesión e intenta de nuevo.');
-    }
-    return session.access_token;
-  }
-
-  const subirFotos = useCallback(async (fotos: File[], anio: number, mes: number) => {
-    setLoading(true);
-    setError(null);
-    setDocumentoRechazado(false);
-    setResultado(null);
-    try {
-      const token = await obtenerTokenSesion();
-
-      const formData = new FormData();
-      fotos.forEach((f) => formData.append('fotos', f));
-      formData.append('anio', String(anio));
-      formData.append('mes', String(mes));
-
-      const res = await fetch(`${edgeFunctionBase()}/make-server-1ccce916/hato/pesaje/foto`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const resultadoCuerpo = await leerCuerpoEdgeFunction<PreviewPesajeRespuesta & { error?: string }>(res);
-      if (!resultadoCuerpo.ok) {
-        throw new Error(resultadoCuerpo.mensaje);
-      }
-      const body = resultadoCuerpo.body;
-      if (!res.ok || !body?.success) {
-        // 422 = rechazo explícito del servidor (ver `documentoRechazado`
-        // arriba), no un error de red/servidor genérico.
-        if (res.status === 422) setDocumentoRechazado(true);
-        throw new Error(body?.error || `El servidor respondió ${res.status} al leer las fotos.`);
-      }
-
-      setResultado(body as PreviewPesajeRespuesta);
-      return body as PreviewPesajeRespuesta;
-    } catch (err) {
-      const mensaje = err instanceof Error ? err.message : 'Error desconocido leyendo las fotos del pesaje';
-      setError(mensaje);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {user,hasRole}=useAuth();const allowed=enabled&&hasRole(['Administrador','Gerencia']);
+  const generation=useRef({owner:user?.id,number:0,mounted:allowed});const [photoAttempt,setPhotoAttempt]=useState<BrowserPhotoAttempt|null>(null);
+  useLayoutEffect(()=>{generation.current={owner:user?.id,number:generation.current.number+1,mounted:allowed};setPhotoAttempt(null);setResultado(null);setError(null);setLoading(false);return()=>{generation.current.mounted=false;generation.current.number++;};},[user?.id,allowed]);
+  const runPhoto=useCallback(async(mode:'upload'|'resume'|'new'|'cancel',input?:{files:readonly File[];year:number;month:number})=>{
+   const owner=user?.id,n=generation.current.number,current=()=>generation.current.mounted&&generation.current.owner===owner&&generation.current.number===n;
+   if(!owner||!current())throw Error('La sesión cambió. Conserve el intento original.');setLoading(true);setError(null);setDocumentoRechazado(false);
+   try{
+    const attempt=await runBrowserPhoto(getSupabase() as unknown as BrowserPhotoClient,`${edgeFunctionBase()}/make-server-1ccce916/hato/pesaje/foto`,owner,mode,current,input,photoAttempt);
+    if(!current())throw Error('La sesión cambió.');setPhotoAttempt(attempt);
+    const outcome=attempt?.result?.preview?.outcome;
+    if(outcome?.ok){setResultado(outcome.resultado as unknown as PreviewPesajeRespuesta);}
+    else if(outcome){setResultado(null);setDocumentoRechazado(outcome.status===422);setError(String(outcome.error));}
+    else if(mode==='new'||mode==='cancel')setResultado(null);
+    return attempt;
+   }catch(e){if(current()){try{const saved=pendingBrowserPhoto(owner);if(saved)setPhotoAttempt(old=>old?.key===saved.key?old:{...saved,result:null});}catch{/* Keep corrupt storage untouched; never allocate a replacement. */}setError(e instanceof Error?e.message:'Conserve y consulte la carga original.');}throw e;}
+   finally{if(current())setLoading(false);}
+  },[user?.id,photoAttempt]);
+  const subirFotos=useCallback(async(fotos:File[],anio:number,mes:number)=>{
+   const a=await runPhoto('upload',{files:fotos,year:anio,month:mes});const outcome=a?.result?.preview?.outcome;
+   if(!outcome?.ok)throw Error(outcome?.error?String(outcome.error):'Resultado incierto. Consulte la carga original sin reenviar las fotos.');return outcome.resultado as unknown as PreviewPesajeRespuesta;
+  },[runPhoto]);
+  const recoverPhotos=useCallback(()=>runPhoto('resume'),[runPhoto]);
+  const newPhoto=useCallback(()=>runPhoto('new'),[runPhoto]);
+  const cancelPhoto=useCallback(()=>runPhoto('cancel'),[runPhoto]);
 
   /** Aprueba las celdas que el usuario confirmó (posiblemente corregidas a
    * mano, D-6) -- nunca reenvía la foto. `anio`/`mes` viajan de nuevo porque
@@ -229,6 +204,7 @@ export function useSubirPesajeFoto(enabled=true) {
   }, []);
 
   return {
+    photoAttempt,recoverPhotos,newPhoto,cancelPhoto,
     subirFotos,
     iniciarManual,
     comprometer,

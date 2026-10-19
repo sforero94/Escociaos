@@ -33,7 +33,7 @@
 // Ninguna de las dos inventa un valor -- la grilla manual arranca vacía
 // (`construirDiffPesajeManual`) y una celda sin dato se queda sin dato.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect,useLayoutEffect,useRef } from 'react';
 import {MilkWeighingConfirmationPanel} from './MilkWeighingConfirmationPanel';
 import { Camera, Loader2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -103,6 +103,7 @@ export function SubirPesajeFoto({
 }) {
   const {
     weighing,
+    photoAttempt,recoverPhotos,newPhoto,cancelPhoto,
     subirFotos,
     iniciarManual,
     comprometer,
@@ -116,11 +117,14 @@ export function SubirPesajeFoto({
     commitResultado,
   } = useSubirPesajeFoto(open);
   const produccion = useProduccionHato();
-  const { profile } = useAuth();
+  const { profile,user } = useAuth();
   // Mismo conjunto de roles que la RLS de escritura de `hato_*` (migración 053).
   const puedeEscribir = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
 
   const [fotos, setFotos] = useState<File[]>([]);
+  const recoverRef=useRef(recoverPhotos);useLayoutEffect(()=>{recoverRef.current=recoverPhotos;},[recoverPhotos]);
+  useEffect(()=>{if(!open||!user?.id||modoInicial==='manual')return;let alive=true;void recoverRef.current().then(a=>{const outcome=a?.result?.preview?.outcome;if(alive&&outcome?.ok){const r=outcome.resultado as unknown as import('../hooks/useSubirPesajeFoto').PreviewPesajeRespuesta;setValores(valoresIniciales(r.diff));setFilas(filasInicialesRevision(r.diff));setMesSeleccionado(`${r.anio}-${String(r.mes).padStart(2,'0')}`);}}).catch(()=>undefined);return()=>{alive=false;};},[open,user?.id,modoInicial]);
+
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
   const [valores, setValores] = useState<Map<string, CeldaEditablePesaje>>(new Map());
   // Las filas de la grilla son ESTADO, no una derivación del diff: desde el
@@ -322,6 +326,15 @@ export function SubirPesajeFoto({
           <DialogTitle>{titulo}</DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-4">
+          {photoAttempt&&<div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
+            <p>Carga original de {photoAttempt.intent.month}/{photoAttempt.intent.year}: {photoAttempt.result?.preview?.state==='ready'?'lectura conservada para revisar':photoAttempt.result?.preview?.state==='held'?'lectura pendiente de verificar':'fotos pendientes de verificar'}. Consultar conserva el mismo intento y no vuelve a enviar las fotos.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={loading||comprometiendo} onClick={()=>{void recoverPhotos().then(a=>{const outcome=a?.result?.preview?.outcome;if(outcome?.ok){const r=outcome.resultado as unknown as import('../hooks/useSubirPesajeFoto').PreviewPesajeRespuesta;setValores(valoresIniciales(r.diff));setFilas(filasInicialesRevision(r.diff));setMesSeleccionado(`${r.anio}-${String(r.mes).padStart(2,'0')}`);}}).catch(()=>undefined);}}>Consultar carga original</Button>
+              {photoAttempt.result?.preview?.state==='ready'&&<Button type="button" variant="outline" size="sm" disabled={loading||comprometiendo||weighing.attempt!==null} onClick={()=>{void newPhoto().then(()=>{setFotos([]);setFilas([]);setValores(new Map());}).catch(()=>undefined);}}>Cerrar esta lectura y preparar otra carga</Button>}
+              {['unknown','reserved'].includes(photoAttempt.result?.upload.state??'')&&<Button type="button" variant="outline" size="sm" disabled={loading||comprometiendo} onClick={()=>{void cancelPhoto().catch(()=>undefined);}}>Cancelar antes del envío</Button>}
+            </div>
+          </div>}
+
           {!resultado && (
             <div className="space-y-1.5">
               <Label htmlFor="mes-pesaje-dialogo">Mes</Label>
@@ -451,7 +464,7 @@ export function SubirPesajeFoto({
                 </Button>
               </div>
               <p className="mt-2 text-xs text-gray-500">
-                Las fotos que enviaste ya quedaron guardadas como respaldo. Ingresar a mano abre la planilla de este mes
+                Conserva y consulta la carga original para verificar su resultado. Ingresar a mano abre la planilla de este mes
                 en blanco para digitarla: no se rellena ningún valor.
               </p>
             </div>
@@ -549,7 +562,7 @@ export function SubirPesajeFoto({
               <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={loading}>
                 Cancelar
               </Button>
-              <Button type="button" onClick={handleSubir} disabled={loading || fotos.length === 0}>
+              <Button type="button" onClick={handleSubir} disabled={loading || fotos.length === 0 || !!photoAttempt&&!['unknown','reserved'].includes(photoAttempt.result?.upload.state??'')}>
                 {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {loading ? 'Leyendo las fotos...' : 'Subir y revisar'}
               </Button>

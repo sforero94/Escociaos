@@ -1,0 +1,671 @@
+{
+  "permit": null,
+  "upload": {
+    "owner": "10000000-0000-4000-8000-000000000002",
+    "paths": [
+      "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+    ],
+    "state": "verified",
+    "bucket": {
+      "id": "hato-pesajes-fotos",
+      "name": "hato-pesajes-fotos",
+      "type": "STANDARD",
+      "owner": null,
+      "public": false,
+      "owner_id": null,
+      "created_at": "2026-10-19T01:32:17.501059-04:00",
+      "updated_at": "2026-10-19T01:32:17.501059-04:00",
+      "file_size_limit": null,
+      "versioning_status": "DISABLED",
+      "allowed_mime_types": null,
+      "avif_autodetection": false,
+      "lifecycle_configuration": null,
+      "lifecycle_configuration_generation": null
+    },
+    "intent": {
+      "year": 2026,
+      "files": [
+        {
+          "mime": "image/png",
+          "page": 1,
+          "size": 70,
+          "sha256": "4ff6ab670a58c14270e034e2090d9a432caa263a14e0a25785386b0c12f880b5",
+          "extension": "png"
+        }
+      ],
+      "month": 10,
+      "version": 1
+    },
+    "permit": null,
+    "receipt": {
+      "actor": {
+        "origin": "web",
+        "profileId": "10000000-0000-4000-8000-000000000002"
+      },
+      "owner": "10000000-0000-4000-8000-000000000002",
+      "paths": [
+        "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+      ],
+      "bucket": {
+        "id": "hato-pesajes-fotos",
+        "name": "hato-pesajes-fotos",
+        "type": "STANDARD",
+        "owner": null,
+        "public": false,
+        "owner_id": null,
+        "created_at": "2026-10-19T01:32:17.501059-04:00",
+        "updated_at": "2026-10-19T01:32:17.501059-04:00",
+        "file_size_limit": null,
+        "versioning_status": "DISABLED",
+        "allowed_mime_types": null,
+        "avif_autodetection": false,
+        "lifecycle_configuration": null,
+        "lifecycle_configuration_generation": null
+      },
+      "intent": {
+        "year": 2026,
+        "files": [
+          {
+            "mime": "image/png",
+            "page": 1,
+            "size": 70,
+            "sha256": "4ff6ab670a58c14270e034e2090d9a432caa263a14e0a25785386b0c12f880b5",
+            "extension": "png"
+          }
+        ],
+        "month": 10,
+        "version": 1
+      },
+      "capture": {
+        "id": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "mes": 10,
+        "anio": 2026,
+        "tipo": "pesaje",
+        "fecha": null,
+        "modelo": null,
+        "origen": "web",
+        "detalle": null,
+        "creado_en": "2026-10-19T01:33:19.218237-04:00",
+        "desenlace": "pendiente",
+        "created_by": "10000000-0000-4000-8000-000000000002",
+        "storage_ok": true,
+        "storage_rutas": [
+          "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+        ],
+        "actualizado_en": "2026-10-19T01:33:19.218237-04:00",
+        "filas_escritas": null,
+        "storage_bucket": "hato-pesajes-fotos",
+        "fotos_recibidas": 1,
+        "storage_prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "celdas_leidas_ocr": null,
+        "celdas_confirmadas": null
+      },
+      "objects": [
+        {
+          "row": {
+            "id": "bf3435bd-bdd6-4269-83a6-8512b1e1d8e0",
+            "name": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png",
+            "owner": null,
+            "version": null,
+            "metadata": {
+              "size": 70,
+              "mimetype": "image/png"
+            },
+            "owner_id": null,
+            "bucket_id": "hato-pesajes-fotos",
+            "created_at": "2026-10-19T01:33:19.068735-04:00",
+            "updated_at": "2026-10-19T01:33:19.068735-04:00",
+            "archived_at": null,
+            "path_tokens": [
+              "verified-milk",
+              "10000000-0000-4000-8000-000000000002",
+              "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+              "page-1.png"
+            ],
+            "is_versioned": false,
+            "user_metadata": null,
+            "is_delete_marker": false,
+            "last_accessed_at": "2026-10-19T01:33:19.068735-04:00"
+          },
+          "mime": "image/png",
+          "page": 1,
+          "size": 70,
+          "sha256": "4ff6ab670a58c14270e034e2090d9a432caa263a14e0a25785386b0c12f880b5"
+        }
+      ],
+      "version": 1,
+      "recordedAt": "2026-10-19T01:33:19.218237-04:00",
+      "requestKey": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+      "permissionId": "5240648c-1c80-402a-ab93-d91f6264753a"
+    },
+    "version": 1,
+    "requestKey": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+    "acknowledged": false,
+    "permissionId": "5240648c-1c80-402a-ab93-d91f6264753a"
+  },
+  "preview": {
+    "actor": {
+      "origin": "web",
+      "profileId": "10000000-0000-4000-8000-000000000002"
+    },
+    "state": "ready",
+    "source": {
+      "rows": [],
+      "config": [
+        {
+          "id": "52255413-4c5e-49ac-b655-aa832c97c88c",
+          "clave": "dia_pesaje_semanal",
+          "valor": {
+            "iso": 3
+          },
+          "created_at": "2026-10-19T01:33:15.838515-04:00",
+          "updated_at": "2026-10-19T01:33:15.838515-04:00",
+          "updated_by": null,
+          "descripcion": null
+        }
+      ],
+      "animals": [
+        {
+          "id": "8997e122-c800-45c3-903c-86cdd158fc5c",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic combined animal",
+          "numero": 1,
+          "origen": null,
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-19T01:32:12.944945-04:00",
+          "created_by": null,
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "ce2b3728-2060-4c13-a4ae-67b36bac5390",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "vendida",
+          "nombre": "Synthetic pre-retirement sale",
+          "numero": 795,
+          "origen": null,
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-19T01:30:42.999379-04:00",
+          "created_by": null,
+          "import_meta": null,
+          "fecha_estado": "2026-10-19",
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        },
+        {
+          "id": "de65a517-87b1-4663-9527-e8bb467972dd",
+          "raza": null,
+          "sexo": "hembra",
+          "etapa": "vaca",
+          "notas": null,
+          "estado": "activa",
+          "nombre": "Synthetic browser milk cow",
+          "numero": 89312,
+          "origen": "compra",
+          "finca_id": null,
+          "madre_id": null,
+          "padre_id": null,
+          "confianza": "alta",
+          "created_at": "2026-10-19T01:33:15.838515-04:00",
+          "created_by": "10000000-0000-4000-8000-000000000002",
+          "import_meta": null,
+          "fecha_estado": null,
+          "etapa_forzada": false,
+          "padre_toro_id": null,
+          "fecha_nacimiento": null,
+          "fecha_nacimiento_confianza": "desconocida"
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "resultado": {
+        "mes": 10,
+        "ocr": {
+          "fotos": [
+            {
+              "tipo": "image/png",
+              "bytes": 70,
+              "nombre": "pagina-1.png",
+              "pagina": 1,
+              "rutaStorage": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+            }
+          ],
+          "modelo": "google/gemini-3-flash-preview",
+          "resumen": {
+            "fotosLeidas": 1,
+            "vacasSinLeer": 1,
+            "filasNoLeidas": 0,
+            "vacasEnRoster": 2,
+            "fotosRecibidas": 1,
+            "filasConfirmadas": 1,
+            "celdasNoConfiables": 0
+          },
+          "advertencias": [],
+          "vacasSinLeer": [
+            {
+              "id": "8997e122-c800-45c3-903c-86cdd158fc5c",
+              "nombre": "Synthetic combined animal"
+            }
+          ],
+          "filasNoLeidas": [],
+          "almacenamiento": {
+            "ok": true,
+            "bucket": "hato-pesajes-fotos",
+            "errores": [],
+            "prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5"
+          },
+          "paginasNoLeidas": []
+        },
+        "anio": 2026,
+        "diff": [
+          {
+            "fecha": "2026-10-07",
+            "nombre": "Synthetic browser milk cow",
+            "semana": 1,
+            "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+            "litrosAm": 3,
+            "litrosPm": 4,
+            "existenteId": null,
+            "litrosTotal": 7,
+            "noConfiable": false,
+            "soloUnOrdeno": false,
+            "clasificacion": "nuevo"
+          },
+          {
+            "fecha": "2026-10-14",
+            "nombre": "Synthetic browser milk cow",
+            "semana": 2,
+            "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+            "litrosAm": null,
+            "litrosPm": null,
+            "existenteId": null,
+            "litrosTotal": null,
+            "noConfiable": false,
+            "soloUnOrdeno": false,
+            "clasificacion": "sin_dato"
+          },
+          {
+            "fecha": "2026-10-21",
+            "nombre": "Synthetic browser milk cow",
+            "semana": 3,
+            "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+            "litrosAm": null,
+            "litrosPm": null,
+            "existenteId": null,
+            "litrosTotal": null,
+            "noConfiable": false,
+            "soloUnOrdeno": false,
+            "clasificacion": "sin_dato"
+          },
+          {
+            "fecha": "2026-10-28",
+            "nombre": "Synthetic browser milk cow",
+            "semana": 4,
+            "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+            "litrosAm": null,
+            "litrosPm": null,
+            "existenteId": null,
+            "litrosTotal": null,
+            "noConfiable": false,
+            "soloUnOrdeno": false,
+            "clasificacion": "sin_dato"
+          }
+        ],
+        "capturaId": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "generadoEn": "2026-10-19T05:33:19.394Z",
+        "rosterAnimales": [
+          {
+            "id": "8997e122-c800-45c3-903c-86cdd158fc5c",
+            "nombre": "Synthetic combined animal"
+          },
+          {
+            "id": "de65a517-87b1-4663-9527-e8bb467972dd",
+            "nombre": "Synthetic browser milk cow"
+          }
+        ],
+        "fechasPorSemana": {
+          "1": "2026-10-07",
+          "2": "2026-10-14",
+          "3": "2026-10-21",
+          "4": "2026-10-28",
+          "5": null
+        }
+      }
+    },
+    "receipt": {
+      "actor": {
+        "origin": "web",
+        "profileId": "10000000-0000-4000-8000-000000000002"
+      },
+      "owner": "10000000-0000-4000-8000-000000000002",
+      "source": {
+        "rows": [],
+        "config": [
+          {
+            "id": "52255413-4c5e-49ac-b655-aa832c97c88c",
+            "clave": "dia_pesaje_semanal",
+            "valor": {
+              "iso": 3
+            },
+            "created_at": "2026-10-19T01:33:15.838515-04:00",
+            "updated_at": "2026-10-19T01:33:15.838515-04:00",
+            "updated_by": null,
+            "descripcion": null
+          }
+        ],
+        "animals": [
+          {
+            "id": "8997e122-c800-45c3-903c-86cdd158fc5c",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic combined animal",
+            "numero": 1,
+            "origen": null,
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-19T01:32:12.944945-04:00",
+            "created_by": null,
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "ce2b3728-2060-4c13-a4ae-67b36bac5390",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "vendida",
+            "nombre": "Synthetic pre-retirement sale",
+            "numero": 795,
+            "origen": null,
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-19T01:30:42.999379-04:00",
+            "created_by": null,
+            "import_meta": null,
+            "fecha_estado": "2026-10-19",
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          },
+          {
+            "id": "de65a517-87b1-4663-9527-e8bb467972dd",
+            "raza": null,
+            "sexo": "hembra",
+            "etapa": "vaca",
+            "notas": null,
+            "estado": "activa",
+            "nombre": "Synthetic browser milk cow",
+            "numero": 89312,
+            "origen": "compra",
+            "finca_id": null,
+            "madre_id": null,
+            "padre_id": null,
+            "confianza": "alta",
+            "created_at": "2026-10-19T01:33:15.838515-04:00",
+            "created_by": "10000000-0000-4000-8000-000000000002",
+            "import_meta": null,
+            "fecha_estado": null,
+            "etapa_forzada": false,
+            "padre_toro_id": null,
+            "fecha_nacimiento": null,
+            "fecha_nacimiento_confianza": "desconocida"
+          }
+        ]
+      },
+      "outcome": {
+        "ok": true,
+        "resultado": {
+          "mes": 10,
+          "ocr": {
+            "fotos": [
+              {
+                "tipo": "image/png",
+                "bytes": 70,
+                "nombre": "pagina-1.png",
+                "pagina": 1,
+                "rutaStorage": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+              }
+            ],
+            "modelo": "google/gemini-3-flash-preview",
+            "resumen": {
+              "fotosLeidas": 1,
+              "vacasSinLeer": 1,
+              "filasNoLeidas": 0,
+              "vacasEnRoster": 2,
+              "fotosRecibidas": 1,
+              "filasConfirmadas": 1,
+              "celdasNoConfiables": 0
+            },
+            "advertencias": [],
+            "vacasSinLeer": [
+              {
+                "id": "8997e122-c800-45c3-903c-86cdd158fc5c",
+                "nombre": "Synthetic combined animal"
+              }
+            ],
+            "filasNoLeidas": [],
+            "almacenamiento": {
+              "ok": true,
+              "bucket": "hato-pesajes-fotos",
+              "errores": [],
+              "prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5"
+            },
+            "paginasNoLeidas": []
+          },
+          "anio": 2026,
+          "diff": [
+            {
+              "fecha": "2026-10-07",
+              "nombre": "Synthetic browser milk cow",
+              "semana": 1,
+              "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+              "litrosAm": 3,
+              "litrosPm": 4,
+              "existenteId": null,
+              "litrosTotal": 7,
+              "noConfiable": false,
+              "soloUnOrdeno": false,
+              "clasificacion": "nuevo"
+            },
+            {
+              "fecha": "2026-10-14",
+              "nombre": "Synthetic browser milk cow",
+              "semana": 2,
+              "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+              "litrosAm": null,
+              "litrosPm": null,
+              "existenteId": null,
+              "litrosTotal": null,
+              "noConfiable": false,
+              "soloUnOrdeno": false,
+              "clasificacion": "sin_dato"
+            },
+            {
+              "fecha": "2026-10-21",
+              "nombre": "Synthetic browser milk cow",
+              "semana": 3,
+              "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+              "litrosAm": null,
+              "litrosPm": null,
+              "existenteId": null,
+              "litrosTotal": null,
+              "noConfiable": false,
+              "soloUnOrdeno": false,
+              "clasificacion": "sin_dato"
+            },
+            {
+              "fecha": "2026-10-28",
+              "nombre": "Synthetic browser milk cow",
+              "semana": 4,
+              "animalId": "de65a517-87b1-4663-9527-e8bb467972dd",
+              "litrosAm": null,
+              "litrosPm": null,
+              "existenteId": null,
+              "litrosTotal": null,
+              "noConfiable": false,
+              "soloUnOrdeno": false,
+              "clasificacion": "sin_dato"
+            }
+          ],
+          "capturaId": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+          "generadoEn": "2026-10-19T05:33:19.394Z",
+          "rosterAnimales": [
+            {
+              "id": "8997e122-c800-45c3-903c-86cdd158fc5c",
+              "nombre": "Synthetic combined animal"
+            },
+            {
+              "id": "de65a517-87b1-4663-9527-e8bb467972dd",
+              "nombre": "Synthetic browser milk cow"
+            }
+          ],
+          "fechasPorSemana": {
+            "1": "2026-10-07",
+            "2": "2026-10-14",
+            "3": "2026-10-21",
+            "4": "2026-10-28",
+            "5": null
+          }
+        }
+      },
+      "version": 1,
+      "recordedAt": "2026-10-19T01:33:19.408488-04:00",
+      "requestKey": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+      "captureAfter": {
+        "id": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "mes": 10,
+        "anio": 2026,
+        "tipo": "pesaje",
+        "fecha": null,
+        "modelo": "google/gemini-3-flash-preview",
+        "origen": "web",
+        "detalle": null,
+        "creado_en": "2026-10-19T01:33:19.218237-04:00",
+        "desenlace": "pendiente",
+        "created_by": "10000000-0000-4000-8000-000000000002",
+        "storage_ok": true,
+        "storage_rutas": [
+          "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+        ],
+        "actualizado_en": "2026-10-19T01:33:19.408488-04:00",
+        "filas_escritas": null,
+        "storage_bucket": "hato-pesajes-fotos",
+        "fotos_recibidas": 1,
+        "storage_prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "celdas_leidas_ocr": 1,
+        "celdas_confirmadas": null
+      },
+      "permissionId": "292bd26b-7639-43ed-b405-8f291b8f6ed6",
+      "captureBefore": {
+        "id": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "mes": 10,
+        "anio": 2026,
+        "tipo": "pesaje",
+        "fecha": null,
+        "modelo": null,
+        "origen": "web",
+        "detalle": null,
+        "creado_en": "2026-10-19T01:33:19.218237-04:00",
+        "desenlace": "pendiente",
+        "created_by": "10000000-0000-4000-8000-000000000002",
+        "storage_ok": true,
+        "storage_rutas": [
+          "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+        ],
+        "actualizado_en": "2026-10-19T01:33:19.218237-04:00",
+        "filas_escritas": null,
+        "storage_bucket": "hato-pesajes-fotos",
+        "fotos_recibidas": 1,
+        "storage_prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+        "celdas_leidas_ocr": null,
+        "celdas_confirmadas": null
+      }
+    },
+    "owner_id": "10000000-0000-4000-8000-000000000002",
+    "claimed_at": "2026-10-19T01:33:19.315151-04:00",
+    "request_key": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+    "capture_after": {
+      "id": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+      "mes": 10,
+      "anio": 2026,
+      "tipo": "pesaje",
+      "fecha": null,
+      "modelo": "google/gemini-3-flash-preview",
+      "origen": "web",
+      "detalle": null,
+      "creado_en": "2026-10-19T01:33:19.218237-04:00",
+      "desenlace": "pendiente",
+      "created_by": "10000000-0000-4000-8000-000000000002",
+      "storage_ok": true,
+      "storage_rutas": [
+        "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+      ],
+      "actualizado_en": "2026-10-19T01:33:19.408488-04:00",
+      "filas_escritas": null,
+      "storage_bucket": "hato-pesajes-fotos",
+      "fotos_recibidas": 1,
+      "storage_prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+      "celdas_leidas_ocr": 1,
+      "celdas_confirmadas": null
+    },
+    "permission_id": "292bd26b-7639-43ed-b405-8f291b8f6ed6",
+    "capture_before": {
+      "id": "7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+      "mes": 10,
+      "anio": 2026,
+      "tipo": "pesaje",
+      "fecha": null,
+      "modelo": null,
+      "origen": "web",
+      "detalle": null,
+      "creado_en": "2026-10-19T01:33:19.218237-04:00",
+      "desenlace": "pendiente",
+      "created_by": "10000000-0000-4000-8000-000000000002",
+      "storage_ok": true,
+      "storage_rutas": [
+        "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5/page-1.png"
+      ],
+      "actualizado_en": "2026-10-19T01:33:19.218237-04:00",
+      "filas_escritas": null,
+      "storage_bucket": "hato-pesajes-fotos",
+      "fotos_recibidas": 1,
+      "storage_prefijo": "verified-milk/10000000-0000-4000-8000-000000000002/7dc122e8-8402-4f41-828c-418fdb0d5ee5",
+      "celdas_leidas_ocr": null,
+      "celdas_confirmadas": null
+    }
+  },
+  "version": 1
+}
