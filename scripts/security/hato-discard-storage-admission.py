@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Read-only local discard contract admission; no database/network connection."""
+import argparse,hashlib,importlib.util,json,subprocess
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[2]
+def digest(x):return hashlib.sha256(x).hexdigest()
+def main():
+ a=argparse.ArgumentParser();a.add_argument('--evidence-dir',type=Path,required=True);a.add_argument('--output',type=Path,required=True);x=a.parse_args()
+ if x.output.name.endswith('-private.json') or x.output.resolve().is_relative_to(x.evidence_dir.resolve()):raise ValueError('Private output boundary')
+ spec=importlib.util.spec_from_file_location('discard_observer',Path(__file__).with_name('hato-photo-observer-replay.py'));p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
+ catalog,rls,storage,t,hashes,admission=p.p.s.load(x.evidence_dir.resolve())
+ prior=json.loads((ROOT/'docs/security-integrity/hato-photo-telegram-replay.json').read_text());assert prior['coordinated_candidate_count']==50 and prior['snapshot_hashes']==hashes
+ for f,h in prior['source_hashes'].items():
+  if digest((ROOT/f).read_bytes())!=h:raise ValueError('Prior native photo certification source changed: '+f)
+ files=['scripts/security/hato-discard-storage-admission.py','scripts/security/hato-discard-storage-admission-native.mjs','src/components/hato/hooks/useSubidasPesajeMes.ts','src/components/hato/components/SubidasPesajeMes.tsx','src/utils/hato/subidasPesajeMes.ts','src/__tests__/fixtures/hatoPhotoPreview.json','src/__tests__/fixtures/hatoMilkWeighing.json','node_modules/@supabase/storage-js/src/packages/StorageFileApi.ts','node_modules/@supabase/storage-js/package.json']
+ sources={f:(ROOT/f).read_bytes() for f in files}
+ proc=subprocess.run(['node',str(Path(__file__).with_name('hato-discard-storage-admission-native.mjs'))],capture_output=True,text=True,cwd=ROOT,timeout=30)
+ if proc.returncode:raise AssertionError('Local installed-SDK admission failed: '+proc.stderr[-1000:])
+ proof=json.loads(proc.stdout);assert proof['assertions']==7
+ fixtures=json.loads((ROOT/'src/__tests__/fixtures/hatoMilkWeighing.json').read_text());kinds=[{'capture_bound':v['intent']['captureId'] is not None,'accepted':len(v['plan']['accepted']),'new_rows':sum(e['before'] is None for e in v['plan']['accepted']),'preexisting_updates':sum(e['before'] is not None for e in v['plan']['accepted'])} for v in fixtures]
+ if any((ROOT/f).read_bytes()!=v for f,v in sources.items()):raise ValueError('Changing discard admission sources cannot be certified')
+ result={'scope':'Read-only contract admission, not protected discard implementation/caller cutover. No SQL candidate/grant/policy/domain mutation or production connection.','coordinated_candidate_count':50,'snapshot_hashes':hashes,'inherited_certification':{'file':'docs/security-integrity/hato-photo-telegram-replay.json','source_hashes_reconciled':len(prior['source_hashes']),'new_native_rehearsal_claimed':False},'source_hashes':{f:digest(v) for f,v in sources.items()},'actual_sdk_reproduction':proof,'protected_receipt_fixture_facts':kinds,'proposed_bounded_admission':['Require original protected web/native upload and terminal known OCR proof, exact capture/object/byte observations and a unique committed protected milk receipt; no timestamp/count inference.','Only still-unchanged newly inserted milk rows are candidates for removal. Refuse preexisting updates, missing/changed/ambiguous rows, competing pending writers and unknown issued upload/OCR/Storage outcomes.','No legacy associations, reconstruction of overwritten values or historical repair. Preserve original immutable requests/receipts/audit.','Gerencia-only current actor, captured target/source CAS, explicit prepared review/confirmation, durable owner-bound original and transactionally audited exact mutation/readback are required.'],'unresolved_owner_contract':'Existing product deletes raw photos and capture. May bounded discard instead retain raw photos/capture/original receipts and mark the discard in separate immutable audit while atomically removing only proven still-unchanged newly inserted milk rows? Physical deletion requires independently verified identity/outcome semantics; path-only remove is not that proof.','limits':['Exact six-export Storage baseline is present; this is not another schema supplement request.','Synthetic replacement/lost-reply counterexamples do not assert hosted Storage ordering or guarantee exploitable hosted races.','No application mutation/caller retirement or runtime/global/recovery completion claimed.']}
+ x.output.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'sdk_assertions':proof['assertions'],'inherited_source_hashes':len(prior['source_hashes']),'source_hashes':len(sources),'snapshot_hashes':len(hashes)}))
+if __name__=='__main__':main()

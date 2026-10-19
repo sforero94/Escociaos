@@ -1,0 +1,69 @@
+{
+  "scope": "Read-only contract admission, not protected discard implementation/caller cutover. No SQL candidate/grant/policy/domain mutation or production connection.",
+  "coordinated_candidate_count": 50,
+  "snapshot_hashes": {
+    "live-catalog-private.json": "336dc7b7a80587d2b4d4abcfad4bd403e0293eee1cb16383a9c19b3197502f23",
+    "live-rls-private.json": "80dbe09528d7cee2cc08a4cf24fc7f4dd6c1e4006da2955da13192e42170c2b3",
+    "live-catalog-supplement-private.json": "96476b8c94f0ab22aa676b6cc801929f61dd30b2875a7355db4df38793c92566",
+    "live-catalog-addendum-private.json": "85bb0cf471c3cf7a7455d493eb179664b79a002389e5742f32ed685e9a5229bd",
+    "live-catalog-storage-supplement-private.json": "ad2da7b29adc7a4862ba2a95f2d4b94478692576f0a60608b5802b6ba997da0f",
+    "live-catalog-storage-buckettype-private.json": "4be583c2797519625fb260e15f4fc4d726cea970bb790e1f327809723d2b6843"
+  },
+  "inherited_certification": {
+    "file": "docs/security-integrity/hato-photo-telegram-replay.json",
+    "source_hashes_reconciled": 328,
+    "new_native_rehearsal_claimed": false
+  },
+  "source_hashes": {
+    "scripts/security/hato-discard-storage-admission.py": "ee5eb0e2b29e4fa68c5e4737cc0e0d4ecd2e01735f2984d0a8c30ecd973e95c1",
+    "scripts/security/hato-discard-storage-admission-native.mjs": "e520af444d76b489c109fe0333aff94aa4df5752222507ceff5584aff2775046",
+    "src/components/hato/hooks/useSubidasPesajeMes.ts": "aa9fc1a97da4297747d4c3508c5910cfe7160b410931ac758b2c157ae2a363d5",
+    "src/components/hato/components/SubidasPesajeMes.tsx": "acb6233570dead1c8bf849de61e26ecc834a344108d2695a9ea15bcb2df14939",
+    "src/utils/hato/subidasPesajeMes.ts": "7a789edc314a1d5910a1e8b83270e7c6c5a22d578df3cfc2b8c90e7561503bf5",
+    "src/__tests__/fixtures/hatoPhotoPreview.json": "0ec1148f16773fcf5c08d831adc13d84af8e4e73d1cb000dbf9db16961b0a53d",
+    "src/__tests__/fixtures/hatoMilkWeighing.json": "fd10538b44ffe412a0170d08607c2ff34ca1e805034dcaa7e3d1156e515983cb",
+    "node_modules/@supabase/storage-js/src/packages/StorageFileApi.ts": "3a750653d8d8a432e90cbe8b56999ad2a53b1b8b2ac3041ccd9af70aae7e4701",
+    "node_modules/@supabase/storage-js/package.json": "33e892abd3a8a59eeae27d4eb5a3d14265d2a277ac0ba2ec2d2a0fe35057eb53"
+  },
+  "actual_sdk_reproduction": {
+    "assertions": 7,
+    "checks": [
+      "actual installed SDK accepts successful path-only removal",
+      "request body contains only prefixes; no expected object UUID/version/hash",
+      "remove supplies no conditional object revision header",
+      "replacement after source check is removed by same path request in synthetic race",
+      "successful response/absent path can follow deletion of replacement identity",
+      "accepted deletion with lost reply remains uncertain to caller; no retry performed",
+      "verified photo/OCR proof retains unknown milk-write count; count cannot authorize row deletion"
+    ],
+    "conditional_identity_in_request": false,
+    "hosted_behavior_certified": false,
+    "scope": "Synthetic counterexample through actual installed SDK; not a production incident or hosted guarantee."
+  },
+  "protected_receipt_fixture_facts": [
+    {
+      "capture_bound": false,
+      "accepted": 2,
+      "new_rows": 1,
+      "preexisting_updates": 1
+    },
+    {
+      "capture_bound": true,
+      "accepted": 1,
+      "new_rows": 1,
+      "preexisting_updates": 0
+    }
+  ],
+  "proposed_bounded_admission": [
+    "Require original protected web/native upload and terminal known OCR proof, exact capture/object/byte observations and a unique committed protected milk receipt; no timestamp/count inference.",
+    "Only still-unchanged newly inserted milk rows are candidates for removal. Refuse preexisting updates, missing/changed/ambiguous rows, competing pending writers and unknown issued upload/OCR/Storage outcomes.",
+    "No legacy associations, reconstruction of overwritten values or historical repair. Preserve original immutable requests/receipts/audit.",
+    "Gerencia-only current actor, captured target/source CAS, explicit prepared review/confirmation, durable owner-bound original and transactionally audited exact mutation/readback are required."
+  ],
+  "unresolved_owner_contract": "Existing product deletes raw photos and capture. May bounded discard instead retain raw photos/capture/original receipts and mark the discard in separate immutable audit while atomically removing only proven still-unchanged newly inserted milk rows? Physical deletion requires independently verified identity/outcome semantics; path-only remove is not that proof.",
+  "limits": [
+    "Exact six-export Storage baseline is present; this is not another schema supplement request.",
+    "Synthetic replacement/lost-reply counterexamples do not assert hosted Storage ordering or guarantee exploitable hosted races.",
+    "No application mutation/caller retirement or runtime/global/recovery completion claimed."
+  ]
+}
