@@ -264,10 +264,12 @@ describe('rutas de foto — el intento se registra ANTES del OCR', () => {
     ).not.toContain("desenlace: 'ok'");
   });
 
-  it.each(ARBOLES)('%s cierra la captura en el commit de pesaje', (arbol) => {
-    const fuente = leer(`${arbol}/hato-pesaje-pipeline.ts`);
-    expect(fuente).toContain("desenlace: 'ok'");
-    expect(fuente).toContain('capturaId');
+  it.each(ARBOLES)('%s conserva el cierre protegido y retira el commit antiguo de pesaje', (arbol) => {
+    expect(leer(`${arbol}/hato-pesaje-pipeline.ts`)).not.toContain('export async function ejecutarCommitPesaje');
+    expect(leer(`${arbol}/hato-pesaje-commit.ts`)).toContain('MILK_PREPARED_CONFIRMATION_REQUIRED');
+    const sql=leer('src/sql/security-candidates/hato-milk-weighing-browser.sql');
+    expect(sql).toContain("desenlace='ok'");
+    expect(sql).toContain('capture');
   });
 
   it.each(ARBOLES)('%s cierra la captura en el commit de chequeo', (arbol) => {

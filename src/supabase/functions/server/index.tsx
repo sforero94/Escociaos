@@ -185,11 +185,7 @@ app.post("/make-server-1ccce916/hato/pesaje/foto", async (c) => {
   return await handleHatoPesajeFoto(c);
 });
 
-// Hato Lechero: S5 commit path -- "Aprobar" el diff de arriba. Revalida cada
-// celda (vaca sigue activa, fecha sigue siendo una semana de pesaje real)
-// contra el estado fresco y escribe en hato_pesajes_leche (UPDATE-por-id +
-// INSERT). Cada celda es un hecho independiente: una inválida no bota a las
-// demás.
+// Retired milk commit: authenticated old clients receive 410 without body/domain I/O.
 app.post("/make-server-1ccce916/hato/pesaje/commit", async (c) => {
   return await handleHatoPesajeCommit(c);
 });

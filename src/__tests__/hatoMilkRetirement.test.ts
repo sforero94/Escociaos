@@ -1,0 +1,13 @@
+import {afterEach,describe,expect,it,vi} from 'vitest';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import {createClient} from '@supabase/supabase-js';
+import {perfilAplicacionActivo} from '../supabase/functions/server/perfilAplicacionActivo';
+const owner='11111111-1111-4111-8111-111111111111';
+afterEach(()=>vi.unstubAllGlobals());
+for(const root of ['src/supabase/functions/server','supabase/functions/make-server-1ccce916'])describe(root+' retired milk HTTP handler',()=>{
+ function handler(){const code=ts.transpileModule(readFileSync(root+'/hato-pesaje-commit.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;const exports:{handleHatoPesajeCommit?:(c:unknown)=>Promise<Response>}={};new Function('exports','require',code)(exports,(name:string)=>name.includes('perfilAplicacionActivo')?{perfilAplicacionActivo}:{createClient});return exports.handleHatoPesajeCommit!;}
+ it.each(['Administrador','Gerencia'])('returns410 for active %s without parsing or posting an old payload',async rol=>{const calls:string[]=[];vi.stubGlobal('Deno',{env:{get:(k:string)=>k==='SUPABASE_URL'?'https://retired.invalid':'synthetic'}});vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{const u=new URL(String(input));calls.push(u.pathname);expect(init?.method??'GET').toBe('GET');if(u.pathname==='/auth/v1/user')return Response.json({id:owner});if(u.pathname==='/rest/v1/usuarios')return Response.json({id:owner,rol,activo:true});throw Error('Domain/Storage/model I/O forbidden');}));const json=vi.fn(()=>{throw Error('Old body must not be parsed');});const c={req:{header:()=> 'Bearer synthetic',json},json:(x:unknown,status:number)=>Response.json(x,{status})};const r=await handler()(c);expect(r.status).toBe(410);expect((await r.json()).code).toBe('MILK_PREPARED_CONFIRMATION_REQUIRED');expect(json).not.toHaveBeenCalled();expect(calls).toEqual(['/auth/v1/user','/rest/v1/usuarios']);});
+ it('preserves missing-token refusal before all SDK traffic',async()=>{vi.stubGlobal('Deno',{env:{get:(k:string)=>k==='SUPABASE_URL'?'https://retired.invalid':'synthetic'}});const fetch=vi.fn(()=>{throw Error('No traffic permitted');});vi.stubGlobal('fetch',fetch);expect((await handler()({req:{header:()=>undefined},json:(x:unknown,status:number)=>Response.json(x,{status})})).status).toBe(401);expect(fetch).not.toHaveBeenCalled();});
+});
+it('mirrors the retirement and keeps the registered route explicit',()=>{for(const file of ['hato-pesaje-commit.ts','hato-pesaje-pipeline.ts'])expect(readFileSync('src/supabase/functions/server/'+file,'utf8')).toBe(readFileSync('supabase/functions/make-server-1ccce916/'+file,'utf8'));});
