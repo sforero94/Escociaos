@@ -29,3 +29,5 @@ October17 clarification from Santiago (Option1, `hato_chequeo_linked_birth_repla
 
 
 October19 clarification from Santiago (08:38 ET, Option1, `hato_upload_discard_raw_retention_policy`): protected upload discard retains original raw photos, capture and immutable proof as history and records disposition separately in trusted audit. Atomically remove only milk rows newly inserted by that unique protected upload and still unchanged. Legacy/ambiguous/changed rows, preexisting updates and unknown outcomes are never discarded. No physical Storage/capture deletion, inferred provenance or historical repair.
+
+October20 clarification from Santiago (Option1, `financial_measured_quincena_correction_policy`): for income linked to a measured Hato milk quincena, corrections to date, business/category, description, region, payment, buyer, liters and money use ONLY the prepared Produccion flow, explicitly showing gross, ICA and net. Finanzas may edit only observations and invoice data through a protected path. Original receipts and shared derived monthly history/links stay intact; no inferred gross, historical rewrite or silent financial deletion.

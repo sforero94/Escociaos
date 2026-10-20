@@ -1,3 +1,7 @@
+import {sameMetadata} from '@/utils/hato/hatoIncomeMetadataProtocol';
+import {useIncomeMetadataRoute} from '@/components/hato/hooks/useIncomeMetadataRoute';
+import {useIncomeMetadataConfirmation} from '@/components/hato/hooks/useIncomeMetadataConfirmation';
+import {IncomeMetadataConfirmationPanel} from '@/components/hato/components/IncomeMetadataConfirmationPanel';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
 import { FacturaUploader } from '../../shared/FacturaUploader';
@@ -71,6 +75,16 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
       url_factura: '',
     },
   });
+
+  const metadataRoute = useIncomeMetadataRoute(open, ingreso?.id);
+  const metadata = useIncomeMetadataConfirmation(open, JSON.stringify([ingreso?.id, formData.observaciones, formData.url_factura]));
+  const metadataBusy = metadata.busy || metadata.attempt !== null;
+  const metadataAction = async (mode: 'prepare' | 'post' | 'status' | 'resolve' | 'new') => {
+    try { const committed = metadata.attempt?.result?.state === 'committed' && metadata.attempt.intent.targetId === ingreso?.id && sameMetadata(metadata.attempt.intent.fields, {observations:formData.observaciones || null, invoice:formData.url_factura || null});
+      await metadata.run(mode);
+      if (mode === 'new' && committed) { clearFormData(); onSuccess(); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Consulta el intento original.'); }
+  };
 
   // Catalog data
   const [negocios, setNegocios] = useState<Negocio[]>([]);
@@ -253,6 +267,11 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     try {
       setSaving(true);
 
+      if (ingreso?.id && await metadataRoute.classifyNow()) {
+        await metadata.prepare({version:1, kind:'metadata', targetId:ingreso.id,
+          fields:{observations:formData.observaciones || null, invoice:formData.url_factura || null}});
+        return;
+      }
       const ingresoData = {
         ...formData,
         valor: Number(formData.valor),
@@ -289,6 +308,12 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (ingreso?.id && metadataRoute.measured !== false) {
+      if (metadataRoute.measured === true) await guardarIngreso();
+      else toast.error(metadataRoute.error || 'Espera la verificación del ingreso.');
+      return;
+    }
 
     // Validation — collect all errors at once
     const newErrors: Record<string, string> = {};
@@ -329,6 +354,8 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <IncomeMetadataConfirmationPanel confirmation={metadata} onAction={metadataAction} />
+          {metadataRoute.error && <p role="alert">{metadataRoute.error}</p>}
           <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -336,6 +363,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
+                <fieldset className="contents" disabled={Boolean(ingreso?.id && metadataRoute.measured !== false) || metadataBusy}>
                 {/* Información básica */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="space-y-2">
@@ -517,6 +545,8 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                   </div>
                 </div>
 
+                </fieldset>
+                <fieldset className="contents" disabled={metadataBusy || Boolean(ingreso?.id && metadataRoute.measured === null)}>
                 {/* Observaciones and Factura */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -538,10 +568,13 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       currentUrl={formData.url_factura}
                       onUploadSuccess={(url) => handleInputChange('url_factura', url)}
                       onRemove={() => handleInputChange('url_factura', '')}
-                      disabled={saving}
+                      disabled={saving || metadataBusy || metadataRoute.measured === true}
                     />
+                    {metadataRoute.measured === true && <p className="text-sm">La nueva factura requiere revisión protegida. Conserva el archivo; puedes mantener o quitar la referencia actual.</p>}
+                    {metadataRoute.measured === true && formData.url_factura && <Button type="button" variant="outline" disabled={metadataBusy} onClick={() => handleInputChange("url_factura", "")}>Quitar referencia de factura (conservar archivo)</Button>}
                   </div>
                 </div>
+                </fieldset>
             </form>
           )}
         </DialogBody>
@@ -551,13 +584,13 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
               type="button"
               variant="outline"
               onClick={() => { clearFormData(); onCancel(); }}
-              disabled={saving}
+              disabled={saving || metadataBusy}
             >
               Cancelar
             </Button>
             <Button
               type="submit"
-              disabled={saving}
+              disabled={saving || metadataBusy}
               className="bg-primary hover:bg-primary-dark"
               onClick={handleSubmit}
             >
