@@ -1,3 +1,4 @@
+import { QuincenaConfirmationPanel } from './QuincenaConfirmationPanel';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Loader2, Save, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -63,8 +64,7 @@ export interface ProduccionQuincenalDialogProps {
 
 /**
  * Producción quincenal — litros al camión por quincena (V3/D2), enlazada
- * 1:1 con su `fin_ingresos` (migración 070, RPC `fn_hato_guardar_quincena_
- * venta` — plan `docs/plan_hato_produccion_rework.md` §3/§6 SOW 3). Dato
+ * 1:1 con su `fin_ingresos`, mediante preparación y confirmación protegidas. Dato
  * distinto del pesaje semanal por vaca — ninguno de los dos alimenta al
  * otro (decisión del dueño, segunda ronda 2026-07-22).
  *
@@ -88,7 +88,6 @@ export interface ProduccionQuincenalDialogProps {
  * diálogo porque el componente no se desmonta con él, solo con la pestaña.
  */
 export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIniciales }: ProduccionQuincenalDialogProps) {
-  const hook = useProduccionHato();
   const catalogos = useFinCatalogosVenta();
   const ocr = useOcrLiquidacionPomar();
 
@@ -128,6 +127,20 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
   const [eliminando, setEliminando] = useState(false);
   const [confirmEliminarOpen, setConfirmEliminarOpen] = useState(false);
   const [historial, setHistorial] = useState<HatoProduccionQuincenalConIngreso[]>([]);
+
+  const hook = useProduccionHato(open, JSON.stringify([anio, mes, quincena, registroId, litrosTotal, litrosPomar, numVacasOrdeno, notas, fechaIngreso, valorBruto, regionId, medioPagoId, compradorId]));
+  const protectedBusy = hook.confirmation.busy || hook.confirmation.attempt !== null;
+  const handleProtected = async (mode: 'prepare' | 'post' | 'status' | 'resolve' | 'new') => {
+    try {
+      await hook.confirmation.run(mode);
+      if (mode === 'new') {
+        await Promise.all([cargarRegistro(), cargarHistorial()]);
+        onSaved?.();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Consulta el intento original.');
+    }
+  };
 
   const rango = rangoQuincena(anio, mes, quincena);
   const soloLectura = origenDato === 'derivado_mensual';
@@ -355,7 +368,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
 
     setGuardando(true);
     try {
-      const resultado = await hook.guardarQuincena({
+      await hook.guardarQuincena({
         quincenaId: registroId,
         anio,
         mes,
@@ -375,15 +388,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
           nombre: null,
         },
       });
-      // El toast confirma lo que el SERVIDOR calculó (RPC, migración 085),
-      // nunca el preview del cliente -- son dos cálculos independientes
-      // que deben coincidir, pero solo uno de los dos persiste.
-      const mensajeIca = resultado.icaAplicada
-        ? ` (ICA retenida: ${formatCurrency(resultado.ica)}, neto: ${formatCurrency(resultado.neto)})`
-        : ' (sin retención de ICA -- periodo anterior a julio 2026)';
-      toast.success(`${registroId ? 'Quincena actualizada' : 'Quincena registrada'}${mensajeIca}`);
-      await Promise.all([cargarRegistro(), cargarHistorial()]);
-      onSaved?.();
+      toast.info('Revisa la quincena y el ingreso capturados antes de confirmar.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('duplicate') || msg.includes('23505')) {
@@ -401,9 +406,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
     setEliminando(true);
     try {
       await hook.eliminarQuincena(registroId);
-      toast.success('Quincena eliminada (junto con su ingreso enlazado)');
-      await Promise.all([cargarRegistro(), cargarHistorial()]);
-      onSaved?.();
+      toast.info('Revisa la eliminación capturada antes de confirmar.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Error al eliminar: ${msg}`);
@@ -527,7 +530,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
                   labelOpcionArchivo="Subir PDF o imagen"
                   multipleFotos={false}
                   multipleArchivo={false}
-                  disabled={ocr.loading || guardando}
+                  disabled={ocr.loading || guardando || protectedBusy}
                   onFotos={(files) => handleOcrLeido(files)}
                   onArchivo={(files) => handleOcrLeido(files)}
                 />
@@ -546,6 +549,8 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
           </div>
         </DialogHeader>
         <DialogBody className="space-y-4">
+          <QuincenaConfirmationPanel confirmation={hook.confirmation} onAction={handleProtected} />
+          <fieldset className="contents" disabled={protectedBusy || guardando || eliminando}>
         <div className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
@@ -812,6 +817,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
           </div>
         </div>
       )}
+          </fieldset>
         </DialogBody>
         <DialogFooter className="sm:justify-between">
           {cargando || soloLectura ? (
@@ -825,7 +831,7 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
                   variant="outline"
                   className="border-red-200 text-red-600 hover:bg-red-50"
                   onClick={() => setConfirmEliminarOpen(true)}
-                  disabled={guardando || cargando || eliminando}
+                  disabled={guardando || cargando || eliminando || protectedBusy}
                 >
                   <Trash2 className="w-4 h-4 mr-2" /> Eliminar
                 </Button>
@@ -834,9 +840,9 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
                   Cancelar
                 </Button>
               )}
-              <Button onClick={handleGuardar} disabled={guardando || cargando || eliminando}>
+              <Button onClick={handleGuardar} disabled={guardando || cargando || eliminando || protectedBusy}>
                 {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                {registroId ? 'Actualizar quincena' : 'Registrar quincena'}
+                {registroId ? 'Revisar actualización' : 'Revisar registro'}
               </Button>
             </>
           )}
@@ -846,9 +852,9 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
       <ConfirmDialog
         open={confirmEliminarOpen}
         onOpenChange={setConfirmEliminarOpen}
-        title="¿Eliminar esta quincena?"
-        description="Se elimina la quincena y su venta enlazada (fin_ingresos) en una sola operación. Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        title="Preparar revisión de eliminación"
+        description="Se capturará la quincena y su ingreso enlazado para revisión. Debes confirmar la revisión antes de eliminarlos."
+        confirmLabel="Revisar"
         onConfirm={handleEliminar}
         destructive
       />

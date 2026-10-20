@@ -1,3 +1,4 @@
+import { useQuincenaConfirmation } from './useQuincenaConfirmation';
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { resolverLitrosQuincenal } from '@/utils/hatoProduccion';
@@ -20,14 +21,10 @@ import type {
  * litros de una fila `medido`) vive en `src/utils/hatoProduccion.ts` — este
  * hook solo consulta y escribe.
  *
- * `hato_pesajes_leche` sigue en UPDATE-por-id + INSERT, nunca upsert de
- * PostgREST (CLAUDE.md, precedente `CapturaCosechaGrid`). La producción
- * quincenal YA NO se escribe con ese patrón desde este hook: el "registro
- * único" quincena+ingreso (migración 070, plan §2.0) se escribe con UN
- * `.rpc()` atómico (`fn_hato_guardar_quincena_venta` / `fn_hato_eliminar_
- * quincena_venta`), nunca con dos `.insert()`/`.update()` sueltos -- un
- * fallo entre ellos dejaría una quincena sin ingreso o un ingreso sin
- * quincena (plan §3.1, opción A rechazada).
+ * La venta medida usa preparación del par producción/ingreso, revisión
+ * capturada, confirmación explícita y recuperación del intento original.
+ * Preparar no registra ni elimina; el servidor calcula ICA y neto.
+
  */
 
 /** Embed `fin_ingreso:fin_ingresos(...)` que trae `SELECT_QUINCENA` --
@@ -114,10 +111,8 @@ function mapFilaConIngreso(fila: FilaQuincenalDb): HatoProduccionQuincenalConIng
   };
 }
 
-/** Payload de `guardarQuincena` -- espejo en camelCase del jsonb que espera
- * `fn_hato_guardar_quincena_venta` (migración 070 §3). `quincenaId` es
- * `null` en alta; presente decide edición (el RPC exige que sea `medido`,
- * nunca `derivado_mensual`, y lo rechaza con una excepción legible si no). */
+/** Form fields mapped to the protected measured-pair draft. Period dates are
+ * derived by the server; preparation is separate from confirmed posting. */
 export interface GuardarQuincenaVentaParams {
   quincenaId: string | null;
   anio: number;
@@ -142,20 +137,8 @@ export interface GuardarQuincenaVentaParams {
   };
 }
 
-/** Resultado de `guardarQuincena` -- incluye lo que el RPC calculó
- * (migración 085) para que el formulario confirme en pantalla el ICA/neto
- * REALES sin tener que recalcularlos ni releer la fila. */
-export interface ResultadoGuardarQuincenaVenta {
-  quincenaId: string;
-  finIngresoId: string;
-  /** `false` cuando el periodo capturado es anterior a julio 2026 (D-12) --
-   * el ICA no se retuvo y `neto === valorBruto`. */
-  icaAplicada: boolean;
-  ica: number;
-  neto: number;
-}
-
-export function useProduccionHato() {
+export function useProduccionHato(enabled = true, contextKey = "") {
+  const confirmation = useQuincenaConfirmation(enabled, contextKey);
   const [loading, setLoading] = useState(false);
   // `hato_*` no está en el `Database` generado (mismo caso que `gan_*` en
   // useGanadoInventario.ts) -- se sigue el mismo workaround ya establecido
@@ -266,57 +249,26 @@ export function useProduccionHato() {
     [supabase],
   );
 
-  /** Escritura atómica del "registro único" quincena+ingreso -- UN
-   * `.rpc()` a `fn_hato_guardar_quincena_venta` (migración 070 §3.2),
-   * nunca dos escrituras sueltas. `SECURITY INVOKER`: la RLS de
-   * `fin_ingresos` (Gerencia-only) sigue aplicando dentro de la función --
-   * un Administrador recibe el error de política de Postgres tal cual,
-   * nunca un bypass. Devuelve los ids del registro (alta o edición). */
+  /** Prepare only; posting requires a separate captured review. */
   const guardarQuincena = useCallback(
-    async (params: GuardarQuincenaVentaParams): Promise<ResultadoGuardarQuincenaVenta> => {
-      const { data, error } = await supabase.rpc('fn_hato_guardar_quincena_venta', {
-        payload: {
-          quincena_id: params.quincenaId,
-          anio: params.anio,
-          mes: params.mes,
-          quincena: params.quincena,
-          fecha_inicio: params.fechaInicio,
-          fecha_fin: params.fechaFin,
-          litros_total: params.litrosTotal,
-          litros_pomar_confirmado: params.litrosPomarConfirmado,
-          num_vacas_ordeno: params.numVacasOrdeno,
-          notas: params.notas,
-          fin_ingreso: {
-            fecha: params.finIngreso.fecha,
-            valor_bruto: params.finIngreso.valorBruto,
-            region_id: params.finIngreso.regionId,
-            medio_pago_id: params.finIngreso.medioPagoId,
-            comprador_id: params.finIngreso.compradorId,
-            nombre: params.finIngreso.nombre,
-          },
-        },
-      });
-      if (error) throw error;
-      return data as ResultadoGuardarQuincenaVenta;
-    },
-    [supabase],
+    (params: GuardarQuincenaVentaParams) => confirmation.prepare({
+      version: 1, kind: 'save', targetId: params.quincenaId,
+      fields: {year: params.anio, month: params.mes, quincena: params.quincena,
+        liters: params.litrosTotal, pomar: params.litrosPomarConfirmado,
+        cows: params.numVacasOrdeno, notes: params.notas,
+        incomeDate: params.finIngreso.fecha, gross: params.finIngreso.valorBruto,
+        regionId: params.finIngreso.regionId, mediumId: params.finIngreso.medioPagoId,
+        buyerId: params.finIngreso.compradorId, name: params.finIngreso.nombre},
+    }), [confirmation.prepare],
   );
-
-  /** Borra la quincena MEDIDA y su `fin_ingresos` enlazado, en una
-   * transacción (`fn_hato_eliminar_quincena_venta`, migración 070 §2.1) --
-   * único camino de borrado; desde `/finanzas/ingresos` el FK `ON DELETE
-   * RESTRICT` lo bloquea (`IngresosList.tsx` traduce el 23503). Rechaza con
-   * excepción legible si la quincena es `derivado_mensual` (read-only). */
   const eliminarQuincena = useCallback(
-    async (quincenaId: string): Promise<void> => {
-      const { error } = await supabase.rpc('fn_hato_eliminar_quincena_venta', { p_quincena_id: quincenaId });
-      if (error) throw error;
-    },
-    [supabase],
+    (quincenaId: string) => confirmation.prepare({version: 1, kind: 'delete', targetId: quincenaId, fields: null}),
+    [confirmation.prepare],
   );
 
   return {
     loading,
+    confirmation,
     fetchDiaPesajeSemanal,
     fetchRetencionIcaLeche,
     fetchRosterPesaje,
