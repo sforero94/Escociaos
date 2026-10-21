@@ -1,0 +1,402 @@
+{
+  "writers": [
+    {
+      "file": "src/components/finanzas/components/CargaMasivaGastos.tsx",
+      "line": 534,
+      "method": "insert",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/CargaMasivaIngresos.tsx",
+      "line": 497,
+      "method": "insert",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/GastoForm.tsx",
+      "line": 177,
+      "method": "insert",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/GastosBatchTable.tsx",
+      "line": 258,
+      "method": "insert",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/GastosList.tsx",
+      "line": 248,
+      "method": "delete",
+      "receiver": "table",
+      "targets": [
+        "fin_transacciones_ganado",
+        "fin_gastos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresoForm.tsx",
+      "line": 298,
+      "method": "update",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresoForm.tsx",
+      "line": 305,
+      "method": "insert",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresosBatchTable.tsx",
+      "line": 267,
+      "method": "insert",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresosList.tsx",
+      "line": 256,
+      "method": "delete",
+      "receiver": "table",
+      "targets": [
+        "fin_transacciones_ganado",
+        "fin_ingresos"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 395,
+      "method": "update",
+      "receiver": "'fin_transacciones_ganado'",
+      "targets": [
+        "fin_transacciones_ganado"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 453,
+      "method": "insert",
+      "receiver": "'fin_transacciones_ganado'",
+      "targets": [
+        "fin_transacciones_ganado"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 474,
+      "method": "insert",
+      "receiver": "'fin_transacciones_ganado'",
+      "targets": [
+        "fin_transacciones_ganado"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 91,
+      "method": "insert",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 145,
+      "method": "update",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/telegram/conversations/ingreso.ts",
+      "line": 507,
+      "method": "insert",
+      "receiver": "\"fin_transacciones_ganado\"",
+      "targets": [
+        "fin_transacciones_ganado"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/telegram/conversations/ingreso.ts",
+      "line": 705,
+      "method": "insert",
+      "receiver": "\"fin_ingresos\"",
+      "targets": [
+        "fin_ingresos"
+      ]
+    },
+    {
+      "file": "src/utils/actualizarGastoSeguro.ts",
+      "line": 31,
+      "method": "update",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 91,
+      "method": "insert",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 145,
+      "method": "update",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts",
+      "line": 507,
+      "method": "insert",
+      "receiver": "\"fin_transacciones_ganado\"",
+      "targets": [
+        "fin_transacciones_ganado"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts",
+      "line": 705,
+      "method": "insert",
+      "receiver": "\"fin_ingresos\"",
+      "targets": [
+        "fin_ingresos"
+      ]
+    }
+  ],
+  "unresolved_writers": [],
+  "rpcs": [
+    {
+      "file": "src/utils/hato/hatoIncomeInvoiceOriginProtocol.ts",
+      "line": 21,
+      "rpc": "fn_hato_income_invoice_origin_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeInvoiceOriginProtocol.ts",
+      "line": 22,
+      "rpc": "fn_hato_income_invoice_origin_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeInvoiceReleaseProtocol.ts",
+      "line": 43,
+      "rpc": "fn_hato_income_invoice_release_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 23,
+      "rpc": "fn_hato_income_metadata_source_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 25,
+      "rpc": "fn_hato_income_metadata_classify_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 26,
+      "rpc": "fn_hato_income_metadata_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 27,
+      "rpc": "fn_hato_income_metadata_recover_web"
+    },
+    {
+      "file": "src/utils/hato/hatoQuincenaProtocol.ts",
+      "line": 60,
+      "rpc": "fn_hato_quincena_source_web"
+    },
+    {
+      "file": "src/utils/hato/hatoQuincenaProtocol.ts",
+      "line": 61,
+      "rpc": "fn_hato_quincena_web"
+    },
+    {
+      "file": "src/utils/hato/hatoQuincenaProtocol.ts",
+      "line": 62,
+      "rpc": "fn_hato_quincena_recover_web"
+    }
+  ],
+  "source_hashes": {
+    "src/App.tsx": "97e783c9d520e2479bcaddec48ddf4fa18296476afbd482b43f7f4ac7fb26c1f",
+    "src/components/aplicaciones/AplicacionesList.tsx": "2f13b8b57455f1357cd1b9780e6d4c692311fdeae63685e590d6b1166ab0a783",
+    "src/components/aplicaciones/CalculadoraAplicaciones.tsx": "e8df2580f357a115024b99c1ad84abbddf89414b374e6920b3134a017d761692",
+    "src/components/aplicaciones/DetalleAplicacion.tsx": "1f37f59fa60aa33ab4cbf865434fa3da0d068dd9018efeee499efa69ca720242",
+    "src/components/aplicaciones/PasoConfiguracion.tsx": "f281c2ccbb9a608b88f4963f0afa3f341e662a6451124a7756a62f6eb903e430",
+    "src/components/aplicaciones/PasoListaCompras.tsx": "a495ad65473034f13f0fc1ac5a1d2f9dfddf4dc20dc499610dffd6567b117b5c",
+    "src/components/chat/ChatEmptyState.tsx": "4df1e006dde24120d829bdd63c2f7e820fab0b4529a918c578b35e895fdfed5b",
+    "src/components/configuracion/hooks/useAjustesHato.ts": "b8eb93a493e725b3e2a636114b496025eab43a8f02e3f05fb67531d4ad78d57e",
+    "src/components/dashboard/hooks/useDinero.ts": "3073152fbb0b518f52e97e0df5db2ce4e40bd4fc28825d9446ed607501cd09b6",
+    "src/components/dashboard/hooks/useNovedades.ts": "ddf139729910d90ec0c5c91151814335bd9ce8af0796574461f6063b1a80691f",
+    "src/components/dashboard/hooks/useRequiereDecision.ts": "d10d077657003d0fa552ec583cb75529fe1164ec611c9f5b1187fe59bdecdef0",
+    "src/components/dashboard/hooks/useSaludDatos.ts": "95c828dec84e026a76559e0bf6f3ed80ca2b659a5b90254be4dd4cd4c6bae26c",
+    "src/components/finanzas/ReportesView.tsx": "f1888b5df1ffc2351a9009dba489fbc3239a6e8f858db482e43fa135543e302a",
+    "src/components/finanzas/components/CargaMasivaGastos.tsx": "93c18641e04c60a90065b256c6b1887a5e5af6a2dd604612cefe16640baf9027",
+    "src/components/finanzas/components/CargaMasivaIngresos.tsx": "899e52aecaaa933ea910d27c723ff56f197b303d422f1db96aaaf185df4d89a6",
+    "src/components/finanzas/components/GastoForm.tsx": "8c866613c69eaae8b24b3b2832802d87ae8da51673bebdfb32eda898854e84ad",
+    "src/components/finanzas/components/GastosBatchTable.tsx": "d03e69911a0987248526734eb877316495472a9aa82acc6ae096dcdc4967fbd3",
+    "src/components/finanzas/components/GastosList.tsx": "df3b59d06de53708954e28d1960a154582498bf7a8104d791f08eba1e74f045b",
+    "src/components/finanzas/components/IngresoDetalleDialog.tsx": "9dec8b1c320c38cd0ce5afac448c223f28ed130e1c79bf1a83b4e093ddaf5f4c",
+    "src/components/finanzas/components/IngresoForm.tsx": "11c0fae33147403e1ca4bf44b3d411d8eefd103a3bbce574f277997715d841d2",
+    "src/components/finanzas/components/IngresosBatchTable.tsx": "ba89894baa72a64efa472ac1a7093516154caa4f94d1f09d09724598e62ce35c",
+    "src/components/finanzas/components/IngresosList.tsx": "5d4b9ea311e20a9db4a0ffd271a6753b14407ba08bdcc18e3bc2e9b8c053913d",
+    "src/components/finanzas/components/TransaccionGanadoForm.tsx": "9a081b38a6b7dc1256b263eae27e90bece2a00ad852db4c1e338027260374cd9",
+    "src/components/finanzas/dashboard/DashboardGanado.tsx": "06d48851e4ee0630dee4767ec33606da3192d6d13cc4d4c6468e0e47acb67beb",
+    "src/components/finanzas/dashboard/components/GastosDetalleDialog.tsx": "ffc672dfbeb627a12b79a4082b83a245af76b2da4c546982f1cb28c53a443d87",
+    "src/components/finanzas/dashboard/components/InventarioGanadoKPIs.tsx": "f2fb1b3dd5c57bba0d59a555b5c49f53e9a983f7b56bdbb0cfe35bb544e49152",
+    "src/components/finanzas/dashboard/components/KPIGanadoSection.tsx": "182da22c5c4e4ca1ce6190dd779c0143f3086ebe7bc7edcb76b9ed682aee48fd",
+    "src/components/finanzas/hooks/useDashboardData.ts": "5bc5ddb555e2dce5144a89dcc89ec2907c99bae68ce2ab2f842e5535670ba740",
+    "src/components/finanzas/hooks/useGanadoData.ts": "9288b40ef08a3cb92b24ef2d833de240f166d34fea303bb56eabfb3528f05598",
+    "src/components/finanzas/hooks/usePresupuestoData.ts": "3b5b6a570dc937e50a7e045a5ee048eab421f3c7a42c0895a372e591cb951c5a",
+    "src/components/finanzas/hooks/useReportesFinancierosData.ts": "d5df1fbddaf86bafe25de13e729ba088e29fe9983cc6badb7e1d2362e8e53ab7",
+    "src/components/finanzas/presupuesto/GastosEjecucionDialog.tsx": "6dbdae6efae171a169e4311339e0f2a8ffc6f6e25d639aa323a82d812258b0d7",
+    "src/components/finanzas/reportes/ReportesControls.tsx": "bd3f557c2861ae165ae91c201dbfe447c525b4214f9a877a8ba22cc7c85c6781",
+    "src/components/ganado/components/ContadorBrechaFinanzas.tsx": "7c45400ed3a96297abb1f76e3436b7e596fe7b6c14bf76475b7379428a1f3e4b",
+    "src/components/ganado/hooks/useGanadoInventario.ts": "254c49bd9f60e51b6399dd1f52acfbaec66e6a8b5e8946b2820317b5a21bbbf1",
+    "src/components/hato/HatoDashboard.tsx": "d0222aeb7ce00d79ce0c42c68c1c336bdb2c1dd0edea1badf2c6de5c74db7544",
+    "src/components/hato/HojaDeVida.tsx": "d40e513c0b19a073f4d969f3964fc908dd449797e6304fd923bafcfdd1c57ca6",
+    "src/components/hato/ProduccionView.tsx": "8bd2aa3ae99ea180845077dee2293c2eb2e8c215302e9f0a07f10119d0db1692",
+    "src/components/hato/components/KpisVentaHato.tsx": "a09e75f12bd58463c299b5af0019873e5dba28fba5bbeaf8033f4b53fb72c2fe",
+    "src/components/hato/components/MeasuredIncomeInvoiceUploader.tsx": "a20d18df2924fdce5ab77f5044c002213087ebe9e1e929d428f73271dc70e8d9",
+    "src/components/hato/components/ProduccionQuincenalDialog.tsx": "947ce4f00f17c166da41d03a613eda24aba04bc557509892394288ff904b56e8",
+    "src/components/hato/components/VentaAnimalesHatoDialog.tsx": "f98bcc449c74303d00c373f4b5cb5811a1502a260299126a86fe98995e8afef9",
+    "src/components/hato/components/VentaQuincenalCard.tsx": "4f1d0a40f862e5c81c0466edf735fc323392161eb9f8d31783c87aa85511b913",
+    "src/components/hato/hooks/useDetallePesajeSemana.ts": "8f22195ef94d9d02f96f3351e818c6a463fe63cec7db54fbeacdbe5c6e631de2",
+    "src/components/hato/hooks/useFinCatalogosVenta.ts": "f603504ac64f35d244e57d7ee59d21ade6e9e79a4f81f1477399ece82c66abf0",
+    "src/components/hato/hooks/useHatoPajillas.ts": "d5c82bd241ec6d3b12daeae6c9b2c9dc4b0bf3dbf5af0d30dbf2ab43e70c5a23",
+    "src/components/hato/hooks/useProduccionHato.ts": "3c1f9f08e00cb897b5e8b16dde2d0bf2a74334f6772df3c018615c259058015d",
+    "src/components/hato/hooks/useRepartoVentasHato.ts": "53c8604051f52e95d6e05032bbf620fa0508010be00ff19330a4c2f13951d031",
+    "src/components/hato/hooks/useSubidasPesajeMes.ts": "0078c7441ac331c083b59c468ebd59daf59f0633941c1cdac668a816d8a54cc4",
+    "src/components/hato/hooks/useSubirChequeoExcel.ts": "483cc27867bef65a2bbf2095e479ffdb6ad5e0b85a4bcefc0e8eaa81b08b4b84",
+    "src/components/hato/hooks/useSubirPesajeFoto.ts": "51be7ee7792a1a1691931758cf937b9bad1946a8f0582a777c66bddc3721908b",
+    "src/components/hato/hooks/useUltimaCapturaFoto.ts": "8904115af8fe7111e691faf15551c5c53778858fa7f360ecf484ae330d94ef63",
+    "src/components/hato/hooks/useVentaAnimalesHato.ts": "e5fa8b9df4e615ec5f33e53b00b209c771d31bd9828898841337f389564b696a",
+    "src/components/inventory/ComprasIntegrado.tsx": "536362e5f8ae02523eff3a90514bf148833474f6bf8ee52a2ca5e1c541681ff6",
+    "src/components/inventory/InventorySubNav.tsx": "6f2c8cdcffd2d21b9e7c577018bc4bc87022923d02c886d13fd087dc22bf87bd",
+    "src/components/inventory/NewPurchase.tsx": "9932ef32f3faab879bbf7924d4416fd7eb211b36a3392d56c00697d1d7710b8f",
+    "src/components/inventory/PurchaseHistory.tsx": "68346f6d4aef78bef8b9d889305434aa9fce52115416e51cf6e1db98ada7592f",
+    "src/components/inventory/dashboard/hooks/useInventoryDashboard.ts": "c894b098a920ddbd89a1a5d1122c3fbb81ad84ef04a509cb7aaa36242dd77593",
+    "src/components/produccion/components/RentabilidadTab.tsx": "c1bd3f80da9fd086aff1808359ea7232177718f75f525e5619c19003e3ef750d",
+    "src/components/produccion/hooks/useCostoKg.ts": "f5a0c5b9d97271ebd728a8d0a14df05f0f3fbc4c0bd5bf34aa73e4129d937012",
+    "src/supabase/functions/server/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "src/supabase/functions/server/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "src/supabase/functions/server/esco-consultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "src/supabase/functions/server/ganado-inventario.ts": "e6d338157c6cc26e9847660ed75759345f9bfe6d92e1585c308ea48d7ffd85e4",
+    "src/supabase/functions/server/generar-reporte-semanal.tsx": "24035b9dcdc7f3de1ebc24b62c554843a88fd7610c0fb67a75bebf267a38b823",
+    "src/supabase/functions/server/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "src/supabase/functions/server/hato-capturas-foto.ts": "4ac91ad446495f0fef6003dc9aacea096e27ae36dbf226e2a5618d50ad2901e7",
+    "src/supabase/functions/server/hato-pesaje-pipeline.ts": "ce3ef56895ae8b030546c3fc2500ca41d2a1f878882144b355bdd6a438e58656",
+    "src/supabase/functions/server/hato-produccion-quincena-foto.ts": "ee807128f0140618a01ccc48b974f4e031bd64610ae559219c2016195a72e642",
+    "src/supabase/functions/server/reportes-financieros.ts": "fe6c7a282f5dedd2fed36fa59b94698d3b3b3a4a417c839c943778da99f2a1a8",
+    "src/supabase/functions/server/telegram/conversations/excepcionDavid.ts": "0a3a011b13b8adec69a801ada5c62d3cca17dddd7698c109fe683eb6b25a50eb",
+    "src/supabase/functions/server/telegram/conversations/ingreso.ts": "40f0cf1b404d931fd3234cf6a2106d65a3bbd0230fa8a73124d4eb3e233ba473",
+    "src/types/aplicaciones.ts": "6ae17f82aa66cf29f9246be8a86ff3d6fb0ad1107ab264cf9701f439ac1291d3",
+    "src/types/database.ts": "c1230a47dc0f7a95bf0d31aeb53d9cc2624c62911dc9735e5556aaa579b4552e",
+    "src/types/hato.ts": "635fe4ab7e7bc84b143c7b794ed9b00474cd9895cede691f52f751b83f93cfdd",
+    "src/types/produccion.ts": "c96749eeba7138155e1a341e95dfedcbdf3b007e44a485094c38b62541f658f8",
+    "src/types/reportesFinancieros.ts": "e6522234d50e5338397e1a1258c2e8bd972cf826ebc764793323e3deb30c1ffc",
+    "src/utils/actualizarGastoSeguro.ts": "3b84324f48428d11eee495976efb3a05fbd5be83191fbbb2a83f01cdf0f68fa8",
+    "src/utils/applicationPlanDelete.ts": "ab34e0de0119eb8536b26a1f11c0a931b35d4bffe4e28cfdb57ec70dd697739d",
+    "src/utils/calculosAplicaciones.ts": "23424cbbba4f5bac095841bd8c399f6e2ba9b137756d835fffa97f5badeab261",
+    "src/utils/calculosCostoKg.ts": "0a42544f7132bd6e04e8d7df9b7f80347250cf043efeddf0f1b9fe04215eef0e",
+    "src/utils/calculosDinero.ts": "bf7d3e8ec43ac4c8d322fee548d7e696b02dec5fe13c36e32a9eb482f69e2747",
+    "src/utils/calculosFlujoCaja.ts": "baec2dcef6ad9f43f9cfb27e8eb7bf723dec5cb0840c4157b5ed3e72a909f222",
+    "src/utils/calculosGanado.ts": "582a4e8845cc7707e44735cafcfbca2e112e96e99a536e676a2576214adca9fe",
+    "src/utils/calculosHato.ts": "351bfe58e40cb4de04368c1bb9e5ff76d1ced9616204ee40409c2df4ea27a426",
+    "src/utils/calculosPyG.ts": "1c07e88b3b42080eb110131fc41494650e07c17b40e33757ccdd6593fee09e6d",
+    "src/utils/calculosVentaGanado.ts": "3d6e971f5cb8459b8b28174715e940d089e6e4d9174de28961999d390abe3c34",
+    "src/utils/costoVentaGanado.ts": "9686b89ae999508ee94b3df95ef7eaf9bfc752b8729047f60adf085fdd0c7240",
+    "src/utils/escoConsultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "src/utils/escoHerramientas.ts": "dfea482432d5e0341ccb3c6e2bdab69f07030648204de2150e8dcbce530e7061",
+    "src/utils/fetchDatosReporteSemanal.ts": "493bd462bc0d46a9ee4a74b1f6eb9a13bec857a1152c7e62ed45611ae69976f9",
+    "src/utils/generarPDFListaCompras.ts": "51bc818b289bc323af719ce4419da3d47604599f99c79f1696faa338885dc576",
+    "src/utils/graficoLitrosQuincenal.ts": "039c1c998403952b957900bb266571b65a2fb5cc9a014bc58e4c5c2c0d439a56",
+    "src/utils/hato/capturasFoto.ts": "845153d2432182ef1e8507aa34dac1fba8608ed9fbc3a1497937adca27f9b16d",
+    "src/utils/hato/hatoIncomeInvoiceAttempt.ts": "e7c2b1b3ee2d1bd31c36da5303624810c664b6d694e26399262eca7454a59df1",
+    "src/utils/hato/hatoIncomeInvoiceOriginBrowserAttempt.ts": "7c9c0a4ee23a75d4dad9d93614d6cfb884fd5b82b4807039d42c39d0f44a2a9f",
+    "src/utils/hato/hatoIncomeInvoiceOriginProtocol.ts": "b551ebf138c1b462d3b8b7e840dd658c1e5c9cba73e6538dfcee0dbb7c2bde85",
+    "src/utils/hato/hatoIncomeInvoiceReleaseBrowserAttempt.ts": "20d81dd46c6fe742c00a0377b600d987b171e76ab8cc4a229be6fd25ea6f8379",
+    "src/utils/hato/hatoIncomeInvoiceReleaseProtocol.ts": "f388f769e8a97418e412303a2fa54862ec8d13601e5062d11605c2a5e39676a8",
+    "src/utils/hato/hatoIncomeMetadataBrowserAttempt.ts": "b4f0fc4ae8e18f491fe6599f00e01b5feceb4edbebf710e9a7c3e434956747a8",
+    "src/utils/hato/hatoIncomeMetadataProtocol.ts": "335c56707c33bae5de2b1c2df02cd9119147ecd9b4eed81b5a53c55b71d1cf3f",
+    "src/utils/hato/hatoQuincenaProtocol.ts": "8e6543b13cb0ea4d640d3130c42b37310724f8bcc13fd49f7410081cd1d673c5",
+    "src/utils/hato/subidasPesajeMes.ts": "7a789edc314a1d5910a1e8b83270e7c6c5a22d578df3cfc2b8c90e7561503bf5",
+    "src/utils/hatoCorrecciones.ts": "fc43d252159ab646bc5e1dda27aa2c7289fc470a1b49f02620660a964423d6c9",
+    "src/utils/hatoProduccion.ts": "0cce39496d2bf456756ae6aa8da504f69c66ca61287f72e7a2e835dca08afe7c",
+    "src/utils/hatoProduccionBackfill.ts": "8538488f57957824ccabf3f9799547bf166ec2785100bda1449853f4860a3550",
+    "src/utils/hatoSalida.ts": "b4517cb7f7afa03b0299d84d76f90e4878113e02bccf7c23adf3382924f16dcf",
+    "src/utils/novedades/agrupar.ts": "fc441b762040c0349fc45f66b563b46c776210f758dad5bf6286fcc9db7642a6",
+    "src/utils/novedades/catalogo.ts": "53bf4bda8d8fe2cbd1b1c1748edab9eb60b1c259f3b4487e33301c994013a3f4",
+    "src/utils/novedades/frases.ts": "fd2aaf9fb611b6cfd5ea7579e3a6efe73b8ac302005b257ec886efc8fa243446",
+    "src/utils/novedades/fuentes/finGastos.ts": "4ff3ec6727f638c16f1c492c945ea9036147f22168721aa4ff71354f82fe89f1",
+    "src/utils/novedades/tipos.ts": "10782cc9dd42eb21fa2dd8f0f37964a5d8a56e65a9b41c58bec2af8500d1d908",
+    "src/utils/periodosReporte.ts": "1be23f41fff26512d3e91b838d4ebd9451583dc62be915ab25f7d8931ae48873",
+    "src/utils/purchaseIntegrity.ts": "12efcebb009337ad9f46a43e12b75dceb2d0e3875111358aea4ed3bb929a5047",
+    "src/utils/reportesFinancierosComun.ts": "f214a77d082462ff10308c02e47d6e0feefbc46a4363449a008424c26683dd24",
+    "src/utils/supabase/fetchAll.ts": "f677f2a6b3e40a0e267e0ba9d972fd0d611c9421a362dea6cc014a8b8f72ba5d",
+    "supabase/functions/make-server-1ccce916/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "supabase/functions/make-server-1ccce916/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "supabase/functions/make-server-1ccce916/esco-consultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "supabase/functions/make-server-1ccce916/ganado-inventario.ts": "e6d338157c6cc26e9847660ed75759345f9bfe6d92e1585c308ea48d7ffd85e4",
+    "supabase/functions/make-server-1ccce916/generar-reporte-semanal.tsx": "24035b9dcdc7f3de1ebc24b62c554843a88fd7610c0fb67a75bebf267a38b823",
+    "supabase/functions/make-server-1ccce916/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts": "4ac91ad446495f0fef6003dc9aacea096e27ae36dbf226e2a5618d50ad2901e7",
+    "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts": "ce3ef56895ae8b030546c3fc2500ca41d2a1f878882144b355bdd6a438e58656",
+    "supabase/functions/make-server-1ccce916/hato-produccion-quincena-foto.ts": "ee807128f0140618a01ccc48b974f4e031bd64610ae559219c2016195a72e642",
+    "supabase/functions/make-server-1ccce916/reportes-financieros.ts": "fe6c7a282f5dedd2fed36fa59b94698d3b3b3a4a417c839c943778da99f2a1a8",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts": "0a3a011b13b8adec69a801ada5c62d3cca17dddd7698c109fe683eb6b25a50eb",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts": "40f0cf1b404d931fd3234cf6a2106d65a3bbd0230fa8a73124d4eb3e233ba473",
+    "scripts/import-hato/backfill-quincenas-leche.ts": "ce03978de408675f59bc70c20cd3a91e6c1508d1ce2c0d5930cf7b649d879d40",
+    "src/components/finanzas/CLAUDE.md": "de3deed0e568ed79265bc32e44fb5a6104561ad2ea741d5185440035d63d3297",
+    "docs/plan_hato_produccion_rework.md": "486ec95078fe37aec366d53f116cfd47615c6bb9fe173c4df1b89e5b92bea373",
+    "src/sql/migrations/070_hato_produccion_venta_link.sql": "1afc60d643a453eefa85b1171588d276177913110876b990d6aa9cbfd5a6a1a2",
+    "src/sql/migrations/085_hato_quincenal_ica_pomar.sql": "87b8c001ce2e5d4827c66367c0b9d006215cea8b37dcfc1e63c358c2674c4592",
+    "scripts/import-hato/load.ts": "1630cbbb822f9d1bd4473ad948d45c3a4af81eb3a73d6931f252a86a93396b87",
+    "scripts/import-hato/backfill-leche.ts": "6847c1cc9001527201acacf3773d3eabcef9515b5601fe2a099975c9808dd493"
+  },
+  "preserved_lanes": [
+    "scripts/import-hato/load.ts",
+    "scripts/import-hato/backfill-leche.ts",
+    "scripts/import-hato/backfill-quincenas-leche.ts",
+    "src/utils/hatoProduccionBackfill.ts",
+    "src/utils/hato/capturasFoto.ts",
+    "src/components/hato/hooks/useProduccionHato.ts",
+    "src/components/hato/components/ProduccionQuincenalDialog.tsx"
+  ],
+  "retirement_assessment": {
+    "legacy_quincena": "No literal executable caller of old save/delete RPCs found. Exact ordinary/service grants and transitive reachability require local replay before coordinated retirement.",
+    "quincena_table": "Browser uses prepared RPCs; preserve service/import/backfill and shared monthly history; do not blanket revoke service.",
+    "income_table": "General IngresoForm still directly creates/edits independent/shared income; IngresosList deletes income/ganado. Table/column revocation is incompatible until those lanes have protected callers or a narrowly reviewed row boundary.",
+    "shared": "Shared expense/purchase/capture writers are inventoried to prevent accidental blanket retirement; no grant or application change in admission.",
+    "unknown": "Preserve original protected income/metadata/invoice actions and one-time permissions, files and history."
+  },
+  "limits": "Bounded TypeScript AST with same-file conditional resolution; unresolved expressions reported. Source text and exact local replay only; dynamic SQL/aliases/transitive/hosted/global reachability not certified."
+}
