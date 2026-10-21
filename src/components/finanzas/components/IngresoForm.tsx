@@ -574,7 +574,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
                   <div className="space-y-2">
                     <Label>Factura</Label>
-                    {metadataRoute.measured === true && ingreso?.id ? <MeasuredIncomeInvoiceUploader incomeId={ingreso.id} open={open} onHold={setInvoiceHeld} resetKey={invoiceEpoch} disabled={saving || metadataBusy} onReceipt={receipt=>{setInvoiceAttachment({incomeId:ingreso.id,receipt});handleInputChange('url_factura',receipt.path);}}/> : <FacturaUploader
+                    {metadataRoute.measured === true && ingreso?.id ? <MeasuredIncomeInvoiceUploader incomeId={ingreso.id} open={open} onHold={setInvoiceHeld} resetKey={invoiceEpoch} onReleased={release=>setInvoiceAttachment(current=>current?.incomeId===release.incomeId&&current.receipt.actor===release.owner&&current.receipt.identity.requestKey===(release.preview.origin.identity as {requestKey:string}).requestKey?null:current)} disabled={saving || metadataBusy} onReceipt={receipt=>{setInvoiceAttachment({incomeId:ingreso.id,receipt});handleInputChange('url_factura',receipt.path);}}/> : <FacturaUploader
                       tipo="venta"
                       targetIdentity={ingreso?.id ?? 'ingreso-new'} open={open}
                       currentUrl={formData.url_factura}

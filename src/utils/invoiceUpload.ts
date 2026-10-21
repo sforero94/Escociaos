@@ -121,3 +121,13 @@ export async function uploadReservedInvoice(client:InvoiceClient,owner:string,sc
  const receipt=verify(result,owner,identity);if(!receipt)throw Error('Consulta la factura original; no vuelvas a enviarla.');
  await token(client,owner,current);await locks.request(slot(owner,scope),{mode:'exclusive'},()=>{if(!current()||!same(pendingInvoice(owner,scope)?.identity,identity))return fail();localStorage.setItem(completedSlot(owner,scope),JSON.stringify(receipt));localStorage.removeItem(slot(owner,scope));});return receipt;
 }
+
+/** Called only after a trusted terminal receipt; never removes another original. */
+export async function clearReleasedInvoiceEvidence(client:InvoiceClient,owner:string,scope:string,identity:InvoiceIdentity,current:()=>boolean){
+ await navigator.locks.request(slot(owner,scope),{mode:'exclusive'},async()=>{
+  await token(client,owner,current);const a=pendingInvoice(owner,scope),raw=localStorage.getItem(completedSlot(owner,scope));
+  let completed:InvoiceReceipt|null=null;if(raw!==null){const parsed=JSON.parse(raw);if(!parsed?.identity||parsed.actor!==owner)return fail();completed=verify(parsed,owner,parsed.identity);if(!completed)return fail();}
+  if(a&&same(a.identity,identity)){localStorage.removeItem(slot(owner,scope));if(localStorage.getItem(slot(owner,scope))!==null)return fail();}
+  if(completed&&same(completed.identity,identity)){localStorage.removeItem(completedSlot(owner,scope));if(localStorage.getItem(completedSlot(owner,scope))!==null)return fail();}
+ });
+}
