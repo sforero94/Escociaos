@@ -1,0 +1,13 @@
+# Measured-income invoice UI hold cleanup and recovery admission
+
+Bounded follow-up to c705dc9. The actual uploader reports a hold only for its currently allowed form context. Layout cleanup releases the departing parent UI hold on unmount, owner/target/open/role/reset change or callback replacement. It does not close a target, clear durable attempts, settle an execution, delete evidence or accept a late reply. Reopening a pending original restores the hold and retains status-only recovery.
+
+Mounted regressions cover busy owner/target/close/role/unmount changes, late completion and reopening an original held attempt. An admission case also erases browser storage before metadata preparation and verifies status cannot rediscover the unassociated upload from income alone.
+
+The exact57-candidate local replay retains the original handler, actual installed SDK and prepared finance callback proofs. Its added admission probe removes all browser state after an actual committed upload reply is lost to local receipt publication, before any metadata prepare. Status returns no income-bound original without sending another file. Original targets/receipts/executions/Storage remain byte-for-byte equal. The harness restores its saved original browser evidence explicitly to continue the already-proven original recovery; this is not an application recovery mechanism.
+
+Release gate: current opaque upload targets have no authoritative server owner+income binding before metadata prepare. Absence of a browser anchor or metadata original is not proof of no earlier upload. This admission does not certify a new upload allocation after total storage loss. Before broader financial writer retirement, implement a protected prospective owner+income reservation/recovery boundary before byte transport; recover or explicitly resolve that original without inferring legacy associations, time-based settlement, silent replacement or physical deletion. Preserve existing receipts and ordinary/shared/import/service lanes. This is a technical implementation gate, not a new owner business-policy question.
+
+Only approved local structure exports and contained synthetic PostgreSQL/invalid-host transports may be used. No production access, deployment, live migration, history repair or release approval.
+
+Validation: final unchanged57-candidate replay passed87native/22actual handler-callback installed-SDK assertions,419matching source+fixture hashes/six approved snapshots/verified temporary database cleanup. Full314files/6,398App PASS128.09s;49focused/42Python/typecheck/lint0errors/873existing warnings PASS. Recovery replay JSON records the derived checks and hashes only; private exports/diagnostics remain external.

@@ -11,7 +11,7 @@ export function MeasuredIncomeInvoiceUploader({incomeId,open,disabled,onReceipt,
  const [attempt,setAttempt]=useState<IncomeInvoiceAttempt|null>(null),[held,setHeld]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
  const currentContext=useRef({owner,incomeId,allowed});currentContext.current={owner,incomeId,allowed};
  useLayoutEffect(()=>{const lifecycle=generation;lifecycle.current++;setBusy(false);setError(null);try{setAttempt(owner?pendingIncomeInvoice(owner,incomeId):null);setHeld(Boolean(owner&&pendingInvoice(owner,incomeInvoiceScope(incomeId))));}catch{setHeld(true);setError('Conserva el intento original; el almacenamiento no se pudo verificar.');}return()=>{lifecycle.current++;};},[owner,incomeId,allowed,resetKey]);
- useLayoutEffect(()=>{onHold(busy||held);},[onHold,busy,held]);
+ useLayoutEffect(()=>{onHold(allowed&&(busy||held));return()=>onHold(false);},[onHold,allowed,busy,held,owner,incomeId,resetKey]);
  async function run(mode:'upload'|'status'|'cancel',file:File|null=null){
   if(!owner||!allowed||disabled||busy)return;const n=generation.current,current=()=>n===generation.current&&currentContext.current.owner===owner&&currentContext.current.incomeId===incomeId&&currentContext.current.allowed;
   setBusy(true);setError(null);
