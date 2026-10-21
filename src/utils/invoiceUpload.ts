@@ -103,3 +103,21 @@ export async function closeInvoiceTarget(client:InvoiceClient,owner:string,scope
  await navigator.locks.request(slot(owner,scope),{mode:'exclusive'},()=>{const a=pendingInvoice(owner,scope);if(a&&(a.identity.targetKey!==targetKey||a.identity.generation!==r.generation))return fail();if(a)localStorage.removeItem(slot(owner,scope));if(pendingInvoice(owner,scope)!==null)return fail();});
  return r;
 }
+
+/** A server-reserved original is sent once; recovery never calls this function. */
+export async function uploadReservedInvoice(client:InvoiceClient,owner:string,scope:string,identity:InvoiceIdentity,file:File,current:()=>boolean):Promise<InvoiceReceipt>{
+ const meta=await validateInvoiceSelection(file);await token(client,owner,current);
+ if(Object.entries(meta).some(([k,v])=>identity[k as keyof InvoiceIdentity]!==v))return fail();
+ const locks=navigator.locks;if(!locks)return fail();
+ await locks.request(slot(owner,scope),{mode:'exclusive'},async()=>{
+  await token(client,owner,current);if(pendingInvoice(owner,scope))return fail();
+  const a={owner,scope,identity};localStorage.setItem(slot(owner,scope),JSON.stringify(a));
+  if(JSON.stringify(pendingInvoice(owner,scope))!==JSON.stringify(a))return fail();
+ });
+ let result:unknown;
+ try{const jwt=await token(client,owner,current),form=new FormData();for(const k of ['requestKey','protocolVersion','targetKey','generation','tipo'] as const)form.set(k,String(identity[k]));form.set('file',file);
+  const r=await fetch(base(),{method:'POST',headers:{Authorization:`Bearer ${jwt}`},body:form});result=await r.json();if(!r.ok)throw Error('Resultado de subida desconocido');
+ }catch{result=await jsonRequest(client,owner,current,'/status',identity);}
+ const receipt=verify(result,owner,identity);if(!receipt)throw Error('Consulta la factura original; no vuelvas a enviarla.');
+ await token(client,owner,current);await locks.request(slot(owner,scope),{mode:'exclusive'},()=>{if(!current()||!same(pendingInvoice(owner,scope)?.identity,identity))return fail();localStorage.setItem(completedSlot(owner,scope),JSON.stringify(receipt));localStorage.removeItem(slot(owner,scope));});return receipt;
+}
