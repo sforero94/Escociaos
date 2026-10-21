@@ -1,4 +1,4 @@
-import {recoverMetadata,metadataIntent,metadataWeb,sameMetadata,metadataResult,metadataDraft,metadataSource,type MetadataClient,type MetadataIntent,type MetadataResult,type MetadataDraft} from './hatoIncomeMetadataProtocol';
+import {recoverMetadata,metadataIntent,metadataWeb,sameMetadata,metadataResult,metadataDraft,metadataCapture,type MetadataClient,type MetadataIntent,type MetadataResult,type MetadataDraft} from './hatoIncomeMetadataProtocol';
 export interface MetadataBrowserClient extends MetadataClient {auth:{getUser():PromiseLike<{data:{user:{id:string}|null};error:unknown}>}}
 export interface MetadataBrowserAttempt {owner:string;key:string;intent:MetadataIntent;result:MetadataResult|null}
 const uuid=(s:unknown):s is string=>typeof s==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
@@ -26,8 +26,8 @@ export async function runMetadataBrowser(c:MetadataBrowserClient,owner:string,dr
    if(reviewed.result)metadataResult(reviewed.result,owner,reviewed.key,reviewed.intent);
    a=reviewed;localStorage.setItem(slot(owner),JSON.stringify(a));if(!sameMetadata(pendingMetadataBrowser(owner),a))return fail();
   }
-  if(!a){if(mode!=='prepare'||!draft)return null;const d=metadataDraft(draft),observed=await metadataSource(c,owner,d);await authorize(c,owner,current);const p=metadataIntent({...d,observed});a={owner,key:crypto.randomUUID(),intent:p,result:null};localStorage.setItem(slot(owner),JSON.stringify(a));if(!sameMetadata(pendingMetadataBrowser(owner),a))return fail();}
-  else if(mode==='prepare'&&draft&&!sameMetadata({version:a.intent.version,kind:a.intent.kind,targetId:a.intent.targetId,fields:a.intent.fields},metadataDraft(draft)))return fail();
+  if(!a){if(mode!=='prepare'||!draft)return null;const d=metadataDraft(draft),capture=await metadataCapture(c,owner,d);await authorize(c,owner,current);const p=metadataIntent({...d,...capture});a={owner,key:crypto.randomUUID(),intent:p,result:null};localStorage.setItem(slot(owner),JSON.stringify(a));if(!sameMetadata(pendingMetadataBrowser(owner),a))return fail();}
+  else if(mode==='prepare'&&draft&&!sameMetadata({version:a.intent.version,kind:a.intent.kind,targetId:a.intent.targetId,fields:a.intent.fields,...(a.intent.attachment?{attachment:a.intent.attachment}:{})},metadataDraft(draft)))return fail();
   if(['post','resolve','new'].includes(mode)&&(!reviewed||reviewed.owner!==owner||reviewed.key!==a.key||!sameMetadata(reviewed.intent,a.intent)))return fail();
   if(mode==='post'){
    if(reviewed?.result?.state!=='pending'||!a.result||!sameMetadata(reviewed.result,a.result)||!sameMetadata(reviewed.result.intent,a.intent))return fail();

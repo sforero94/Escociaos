@@ -84,3 +84,22 @@ export async function resolveInvoice(client:InvoiceClient,owner:string,scope:str
  return receipt;
 }
 export async function verifyInvoiceOwner(client:InvoiceClient,owner:string,current:()=>boolean){await token(client,owner,current);}
+
+/** Status-only recovery also covers the crash gap after the shared completed envelope was saved. */
+export async function recoverCompletedInvoice(client:InvoiceClient,owner:string,scope:string,targetKey:string,current:()=>boolean):Promise<InvoiceReceipt|null>{
+ const pending=pendingInvoice(owner,scope);
+ if(pending){if(pending.identity.targetKey!==targetKey)return fail();return resolveInvoice(client,owner,scope,current);}
+ const raw=localStorage.getItem(completedSlot(owner,scope));if(raw===null)return null;
+ const r=JSON.parse(raw) as InvoiceReceipt;
+ if(!r?.identity||r.identity.targetKey!==targetKey||r.identity.tipo!=='venta')return fail();
+ const result=await jsonRequest(client,owner,current,'/status',r.identity);const receipt=verify(result,owner,r.identity);await token(client,owner,current);return receipt;
+}
+
+/** Irreversible target closure proves no future publication; it never proves byte absence. */
+export async function closeInvoiceTarget(client:InvoiceClient,owner:string,scope:string,targetKey:string,current:()=>boolean){
+ const r=await jsonRequest(client,owner,current,'/target',{targetKey,action:'invalidate'}) as {actor:string;targetKey:string;generation:string;active:boolean};
+ if(!r||Object.keys(r).length!==4||r.actor!==owner||r.targetKey!==targetKey||!uuid(r.generation)||r.active!==false)return fail();
+ await token(client,owner,current);
+ await navigator.locks.request(slot(owner,scope),{mode:'exclusive'},()=>{const a=pendingInvoice(owner,scope);if(a&&(a.identity.targetKey!==targetKey||a.identity.generation!==r.generation))return fail();if(a)localStorage.removeItem(slot(owner,scope));if(pendingInvoice(owner,scope)!==null)return fail();});
+ return r;
+}

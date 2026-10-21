@@ -9,6 +9,7 @@ export function IncomeMetadataConfirmationPanel({confirmation:c,onAction}:{confi
  <Button type="button" variant="outline" disabled={c.busy} onClick={()=>void onAction('status')}>Consultar intento original de observaciones/factura</Button>
  {a&&<><p className="break-all text-xs">Intento: {a.key} · {r?.state??'resultado desconocido'}</p>
  {p&&<div><p>Ingreso: {String(p.beforeIncome.id)} · Fecha: {String(p.beforeIncome.fecha)} · Neto: {String(p.beforeIncome.valor)} · Litros: {String(p.beforeIncome.cantidad)}</p><p>Observaciones: {String(p.beforeIncome.observaciones??'sin dato')} → {String(p.afterIncome.observaciones??'sin dato')}</p><p className="break-all">Factura: {String(p.beforeIncome.url_factura??'sin factura')} → {String(p.afterIncome.url_factura??'sin factura')}</p><p>La producción y todos los valores financieros se conservan.</p></div>}
+ {a?.intent.attachment&&<p className="break-all">Recibo de factura: {a.intent.attachment.receiptId} · {a.intent.attachment.identity.mime} · {a.intent.attachment.identity.size} bytes · SHA-256 {a.intent.attachment.identity.sha256}</p>}
  {r?.state==='pending'&&<Button type="button" disabled={c.busy} onClick={()=>void onAction('post')}>Confirmar observaciones/factura capturadas</Button>}
  {(!r||r.state==='unknown')&&<Button type="button" disabled={c.busy} onClick={()=>void onAction('prepare')}>Recuperar preparación original</Button>}
  {(!r||r.state==='pending'||r.state==='unknown')&&<Button type="button" disabled={c.busy} onClick={()=>void onAction('resolve')}>Cancelar intento original</Button>}

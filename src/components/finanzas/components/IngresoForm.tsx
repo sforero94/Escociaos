@@ -1,3 +1,7 @@
+import {releaseIncomeInvoice} from '@/utils/hato/hatoIncomeInvoiceAttempt';
+import {useAuth} from '@/contexts/AuthContext';
+import type {InvoiceReceipt} from '@/utils/invoiceUpload';
+import {MeasuredIncomeInvoiceUploader} from '@/components/hato/components/MeasuredIncomeInvoiceUploader';
 import {sameMetadata} from '@/utils/hato/hatoIncomeMetadataProtocol';
 import {useIncomeMetadataRoute} from '@/components/hato/hooks/useIncomeMetadataRoute';
 import {useIncomeMetadataConfirmation} from '@/components/hato/hooks/useIncomeMetadataConfirmation';
@@ -57,6 +61,9 @@ interface IngresoFormProps {
 }
 
 export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }: IngresoFormProps) {
+  const {user:metadataUser}=useAuth();
+  const [invoiceHeld,setInvoiceHeld]=useState(false),[invoiceEpoch,setInvoiceEpoch]=useState(0);
+  const [invoiceAttachment,setInvoiceAttachment]=useState<{incomeId:string;receipt:InvoiceReceipt}|null>(null);
   // Form state
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<IngresoFormData>({
     key: ingreso?.id ? `ingreso-edit-${ingreso.id}` : 'ingreso-new-v2',
@@ -76,12 +83,16 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     },
   });
 
+  const selectedInvoice=invoiceAttachment&&invoiceAttachment.incomeId===ingreso?.id&&invoiceAttachment.receipt.actor===metadataUser?.id&&invoiceAttachment.receipt.path===formInvoicePath()?invoiceAttachment.receipt:undefined;
+  function formInvoicePath(){return formData.url_factura;}
   const metadataRoute = useIncomeMetadataRoute(open, ingreso?.id);
-  const metadata = useIncomeMetadataConfirmation(open, JSON.stringify([ingreso?.id, formData.observaciones, formData.url_factura]));
+  const metadata = useIncomeMetadataConfirmation(open, JSON.stringify([ingreso?.id, formData.observaciones, formData.url_factura, selectedInvoice]));
   const metadataBusy = metadata.busy || metadata.attempt !== null;
   const metadataAction = async (mode: 'prepare' | 'post' | 'status' | 'resolve' | 'new') => {
     try { const committed = metadata.attempt?.result?.state === 'committed' && metadata.attempt.intent.targetId === ingreso?.id && sameMetadata(metadata.attempt.intent.fields, {observations:formData.observaciones || null, invoice:formData.url_factura || null});
+      const attachment=metadata.attempt?.intent.attachment,id=metadata.attempt?.intent.targetId;
       await metadata.run(mode);
+      if(mode==='new'&&attachment&&id){await releaseIncomeInvoice(attachment.actor,id,attachment);setInvoiceAttachment(null);setInvoiceEpoch(x=>x+1);}
       if (mode === 'new' && committed) { clearFormData(); onSuccess(); }
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Consulta el intento original.'); }
   };
@@ -266,10 +277,11 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
   const guardarIngreso = async () => {
     try {
       setSaving(true);
+      if(invoiceHeld)throw Error('Consulta o cancela el destino original de factura antes de revisar metadatos.');
 
       if (ingreso?.id && await metadataRoute.classifyNow()) {
         await metadata.prepare({version:1, kind:'metadata', targetId:ingreso.id,
-          fields:{observations:formData.observaciones || null, invoice:formData.url_factura || null}});
+          fields:{observations:formData.observaciones || null, invoice:formData.url_factura || null},...(selectedInvoice?{attachment:selectedInvoice}:{})});
         return;
       }
       const ingresoData = {
@@ -562,15 +574,15 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
                   <div className="space-y-2">
                     <Label>Factura</Label>
-                    <FacturaUploader
+                    {metadataRoute.measured === true && ingreso?.id ? <MeasuredIncomeInvoiceUploader incomeId={ingreso.id} open={open} onHold={setInvoiceHeld} resetKey={invoiceEpoch} disabled={saving || metadataBusy} onReceipt={receipt=>{setInvoiceAttachment({incomeId:ingreso.id,receipt});handleInputChange('url_factura',receipt.path);}}/> : <FacturaUploader
                       tipo="venta"
                       targetIdentity={ingreso?.id ?? 'ingreso-new'} open={open}
                       currentUrl={formData.url_factura}
                       onUploadSuccess={(url) => handleInputChange('url_factura', url)}
                       onRemove={() => handleInputChange('url_factura', '')}
-                      disabled={saving || metadataBusy || metadataRoute.measured === true}
-                    />
-                    {metadataRoute.measured === true && <p className="text-sm">La nueva factura requiere revisión protegida. Conserva el archivo; puedes mantener o quitar la referencia actual.</p>}
+                      disabled={saving || metadataBusy}
+                    />}
+                    {metadataRoute.measured === true && <p className="text-sm">La referencia actual se conserva hasta la confirmación. Puedes consultar la factura original sin volver a enviarla.</p>}
                     {metadataRoute.measured === true && formData.url_factura && <Button type="button" variant="outline" disabled={metadataBusy} onClick={() => handleInputChange("url_factura", "")}>Quitar referencia de factura (conservar archivo)</Button>}
                   </div>
                 </div>
@@ -590,7 +602,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             </Button>
             <Button
               type="submit"
-              disabled={saving || metadataBusy}
+              disabled={saving || metadataBusy || invoiceHeld}
               className="bg-primary hover:bg-primary-dark"
               onClick={handleSubmit}
             >
