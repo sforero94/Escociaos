@@ -2398,3 +2398,18 @@ La auto-poda no aplica.
 - 6/6 agentes por nombre + worktree + run-context volvieron en 3–10 min. Verificacion adversarial del unico P1 (ESCO-158) lanzada por el orquestador con general-purpose: CONFIRMADO en <1 min. [corrida: 2026-10-19-lunes]
 - La opcion `Reportes` NO existe en el multi_select `Modulo` de Notion; usar las existentes (Aguacate, Aplicaciones, Auth & RLS, Clima, Finanzas, Hato Lechero, Infra, Inventario, Labores, Monitoreo) para no crear opciones sueltas. `Especialidad` incluye `Bug Triage`. [corrida: 2026-10-19-lunes]
 - Poda §8 de memoria: otra vez NO aplicada (_compartida ~2.400 lineas). Pendiente para un viernes con conjunto elegible vacio. [corrida: 2026-10-19-lunes]
+
+## Corrida 2026-10-22-jueves — hechos transversales
+- Preflight 4/4 Composio active, `supabase_read_only_user`, `ATTENDED=0`. `query_logs` sobre `edge_logs` dio `Backend error!` dos veces; sobre `function_logs` respondio. El carril de logs funciona: usar `function_logs` en el preflight. Cero prompts, cero denegaciones (REMOTE_BASH permitido al orquestador). [corrida: 2026-10-22-jueves]
+- 4/4 agentes por nombre + worktree + run-context volvieron en 2–5 min. [corrida: 2026-10-22-jueves]
+- ESCO-158 cerrado (Done/Arreglado): la quincena se re-guardo en la app el 10-21, sin migracion. ESCO-160 filado (P2, decision): etiqueta de cosecha 'Principal 2027' contra la regla 043. [corrida: 2026-10-22-jueves]
+- Siguiente numero de migracion libre: 184 (barrido 184–188 limpio). [corrida: 2026-10-22-jueves]
+- **CALENDARIO: el 1 de noviembre cambian los crons de las 3 Routines a `0 12 * * 1|4|5`.** Faltan 10 dias; la corrida del lunes 10-26 debe ponerlo primero en REQUIERE TU DECISION. [corrida: 2026-10-22-jueves]
+
+## Racha del jueves (regla de auto-poda) — actualizada 2026-10-22
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-10-08-jueves | 4 |
+| 2026-10-15-jueves | 1 |
+| **2026-10-22-jueves** | **1 (ESCO-160, P2). Racha de ceros: 0** |
+La auto-poda no aplica.

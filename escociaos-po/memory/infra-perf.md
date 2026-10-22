@@ -689,3 +689,11 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - METODO: pg_stat_statements vive en `extensions.pg_stat_statements`. Filtrar por `userid` del rol de app; si no, el top son las sondas PO sobre net._http_response (2–4,5 s por el bloat). [corrida: 2026-10-19-lunes]
 - METODO: query_logs sobre function_logs con varios positionCaseInsensitive OR da FetchException; un GROUP BY simple sobre event_message si funciona. [corrida: 2026-10-19-lunes]
 - Lineas base 2026-10-19: DB 130 MB (85 = net._http_response + cron.job_run_details), 23 conexiones · Storage 268 MB / 315 objetos · Vercel PROMOTED 2947270, build 50,7 s (atipico; los 5 anteriores ~23–28 s) · vite build local 21,1 s, entry 106,6 KB gz · 5 crons / 876 corridas / 0 fallos en 72 h · hato tick 9 ok seguidos · advisors ufk 110, unused 38, no_pk 55, mpp 479, table_bloat 1 (net._http_response, INFO) · consulta app mas lenta fn_clima_rollup_diario 193,5 ms · arboles edge 80/80, 0 diffs reales · lluvia_confianza 30 d: ok 14 · reconstruido 9 (ESCO-155) · cobertura_parcial 6 · falta 1. [corrida: 2026-10-19-lunes]
+
+## Corrida 2026-10-22-jueves
+- sin_hallazgos. Edge **v276** (2026-10-19T13:21:21Z, verify_jwt=false), ezbr `a8eda6f8…` igual a v275: redespliegue sin cambio de contenido, deriva 0. Detector #59–#61 success. Vercel PROMOTED en `95f9076` = HEAD de main. [corrida: 2026-10-22-jueves]
+- La 183 funciona en vivo: 10-18..10-21 = 4/4 dias ok, 288 lecturas, evento = contador. Solo mirar si `reconstruido` reaparece. [corrida: 2026-10-22-jueves]
+- Timeouts pg_net en clima: 12 de 74 en ~6 h (antes 3 de 73), funcion siempre 200 y 288/288 lecturas. Cosmetico. Filar solo si lecturas_count baja de ~280 sin apagon. [corrida: 2026-10-22-jueves]
+- METODO: hato_alertas_tick_runs se ordena por `ejecutado_at` (id es uuid). hato_capturas_foto no tiene created_at. query_logs sobre edge_logs dio 'Backend error!' dos veces en el arranque; function_logs funciona. [corrida: 2026-10-22-jueves]
+- METODO: thinksid/escocia-backups no es legible desde la sesion GitHub MCP (solo sforero94/escociaos): va a NO CORRIO. [corrida: 2026-10-22-jueves]
+- Lineas base: DB 131 MB, 22 conexiones · 5 crons / 876 corridas / 0 fallos en 72 h · consulta app mas lenta monitoreos via PostgREST 168,3 ms · 0 respuestas no-200 de la edge en 24 h. [corrida: 2026-10-22-jueves]

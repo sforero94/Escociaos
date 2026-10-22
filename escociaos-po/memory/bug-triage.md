@@ -844,3 +844,11 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - fn_cerrar_aplicacion 400 a las 00:47Z (Microman 80,2 > saldo 80,00); el usuario corrigio en 4 min. Patron ESCO-129, no filado. [corrida: 2026-10-19-lunes]
 - BUG_REPORT.md refrescado en PR #337 (issue 7 = PR #336). Si #336 se fusiona, marcar issue 7 corregido. [corrida: 2026-10-19-lunes]
 - #335 (Hato Produccion v2/Cargas): hooks usan fetchAll; cero firmas de error en 24 h. Sin revision profunda (3,7k lineas) — pendiente. [corrida: 2026-10-19-lunes]
+
+## Corrida 2026-10-22-jueves
+- Linea base main@95f9076 VERDE: vitest 208/4.265, tsc 0, lint 0/910 (igual al lunes; desde entonces solo SQL/docs). [corrida: 2026-10-22-jueves]
+- ESCO-158 resuelto en el dato (quincena 2026-09 Q2 re-guardada 2026-10-21 21:37Z). Cerrado. [corrida: 2026-10-22-jueves]
+- Tras la 182, Irlanda/Acueducto (activo=false) salen de los selectores de lote, pero las consultas de produccion usan lotes!inner sin filtro activo: el historico sigue contando. No es defecto. [corrida: 2026-10-22-jueves]
+- query_logs puede fallar una vez con 'FetchException'; reintentar con iso_timestamp_start/end explicitos (< 24 h). [corrida: 2026-10-22-jueves]
+- Los fin_ingresos de leche se llaman '<litros> L' (ej. '5091 L'), sin 'leche': ligar via hato_produccion_quincenal.fin_ingreso_id. [corrida: 2026-10-22-jueves]
+- PR #336 (ESCO-159) sigue abierto, mergeable clean, sin actividad desde 10-19. [corrida: 2026-10-22-jueves]

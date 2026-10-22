@@ -623,3 +623,9 @@ mensual sigue siendo la unica legible.**
 - ESCO-143: database.ts ya no tiene clima_avisos (180) ni lotes.fecha_erradicacion (181). Comprobar con `grep -c '      <tabla>: {' src/types/database.ts`. [corrida: 2026-10-19-lunes]
 - ESCO-152: patron de cortes jueves a sabado (10-01/02, 08/09/10, 16/17); el 10-09 no tiene fila de resumen. Consulta: `clima_resumen_diario` con `cobertura_hueco_max_min` y `extract(isodow from fecha)`. [corrida: 2026-10-19-lunes]
 - Desde 10-03, `reconstruido` aparece en 8 de 12 dias completos (apoyo a ESCO-155). [corrida: 2026-10-19-lunes]
+
+## Corrida 2026-10-22-jueves
+- Linea base: HEAD `95f9076`. Edge v276 = redespliegue (ezbr `a8eda6f8…` = estado de deriva de `0e49aaa`). Migraciones hasta 183, 0 aplicadas sin archivo. PR abiertos #324 (borrador), #336, #337. Nada pendiente de deploy. Barrido 184–188: 0 colisiones, 184 libre. [corrida: 2026-10-22-jueves]
+- Probar la 183 con md5(prosrc) = `6228f11a…`, no con ilike sobre pg_get_functiondef. [corrida: 2026-10-22-jueves]
+- Una version edge nueva con el arbol sin cambio es benigna si su ezbr_sha256 es igual al del estado de deriva del mismo commit. [corrida: 2026-10-22-jueves]
+- La 181 ya tiene entrada en CLAUDE.md: no filar el 10-26. Las cabeceras de 181/183 siguen 'ESCRITA, SIN APLICAR' (patron ESCO-147, CLAUDE.md correcto). [corrida: 2026-10-22-jueves]

@@ -23,6 +23,24 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-22 — corrida jueves
+
+**Two PRs merged** (#338 and #333, both on 2026-10-19) and **two migrations applied**
+(183, ledger `20261019131820`; 182, ledger `20261019152017`). Everything is live. The
+frontend is on `95f9076` (Vercel READY/PROMOTED); no frontend code changed. The edge
+function `make-server-1ccce916` is v276 (2026-10-19T13:21:21Z), a redeploy of the unchanged
+tree (hash `a8eda6f8…` = drift state of `0e49aaa`). Nothing waits for a deploy.
+
+### Aguacate · Producción
+- The cost-per-kilo table uses the real eradication dates: Pedregal 2026-02-12, La Unión 2026-04-08, Irlanda 2026-06-25, Acueducto 2026-07-17. Santa Rosa stays active (ESCO-139, #333, migration 182).
+- Irlanda and Acueducto are now inactive, so they no longer appear in lote selectors that show active lotes only (#333).
+
+### Clima
+- A dry day no longer inherits yesterday's drizzle at midnight. Since 2026-10-19 every day closes `ok` with counter = event sum (0,00 / 5,08 / 17,78 mm), and `reconstruido` stopped appearing (ESCO-155, #338, migration 183).
+
+### Requiere despliegue manual
+- None.
+
 ## 2026-10-19 — corrida lunes
 
 **Five PRs merged** (#329–#332 on 2026-10-17, #335 on 2026-10-16) and **one migration
