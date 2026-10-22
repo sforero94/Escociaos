@@ -49,3 +49,9 @@ __pycache__/
 # F0 spike Tailwind: capturas locales, no se versionan
 docs/tailwind-spike/antes/
 docs/tailwind-spike/despues/
+
+# Evaluaciones de Esco: el conjunto dorado trae nombres y cifras reales de la finca,
+# y cada corrida guarda respuestas completas. Ni uno ni lo otro se versiona.
+evals/esco/golden/
+evals/esco/runs/
+.env.eval
