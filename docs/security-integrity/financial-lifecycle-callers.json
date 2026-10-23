@@ -1,0 +1,1300 @@
+{
+  "writers": [
+    {
+      "file": "src/components/configuracion/GanadoConfig.tsx",
+      "line": 231,
+      "method": "insert",
+      "receiver": "'gan_fincas'",
+      "targets": [
+        "gan_fincas"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "nombre",
+        "finca_id",
+        "lote_id",
+        "etapa",
+        "activo"
+      ]
+    },
+    {
+      "file": "src/components/configuracion/GanadoConfig.tsx",
+      "line": 232,
+      "method": "update",
+      "receiver": "'gan_fincas'",
+      "targets": [
+        "gan_fincas"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "nombre",
+        "finca_id",
+        "lote_id",
+        "etapa",
+        "activo"
+      ]
+    },
+    {
+      "file": "src/components/configuracion/GanadoConfig.tsx",
+      "line": 536,
+      "method": "insert",
+      "receiver": "'gan_potreros'",
+      "targets": [
+        "gan_potreros"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "nombre",
+        "finca_id",
+        "lote_id",
+        "etapa",
+        "activo"
+      ]
+    },
+    {
+      "file": "src/components/configuracion/GanadoConfig.tsx",
+      "line": 537,
+      "method": "update",
+      "receiver": "'gan_potreros'",
+      "targets": [
+        "gan_potreros"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "nombre",
+        "finca_id",
+        "lote_id",
+        "etapa",
+        "activo"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/CargaMasivaGastos.tsx",
+      "line": 534,
+      "method": "insert",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/CargaMasivaIngresos.tsx",
+      "line": 497,
+      "method": "insert",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/GastoForm.tsx",
+      "line": 177,
+      "method": "insert",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "negocio_id",
+        "region_id",
+        "categoria_id",
+        "concepto_id",
+        "nombre",
+        "valor",
+        "medio_pago_id",
+        "proveedor_id",
+        "observaciones",
+        "url_factura",
+        "estado"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/GastosBatchTable.tsx",
+      "line": 258,
+      "method": "insert",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/GastosList.tsx",
+      "line": 248,
+      "method": "delete",
+      "receiver": "table",
+      "targets": [
+        "fin_transacciones_ganado",
+        "fin_gastos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "delete",
+        "eq"
+      ],
+      "assigned_columns": []
+    },
+    {
+      "file": "src/components/finanzas/components/IngresoForm.tsx",
+      "line": 298,
+      "method": "update",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "valor",
+        "comprador_id",
+        "observaciones",
+        "url_factura",
+        "cantidad",
+        "precio_unitario"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresoForm.tsx",
+      "line": 305,
+      "method": "insert",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "valor",
+        "comprador_id",
+        "observaciones",
+        "url_factura",
+        "cantidad",
+        "precio_unitario"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresosBatchTable.tsx",
+      "line": 267,
+      "method": "insert",
+      "receiver": "'fin_ingresos'",
+      "targets": [
+        "fin_ingresos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/IngresosList.tsx",
+      "line": 256,
+      "method": "delete",
+      "receiver": "table",
+      "targets": [
+        "fin_transacciones_ganado",
+        "fin_ingresos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "delete",
+        "eq"
+      ],
+      "assigned_columns": []
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 387,
+      "method": "insert",
+      "receiver": "'gan_fincas'",
+      "targets": [
+        "gan_fincas"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "nombre"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 395,
+      "method": "update",
+      "receiver": "'fin_transacciones_ganado'",
+      "targets": [
+        "fin_transacciones_ganado"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "tipo",
+        "finca",
+        "cliente_proveedor",
+        "cantidad_cabezas",
+        "kilos_pagados",
+        "peso_total_kg",
+        "destare_kg_cabeza",
+        "precio_kilo",
+        "valor_total",
+        "observaciones",
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 417,
+      "method": "update",
+      "receiver": "'gan_movimientos'",
+      "targets": [
+        "gan_movimientos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "peso_promedio_kg"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 439,
+      "method": "update",
+      "receiver": "'gan_pesos_historico'",
+      "targets": [
+        "gan_pesos_historico"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "peso_promedio_kg"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 453,
+      "method": "insert",
+      "receiver": "'fin_transacciones_ganado'",
+      "targets": [
+        "fin_transacciones_ganado"
+      ],
+      "filter_columns": [],
+      "returned_row": true,
+      "query_methods": [
+        "from",
+        "insert",
+        "select",
+        "single"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "tipo",
+        "finca",
+        "cliente_proveedor",
+        "cantidad_cabezas",
+        "kilos_pagados",
+        "peso_total_kg",
+        "destare_kg_cabeza",
+        "precio_kilo",
+        "valor_total",
+        "observaciones",
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+      "line": 474,
+      "method": "insert",
+      "receiver": "'fin_transacciones_ganado'",
+      "targets": [
+        "fin_transacciones_ganado"
+      ],
+      "filter_columns": [],
+      "returned_row": true,
+      "query_methods": [
+        "from",
+        "insert",
+        "select",
+        "single"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "tipo",
+        "finca",
+        "cliente_proveedor",
+        "cantidad_cabezas",
+        "kilos_pagados",
+        "peso_total_kg",
+        "destare_kg_cabeza",
+        "precio_kilo",
+        "valor_total",
+        "observaciones",
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 293,
+      "method": "insert",
+      "receiver": "'gan_movimientos'",
+      "targets": [
+        "gan_movimientos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "tipo",
+        "estado",
+        "fecha",
+        "potrero_origen_id",
+        "novillos_delta",
+        "toros_delta",
+        "notas"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 329,
+      "method": "insert",
+      "receiver": "'gan_movimientos'",
+      "targets": [
+        "gan_movimientos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "tipo",
+        "estado",
+        "fecha",
+        "potrero_destino_id",
+        "novillos_delta",
+        "toros_delta",
+        "notas"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 361,
+      "method": "update",
+      "receiver": "'gan_potreros'",
+      "targets": [
+        "gan_potreros"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "activo"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 368,
+      "method": "insert",
+      "receiver": "'gan_potreros'",
+      "targets": [
+        "gan_potreros"
+      ],
+      "filter_columns": [],
+      "returned_row": true,
+      "query_methods": [
+        "from",
+        "insert",
+        "select",
+        "single"
+      ],
+      "assigned_columns": [
+        "nombre",
+        "finca_id"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 380,
+      "method": "insert",
+      "receiver": "'gan_movimientos'",
+      "targets": [
+        "gan_movimientos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 395,
+      "method": "insert",
+      "receiver": "'gan_movimientos'",
+      "targets": [
+        "gan_movimientos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 417,
+      "method": "update",
+      "receiver": "'gan_movimientos'",
+      "targets": [
+        "gan_movimientos"
+      ],
+      "filter_columns": [
+        "id",
+        "estado"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq",
+        "eq"
+      ],
+      "assigned_columns": [
+        "estado"
+      ]
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 438,
+      "method": "update",
+      "receiver": "'gan_potreros'",
+      "targets": [
+        "gan_potreros"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "etapa"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 91,
+      "method": "insert",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ],
+      "filter_columns": [],
+      "returned_row": true,
+      "query_methods": [
+        "from",
+        "insert",
+        "select",
+        "single"
+      ],
+      "assigned_columns": [
+        "tipo",
+        "origen",
+        "desenlace",
+        "anio",
+        "mes",
+        "fecha",
+        "storage_bucket",
+        "storage_prefijo",
+        "storage_rutas",
+        "storage_ok",
+        "fotos_recibidas",
+        "modelo",
+        "detalle",
+        "created_by"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/hato-capturas-foto.ts",
+      "line": 145,
+      "method": "update",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "desenlace",
+        "actualizado_en"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/telegram/conversations/ingreso.ts",
+      "line": 507,
+      "method": "insert",
+      "receiver": "\"fin_transacciones_ganado\"",
+      "targets": [
+        "fin_transacciones_ganado"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "tipo",
+        "finca",
+        "cliente_proveedor",
+        "cantidad_cabezas",
+        "kilos_pagados",
+        "precio_kilo",
+        "valor_total",
+        "observaciones"
+      ]
+    },
+    {
+      "file": "src/supabase/functions/server/telegram/conversations/ingreso.ts",
+      "line": 705,
+      "method": "insert",
+      "receiver": "\"fin_ingresos\"",
+      "targets": [
+        "fin_ingresos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "nombre",
+        "valor",
+        "negocio_id",
+        "region_id",
+        "categoria_id",
+        "medio_pago_id",
+        "comprador_id",
+        "observaciones",
+        "created_by"
+      ]
+    },
+    {
+      "file": "src/utils/actualizarGastoSeguro.ts",
+      "line": 31,
+      "method": "update",
+      "receiver": "'fin_gastos'",
+      "targets": [
+        "fin_gastos"
+      ],
+      "filter_columns": [
+        "id",
+        "updated_at"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq",
+        "eq",
+        "select"
+      ],
+      "assigned_columns": [
+        "updated_at"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 91,
+      "method": "insert",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ],
+      "filter_columns": [],
+      "returned_row": true,
+      "query_methods": [
+        "from",
+        "insert",
+        "select",
+        "single"
+      ],
+      "assigned_columns": [
+        "tipo",
+        "origen",
+        "desenlace",
+        "anio",
+        "mes",
+        "fecha",
+        "storage_bucket",
+        "storage_prefijo",
+        "storage_rutas",
+        "storage_ok",
+        "fotos_recibidas",
+        "modelo",
+        "detalle",
+        "created_by"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts",
+      "line": 145,
+      "method": "update",
+      "receiver": "TABLA",
+      "targets": [
+        "hato_capturas_foto"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "desenlace",
+        "actualizado_en"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts",
+      "line": 507,
+      "method": "insert",
+      "receiver": "\"fin_transacciones_ganado\"",
+      "targets": [
+        "fin_transacciones_ganado"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "tipo",
+        "finca",
+        "cliente_proveedor",
+        "cantidad_cabezas",
+        "kilos_pagados",
+        "precio_kilo",
+        "valor_total",
+        "observaciones"
+      ]
+    },
+    {
+      "file": "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts",
+      "line": 705,
+      "method": "insert",
+      "receiver": "\"fin_ingresos\"",
+      "targets": [
+        "fin_ingresos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "nombre",
+        "valor",
+        "negocio_id",
+        "region_id",
+        "categoria_id",
+        "medio_pago_id",
+        "comprador_id",
+        "observaciones",
+        "created_by"
+      ]
+    },
+    {
+      "file": "scripts/import-hato/cleanup-partos-duplicados.ts",
+      "line": 368,
+      "method": "update",
+      "receiver": "'hato_eventos'",
+      "targets": [
+        "hato_eventos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "update",
+        "eq"
+      ],
+      "assigned_columns": [
+        "fecha",
+        "fecha_confianza"
+      ]
+    },
+    {
+      "file": "scripts/import-hato/cleanup-partos-duplicados.ts",
+      "line": 380,
+      "method": "delete",
+      "receiver": "'hato_eventos'",
+      "targets": [
+        "hato_eventos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "delete",
+        "in"
+      ],
+      "assigned_columns": []
+    },
+    {
+      "file": "scripts/import-hato/cleanup-servicios-duplicados.ts",
+      "line": 371,
+      "method": "delete",
+      "receiver": "'hato_eventos'",
+      "targets": [
+        "hato_eventos"
+      ],
+      "filter_columns": [
+        "id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "delete",
+        "in"
+      ],
+      "assigned_columns": []
+    },
+    {
+      "file": "scripts/import-hato/load.ts",
+      "line": 188,
+      "method": "delete",
+      "receiver": "'hato_eventos'",
+      "targets": [
+        "hato_eventos"
+      ],
+      "filter_columns": [
+        "animal_id"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "delete",
+        "in"
+      ],
+      "assigned_columns": []
+    },
+    {
+      "file": "scripts/import-hato/load.ts",
+      "line": 198,
+      "method": "delete",
+      "receiver": "'hato_animales'",
+      "targets": [
+        "hato_animales"
+      ],
+      "filter_columns": [
+        "origen"
+      ],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "delete",
+        "eq"
+      ],
+      "assigned_columns": []
+    },
+    {
+      "file": "scripts/import-hato/load.ts",
+      "line": 267,
+      "method": "insert",
+      "receiver": "'hato_animales'",
+      "targets": [
+        "hato_animales"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert",
+        "select"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    },
+    {
+      "file": "scripts/import-hato/load.ts",
+      "line": 690,
+      "method": "insert",
+      "receiver": "'hato_eventos'",
+      "targets": [
+        "hato_eventos"
+      ],
+      "filter_columns": [],
+      "returned_row": false,
+      "query_methods": [
+        "from",
+        "insert"
+      ],
+      "assigned_columns": [
+        "<unresolved>"
+      ]
+    }
+  ],
+  "unresolved_writers": [],
+  "rpcs": [
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 312,
+      "rpc": "fn_ganado_registrar_traslado_multi"
+    },
+    {
+      "file": "src/components/ganado/hooks/useGanadoInventario.ts",
+      "line": 409,
+      "rpc": "fn_ganado_confirmar_pendiente_multi"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeInvoiceOriginProtocol.ts",
+      "line": 21,
+      "rpc": "fn_hato_income_invoice_origin_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeInvoiceOriginProtocol.ts",
+      "line": 22,
+      "rpc": "fn_hato_income_invoice_origin_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeInvoiceReleaseProtocol.ts",
+      "line": 43,
+      "rpc": "fn_hato_income_invoice_release_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 23,
+      "rpc": "fn_hato_income_metadata_source_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 25,
+      "rpc": "fn_hato_income_metadata_classify_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 26,
+      "rpc": "fn_hato_income_metadata_web"
+    },
+    {
+      "file": "src/utils/hato/hatoIncomeMetadataProtocol.ts",
+      "line": 27,
+      "rpc": "fn_hato_income_metadata_recover_web"
+    },
+    {
+      "file": "src/utils/hato/hatoQuincenaProtocol.ts",
+      "line": 60,
+      "rpc": "fn_hato_quincena_source_web"
+    },
+    {
+      "file": "src/utils/hato/hatoQuincenaProtocol.ts",
+      "line": 61,
+      "rpc": "fn_hato_quincena_web"
+    },
+    {
+      "file": "src/utils/hato/hatoQuincenaProtocol.ts",
+      "line": 62,
+      "rpc": "fn_hato_quincena_recover_web"
+    },
+    {
+      "file": "src/utils/hato/hatoSaleProtocol.ts",
+      "line": 45,
+      "rpc": "fn_hato_sale_web"
+    }
+  ],
+  "source_hashes": {
+    "src/App.tsx": "97e783c9d520e2479bcaddec48ddf4fa18296476afbd482b43f7f4ac7fb26c1f",
+    "src/components/aplicaciones/AplicacionesList.tsx": "2f13b8b57455f1357cd1b9780e6d4c692311fdeae63685e590d6b1166ab0a783",
+    "src/components/aplicaciones/CalculadoraAplicaciones.tsx": "e8df2580f357a115024b99c1ad84abbddf89414b374e6920b3134a017d761692",
+    "src/components/aplicaciones/DetalleAplicacion.tsx": "1f37f59fa60aa33ab4cbf865434fa3da0d068dd9018efeee499efa69ca720242",
+    "src/components/aplicaciones/PasoConfiguracion.tsx": "f281c2ccbb9a608b88f4963f0afa3f341e662a6451124a7756a62f6eb903e430",
+    "src/components/aplicaciones/PasoListaCompras.tsx": "a495ad65473034f13f0fc1ac5a1d2f9dfddf4dc20dc499610dffd6567b117b5c",
+    "src/components/chat/ChatEmptyState.tsx": "4df1e006dde24120d829bdd63c2f7e820fab0b4529a918c578b35e895fdfed5b",
+    "src/components/configuracion/GanadoConfig.tsx": "3fdfb0247df92320a08013b2c2709c1cb968bcee9d2e2e23f849537f191e51bf",
+    "src/components/configuracion/hooks/useAjustesHato.ts": "b8eb93a493e725b3e2a636114b496025eab43a8f02e3f05fb67531d4ad78d57e",
+    "src/components/dashboard/hooks/useDinero.ts": "3073152fbb0b518f52e97e0df5db2ce4e40bd4fc28825d9446ed607501cd09b6",
+    "src/components/dashboard/hooks/useNovedades.ts": "ddf139729910d90ec0c5c91151814335bd9ce8af0796574461f6063b1a80691f",
+    "src/components/dashboard/hooks/useRequiereDecision.ts": "d10d077657003d0fa552ec583cb75529fe1164ec611c9f5b1187fe59bdecdef0",
+    "src/components/dashboard/hooks/useSaludDatos.ts": "95c828dec84e026a76559e0bf6f3ed80ca2b659a5b90254be4dd4cd4c6bae26c",
+    "src/components/dashboard/pulsoNegocioCalculos.ts": "93d7b2d0593ef56a3f72060bfb1517cfe735728af35e354dc06df325aca7e74b",
+    "src/components/finanzas/ReportesView.tsx": "f1888b5df1ffc2351a9009dba489fbc3239a6e8f858db482e43fa135543e302a",
+    "src/components/finanzas/components/CargaMasivaGastos.tsx": "93c18641e04c60a90065b256c6b1887a5e5af6a2dd604612cefe16640baf9027",
+    "src/components/finanzas/components/CargaMasivaIngresos.tsx": "899e52aecaaa933ea910d27c723ff56f197b303d422f1db96aaaf185df4d89a6",
+    "src/components/finanzas/components/GastoForm.tsx": "8c866613c69eaae8b24b3b2832802d87ae8da51673bebdfb32eda898854e84ad",
+    "src/components/finanzas/components/GastosBatchTable.tsx": "d03e69911a0987248526734eb877316495472a9aa82acc6ae096dcdc4967fbd3",
+    "src/components/finanzas/components/GastosList.tsx": "df3b59d06de53708954e28d1960a154582498bf7a8104d791f08eba1e74f045b",
+    "src/components/finanzas/components/IngresoDetalleDialog.tsx": "9dec8b1c320c38cd0ce5afac448c223f28ed130e1c79bf1a83b4e093ddaf5f4c",
+    "src/components/finanzas/components/IngresoForm.tsx": "11c0fae33147403e1ca4bf44b3d411d8eefd103a3bbce574f277997715d841d2",
+    "src/components/finanzas/components/IngresosBatchTable.tsx": "ba89894baa72a64efa472ac1a7093516154caa4f94d1f09d09724598e62ce35c",
+    "src/components/finanzas/components/IngresosList.tsx": "5d4b9ea311e20a9db4a0ffd271a6753b14407ba08bdcc18e3bc2e9b8c053913d",
+    "src/components/finanzas/components/TransaccionGanadoForm.tsx": "9a081b38a6b7dc1256b263eae27e90bece2a00ad852db4c1e338027260374cd9",
+    "src/components/finanzas/dashboard/DashboardGanado.tsx": "06d48851e4ee0630dee4767ec33606da3192d6d13cc4d4c6468e0e47acb67beb",
+    "src/components/finanzas/dashboard/components/GastosDetalleDialog.tsx": "ffc672dfbeb627a12b79a4082b83a245af76b2da4c546982f1cb28c53a443d87",
+    "src/components/finanzas/dashboard/components/InventarioGanadoKPIs.tsx": "f2fb1b3dd5c57bba0d59a555b5c49f53e9a983f7b56bdbb0cfe35bb544e49152",
+    "src/components/finanzas/dashboard/components/KPIGanadoSection.tsx": "182da22c5c4e4ca1ce6190dd779c0143f3086ebe7bc7edcb76b9ed682aee48fd",
+    "src/components/finanzas/hooks/useDashboardData.ts": "5bc5ddb555e2dce5144a89dcc89ec2907c99bae68ce2ab2f842e5535670ba740",
+    "src/components/finanzas/hooks/useGanadoData.ts": "9288b40ef08a3cb92b24ef2d833de240f166d34fea303bb56eabfb3528f05598",
+    "src/components/finanzas/hooks/usePresupuestoData.ts": "3b5b6a570dc937e50a7e045a5ee048eab421f3c7a42c0895a372e591cb951c5a",
+    "src/components/finanzas/hooks/useReportesFinancierosData.ts": "d5df1fbddaf86bafe25de13e729ba088e29fe9983cc6badb7e1d2362e8e53ab7",
+    "src/components/finanzas/presupuesto/GastosEjecucionDialog.tsx": "6dbdae6efae171a169e4311339e0f2a8ffc6f6e25d639aa323a82d812258b0d7",
+    "src/components/finanzas/reportes/ReportesControls.tsx": "bd3f557c2861ae165ae91c201dbfe447c525b4214f9a877a8ba22cc7c85c6781",
+    "src/components/ganado/GanadoMovimientos.tsx": "09c5005ae693cf5cbb54b3824a94da68f1a065b06c84f4c6a305a166b8fead65",
+    "src/components/ganado/components/ContadorBrechaFinanzas.tsx": "7c45400ed3a96297abb1f76e3436b7e596fe7b6c14bf76475b7379428a1f3e4b",
+    "src/components/ganado/hooks/useGanadoInventario.ts": "254c49bd9f60e51b6399dd1f52acfbaec66e6a8b5e8946b2820317b5a21bbbf1",
+    "src/components/hato/ChequeoDetalle.tsx": "5d7094c8516bb4f6df653e344d6fc1b51a812f45dd0bd7e22059353e481c156a",
+    "src/components/hato/HatoDashboard.tsx": "d0222aeb7ce00d79ce0c42c68c1c336bdb2c1dd0edea1badf2c6de5c74db7544",
+    "src/components/hato/HojaDeVida.tsx": "d40e513c0b19a073f4d969f3964fc908dd449797e6304fd923bafcfdd1c57ca6",
+    "src/components/hato/ProduccionView.tsx": "8bd2aa3ae99ea180845077dee2293c2eb2e8c215302e9f0a07f10119d0db1692",
+    "src/components/hato/components/CrearAlertaManualDialog.tsx": "0d6aba5feb2a505f6972c682a8dea648a9befa4c10a717fca0c4c60c29ab5562",
+    "src/components/hato/components/CrearAnimalDialog.tsx": "3553e97abeed0e170c607b17387b1ba8dc51f3733796e899318c529d17bb84c0",
+    "src/components/hato/components/EditarAnimalDialog.tsx": "7f3b8729c2c21959d0dc0a4474e758eb15df7ef16ee6f1fe09531d80fedf954b",
+    "src/components/hato/components/EventoTimeline.tsx": "91bdd18d7872f1910663789942c696204a602354a61b771839c09ac4759b18a4",
+    "src/components/hato/components/KpisVentaHato.tsx": "a09e75f12bd58463c299b5af0019873e5dba28fba5bbeaf8033f4b53fb72c2fe",
+    "src/components/hato/components/MarcarCicloDialog.tsx": "05ff5074ded57760519de6adcdcb900e536bd97316afc036bb36c107161ca274",
+    "src/components/hato/components/MeasuredIncomeInvoiceUploader.tsx": "a20d18df2924fdce5ab77f5044c002213087ebe9e1e929d428f73271dc70e8d9",
+    "src/components/hato/components/ProduccionQuincenalDialog.tsx": "947ce4f00f17c166da41d03a613eda24aba04bc557509892394288ff904b56e8",
+    "src/components/hato/components/VentaAnimalesHatoDialog.tsx": "f98bcc449c74303d00c373f4b5cb5811a1502a260299126a86fe98995e8afef9",
+    "src/components/hato/components/VentaQuincenalCard.tsx": "4f1d0a40f862e5c81c0466edf735fc323392161eb9f8d31783c87aa85511b913",
+    "src/components/hato/hooks/useActualizarHatoAnimal.ts": "a7c901df41b8c5c448fd7beb4c20dd08e0185c75d49c259d70b915ccbad429ad",
+    "src/components/hato/hooks/useAnimalesParaPlanillaChequeo.ts": "81d51d2992d3b621b1d9c7448915fc702ed1ab2417233788fe8488a3fdbe5e48",
+    "src/components/hato/hooks/useCandidatosGenealogia.ts": "8a6a078e4fb42674479f59cc1ae4cc2e3b1ed02fdf9275b21fbc946d3ba7483e",
+    "src/components/hato/hooks/useDatosProduccionPorVaca.ts": "fba7b10391cc0a54790bc0938bfd4ec18227a9ac8ef7237079a14c11ba802b2b",
+    "src/components/hato/hooks/useDetallePesajeSemana.ts": "8f22195ef94d9d02f96f3351e818c6a463fe63cec7db54fbeacdbe5c6e631de2",
+    "src/components/hato/hooks/useFinCatalogosVenta.ts": "f603504ac64f35d244e57d7ee59d21ade6e9e79a4f81f1477399ece82c66abf0",
+    "src/components/hato/hooks/useHatoAlertas.ts": "5b9fff21e6cecf43fd75bd4a04c219cea73611d0160b7fbe2aa52a280a78dfb1",
+    "src/components/hato/hooks/useHatoAnimal.ts": "bb23871af1fbf482fb5dd752a4fa9edeba6f31d1e2a5bcc97dd8611a66f75629",
+    "src/components/hato/hooks/useHatoAnimales.ts": "bfceb156369ae7d8aa06b085b1b300d47b46d51091e6a1b30673fd2adc6f2980",
+    "src/components/hato/hooks/useHatoChequeoDetalle.ts": "54e8dab97c462c5ab1977768f1b230ca37b573b124c0f023ff976b39fe93d559",
+    "src/components/hato/hooks/useHatoPajillas.ts": "d5c82bd241ec6d3b12daeae6c9b2c9dc4b0bf3dbf5af0d30dbf2ab43e70c5a23",
+    "src/components/hato/hooks/useMarcarCicloHato.ts": "087e1b362a6eee1e2b0ce8c8c69ea641ae972550e4e35a935022c470838b78ea",
+    "src/components/hato/hooks/usePesajesYPartos.ts": "b3987ba50e34b53dabf2e449efc58ba98cc244b501a75e8e7751404f597b7051",
+    "src/components/hato/hooks/useProduccionHato.ts": "3c1f9f08e00cb897b5e8b16dde2d0bf2a74334f6772df3c018615c259058015d",
+    "src/components/hato/hooks/useReactivarHatoAnimal.ts": "a38c1a6957f5df40cfbe5b854174d0b18082882275be653a3c2349a56fa061ef",
+    "src/components/hato/hooks/useRepartoVentasHato.ts": "53c8604051f52e95d6e05032bbf620fa0508010be00ff19330a4c2f13951d031",
+    "src/components/hato/hooks/useRevisionChequeo.ts": "ff32e96b7cb2c7a8858267d006e6e79c31544cfdba03d4929baf1c9d76fcbdef",
+    "src/components/hato/hooks/useSubidasPesajeMes.ts": "0078c7441ac331c083b59c468ebd59daf59f0633941c1cdac668a816d8a54cc4",
+    "src/components/hato/hooks/useSubirChequeoExcel.ts": "483cc27867bef65a2bbf2095e479ffdb6ad5e0b85a4bcefc0e8eaa81b08b4b84",
+    "src/components/hato/hooks/useSubirPesajeFoto.ts": "51be7ee7792a1a1691931758cf937b9bad1946a8f0582a777c66bddc3721908b",
+    "src/components/hato/hooks/useUltimaCapturaFoto.ts": "8904115af8fe7111e691faf15551c5c53778858fa7f360ecf484ae330d94ef63",
+    "src/components/hato/hooks/useVentaAnimalesHato.ts": "e5fa8b9df4e615ec5f33e53b00b209c771d31bd9828898841337f389564b696a",
+    "src/components/inventory/ComprasIntegrado.tsx": "536362e5f8ae02523eff3a90514bf148833474f6bf8ee52a2ca5e1c541681ff6",
+    "src/components/inventory/InventorySubNav.tsx": "6f2c8cdcffd2d21b9e7c577018bc4bc87022923d02c886d13fd087dc22bf87bd",
+    "src/components/inventory/NewPurchase.tsx": "9932ef32f3faab879bbf7924d4416fd7eb211b36a3392d56c00697d1d7710b8f",
+    "src/components/inventory/PurchaseHistory.tsx": "68346f6d4aef78bef8b9d889305434aa9fce52115416e51cf6e1db98ada7592f",
+    "src/components/inventory/dashboard/hooks/useInventoryDashboard.ts": "c894b098a920ddbd89a1a5d1122c3fbb81ad84ef04a509cb7aaa36242dd77593",
+    "src/components/produccion/components/RentabilidadTab.tsx": "c1bd3f80da9fd086aff1808359ea7232177718f75f525e5619c19003e3ef750d",
+    "src/components/produccion/hooks/useCostoKg.ts": "f5a0c5b9d97271ebd728a8d0a14df05f0f3fbc4c0bd5bf34aa73e4129d937012",
+    "src/supabase/functions/server/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "src/supabase/functions/server/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "src/supabase/functions/server/esco-consultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "src/supabase/functions/server/ganado-inventario.ts": "e6d338157c6cc26e9847660ed75759345f9bfe6d92e1585c308ea48d7ffd85e4",
+    "src/supabase/functions/server/generar-reporte-semanal.tsx": "24035b9dcdc7f3de1ebc24b62c554843a88fd7610c0fb67a75bebf267a38b823",
+    "src/supabase/functions/server/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "src/supabase/functions/server/hato-alertas.ts": "a6f152c69ff98b3aef5d8302ef6c324b3a1e0045a79be2c049d1c8f07902ae4c",
+    "src/supabase/functions/server/hato-capturas-foto.ts": "4ac91ad446495f0fef6003dc9aacea096e27ae36dbf226e2a5618d50ad2901e7",
+    "src/supabase/functions/server/hato-chequeo-foto.ts": "ac001ef1bdba669f81b293f61e0e2194b3591a48cf6c5a557ae457b9fa7a8d9b",
+    "src/supabase/functions/server/hato-chequeo-preview.ts": "cc8ff3d6cf60dfd289589d3a3a026c411743ab62c28ace52274f49525bdb2bb3",
+    "src/supabase/functions/server/hato-cria-automatica.ts": "84aaf345d02e9a408f4efe27c5c0335e1f21665fcb2ca9dd2e5de09eac38d2a5",
+    "src/supabase/functions/server/hato-pesaje-pipeline.ts": "ce3ef56895ae8b030546c3fc2500ca41d2a1f878882144b355bdd6a438e58656",
+    "src/supabase/functions/server/hato-produccion-quincena-foto.ts": "ee807128f0140618a01ccc48b974f4e031bd64610ae559219c2016195a72e642",
+    "src/supabase/functions/server/importHato/commitChequeo.ts": "8bbc34a22ccb273aac5d5119ab9f1c4b677a107d8a35102a64e9e01c9f665aa7",
+    "src/supabase/functions/server/importHato/diffChequeo.ts": "3026738d2f22a5e74f380c701ec2df0ce7faeaa8851c67a93e8b17fb24ebc61c",
+    "src/supabase/functions/server/importHato/ocrChequeo.ts": "8b1c9f40cf7f041e40279149e76af8af5234f66a78ffc634fefdfb5c3f8424cb",
+    "src/supabase/functions/server/importHato/ocrPesaje.ts": "c7c8590c5dce909b2e43e6a8e60c9b8de72a7c38b3c73a3ea084d97d8f286815",
+    "src/supabase/functions/server/importHato/overridesChapeta.ts": "a417e9cfb6d8a649ad5e6d00ff49b088d9e5cfbfa6f80f7311af2ace99df4c8e",
+    "src/supabase/functions/server/importHato/preparedChequeo.ts": "5046138bba52d5040f42912a78a99352fb428785dd8ec02519f652da91cb0fa0",
+    "src/supabase/functions/server/reportes-financieros.ts": "fe6c7a282f5dedd2fed36fa59b94698d3b3b3a4a417c839c943778da99f2a1a8",
+    "src/supabase/functions/server/telegram/birthUndoProtocol.ts": "ee0a65129f6a5e31806343b9d8101b11533338424e60fba752a2cb156d4e188a",
+    "src/supabase/functions/server/telegram/conversations/eventoHato.ts": "5ec824c30a617ac901add76e0c8fc68425e1d1b55c97cbed5e0bc424ef81f4d5",
+    "src/supabase/functions/server/telegram/conversations/excepcionDavid.ts": "0a3a011b13b8adec69a801ada5c62d3cca17dddd7698c109fe683eb6b25a50eb",
+    "src/supabase/functions/server/telegram/conversations/ingreso.ts": "40f0cf1b404d931fd3234cf6a2106d65a3bbd0230fa8a73124d4eb3e233ba473",
+    "src/supabase/functions/server/telegram/eventoHatoUndo.ts": "d0cd6bc93d31918c5e9c6e41cf02b6550a86c99060e96e1d9c0de17a3de3b086",
+    "src/supabase/functions/server/telegram/quickUndoProtocol.ts": "870820cbde43eff71093893fad279b3ee69208a87b35a05e717521e732a1adcb",
+    "src/types/aplicaciones.ts": "6ae17f82aa66cf29f9246be8a86ff3d6fb0ad1107ab264cf9701f439ac1291d3",
+    "src/types/database.ts": "c1230a47dc0f7a95bf0d31aeb53d9cc2624c62911dc9735e5556aaa579b4552e",
+    "src/types/ganado.ts": "edaf6d5118e7e0b7fc6a25c8982d5c461ace9aab3b4ec4cbc4ba6a7d80252be2",
+    "src/types/hato.ts": "635fe4ab7e7bc84b143c7b794ed9b00474cd9895cede691f52f751b83f93cfdd",
+    "src/types/produccion.ts": "c96749eeba7138155e1a341e95dfedcbdf3b007e44a485094c38b62541f658f8",
+    "src/types/reportesFinancieros.ts": "e6522234d50e5338397e1a1258c2e8bd972cf826ebc764793323e3deb30c1ffc",
+    "src/utils/actualizarGastoSeguro.ts": "3b84324f48428d11eee495976efb3a05fbd5be83191fbbb2a83f01cdf0f68fa8",
+    "src/utils/applicationPlanDelete.ts": "ab34e0de0119eb8536b26a1f11c0a931b35d4bffe4e28cfdb57ec70dd697739d",
+    "src/utils/calculosAplicaciones.ts": "23424cbbba4f5bac095841bd8c399f6e2ba9b137756d835fffa97f5badeab261",
+    "src/utils/calculosCostoKg.ts": "0a42544f7132bd6e04e8d7df9b7f80347250cf043efeddf0f1b9fe04215eef0e",
+    "src/utils/calculosDinero.ts": "bf7d3e8ec43ac4c8d322fee548d7e696b02dec5fe13c36e32a9eb482f69e2747",
+    "src/utils/calculosFlujoCaja.ts": "baec2dcef6ad9f43f9cfb27e8eb7bf723dec5cb0840c4157b5ed3e72a909f222",
+    "src/utils/calculosGanado.ts": "582a4e8845cc7707e44735cafcfbca2e112e96e99a536e676a2576214adca9fe",
+    "src/utils/calculosHato.ts": "351bfe58e40cb4de04368c1bb9e5ff76d1ced9616204ee40409c2df4ea27a426",
+    "src/utils/calculosPyG.ts": "1c07e88b3b42080eb110131fc41494650e07c17b40e33757ccdd6593fee09e6d",
+    "src/utils/calculosRequiereDecision.ts": "4fa6ecaff264715c3c9fe6ced7ec37082693158fb258d1cee30841ae766a31f1",
+    "src/utils/calculosVentaGanado.ts": "3d6e971f5cb8459b8b28174715e940d089e6e4d9174de28961999d390abe3c34",
+    "src/utils/costoVentaGanado.ts": "9686b89ae999508ee94b3df95ef7eaf9bfc752b8729047f60adf085fdd0c7240",
+    "src/utils/escoConsultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "src/utils/escoHerramientas.ts": "dfea482432d5e0341ccb3c6e2bdab69f07030648204de2150e8dcbce530e7061",
+    "src/utils/fetchDatosReporteSemanal.ts": "493bd462bc0d46a9ee4a74b1f6eb9a13bec857a1152c7e62ed45611ae69976f9",
+    "src/utils/generarPDFListaCompras.ts": "51bc818b289bc323af719ce4419da3d47604599f99c79f1696faa338885dc576",
+    "src/utils/graficoLitrosQuincenal.ts": "039c1c998403952b957900bb266571b65a2fb5cc9a014bc58e4c5c2c0d439a56",
+    "src/utils/hato/capturasFoto.ts": "845153d2432182ef1e8507aa34dac1fba8608ed9fbc3a1497937adca27f9b16d",
+    "src/utils/hato/criaAutomatica.ts": "ffd3facbd043de99de9896d41b48e091f528816534017453c27b05eccccbf0ef",
+    "src/utils/hato/exportarPlanillaChequeoPDF.ts": "8c3e53bcf7b240491d85b10c9e336c93f3b3d5f6d99fadaf295f609f798f2d73",
+    "src/utils/hato/hatoAnimalEditProtocol.ts": "57e169d6a35fae344f75ad0496b1e169cc93dab5cbbb950200de7bbd0daeee48",
+    "src/utils/hato/hatoBirthUndoProtocol.ts": "e51ceca39636ddfec39a28cd4182a5471432d2175660dbfd0c4cb00c4b0809d9",
+    "src/utils/hato/hatoCycleBirthUndoProtocol.ts": "8e4c29f54100a5fedc8245c3b964d01a1602b697c161010032b21028f99c517a",
+    "src/utils/hato/hatoDeathProtocol.ts": "8e692c727b16b2afe40bba28fc98f8dbbed6f13176a1ddb667b97005d968ffe3",
+    "src/utils/hato/hatoEventCorrectionProtocol.ts": "ba0ac7f7a6719fe7eb3564e18a7a5fd722771eef18d9596d5832eec4ed777020",
+    "src/utils/hato/hatoIncomeInvoiceAttempt.ts": "e7c2b1b3ee2d1bd31c36da5303624810c664b6d694e26399262eca7454a59df1",
+    "src/utils/hato/hatoIncomeInvoiceOriginBrowserAttempt.ts": "7c9c0a4ee23a75d4dad9d93614d6cfb884fd5b82b4807039d42c39d0f44a2a9f",
+    "src/utils/hato/hatoIncomeInvoiceOriginProtocol.ts": "b551ebf138c1b462d3b8b7e840dd658c1e5c9cba73e6538dfcee0dbb7c2bde85",
+    "src/utils/hato/hatoIncomeInvoiceReleaseBrowserAttempt.ts": "20d81dd46c6fe742c00a0377b600d987b171e76ab8cc4a229be6fd25ea6f8379",
+    "src/utils/hato/hatoIncomeInvoiceReleaseProtocol.ts": "f388f769e8a97418e412303a2fa54862ec8d13601e5062d11605c2a5e39676a8",
+    "src/utils/hato/hatoIncomeMetadataBrowserAttempt.ts": "b4f0fc4ae8e18f491fe6599f00e01b5feceb4edbebf710e9a7c3e434956747a8",
+    "src/utils/hato/hatoIncomeMetadataProtocol.ts": "335c56707c33bae5de2b1c2df02cd9119147ecd9b4eed81b5a53c55b71d1cf3f",
+    "src/utils/hato/hatoQuickUndoProtocol.ts": "2f773ffabaece82b972d937514d3fc321c25a4ee19864eae7faf2d7f5f5f384d",
+    "src/utils/hato/hatoQuincenaProtocol.ts": "8e6543b13cb0ea4d640d3130c42b37310724f8bcc13fd49f7410081cd1d673c5",
+    "src/utils/hato/hatoReactivationProtocol.ts": "a194c6282fc466ce5afa6c2fb24199d6a248e9eef1fcb2352bfdf77e700e2a28",
+    "src/utils/hato/hatoSaleProtocol.ts": "7aaf2f8f6732997de00c42d9d8c78050d80a8197f6204d74da7e234c3fee3764",
+    "src/utils/hato/reactivacionAnimal.ts": "de1f7416410e22aac0a589418cea0c41193fec5c9fdeb703e9a322b152438aef",
+    "src/utils/hato/servicioVigente.ts": "ec2d358fee985c4ffc0509940b976de52ab861d4b93345e0b17dd3952e224827",
+    "src/utils/hato/subidasPesajeMes.ts": "7a789edc314a1d5910a1e8b83270e7c6c5a22d578df3cfc2b8c90e7561503bf5",
+    "src/utils/hatoAlertas.ts": "cca18473d327c03df3b0f25e6e84558bafad40129483ef48fe49a8bb1e12c6c8",
+    "src/utils/hatoCategorias.ts": "0815a6dd7c8cfee125ac87e15c715f8368d739329c6d1a1f7349f0a39b5885b8",
+    "src/utils/hatoCicloManual.ts": "a66e3e178b9036f31461951980aa45595edd12dffacec93caa6f952c5d83b3cb",
+    "src/utils/hatoCorrecciones.ts": "fc43d252159ab646bc5e1dda27aa2c7289fc470a1b49f02620660a964423d6c9",
+    "src/utils/hatoProduccion.ts": "0cce39496d2bf456756ae6aa8da504f69c66ca61287f72e7a2e835dca08afe7c",
+    "src/utils/hatoProduccionBackfill.ts": "8538488f57957824ccabf3f9799547bf166ec2785100bda1449853f4860a3550",
+    "src/utils/hatoSalida.ts": "b4517cb7f7afa03b0299d84d76f90e4878113e02bccf7c23adf3382924f16dcf",
+    "src/utils/importHato/commitChequeo.ts": "2596ccb0207af1e5a65d932a64c77a69b0ad866117fbe41fc07d64e65cf77037",
+    "src/utils/importHato/diffChequeo.ts": "88b4415adcc72236ecdd2049978bc38fab11fe2b1a87ef29e3ce66ef9fb2f39a",
+    "src/utils/importHato/ocrChequeo.ts": "84f5fbdfc3ab133eef8dcaccae3d494d4aba96c3eafac4076d73e1acb5e3fd00",
+    "src/utils/importHato/ocrPesaje.ts": "cc4f2abfaad2445c40c1a839e287bfd548ba580ed5d15d1b100714cd68da8fab",
+    "src/utils/importHato/overridesChapeta.ts": "4b4547a82cd428ab76f718e7d2f4e2bcd42283ec39c7403871e3682a57a97b26",
+    "src/utils/importHato/overridesNombreLeche.ts": "78275ab837f07fef00002dae2daa6c8555c163cc4cac8e27ab95358af4d7a108",
+    "src/utils/importHato/pesajesLeche.ts": "16d07614b8641e3d188dba852d5351eea7f4ce9551896ba4aba150643928d904",
+    "src/utils/importHato/preparedChequeo.ts": "56f16afe517e3f63ea99d2730676d50947111aeead33615022ff453274158ee5",
+    "src/utils/importHato/recomputarPartosCercanos.ts": "29150d14ca69255f9218a358e45f1d3b7a27519c95c5d92663ae8df3023d3c91",
+    "src/utils/importHato/resolver.ts": "109710e37d6c5699013287d9dd83fbf9744a5b1d28709eae8a1e2072b9ebe45e",
+    "src/utils/importHato/verificar.ts": "8d6dde8c2fd6c2f0a04acbfbee7941a5c0e18242a4c6f33095a549e3752cc671",
+    "src/utils/novedades/agrupar.ts": "fc441b762040c0349fc45f66b563b46c776210f758dad5bf6286fcc9db7642a6",
+    "src/utils/novedades/catalogo.ts": "53bf4bda8d8fe2cbd1b1c1748edab9eb60b1c259f3b4487e33301c994013a3f4",
+    "src/utils/novedades/frases.ts": "fd2aaf9fb611b6cfd5ea7579e3a6efe73b8ac302005b257ec886efc8fa243446",
+    "src/utils/novedades/fuentes/_animalHato.ts": "9698c07579e1b586bfa4f619eecd2b4635c121f46d8f73d16a0b8c727344cff8",
+    "src/utils/novedades/fuentes/finGastos.ts": "4ff3ec6727f638c16f1c492c945ea9036147f22168721aa4ff71354f82fe89f1",
+    "src/utils/novedades/fuentes/hatoEventos.ts": "9cf180ea3f9d3e4d802c968358afd1e04b44fb63c2c22f779186cdc1c7c5e296",
+    "src/utils/novedades/fuentes/hatoPesajesLeche.ts": "8f415c46ee65d9b268441becbe4d2db8cabff78dd1d1aa6b6d2727243cd276dc",
+    "src/utils/novedades/fuentes/hatoTratamientos.ts": "0a8ce1441241741213195ad1e20a72cbf7209e5bf75ba65b73e1d909851970b4",
+    "src/utils/novedades/fuentes/registrosTrabajo.ts": "5573efa44fa06043b60e548950c24f5160400ae0e66e9a08d7b154e913961a63",
+    "src/utils/novedades/tipos.ts": "10782cc9dd42eb21fa2dd8f0f37964a5d8a56e65a9b41c58bec2af8500d1d908",
+    "src/utils/periodosReporte.ts": "1be23f41fff26512d3e91b838d4ebd9451583dc62be915ab25f7d8931ae48873",
+    "src/utils/purchaseIntegrity.ts": "12efcebb009337ad9f46a43e12b75dceb2d0e3875111358aea4ed3bb929a5047",
+    "src/utils/reportesFinancierosComun.ts": "f214a77d082462ff10308c02e47d6e0feefbc46a4363449a008424c26683dd24",
+    "src/utils/supabase/fetchAll.ts": "f677f2a6b3e40a0e267e0ba9d972fd0d611c9421a362dea6cc014a8b8f72ba5d",
+    "supabase/functions/make-server-1ccce916/calculos-hato.ts": "599bbb05ca8d024bf073beaba1eac914af02a92f0c7138d952a90cbf8b3d1e69",
+    "supabase/functions/make-server-1ccce916/chat.tsx": "7c5d2775c27961fed11561d017fc4f77bef2585cd8980a6d3022e8a43c6d53fd",
+    "supabase/functions/make-server-1ccce916/esco-consultas.ts": "4e95402c61ad8c7672e6a1218725031b4bedc7654b25154f867e1f4412bab499",
+    "supabase/functions/make-server-1ccce916/ganado-inventario.ts": "e6d338157c6cc26e9847660ed75759345f9bfe6d92e1585c308ea48d7ffd85e4",
+    "supabase/functions/make-server-1ccce916/generar-reporte-semanal.tsx": "24035b9dcdc7f3de1ebc24b62c554843a88fd7610c0fb67a75bebf267a38b823",
+    "supabase/functions/make-server-1ccce916/hato-aggregation.ts": "0b9e16acebc74895d75e83b6cd85b2cb135525d79f7f637a5a5b120016358212",
+    "supabase/functions/make-server-1ccce916/hato-alertas.ts": "4fdb41ead623a4f55a159ae124344c5384cd307e439c3515fe323032c00c158c",
+    "supabase/functions/make-server-1ccce916/hato-capturas-foto.ts": "4ac91ad446495f0fef6003dc9aacea096e27ae36dbf226e2a5618d50ad2901e7",
+    "supabase/functions/make-server-1ccce916/hato-chequeo-foto.ts": "ac001ef1bdba669f81b293f61e0e2194b3591a48cf6c5a557ae457b9fa7a8d9b",
+    "supabase/functions/make-server-1ccce916/hato-chequeo-preview.ts": "cc8ff3d6cf60dfd289589d3a3a026c411743ab62c28ace52274f49525bdb2bb3",
+    "supabase/functions/make-server-1ccce916/hato-cria-automatica.ts": "84aaf345d02e9a408f4efe27c5c0335e1f21665fcb2ca9dd2e5de09eac38d2a5",
+    "supabase/functions/make-server-1ccce916/hato-pesaje-pipeline.ts": "ce3ef56895ae8b030546c3fc2500ca41d2a1f878882144b355bdd6a438e58656",
+    "supabase/functions/make-server-1ccce916/hato-produccion-quincena-foto.ts": "ee807128f0140618a01ccc48b974f4e031bd64610ae559219c2016195a72e642",
+    "supabase/functions/make-server-1ccce916/importHato/commitChequeo.ts": "4e39e514d9f3056caede01321518540ad5ad7b1bedea8ca8e3c48ac6218e842a",
+    "supabase/functions/make-server-1ccce916/importHato/diffChequeo.ts": "83de39880223ee3729fa4f48df2ec6521aac74a0763914a3f6790e0f93f453fd",
+    "supabase/functions/make-server-1ccce916/importHato/ocrChequeo.ts": "89f2f1b5cfa24a6d6bf816b42938db73287667f872a19b01471793f4986daca8",
+    "supabase/functions/make-server-1ccce916/importHato/ocrPesaje.ts": "1482f05aa2f036e1ae29f74d319b080e098570e0c5da54bc257d074b5d5ddf85",
+    "supabase/functions/make-server-1ccce916/importHato/overridesChapeta.ts": "bd78056d628242cc3123aacd6c8e22773599ba7a6318b005c38cbe66f9f9389d",
+    "supabase/functions/make-server-1ccce916/importHato/preparedChequeo.ts": "db38cc9752d763ddc13d70f0262b41ea864da12f68c3f558835f43632aeb87a1",
+    "supabase/functions/make-server-1ccce916/reportes-financieros.ts": "fe6c7a282f5dedd2fed36fa59b94698d3b3b3a4a417c839c943778da99f2a1a8",
+    "supabase/functions/make-server-1ccce916/telegram/birthUndoProtocol.ts": "ee0a65129f6a5e31806343b9d8101b11533338424e60fba752a2cb156d4e188a",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/eventoHato.ts": "5ec824c30a617ac901add76e0c8fc68425e1d1b55c97cbed5e0bc424ef81f4d5",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts": "0a3a011b13b8adec69a801ada5c62d3cca17dddd7698c109fe683eb6b25a50eb",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts": "40f0cf1b404d931fd3234cf6a2106d65a3bbd0230fa8a73124d4eb3e233ba473",
+    "supabase/functions/make-server-1ccce916/telegram/eventoHatoUndo.ts": "d0cd6bc93d31918c5e9c6e41cf02b6550a86c99060e96e1d9c0de17a3de3b086",
+    "supabase/functions/make-server-1ccce916/telegram/quickUndoProtocol.ts": "870820cbde43eff71093893fad279b3ee69208a87b35a05e717521e732a1adcb",
+    "scripts/import-hato/backfill-leche.ts": "6847c1cc9001527201acacf3773d3eabcef9515b5601fe2a099975c9808dd493",
+    "scripts/import-hato/backfill-quincenas-leche.ts": "ce03978de408675f59bc70c20cd3a91e6c1508d1ce2c0d5930cf7b649d879d40",
+    "scripts/import-hato/cleanup-partos-duplicados.ts": "a47ce6c0866d8cba98eccf3681dd17d974468c37aa34592ddd27e03a0e9c155d",
+    "scripts/import-hato/cleanup-servicios-duplicados.ts": "df2008946800907b723a381f5ffd01abdee5e1c1627576c2ba21d96e65b275a5",
+    "scripts/import-hato/load.ts": "1630cbbb822f9d1bd4473ad948d45c3a4af81eb3a73d6931f252a86a93396b87",
+    "scripts/import-hato/recompute-partos-cercanos.ts": "a5e393a2731e89f6e41a045954f24f9004517419a6b4215b6e474352a969fe6e",
+    "scripts/import-hato/verify.ts": "b58340e4832a375899c303c593e285388293be1c82eecdd03319bf3ebfb8c54f",
+    "src/components/finanzas/CLAUDE.md": "de3deed0e568ed79265bc32e44fb5a6104561ad2ea741d5185440035d63d3297",
+    "docs/plan_hato_produccion_rework.md": "486ec95078fe37aec366d53f116cfd47615c6bb9fe173c4df1b89e5b92bea373",
+    "src/sql/migrations/070_hato_produccion_venta_link.sql": "1afc60d643a453eefa85b1171588d276177913110876b990d6aa9cbfd5a6a1a2",
+    "src/sql/migrations/085_hato_quincenal_ica_pomar.sql": "87b8c001ce2e5d4827c66367c0b9d006215cea8b37dcfc1e63c358c2674c4592"
+  },
+  "preserved_lanes": [
+    "src/components/finanzas/components/TransaccionGanadoForm.tsx",
+    "src/components/finanzas/components/GastosList.tsx",
+    "src/supabase/functions/server/telegram/conversations/ingreso.ts",
+    "supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts",
+    "scripts/import-hato/load.ts",
+    "scripts/import-hato/backfill-leche.ts",
+    "scripts/import-hato/backfill-quincenas-leche.ts",
+    "src/utils/hatoProduccionBackfill.ts",
+    "src/utils/hato/capturasFoto.ts",
+    "src/components/hato/hooks/useProduccionHato.ts",
+    "src/components/hato/components/ProduccionQuincenalDialog.tsx"
+  ],
+  "retirement_assessment": {
+    "admission_scope": "General/shared income and coupled ganado caller/schema admission only; no application, grant, candidate, historical or service change. Preserve retained sale, milk and invoice originals; no inferred weight-history provenance.",
+    "legacy_quincena": "No literal executable caller of old save/delete RPCs found. Exact ordinary/service grants and transitive reachability require local replay before coordinated retirement.",
+    "quincena_table": "Browser uses prepared RPCs; preserve service/import/backfill and shared monthly history; do not blanket revoke service.",
+    "income_table": "General IngresoForm still directly creates/edits independent/shared income; IngresosList deletes income/ganado. Table/column revocation is incompatible until those lanes have protected callers or a narrowly reviewed row boundary.",
+    "shared": "Shared expense/purchase/capture writers are inventoried to prevent accidental blanket retirement; no grant or application change in admission.",
+    "unknown": "Preserve original protected income/metadata/invoice actions and one-time permissions, files and history."
+  },
+  "limits": "Bounded TypeScript AST with same-file conditional resolution; unresolved expressions reported. Source text and exact local replay only; dynamic SQL/aliases/transitive/hosted/global reachability not certified."
+}
