@@ -49,14 +49,15 @@ const ALLOWLIST_FROM = new Set([
   'src/components/finanzas/components/TransaccionGanadoForm.tsx:138',
   // Corrido de 295 a 296 al agregar la atribución de Telegram (F5) y el
   // arreglo de fecha UTC (F5-bis) del issue #266; corrido otra vez de 296 a
-  // 299 por `resolverUsuarioTelegram` (#274) -- líneas nuevas antes de este
+  // 299 por `resolverUsuarioTelegram` (#274), 301 por el paso de cosecha
+  // (ESCO-160) -- líneas nuevas antes de este
   // selector, la consulta en sí no cambió.
   //
   // Las dos entradas de `gasto.ts` salieron el 2026-09-21 (ESCO-117): el
   // flujo /gasto de Telegram se retiró junto con su sub-flujo de ganado.
-  'src/supabase/functions/server/telegram/conversations/ingreso.ts:299',
+  'src/supabase/functions/server/telegram/conversations/ingreso.ts:301',
   // Árbol espejo (supabase/functions/make-server-1ccce916) — mismo motivo.
-  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:299',
+  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:301',
 ]);
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {

@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import * as copiaEdge from '@/supabase/functions/server/cosecha-aguacate';
 import {
   esNegocioAguacate,
   esEtiquetaCosecha,
@@ -45,5 +48,32 @@ describe('cosechaAguacate (ESCO-160)', () => {
     expect(opcionesCosechaConActual('2026-09-12', 'Traviesa 2025')[0]).toBe('Traviesa 2025');
     expect(opcionesCosechaConActual('2026-09-12', 'Principal 2027')).toEqual(opcionesCosecha('2026-09-12'));
     expect(opcionesCosechaConActual('2026-09-12', 'basura')).toEqual(opcionesCosecha('2026-09-12'));
+  });
+});
+
+describe('cosechaAguacate — copia del bot y cableado de /ingreso (ESCO-160)', () => {
+  const raiz = resolve(__dirname, '../..');
+  const leer = (ruta: string) => readFileSync(resolve(raiz, ruta), 'utf8');
+
+  it('la copia Deno da las mismas opciones que la web', () => {
+    for (const fecha of ['2026-09-12', '2026-01-15', '2027-06-30', '']) {
+      expect(copiaEdge.opcionesCosecha(fecha, 2030)).toEqual(opcionesCosecha(fecha, 2030));
+    }
+    for (const nombre of ['Aguacate Hass', 'Hato Lechero', '', undefined]) {
+      expect(copiaEdge.esNegocioAguacate(nombre)).toBe(esNegocioAguacate(nombre));
+    }
+  });
+
+  it('los dos árboles de la edge function son idénticos', () => {
+    for (const rel of ['cosecha-aguacate.ts', 'telegram/conversations/ingreso.ts']) {
+      expect(leer(`supabase/functions/make-server-1ccce916/${rel}`)).toBe(leer(`src/supabase/functions/server/${rel}`));
+    }
+  });
+
+  it('/ingreso pregunta la cosecha para aguacate y la manda al insert', () => {
+    const src = leer('src/supabase/functions/server/telegram/conversations/ingreso.ts');
+    expect(src).toContain('esNegocioAguacate(negocio.nombre)');
+    expect(src).toContain('opcionesCosecha(fecha)');
+    expect(src).toMatch(/\.\.\.\(pideCosecha \? \{ cosecha \} : \{\}\)/);
   });
 });
