@@ -216,6 +216,8 @@ export interface IngresoFormData {
   medio_pago_id: string;
   observaciones?: string;
   url_factura?: string;
+  /** Solo Aguacate Hass: etiqueta escogida al registrar (`Principal 2027`). ESCO-160. */
+  cosecha?: string;
 }
 
 // Report types
@@ -364,6 +366,8 @@ export interface BatchRowDataIngreso {
   factura_uploaded: boolean;
   /** Cantidad (kg para Aguacate Hass, litros para Hato Lechero). Null para otros negocios. */
   cantidad: string;
+  /** Solo Aguacate Hass: etiqueta de cosecha escogida al registrar. ESCO-160. */
+  cosecha: string;
 }
 
 // ── Budget (Presupuesto) ─────────────────────────────────────────

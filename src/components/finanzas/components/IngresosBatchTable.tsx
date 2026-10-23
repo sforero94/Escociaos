@@ -15,6 +15,7 @@ import {
   ETIQUETA_CORREGIR_FECHA_FUTURA,
 } from '@/utils/fechas';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { esNegocioAguacate, esEtiquetaCosecha } from '@/utils/cosechaAguacate';
 
 const DRAFT_KEY = 'ingresos_batch_draft';
 
@@ -38,6 +39,7 @@ function createEmptyRow(): BatchRowDataIngreso {
     factura_file: null,
     factura_uploaded: false,
     cantidad: '',
+    cosecha: '',
   };
 }
 
@@ -58,6 +60,8 @@ function deserializeRows(draft: DraftData): BatchRowDataIngreso[] {
     const row = { ...r, factura_file: null } as BatchRowDataIngreso;
     // Compatibilidad con borradores guardados antes de que se agregara el campo cantidad
     if (!row.cantidad) row.cantidad = '';
+    // Y antes de que se agregara cosecha (ESCO-160)
+    if (!row.cosecha) row.cosecha = '';
     return row;
   });
 }
@@ -183,6 +187,12 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
           valid = false;
         }
       }
+      // ESCO-160: una venta de aguacate se registra con su cosecha.
+      const negocioFila = catalogs.negocios.find((n) => n.id === row.negocio_id);
+      if (esNegocioAguacate(negocioFila?.nombre) && !esEtiquetaCosecha(row.cosecha)) {
+        rowErrors.cosecha = 'Requerido';
+        valid = false;
+      }
       if (Object.keys(rowErrors).length > 0) {
         newErrors[i] = rowErrors;
       }
@@ -237,6 +247,9 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
           url_factura: facturaUrls[i] || null,
           cantidad: cantidadNum,
           precio_unitario: precioUnitario,
+          // ESCO-160: null para otros negocios; el trigger de la base solo
+          // rellena aguacate, y aguacate siempre llega con etiqueta.
+          cosecha: esNegocioAguacate(negocioNombre) ? row.cosecha : null,
         };
       });
 

@@ -1,8 +1,9 @@
 // telegram/conversations/ingreso.ts — Income registration conversation
 //
 // Two flows:
-// A) Regular ingreso (fin_ingresos): fecha → descripción → valor → negocio →
-//    región → categoría → medio de pago → comprador → observaciones → confirm
+// A) Regular ingreso (fin_ingresos): fecha → negocio → descripción → valor →
+//    [cosecha, solo Aguacate Hass] → región → categoría → medio de pago →
+//    comprador → observaciones → confirm
 // B) Ganado venta (fin_transacciones_ganado): triggered when negocio name
 //    contains "ganado" (case-insensitive). Always tipo="venta". fecha → finca →
 //    cabezas → kilos → precio/kilo → valor total → cliente → obs → confirm
@@ -18,6 +19,7 @@ import {
   mensajeResolverUsuarioTelegram,
   resolverUsuarioTelegram,
 } from "../resolverUsuarioTelegram.ts";
+import { esNegocioAguacate, opcionesCosecha } from "../../cosecha-aguacate.ts";
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -542,12 +544,20 @@ async function regularIngresoFlow(
   let medioPago: LookupItem | null = null;
   let comprador: LookupItem | null = null;
   let observaciones: string | null = null;
+  let cosecha: string | null = null;
 
-  // Steps: 1=descripción, 2=valor, 3=región, 4=categoría, 5=medio pago,
-  //         6=comprador, 7=observaciones+confirm
+  // ESCO-160: una venta de Aguacate Hass lleva su cosecha escogida al
+  // registrarla. Sin este paso el trigger de la base la deducía de la fecha
+  // con las ventanas viejas (septiembre → Traviesa), y la migración 184 ya
+  // rechaza una venta de aguacate sin etiqueta.
+  const pideCosecha = esNegocioAguacate(negocio.nombre);
+  const PASO_COSECHA = 10;
+
+  // Steps: 1=descripción, 2=valor, 10=cosecha (solo aguacate), 3=región,
+  //         4=categoría, 5=medio pago, 6=comprador, 7=observaciones+confirm
   let step = 1;
 
-  while (step > 0 && step <= 7) {
+  while ((step > 0 && step <= 7) || step === PASO_COSECHA) {
     if (step === 1) {
       const result = await waitForTextWithBack(conversation, ctx, "📝 ¿Descripción del ingreso?");
       if (result === null) return false; // back to negocio
@@ -563,6 +573,16 @@ async function regularIngresoFlow(
       if (result === null) { step = 1; continue; }
       valor = result;
       await ctx.reply(`💵 Valor: ${formatCOP(valor)}`);
+      step = pideCosecha ? PASO_COSECHA : 3; continue;
+    }
+
+    if (step === PASO_COSECHA) {
+      const opciones = opcionesCosecha(fecha).map((etiqueta, i) => ({ id: String(i), nombre: etiqueta }));
+      const selected = await waitForPaginatedSelection(
+        conversation, ctx, opciones, "🥑 ¿De qué cosecha es la venta?", "cos_", undefined, true,
+      );
+      if (selected === GO_BACK_SENTINEL) { step = 2; continue; }
+      cosecha = selected.nombre;
       step = 3; continue;
     }
 
@@ -575,7 +595,7 @@ async function regularIngresoFlow(
       });
       if (regiones.length === 0) { await ctx.reply("No hay regiones configuradas."); return false; }
       const selected = await waitForPaginatedSelection(conversation, ctx, regiones, "📍 ¿En qué región?", "reg_", undefined, true);
-      if (selected === GO_BACK_SENTINEL) { step = 2; continue; }
+      if (selected === GO_BACK_SENTINEL) { step = pideCosecha ? PASO_COSECHA : 2; continue; }
       region = selected;
       step = 4; continue;
     }
@@ -660,6 +680,7 @@ async function regularIngresoFlow(
         `📝 ${nombre}`,
         `💵 Valor: ${formatCOP(valor)}`,
         `🏢 Negocio: ${negocio.nombre}`,
+        cosecha ? `🥑 Cosecha: ${cosecha}` : "",
         `📍 Región: ${region!.nombre}`,
         `📂 Categoría: ${categoria!.nombre}`,
         `💳 Medio de pago: ${medioPago!.nombre}`,
@@ -711,6 +732,7 @@ async function regularIngresoFlow(
           comprador_id: comprador?.id ?? null,
           observaciones: observaciones ?? null,
           created_by: usuarioId,
+          ...(pideCosecha ? { cosecha } : {}),
         });
         return error?.message ?? null;
       });

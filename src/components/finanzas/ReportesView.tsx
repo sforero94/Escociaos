@@ -50,19 +50,31 @@ function ReportesContenido() {
   const [tab, setTab] = useState('pyg');
   const [exportando, setExportando] = useState(false);
 
-  const { datos, loading, error } = useReportesFinancierosData(anio);
-
   // El modo cosecha solo tiene sentido en aguacate: es su ciclo productivo.
   const permiteModoCosecha = vista === 'aguacate';
   const modoEfectivo: ModoReporte = permiteModoCosecha ? modo : 'trimestres';
 
+  // ESCO-160: la Principal del año siguiente ya se vende en el segundo
+  // semestre (en 2026 arrancó en septiembre), así que el P&G por cosecha
+  // ofrece también el año que viene. Fuera de ese modo el año queda acotado
+  // al actual: un trimestre o un flujo de caja del año que viene es vacío.
+  const anioActual = anios[0];
+  const permiteAnioSiguiente = modoEfectivo === 'cosecha' && tab === 'pyg';
+  const aniosVisibles = useMemo(
+    () => (permiteAnioSiguiente ? [anioActual + 1, ...anios] : anios),
+    [permiteAnioSiguiente, anioActual, anios],
+  );
+  const anioEfectivo = !permiteAnioSiguiente && anio > anioActual ? anioActual : anio;
+
+  const { datos, loading, error } = useReportesFinancierosData(anioEfectivo);
+
   const pyg = useMemo(() => {
     if (!datos) return null;
-    return construirPyG(datos, construirPeriodos(anio, modoEfectivo), {
+    return construirPyG(datos, construirPeriodos(anioEfectivo, modoEfectivo), {
       vista,
       modo: modoEfectivo,
     });
-  }, [datos, anio, vista, modoEfectivo]);
+  }, [datos, anioEfectivo, vista, modoEfectivo]);
 
   const flujo = useMemo(() => {
     if (!datos) return null;
@@ -136,10 +148,10 @@ function ReportesContenido() {
       </div>
 
       <ReportesControls
-        anio={anio}
+        anio={anioEfectivo}
         vista={vista}
         modo={modoEfectivo}
-        aniosDisponibles={anios}
+        aniosDisponibles={aniosVisibles}
         permiteModoCosecha={permiteModoCosecha}
         onAnioChange={setAnio}
         onVistaChange={setVista}

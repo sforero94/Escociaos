@@ -90,7 +90,10 @@ export function periodosTrimestrales(anio: number): PeriodoDef[] {
  *   Traviesa  N — se vende may → oct (N);       carga egresos de ene–jun (N)
  *
  * Los ingresos se seleccionan por la etiqueta `fin_ingresos.cosecha`, no por
- * fecha: la etiqueta es la que ya calcula `fn_cosecha_aguacate()` en la base.
+ * fecha. Desde ESCO-160 (2026-10-23) esa etiqueta se escoge al registrar la
+ * venta (`src/utils/cosechaAguacate.ts`); `fn_cosecha_aguacate()` solo queda
+ * como respaldo en la base para los caminos que no la mandan. Las ventanas de
+ * venta de arriba son las de la regla vieja y ya no deciden nada.
  */
 export function periodosCosecha(anio: number): PeriodoDef[] {
   const anioPrincipal = anio + DESFASE_ANIO_PRINCIPAL;
