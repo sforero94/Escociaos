@@ -793,6 +793,8 @@ aparece en ninguno de los 192 chunks de la app, solo en el vendor
 |---|---|---|
 | 2026-08-28-viernes | **6 elegibles** (5 `codigo` + 1 `ddl_aditivo`) | **0** |
 | 2026-09-25-viernes | **1 elegible** (1 `codigo`, 0 `ddl_aditivo`) | **0** |
+| 2026-10-16-viernes | 4 elegibles (3 `codigo` + 1 `ddl_aditivo`) | 0 |
+| 2026-10-23-viernes | **0 elegibles** — 6 abiertas: 3 `decision`+aprobacion (156, 157, 160), 3 `In progress` con PR (143, 152, 159) | **1** |
 
 > **OJO: hay DOS tablas "Racha del viernes" en este fichero** (esta y otra mas arriba,
 > vacia, hacia la linea 658). Esta es la viva. La duplicada habria que podarla.
