@@ -28,7 +28,10 @@
 --      «Principal AAAA» / «Traviesa AAAA». El P&G por cosecha compara la
 --      etiqueta como texto exacto, asi que «principal 2027» seria una venta
 --      invisible. Hoy 0 de 246 filas incumplen (verificado 2026-10-23).
---   3. COMMENT ON FUNCTION.
+--   3. COMMENT ON FUNCTION de set_cosecha_aguacate() y de fn_cosecha_aguacate():
+--      la segunda queda marcada OBSOLETA en el catalogo (la regla de ventanas
+--      de la 042/043). No se editan esos ficheros: nunca se toca una migracion
+--      aplicada.
 --
 -- QUE NO HACE:
 --   - No toca ninguna fila: las 95 ventas de aguacate ya tienen etiqueta
@@ -146,6 +149,9 @@ ALTER TABLE public.fin_ingresos
 COMMENT ON FUNCTION public.set_cosecha_aguacate() IS
   'ESCO-160 (migracion 184): rechaza una venta de Aguacate Hass sin cosecha. La etiqueta se escoge al registrar; ya no se deduce de la fecha con fn_cosecha_aguacate().';
 
+COMMENT ON FUNCTION public.fn_cosecha_aguacate(date) IS
+  'OBSOLETA desde 2026-10-23 (ESCO-160, migracion 184). Regla de ventanas por fecha de la 043 (nov-abr Principal, may-oct Traviesa); las ventanas cambiaron en 2026. Sin llamadores: la cosecha se escoge al registrar la venta. Se conserva solo como registro de como se etiqueto la historia.';
+
 -- ---------------------------------------------------------------------------
 -- 4. Post-condiciones
 -- ---------------------------------------------------------------------------
@@ -178,6 +184,10 @@ BEGIN
                    AND conname = 'fin_ingresos_cosecha_formato'
                    AND convalidated) THEN
     RAISE EXCEPTION '184: el CHECK fin_ingresos_cosecha_formato no quedo validado.';
+  END IF;
+
+  IF coalesce(obj_description('public.fn_cosecha_aguacate(date)'::regprocedure, 'pg_proc'), '') NOT LIKE 'OBSOLETA%' THEN
+    RAISE EXCEPTION '184: fn_cosecha_aguacate() no quedo marcada OBSOLETA.';
   END IF;
 END $$;
 
