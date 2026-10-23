@@ -3,6 +3,7 @@ import { Upload, CheckCircle, X } from 'lucide-react';
 import type { BatchRowDataIngreso } from '@/types/finanzas';
 import type { IngresosCatalogs } from '../hooks/useIngresosCatalogs';
 import { formatCurrency } from '@/utils/format';
+import { esNegocioAguacate, opcionesCosecha } from '@/utils/cosechaAguacate';
 
 interface IngresosBatchRowProps {
   row: BatchRowDataIngreso;
@@ -29,7 +30,7 @@ export function IngresosBatchRow({ row, index, catalogs, errors, onChange, onRem
   // Determinar si el negocio seleccionado requiere campos de cantidad
   const negocio = catalogs.negocios.find((n) => n.id === row.negocio_id);
   const negocioNombre = negocio?.nombre ?? '';
-  const esAguacate = negocioNombre.toLowerCase().includes('aguacate');
+  const esAguacate = esNegocioAguacate(negocioNombre);
   const esHatoLechero =
     negocioNombre.toLowerCase().includes('hato') ||
     negocioNombre.toLowerCase().includes('lechero');
@@ -89,8 +90,9 @@ export function IngresosBatchRow({ row, index, catalogs, errors, onChange, onRem
             onChange={(e) => {
               onChange(index, 'negocio_id', e.target.value);
               onChange(index, 'categoria_id', '');
-              // Limpiar cantidad al cambiar negocio
+              // Limpiar cantidad y cosecha al cambiar negocio
               onChange(index, 'cantidad', '');
+              onChange(index, 'cosecha', '');
             }}
             className={cls('negocio_id')}
             style={{ minWidth: 130 }}
@@ -270,6 +272,33 @@ export function IngresosBatchRow({ row, index, catalogs, errors, onChange, onRem
                   {unidad}
                 </span>
               </div>
+
+              {/* Cosecha — solo Aguacate Hass, obligatoria (ESCO-160) */}
+              {esAguacate && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--color-muted-foreground)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Cosecha *
+                  </label>
+                  <select
+                    value={row.cosecha}
+                    onChange={(e) => onChange(index, 'cosecha', e.target.value)}
+                    className={cls('cosecha')}
+                    style={{ minWidth: 150, width: 'auto' }}
+                    aria-label={`Cosecha fila ${index + 1}`}
+                  >
+                    <option value="">Seleccionar</option>
+                    {opcionesCosecha(row.fecha).map((etiqueta) => (
+                      <option key={etiqueta} value={etiqueta}>{etiqueta}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Precio unitario calculado (solo lectura) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

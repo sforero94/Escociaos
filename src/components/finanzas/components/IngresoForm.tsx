@@ -43,6 +43,7 @@ import {
   ETIQUETA_CORREGIR_FECHA_FUTURA,
 } from '@/utils/fechas';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { esNegocioAguacate, esEtiquetaCosecha, opcionesCosechaConActual } from '@/utils/cosechaAguacate';
 
 interface IngresoFormProps {
   open: boolean;
@@ -69,6 +70,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
       medio_pago_id: '',
       observaciones: '',
       url_factura: '',
+      cosecha: '',
     },
   });
 
@@ -92,7 +94,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   // Detect negocio type for conditional fields
   const selectedNegocio = negocios.find(n => n.id === formData.negocio_id);
-  const esAguacate = selectedNegocio?.nombre?.toLowerCase().includes('aguacate');
+  const esAguacate = esNegocioAguacate(selectedNegocio?.nombre);
   const esHatoLechero = selectedNegocio?.nombre?.toLowerCase().includes('hato') ||
                         selectedNegocio?.nombre?.toLowerCase().includes('lechero');
   const mostrarCantidad = esAguacate || esHatoLechero;
@@ -128,6 +130,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         medio_pago_id: ingreso.medio_pago_id,
         observaciones: ingreso.observaciones || '',
         url_factura: ingreso.url_factura || '',
+        cosecha: ingreso.cosecha || '',
       });
     } else {
       // Reset form for new ingreso
@@ -144,6 +147,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         medio_pago_id: '',
         observaciones: '',
         url_factura: '',
+        cosecha: '',
       });
     }
   }, [ingreso]);
@@ -209,7 +213,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
     // Clear categoria when negocio changes
     if (field === 'negocio_id') {
-      setFormData(prev => ({ ...prev, categoria_id: '' }));
+      setFormData(prev => ({ ...prev, categoria_id: '', cosecha: '' }));
     }
   };
 
@@ -253,8 +257,12 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     try {
       setSaving(true);
 
+      // ESCO-160: la etiqueta de cosecha solo viaja para Aguacate Hass. Para
+      // otro negocio la clave no se manda, así una edición nunca la pisa.
+      const { cosecha, ...resto } = formData;
       const ingresoData = {
-        ...formData,
+        ...resto,
+        ...(esAguacate ? { cosecha } : {}),
         valor: Number(formData.valor),
         comprador_id: formData.comprador_id || null,
         observaciones: formData.observaciones || null,
@@ -298,6 +306,9 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     if (!formData.categoria_id) newErrors.categoria_id = 'Debe seleccionar una categoría';
     if (formData.valor <= 0) newErrors.valor = 'El valor debe ser mayor a cero';
     if (!formData.medio_pago_id) newErrors.medio_pago_id = 'Debe seleccionar un medio de pago';
+    if (esAguacate && !esEtiquetaCosecha(formData.cosecha)) {
+      newErrors.cosecha = 'Debe seleccionar la cosecha (Principal o Traviesa)';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -402,6 +413,27 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                           : '—'}
                       </div>
                     </div>
+                    {esAguacate && (
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="cosecha">Cosecha *</Label>
+                        <Select
+                          value={formData.cosecha || undefined}
+                          onValueChange={(value) => handleInputChange('cosecha', value)}
+                        >
+                          <SelectTrigger id="cosecha" aria-invalid={!!errors.cosecha}>
+                            <SelectValue placeholder="¿Principal o Traviesa?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {opcionesCosechaConActual(formData.fecha, ingreso?.cosecha).map((etiqueta) => (
+                              <SelectItem key={etiqueta} value={etiqueta}>
+                                {etiqueta}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.cosecha && <p className="text-xs text-destructive">{errors.cosecha}</p>}
+                      </div>
+                    )}
                   </div>
                 )}
 

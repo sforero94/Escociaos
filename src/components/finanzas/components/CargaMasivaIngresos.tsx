@@ -24,6 +24,7 @@ import {
 import { parsearFechaFlexible, obtenerFechaHoy } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaIngreso, Comprador, MedioPago } from '../../../types/finanzas';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { esNegocioAguacate, normalizarEtiquetaCosecha } from '@/utils/cosechaAguacate';
 
 interface CargaMasivaIngresosProps {
   open: boolean;
@@ -42,6 +43,8 @@ interface IngresoRow {
   'Nombre del Ingreso': string;
   Valor: number;
   Observaciones?: string;
+  /** Solo Aguacate Hass, obligatoria (ESCO-160). Columna 10: plantillas viejas sin ella siguen leyéndose. */
+  Cosecha?: string;
 }
 
 interface ValidationError {
@@ -135,7 +138,8 @@ export function CargaMasivaIngresos({
           'Medio de Pago',
           'Nombre del Ingreso',
           'Valor',
-          'Observaciones'
+          'Observaciones',
+          'Cosecha'
         ],
         // Instruction row
         [
@@ -147,7 +151,8 @@ export function CargaMasivaIngresos({
           'Nombre del medio de pago',
           'Descripción del ingreso',
           'Valor numérico sin formato',
-          'Observaciones (opcional)'
+          'Observaciones (opcional)',
+          'Solo Aguacate Hass, obligatoria: Principal 2027 / Traviesa 2026'
         ],
         // Example row with actual catalog data
         [
@@ -159,7 +164,8 @@ export function CargaMasivaIngresos({
           mediosPago[0]?.nombre || 'Efectivo',
           'Venta de productos',
           150000,
-          'Ingreso de ejemplo'
+          'Ingreso de ejemplo',
+          ''
         ]
       ];
 
@@ -212,7 +218,8 @@ export function CargaMasivaIngresos({
         { wch: 20 },  // Medio de Pago
         { wch: 35 },  // Nombre
         { wch: 15 },  // Valor
-        { wch: 30 }   // Observaciones
+        { wch: 30 },  // Observaciones
+        { wch: 22 }   // Cosecha
       ];
 
       // Add worksheet to workbook
@@ -266,7 +273,8 @@ export function CargaMasivaIngresos({
           'Medio de Pago',
           'Nombre del Ingreso',
           'Valor',
-          'Observaciones'
+          'Observaciones',
+          'Cosecha'
         ],
         defval: ''
       });
@@ -337,6 +345,18 @@ export function CargaMasivaIngresos({
         const negocio = negocios.find(n => n.nombre.toLowerCase() === String(row.Negocio).toLowerCase());
         if (!negocio) {
           validationErrors.push({ row: rowNumber, field: 'Negocio', message: `Negocio "${row.Negocio}" no encontrado en catálogo` });
+          continue;
+        }
+
+        // ESCO-160: una venta de aguacate se registra con su cosecha, escrita
+        // en la fila. Nunca se deduce de la fecha.
+        const cosecha = normalizarEtiquetaCosecha(row.Cosecha);
+        if (esNegocioAguacate(negocio.nombre) && !cosecha) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Cosecha',
+            message: 'Cosecha es obligatoria para Aguacate Hass (ej. "Principal 2027" o "Traviesa 2026")',
+          });
           continue;
         }
 
@@ -447,6 +467,7 @@ export function CargaMasivaIngresos({
           nombre: row['Nombre del Ingreso'],
           valor: Number(row.Valor),
           observaciones: row.Observaciones || null,
+          cosecha: esNegocioAguacate(negocio.nombre) ? cosecha : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
