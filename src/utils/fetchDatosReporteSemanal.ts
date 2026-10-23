@@ -385,6 +385,26 @@ export async function fetchMatrizJornales(
 // ============================================================================
 
 /**
+ * `aplicaciones.blanco_biologico` es TEXT y guarda un arreglo JSON serializado
+ * (`CalculadoraAplicaciones` hace `JSON.stringify`), p. ej. '[]' o '["<uuid>"]'.
+ * Devuelve los ids; ante un valor ilegible devuelve [] en vez de mandar el texto
+ * crudo a `.in('id', …)`, que PostgREST rechaza con 400.
+ */
+function idsBlancoBiologico(valor: unknown): string[] {
+  let lista: unknown = valor;
+  if (typeof valor === 'string') {
+    try {
+      lista = JSON.parse(valor);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(lista)
+    ? lista.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : [];
+}
+
+/**
  * Obtiene aplicaciones planeadas (estado: 'Calculada') con mezclas y lista de compras
  */
 export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]> {
@@ -425,12 +445,7 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
   // Batch lookup for pest names
   const allBlancoIds = new Set<string>();
   for (const app of aplicaciones || []) {
-    if (app.blanco_biologico) {
-      const ids = Array.isArray(app.blanco_biologico)
-        ? app.blanco_biologico
-        : [app.blanco_biologico];
-      (ids as string[]).forEach((id: string) => allBlancoIds.add(id));
-    }
+    idsBlancoBiologico(app.blanco_biologico).forEach((id) => allBlancoIds.add(id));
   }
 
   const plagasMap = new Map<string, string>();
@@ -451,8 +466,8 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
       .from('aplicaciones_mezclas')
       .select(`
         id,
-        nombre,
-        numero_orden,
+        nombre_mezcla,
+        numero_mezcla,
         aplicacion_id,
         aplicaciones_productos(
           producto_nombre,
@@ -465,7 +480,7 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
         )
       `)
       .in('aplicacion_id', appIds)
-      .order('numero_orden', { ascending: true });
+      .order('numero_mezcla', { ascending: true });
 
     for (const m of mezclas || []) {
       const appId = (m as any).aplicacion_id;
@@ -481,7 +496,7 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
         return { nombre: p.producto_nombre, dosis };
       });
 
-      mezclasMap.get(appId)!.push({ nombre: (m as any).nombre ?? '', productos });
+      mezclasMap.get(appId)!.push({ nombre: (m as any).nombre_mezcla ?? '', productos });
     }
   }
 
@@ -527,13 +542,9 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
     const inventarioTotal = listaCompras.reduce((sum, item) => sum + (item.inventarioDisponible || 0), 0);
     const totalPedido = listaCompras.reduce((sum, item) => sum + (item.cantidadAComprar || 0), 0);
 
-    let blancos: string[] = [];
-    if (app.blanco_biologico) {
-      const ids = Array.isArray(app.blanco_biologico)
-        ? app.blanco_biologico
-        : [app.blanco_biologico];
-      blancos = (ids as string[]).map((id: string) => plagasMap.get(id) || '').filter(Boolean);
-    }
+    const blancos = idsBlancoBiologico(app.blanco_biologico)
+      .map((id) => plagasMap.get(id) || '')
+      .filter(Boolean);
 
     // Extraer totales de los cálculos
     let totalArboles = 0;
