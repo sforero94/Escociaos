@@ -1,0 +1,46 @@
+{
+  "status": "offline_preflight_passed_runtime_not_certified",
+  "at": "2026-10-23T19:45:09.456331+00:00",
+  "new_replay_executed": false,
+  "postgres_clusters_started_during_audit": 0,
+  "prior_source_hashes_checked": 539,
+  "approved_snapshot_hashes_checked": 6,
+  "source_hashes": {
+    "scripts/security/build-financial-sale-correction.py": "3efa4895b7aa25f76b11ea5c4e8dfe1b15db1815c703c97df000d53d4886eead",
+    "scripts/security/financial-sale-correction-replay.py": "921135863414ae8b50359b41fd7c9e91b14065d9091aac3ac869a42745ddcfa5",
+    "scripts/security/financial-sale-correction-native.mjs": "577f400cb60f26dad6bdcd0bafb3020d2adb1ba4fffe6b2aa79255fe16354765",
+    "scripts/security/financial-sale-correction-probes.sql": "8c895af2aa6791c003b52d26c065e07c1118deb450f7e23e5e92cd00cef569ad",
+    "src/sql/security-candidates/financial-sale-correction.sql": "19520ff8ff5d1c97fce2553aed31e4d6950d8ec9d6ef5fffd4f553bddc32e2be"
+  },
+  "unchanged_from_handoff": [
+    "scripts/security/build-financial-sale-correction.py",
+    "src/sql/security-candidates/financial-sale-correction.sql"
+  ],
+  "checks": {
+    "serial_offline_scripts": 8,
+    "parser": {
+      "probe_top_level": 6,
+      "probe_expressions": 148,
+      "candidate_top_level": 42,
+      "candidate_expressions": 187,
+      "native_fixture_top_level": 6,
+      "native_fixture_expressions": 34
+    },
+    "null_safe_scalar_checks": 5,
+    "write_omissions_detected_offline": 8,
+    "plan_omissions_detected_offline": 8,
+    "native_fake_client_scenarios": 6,
+    "logger_duplicate_concurrent_calls": 16,
+    "generator_output_matches_candidate": true,
+    "native_javascript_syntax": true,
+    "macos_launcher_preflight": true,
+    "temporary_database_directories_remaining": 0
+  },
+  "external_launcher_sha256": "444f30378800fa9c684019ae883f7efe51dd7a2cbcd8cc33cddf54e1a636e02d",
+  "limitations": [
+    "Parser normalizes composite declaration types to record only in memory; it does not resolve live SQL types.",
+    "Expression model and fake pg clients do not verify PostgreSQL writes, triggers, privileges, RLS or real lock races.",
+    "Full frozen62-candidate replay and serial final lint/typecheck/Python/App checks remain pending."
+  ],
+  "commit_created": false
+}
