@@ -1499,3 +1499,15 @@ The3observed native lock races cover a winning ordinary financial writer (stale 
 This certifies only the local general/shared-monthly eight-field financial correction SQL foundation. Actual general browser/native callers,quantity/metadata/invoice/creation/deletion compatibility,coordinated ganado and writer retirement remain separate,as do reader/transitive/runtime/global/capacity/recovery/release gates. No ordinary/service/import grants or production history changed.
 
 Final serial gates after successful native cleanup:lint0errors/873existing warnings;typecheck PASS on bounded rerun (first120s non-PG command timed out without compiler errors;no database retry);42Python PASS;full App317files/6490tests PASS120.75s,one worker and unchanged test deadlines.565source hashes remain exact. Ready for one-front publication;actual general callers remain next.
+
+
+## October24 — strict general financial SDK/protocol and durable browser recovery layer
+
+After96bfa35,added exact generalFinancial source/plan/receipt validation and generation-fenced durable owner browser adapter/hook. Shared aliases must be complete,ordered,unique,derived and bound to the same income;source/receipt rewrites refuse. Original UUID is persisted before prepare,recovered before replacement and retained across unknown outcomes;explicit reviewed post,cancel and terminal acknowledgment remain separate. Existing form,SQL,grants,imports/service and history remain unchanged.
+
+
+Final frozen proof PASS121combined assertions on the unchanged64-candidate graph,including25new installed-SDK checks,21existing sale SDK checks and the inherited3observed general lock races. All573source hashes and6approved snapshots match;temporary PG stopped/removed.1007SQL-client calls,max1.057s,total217.22s,no timeout. Exact SDK-native query/parameter/hash/timing diagnostics remain outside Git under /tmp/escocia-general-sdk-native-*;main attempt evidence is /workspace/escociaos-security-control/general-sdk-attempt-20261024.
+
+The installed SDK validated real captured aliases and complete native income/audit,explicit post after lost preparation reply,committed response loss plus complete storage loss without resend/replacement,preserved six nonfinancial fields,8receipt mutation refusals,other-owner isolation,cancel and terminal acknowledgment. IngresoForm was not cut over by this unit.
+
+Final gates on unchanged App sources:30focused tests,typecheck,42Python,lint0errors/873existing warnings,full318files/6520App PASS120.00s on a serial rerun after an initial180s command timeout without result. No source drift or extra PG attempt. This is local client-layer preparation only;full editor quantity/unit-price/metadata/invoice compatibility,creation/deletion,ganado,remaining writer/reader/runtime/global/recovery/release gates stay open.

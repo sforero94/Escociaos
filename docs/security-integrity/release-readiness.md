@@ -374,3 +374,6 @@ October24 sale-correction caller dependency: financial-sale-correction-browser.s
 
 
 October24 general/shared financial correction dependency: financial-general-correction.sql(candidate64) follows the published full63-candidate graph and its trusted classification/caller boundary. Local64installation/focused proof passes96combined assertions(including21existing sale SDK checks,11general native-race assertions/3observed locks),565source hashes,six snapshots and verified cleanup. The new eight-field financial core preserves all shared-monthly production aliases/nonfinancial fields and refuses protected measured/sale/event/invoice claims. Actual general callers,quantity/metadata/invoice/creation/deletion compatibility,ganado and coordinated ordinary writer retirement remain release prerequisites. Candidate preparation authorizes no production application.
+
+
+October24 strict general-finance SDK layer:121combined local assertions(including25newSDK/21saleSDK),573frozen sources,six snapshots and cleanup verified;6520App/typecheck/lint/42Python pass. This adds the protocol/owner durable adapter/hook only. Actual IngresoForm cutover must reconcile quantity/unit-price and observation/invoice semantics before being called compatible;creation/deletion and remaining financial/ganado/direct-writer gates stay open. No production application authorized.

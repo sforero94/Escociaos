@@ -1,0 +1,18 @@
+# General financial correction — strict SDK and durable recovery layer
+
+Preparation after96bfa35. This unit adds exact generalFinancial source/plan/receipt validation,the owner-bound durable browser adapter and generation-fenced hook. Existing IngresoForm,SQL candidates,ordinary/service/import writers and history are unchanged. Actual form cutover remains a separate required gate: its quantity/unit-price and observations/invoice paths must be reconciled without silently dropping edits.
+
+The source validates complete ordered unique derived-monthly aliases with target/date/numeric/cow-provenance shape checks. Exact before/after income,all8financial fields,captured old/new references,current owner,original aliases,actor,immutable receipt and preserved nonfinancial fields bind every result. Unexpected fields,alias replacement/reordering,measured origins,changed receipt money/quantity/invoice/actor refuse. A captured expected original cannot be rebound by a later response.
+
+Before prepare,the adapter recovers any server original,then persists/reads back an owner-bound UUID and complete intent under an exclusive owner lock. Prepare never posts. Post requires the exact pending reviewed proof. Status and independent recovery after storage/reply loss never allocate a replacement or resend. Explicit cancellation and verified terminal acknowledgment retain original fences;owner/role/open/draft-generation changes refuse late publication. Corrupt storage is retained and refuses.
+
+Thirty focused protocol/adapter/hook tests PASS. Typecheck and42Python tests PASS;lint0errors/873warnings. First bounded App command reached its180s wall timeout without a test result;serial rerun pending. No SDK-layer PostgreSQL replay has started. The planned single contained proof installs the unchanged64-candidate graph and uses the installed Supabase SDK against synthetic local Auth/Unix-socket PG only,with exact query/parameter/hash/timing diagnostics outside Git. SQL client60s limits remain unchanged;failure requires recording/stopping without a retry loop.
+
+No hosted,ordinary-role global,full form or release certification. Remaining editor-field/creation/deletion compatibility,coordinated ganado and writer/reader/runtime/global/recovery gates remain open.
+
+
+Final frozen proof PASS121combined assertions on the unchanged64-candidate graph,including25new installed-SDK checks,21existing sale SDK checks and the inherited3observed general lock races. All573source hashes and6approved snapshots match;temporary PG stopped/removed.1007SQL-client calls,max1.057s,total217.22s,no timeout. Exact SDK-native query/parameter/hash/timing diagnostics remain outside Git under /tmp/escocia-general-sdk-native-*;main attempt evidence is /workspace/escociaos-security-control/general-sdk-attempt-20261024.
+
+The installed SDK validated real captured aliases and complete native income/audit,explicit post after lost preparation reply,committed response loss plus complete storage loss without resend/replacement,preserved six nonfinancial fields,8receipt mutation refusals,other-owner isolation,cancel and terminal acknowledgment. IngresoForm was not cut over by this unit.
+
+Final gates on unchanged App sources:30focused tests,typecheck,42Python,lint0errors/873existing warnings,full318files/6520App PASS120.00s on a serial rerun after an initial180s command timeout without result. No source drift or extra PG attempt. This is local client-layer preparation only;full editor quantity/unit-price/metadata/invoice compatibility,creation/deletion,ganado,remaining writer/reader/runtime/global/recovery/release gates stay open.
