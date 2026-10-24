@@ -1,0 +1,69 @@
+-- NONNUMBERED candidate63. Read-only routing; no table/column grants or history change.
+BEGIN;
+SELECT financial_sale_correction.lock_source();SELECT financial_sale_correction.assert_baseline();
+DO $admit$ BEGIN IF current_user<>'postgres' OR NOT EXISTS(SELECT 1 FROM pg_proc WHERE oid=to_regprocedure('hato_income_metadata.assert_controls()') AND md5(prosrc)='3f08ee4797f88191bc8727cf320a5d0b' AND NOT prosecdef AND proconfig=ARRAY['search_path=pg_catalog'] AND pg_get_userbyid(proowner)='postgres') THEN RAISE EXCEPTION 'Unreviewed financial routing dependency';END IF;END $admit$;
+CREATE FUNCTION public.fn_financial_income_route_web(p_income_id uuid,p_expected_owner uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE actor jsonb;milk boolean;sale boolean;BEGIN
+ IF p_income_id IS NULL OR p_expected_owner IS NULL OR auth.uid() IS DISTINCT FROM p_expected_owner THEN RAISE EXCEPTION 'Current financial routing owner/target required' USING ERRCODE='42501';END IF;
+ actor=financial_sale_correction.actor();PERFORM financial_sale_correction.assert_baseline();PERFORM financial_sale_correction.lock_source();
+ IF NOT EXISTS(SELECT 1 FROM public.fin_ingresos WHERE id=p_income_id) THEN RAISE EXCEPTION 'Original financial target missing';END IF;
+ milk=EXISTS(SELECT 1 FROM public.hato_produccion_quincenal WHERE fin_ingreso_id=p_income_id AND origen_dato='medido') OR EXISTS(SELECT 1 FROM hato_quincena.audit WHERE(receipt->'before'->'income'->>'id'=p_income_id::text AND receipt->'before'->'production'->>'origen_dato'='medido') OR(receipt->'after'->'income'->>'id'=p_income_id::text AND receipt->'after'->'production'->>'origen_dato'='medido'));
+ sale=EXISTS(SELECT 1 FROM hato_sale.requests WHERE plan->>'incomeId'=p_income_id::text OR receipt->'income'->>'id'=p_income_id::text) OR EXISTS(SELECT 1 FROM hato_sale.audit WHERE receipt->'income'->>'id'=p_income_id::text) OR EXISTS(SELECT 1 FROM public.hato_eventos WHERE fin_ingreso_id=p_income_id AND tipo='venta');
+ PERFORM financial_sale_correction.assert_baseline();IF actor IS DISTINCT FROM financial_sale_correction.actor() THEN RAISE EXCEPTION 'Financial routing actor changed';END IF;
+ RETURN jsonb_build_object('version',1,'owner',p_expected_owner,'targetId',p_income_id,'kind',CASE WHEN milk AND sale THEN 'blocked' WHEN milk THEN 'measured' WHEN sale THEN 'sale' ELSE 'general' END);
+END $$;
+REVOKE ALL ON FUNCTION public.fn_financial_income_route_web(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.fn_financial_income_route_web(uuid,uuid) TO authenticated;
+CREATE OR REPLACE FUNCTION financial_sale_correction.assert_controls() RETURNS void LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE f record;BEGIN
+
+ IF NOT EXISTS(SELECT 1 FROM pg_proc route_proc JOIN pg_language l ON l.oid=route_proc.prolang WHERE route_proc.oid=to_regprocedure('public.fn_financial_income_route_web(uuid,uuid)') AND md5(route_proc.prosrc)='f4857858f15e0ebe80f591085d2fd37a' AND route_proc.prosecdef AND NOT route_proc.proisstrict AND NOT route_proc.proleakproof AND NOT route_proc.proretset AND route_proc.provolatile='v' AND route_proc.proparallel='u' AND route_proc.prokind='f' AND route_proc.pronargdefaults=0 AND route_proc.proargnames=ARRAY['p_income_id','p_expected_owner'] AND route_proc.prorettype='pg_catalog.jsonb'::regtype AND route_proc.proconfig=ARRAY['search_path=pg_catalog'] AND l.lanname='plpgsql' AND pg_get_userbyid(route_proc.proowner)='postgres' AND (SELECT count(*) FROM aclexplode(coalesce(route_proc.proacl,acldefault('f',route_proc.proowner))))=2 AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(route_proc.proacl,acldefault('f',route_proc.proowner)))a WHERE a.grantee NOT IN(route_proc.proowner,'authenticated'::regrole) OR a.grantor<>route_proc.proowner OR a.privilege_type<>'EXECUTE' OR a.is_grantable)) THEN RAISE EXCEPTION 'Financial income routing binding drift' USING ERRCODE='42501';END IF;
+
+ IF financial_sale_correction.sale_metadata() IS DISTINCT FROM 'b618fa852099e40a32cc150c3e2a37e8' THEN RAISE EXCEPTION 'Retained sale proof metadata drift';END IF;
+ IF financial_sale_correction.metadata() IS DISTINCT FROM '98a83f73528eb664286f89b6964dbadc' THEN RAISE EXCEPTION 'Sale correction private metadata drift';END IF;
+ IF EXISTS(SELECT 1 FROM(VALUES('anon'),('authenticated'),('service_role'))r(role) CROSS JOIN(VALUES('financial_sale_correction.requests'::regclass),('financial_sale_correction.audit'::regclass))t(target) WHERE has_table_privilege(r.role,t.target,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN') OR has_any_column_privilege(r.role,t.target,'SELECT,INSERT,UPDATE,REFERENCES')) OR EXISTS(SELECT 1 FROM pg_class WHERE oid IN('financial_sale_correction.requests'::regclass,'financial_sale_correction.audit'::regclass) AND(NOT relrowsecurity OR relforcerowsecurity OR pg_get_userbyid(relowner)<>'postgres')) THEN RAISE EXCEPTION 'Sale correction private authority drift';END IF;
+ FOR f IN SELECT * FROM(VALUES ('financial_sale_correction.immutable()','f1071b1c13456df84eea7e1655b57f78',false),('financial_sale_correction.controls()','6704d15b794e8f401b55af67d95cd0a6',false),('financial_sale_correction.foreign_controls()','89d4e2294a181ae391263d91ee9afae5',false),('financial_sale_correction.lock_source()','f9981399abc43c2988178347e9112dfc',false),('financial_sale_correction.actor()','59091f508eca5108b0891536e037a3e5',false),('financial_sale_correction.result(financial_sale_correction.requests)','ac0cc6016799b1654e0f5f294e9ddc16',false),('financial_sale_correction.validate(jsonb,boolean)','89dc02d54930035865aca26451876cfd',false),('financial_sale_correction.source(jsonb)','da86219af941e49b864aa7836833d061',false),('financial_sale_correction.plan(jsonb,jsonb,uuid)','dc23b6146925077744c438647846e0cc',false),('public.fn_financial_sale_correction_source_web(jsonb,uuid)','cd0f5972bf4a02a7e62ddb8c3450b4d5',true),('public.fn_financial_sale_correction_web(text,uuid,jsonb,uuid)','3420fd11eef712f8e52f2fefe2400533',true),('public.fn_financial_sale_correction_recover_web(uuid)','cd6a4348dec12bbbbeffa0db8d713144',true),('financial_sale_correction.assert_baseline()','66900a6d5f9826da0f9e3df02426bce0',false),('financial_sale_correction.metadata()','383cea92785c37b16d0a14b4c5718574',false),('financial_sale_correction.sale_metadata()','2182d68afda98f7bc2bd3de0d7251381',false),('hato_sale.actor()','4ce1a5e0c7feacdbfdfd97f26ac23726',false),('hato_sale.assert_retired()','ada0f86e5fd40d503f7274e3d4977cba',false),('hato_sale.finance()','faaf8458321604398f8f75a1cdb398af',false),('hato_sale.immutable()','0709b8df795367042a0bea61d8528ea6',false),('hato_sale.lock_source()','35bd07189be4bbf2dc0c964109c064bf',false),('hato_sale.result(hato_sale.requests)','be6a9f1b1687f4c3848fca9e63fbf025',false),('hato_sale.snapshot(jsonb)','4b521b3d1a958e7642597443f733ad00',false),('public.fn_hato_sale_web(text,uuid,jsonb,uuid)','cab938886c3462b9f497b1f415d53429',true))pin(signature,body,secdef) LOOP
+ IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang WHERE p.oid=to_regprocedure(f.signature) AND md5(p.prosrc)=f.body AND p.prosecdef=f.secdef AND NOT p.proisstrict AND NOT p.proleakproof AND NOT p.proretset AND p.provolatile='v' AND p.proparallel='u' AND p.prokind='f' AND p.pronargdefaults=0 AND p.proconfig=ARRAY['search_path=pg_catalog'] AND pg_get_userbyid(p.proowner)='postgres') THEN RAISE EXCEPTION 'Sale correction function binding drift: %',f.signature;END IF;
+ IF (SELECT count(*) FROM aclexplode(coalesce((SELECT proacl FROM pg_proc WHERE oid=to_regprocedure(f.signature)),acldefault('f','postgres'::regrole))))<>(CASE WHEN f.secdef THEN 2 ELSE 1 END) OR EXISTS(SELECT 1 FROM aclexplode(coalesce((SELECT proacl FROM pg_proc WHERE oid=to_regprocedure(f.signature)),acldefault('f','postgres'::regrole)))a WHERE a.grantee NOT IN('postgres'::regrole,CASE WHEN f.secdef THEN 'authenticated'::regrole ELSE 'postgres'::regrole END) OR a.grantor<>'postgres'::regrole OR a.privilege_type<>'EXECUTE' OR a.is_grantable) THEN RAISE EXCEPTION 'Sale correction function authority drift';END IF;
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM(VALUES('requests','immutable_correction_request',27),('audit','immutable_correction_audit',27),('requests','no_truncate_correction_request',34),('audit','no_truncate_correction_audit',34))e(relation,name,kind) WHERE NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=('financial_sale_correction.'||e.relation)::regclass AND tgname=e.name AND tgtype=e.kind AND tgenabled='O' AND tgfoid='financial_sale_correction.immutable()'::regprocedure AND NOT tgdeferrable AND NOT tginitdeferred AND tgqual IS NULL AND tgattr::text='' AND tgnargs=0)) THEN RAISE EXCEPTION 'Sale correction immutable binding drift';END IF;
+END $$;
+CREATE OR REPLACE FUNCTION hato_income_metadata.assert_controls() RETURNS void LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE f record;BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_proc WHERE oid=to_regprocedure('financial_sale_correction.assert_controls()') AND md5(prosrc)='c45abe0415844966b6dda17b27da121e' AND NOT prosecdef AND NOT proisstrict AND proconfig=ARRAY['search_path=pg_catalog'] AND pg_get_userbyid(proowner)='postgres') OR EXISTS(SELECT 1 FROM(VALUES('anon'),('authenticated'),('service_role'))r(role) WHERE has_function_privilege(r.role,'financial_sale_correction.assert_controls()','EXECUTE')) THEN RAISE EXCEPTION 'Sale correction guard binding drift';END IF;
+ PERFORM financial_sale_correction.assert_controls();
+
+ PERFORM hato_income_metadata.assert_invoice_origins();
+ IF EXISTS(SELECT 1 FROM(VALUES('anon'),('authenticated'),('service_role'))r(role) CROSS JOIN(VALUES('hato_income_metadata.requests'::regclass),('hato_income_metadata.audit'::regclass))t(target) WHERE has_table_privilege(r.role,t.target,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN') OR has_any_column_privilege(r.role,t.target,'SELECT,INSERT,UPDATE,REFERENCES')) OR EXISTS(SELECT 1 FROM pg_class WHERE oid IN('hato_income_metadata.requests'::regclass,'hato_income_metadata.audit'::regclass) AND(NOT relrowsecurity OR relforcerowsecurity OR pg_get_userbyid(relowner)<>'postgres')) THEN RAISE EXCEPTION 'Private quincena control authority drift';END IF;
+ FOR f IN SELECT * FROM(VALUES
+('hato_quincena.source(jsonb)','7b26364778fd4514d31338d6b15adfcb',false),
+('hato_quincena.assert_controls()','4bd7ea1704f18a3ede3c788b4c8445ed',false),
+('hato_income_metadata.capture_attachment(jsonb,uuid)','d358a56454fed478285661c726bddae9',false),
+('hato_income_metadata.invoice_release_preview(uuid,uuid)','199bf1b02133f2a6ecb2ef42a6a74a8f',false),
+('hato_income_metadata.assert_invoice_releases()','c6187fbf6752d997a1beb6e788b6a152',false),
+('public.fn_hato_income_invoice_release_web(text,uuid,uuid,jsonb,uuid)','ac7921aa540401dd542285ab5f1159cb',true),
+('hato_income_metadata.immutable_invoice_origin()','e6f5d14395531109d99160195d7ef02b',false),
+('hato_income_metadata.assert_invoice_origins()','d6ee616ab0f25cc5acd874059ab83056',false),
+('public.fn_hato_income_invoice_origin_web(text,uuid,uuid,jsonb,jsonb,uuid)','b6077948cf92ac02fbe4b59b152c1a36',true),
+('hato_income_metadata.immutable()','f1071b1c13456df84eea7e1655b57f78',false),
+('hato_income_metadata.controls()','7b9600b73ecdc15fe454ae8d3ed047d8',false),
+('hato_income_metadata.foreign_controls()','806a48677f4a224ba533f5e3c94594e1',false),
+('hato_income_metadata.lock_source()','bd55361232101caf3d3f555157dca2ee',false),
+('hato_income_metadata.actor()','385f4c9c1d309b0a5df0f70ecd58d907',false),
+('hato_income_metadata.result(hato_income_metadata.requests)','ac0cc6016799b1654e0f5f294e9ddc16',false),
+('hato_income_metadata.validate(jsonb,boolean)','f1176b3ad0c46a1e27d073ba52077a33',false),
+('hato_income_metadata.source(jsonb)','234b1ad7248bc4d6891947243ea9fbb2',false),
+('hato_income_metadata.plan(jsonb,jsonb,uuid)','2e7acd023aa14b80fd78094574c29248',false),
+('public.fn_hato_income_metadata_source_web(jsonb,uuid)','4b37cd095547da518aab7bc3c85629f8',true),
+('public.fn_hato_income_metadata_web(text,uuid,jsonb,uuid)','c30c67d3b644eeab1f43f7586daa22f6',true),
+('public.fn_hato_income_metadata_recover_web(uuid)','a922f160af4c3a636b9b99e055b0d826',true),
+('public.fn_hato_income_metadata_classify_web(uuid,uuid)','5118af86ac1a959bbf90d831e475d8d6',true),
+('hato_income_metadata.baseline()','cc1ef953a4213ec1a4d3b2b405fa8222',false))pin(signature,body,secdef) LOOP
+ IF NOT EXISTS(SELECT 1 FROM pg_proc WHERE oid=to_regprocedure(f.signature) AND md5(prosrc)=f.body AND prosecdef=f.secdef AND proconfig=ARRAY['search_path=pg_catalog'] AND pg_get_userbyid(proowner)='postgres') THEN RAISE EXCEPTION 'Unreviewed quincena core: %',f.signature;END IF;
+ IF NOT f.secdef AND EXISTS(SELECT 1 FROM(VALUES('anon'),('authenticated'),('service_role'))r(role) WHERE has_function_privilege(r.role,f.signature,'EXECUTE')) THEN RAISE EXCEPTION 'Private quincena core grant drift';END IF;
+ IF f.secdef AND(has_function_privilege('anon',f.signature,'EXECUTE') OR has_function_privilege('service_role',f.signature,'EXECUTE') OR NOT has_function_privilege('authenticated',f.signature,'EXECUTE')) THEN RAISE EXCEPTION 'Quincena web entry authority drift';END IF;
+ END LOOP;
+ IF EXISTS(SELECT 1 FROM(VALUES('requests','immutable_quincena_request',27),('audit','immutable_quincena_audit',27),('requests','no_truncate_quincena_request',34),('audit','no_truncate_quincena_audit',34))e(relation,name,kind) WHERE NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=('hato_income_metadata.'||e.relation)::regclass AND tgname=e.name AND tgtype=e.kind AND tgenabled='O' AND tgfoid='hato_income_metadata.immutable()'::regprocedure AND NOT tgdeferrable AND NOT tginitdeferred AND tgqual IS NULL AND tgattr::text='' AND tgnargs=0)) THEN RAISE EXCEPTION 'Quincena immutable control binding drift';END IF;
+END $$;
+SELECT financial_sale_correction.assert_baseline();
+COMMIT;

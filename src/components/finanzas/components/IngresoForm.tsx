@@ -3,7 +3,10 @@ import {useAuth} from '@/contexts/AuthContext';
 import type {InvoiceReceipt} from '@/utils/invoiceUpload';
 import {MeasuredIncomeInvoiceUploader} from '@/components/hato/components/MeasuredIncomeInvoiceUploader';
 import {sameMetadata} from '@/utils/hato/hatoIncomeMetadataProtocol';
-import {useIncomeMetadataRoute} from '@/components/hato/hooks/useIncomeMetadataRoute';
+import {useFinancialIncomeRoute} from '@/components/hato/hooks/useFinancialIncomeRoute';
+import {useSaleCorrectionConfirmation} from '@/components/hato/hooks/useSaleCorrectionConfirmation';
+import {SaleCorrectionConfirmationPanel} from '@/components/hato/components/SaleCorrectionConfirmationPanel';
+import {saleCorrectionFromForm,saleCorrectionMatchesForm} from '@/utils/hato/financialSaleCorrectionForm';
 import {useIncomeMetadataConfirmation} from '@/components/hato/hooks/useIncomeMetadataConfirmation';
 import {IncomeMetadataConfirmationPanel} from '@/components/hato/components/IncomeMetadataConfirmationPanel';
 import { useState, useEffect } from 'react';
@@ -85,9 +88,13 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   const selectedInvoice=invoiceAttachment&&invoiceAttachment.incomeId===ingreso?.id&&invoiceAttachment.receipt.actor===metadataUser?.id&&invoiceAttachment.receipt.path===formInvoicePath()?invoiceAttachment.receipt:undefined;
   function formInvoicePath(){return formData.url_factura;}
-  const metadataRoute = useIncomeMetadataRoute(open, ingreso?.id);
+  const metadataRoute = useFinancialIncomeRoute(open, ingreso?.id);
   const metadata = useIncomeMetadataConfirmation(open, JSON.stringify([ingreso?.id, formData.observaciones, formData.url_factura, selectedInvoice]));
-  const metadataBusy = metadata.busy || metadata.attempt !== null;
+  const saleCorrection=useSaleCorrectionConfirmation(open,JSON.stringify([ingreso?.id,formData]));
+  const metadataBusy = metadata.busy || metadata.attempt !== null || saleCorrection.busy || saleCorrection.attempt !== null;
+  const saleCorrectionAction=async(mode:'prepare'|'post'|'status'|'resolve'|'new')=>{
+    try{const a=saleCorrection.attempt,matched=a?.result?.state==='committed'&&saleCorrectionMatchesForm(ingreso?.id,formData,a.intent);await saleCorrection.run(mode);if(mode==='new'&&matched){clearFormData();onSuccess();}}catch(e){toast.error(e instanceof Error?e.message:'Consulta la corrección original.');}
+  };
   const metadataAction = async (mode: 'prepare' | 'post' | 'status' | 'resolve' | 'new') => {
     try { const committed = metadata.attempt?.result?.state === 'committed' && metadata.attempt.intent.targetId === ingreso?.id && sameMetadata(metadata.attempt.intent.fields, {observations:formData.observaciones || null, invoice:formData.url_factura || null});
       const attachment=metadata.attempt?.intent.attachment,id=metadata.attempt?.intent.targetId;
@@ -284,6 +291,10 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
           fields:{observations:formData.observaciones || null, invoice:formData.url_factura || null},...(selectedInvoice?{attachment:selectedInvoice}:{})});
         return;
       }
+      if(ingreso?.id && await metadataRoute.saleNow()){
+        await saleCorrection.prepare(saleCorrectionFromForm(ingreso.id,formData));
+        return;
+      }
       const ingresoData = {
         ...formData,
         valor: Number(formData.valor),
@@ -366,6 +377,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <SaleCorrectionConfirmationPanel confirmation={saleCorrection} onAction={saleCorrectionAction} />
           <IncomeMetadataConfirmationPanel confirmation={metadata} onAction={metadataAction} />
           {metadataRoute.error && <p role="alert">{metadataRoute.error}</p>}
           <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
@@ -419,7 +431,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                 </div>
 
                 {/* Cantidad y precio unitario — solo para Aguacate Hass / Hato Lechero */}
-                {mostrarCantidad && (
+                {mostrarCantidad && metadataRoute.kind!=='sale' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-muted/40 rounded-md border">
                     <div className="space-y-2">
                       <Label htmlFor="cantidad">{labelCantidad}</Label>
@@ -558,7 +570,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                 </div>
 
                 </fieldset>
-                <fieldset className="contents" disabled={metadataBusy || Boolean(ingreso?.id && metadataRoute.measured === null)}>
+                <fieldset className="contents" disabled={metadataBusy || Boolean(ingreso?.id && metadataRoute.measured === null) || metadataRoute.kind==='sale'}>
                 {/* Observaciones and Factura */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -602,7 +614,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             </Button>
             <Button
               type="submit"
-              disabled={saving || metadataBusy || invoiceHeld}
+              disabled={saving || metadataBusy || invoiceHeld || Boolean(ingreso?.id && metadataRoute.measured===null)}
               className="bg-primary hover:bg-primary-dark"
               onClick={handleSubmit}
             >
