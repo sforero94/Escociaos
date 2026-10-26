@@ -697,3 +697,8 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - METODO: hato_alertas_tick_runs se ordena por `ejecutado_at` (id es uuid). hato_capturas_foto no tiene created_at. query_logs sobre edge_logs dio 'Backend error!' dos veces en el arranque; function_logs funciona. [corrida: 2026-10-22-jueves]
 - METODO: thinksid/escocia-backups no es legible desde la sesion GitHub MCP (solo sforero94/escociaos): va a NO CORRIO. [corrida: 2026-10-22-jueves]
 - Lineas base: DB 131 MB, 22 conexiones · 5 crons / 876 corridas / 0 fallos en 72 h · consulta app mas lenta monitoreos via PostgREST 168,3 ms · 0 respuestas no-200 de la edge en 24 h. [corrida: 2026-10-22-jueves]
+- sin_hallazgos. Edge v277 (2026-10-23T19:47:46Z, verify_jwt=false), ezbr fb9fcd63… = drift-state 56ac927; detector #61–#65 success. Vercel PROMOTED 6f43bae = HEAD, build 31,5 s; #339 verificado por contenido ('Debe seleccionar la cosecha' en el grafo de IngresosView). [corrida: 2026-10-26-lunes]
+- entrypoint_path de v277 vuelve a ser el checkout local de Mac: despliegue por CLI local. Irrelevante mientras el hash = drift-state. [corrida: 2026-10-26-lunes]
+- MÉTODO: clima_avisos no tiene enviado_en; columnas clave, created_at, detalle. [corrida: 2026-10-26-lunes]
+- La 183 se sostiene: 10-18..10-25 = 8/8 días ok, 288 lecturas; reconstruido no aparece desde 10-15. [corrida: 2026-10-26-lunes]
+- Líneas base: DB 132 MB (net._http_response 60 + cron.job_run_details 26), 20 conexiones · Storage 268 MB / 315 objetos, 0 nuevos en 7 d · 5 crons / 876 corridas / 0 fallos en 72 h · edge 300/300 en 200 · suite 209 / 4.278, lint 0 / 910, tsc limpio · entry 106,1 KB gz · árboles edge 81/81 · consulta app más lenta monitoreos 180,8 ms. [corrida: 2026-10-26-lunes]

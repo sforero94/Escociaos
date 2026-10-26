@@ -852,3 +852,8 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - query_logs puede fallar una vez con 'FetchException'; reintentar con iso_timestamp_start/end explicitos (< 24 h). [corrida: 2026-10-22-jueves]
 - Los fin_ingresos de leche se llaman '<litros> L' (ej. '5091 L'), sin 'leche': ligar via hato_produccion_quincenal.fin_ingreso_id. [corrida: 2026-10-22-jueves]
 - PR #336 (ESCO-159) sigue abierto, mergeable clean, sin actividad desde 10-19. [corrida: 2026-10-22-jueves]
+- Base main@6f43bae verde: vitest 209 / 4.278, tsc 0, lint 0 / 910. [corrida: 2026-10-26-lunes]
+- Tras la 184, los 4 caminos de captura de aguacate mandan la etiqueta y las RPC del hato escriben NULL (pasa el CHECK). No re-auditar salvo un nuevo escritor de fin_ingresos (grep "from('fin_ingresos')" + INSERT INTO fin_ingresos en migraciones). [corrida: 2026-10-26-lunes]
+- describirUltimaCaptura ya trata liquidacion 'pendiente' como neutro. El aplazamiento del 2026-09-24 queda cerrado. [corrida: 2026-10-26-lunes]
+- El arreglo de issue 7 (#336) está desplegado pero no ha corrido: tras el próximo reporte semanal, buscar 400 en edge_logs. PRs abiertos hoy: #340 (BUG_REPORT, ESCO-161), #341 (comentarios cosecha, ESCO-163). [corrida: 2026-10-26-lunes]
+- aplicaciones total = 23. Editar un ingreso de aguacate y cambiarle el negocio deja la cosecha vieja en la fila: sin efecto en cifras (todo lector filtra por vista antes). No filar. [corrida: 2026-10-26-lunes]

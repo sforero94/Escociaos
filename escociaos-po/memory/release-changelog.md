@@ -629,3 +629,8 @@ mensual sigue siendo la unica legible.**
 - Probar la 183 con md5(prosrc) = `6228f11a…`, no con ilike sobre pg_get_functiondef. [corrida: 2026-10-22-jueves]
 - Una version edge nueva con el arbol sin cambio es benigna si su ezbr_sha256 es igual al del estado de deriva del mismo commit. [corrida: 2026-10-22-jueves]
 - La 181 ya tiene entrada en CLAUDE.md: no filar el 10-26. Las cabeceras de 181/183 siguen 'ESCRITA, SIN APLICAR' (patron ESCO-147, CLAUDE.md correcto). [corrida: 2026-10-22-jueves]
+- Línea base 2026-10-26: HEAD 6f43bae · edge v277 = 56ac927 · migraciones hasta 184 · PR abiertos #324 (borrador), #340, #341 · nada pendiente de deploy. ESCO-160 y ESCO-143 cerrados (Arreglado). [corrida: 2026-10-26-lunes]
+- ESCO-159 cierra sólo cuando exista un reporte semanal posterior al 2026-10-23: select created_at, fecha_inicio from reportes_semanales order by created_at desc limit 1 (hoy el último es S42, 10-19). [corrida: 2026-10-26-lunes]
+- 184 sin ejercitar: 0 fin_ingresos creados después de 2026-10-23 19:53Z. El jueves comprobar que las ventas nuevas de aguacate traen etiqueta. [corrida: 2026-10-26-lunes]
+- database.ts se atrasa tras cada migración aditiva (faltan 180 y 181 desde 10-16). Si crece, filar aparte, no como ESCO-143. [corrida: 2026-10-26-lunes]
+- Ráfaga del 10-23: 3 PR fusionados en 27 s. Próximo chequeo de cadencia mensual: 2026-11-02 (primer lunes). [corrida: 2026-10-26-lunes]

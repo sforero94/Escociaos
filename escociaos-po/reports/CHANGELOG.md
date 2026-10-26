@@ -23,6 +23,28 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-10-26 — corrida lunes
+
+**Three PRs merged** (#336, #337 and #339, all on 2026-10-23 within 27 seconds) and **one
+migration applied** (184, ledger `20261023195321`). Everything is live. The frontend is on
+`6f43bae` (Vercel READY/PROMOTED, includes all three PRs). The edge function
+`make-server-1ccce916` is v277 (2026-10-23T19:47:46Z, hash = drift state of `56ac927`),
+deployed before migration 184 as its order requires. Nothing waits for a deploy.
+
+### Finanzas
+- Every aguacate sale now asks which harvest it belongs to (Principal or Traviesa and the year), in the income form, the batch table, the bulk CSV load and Telegram `/ingreso`. The harvest is no longer guessed from the sale date, because the sale windows changed in 2026 (ESCO-160, #339).
+- The database rejects an aguacate sale without a harvest tag, or with a tag that is not `Principal AAAA` / `Traviesa AAAA`. The 95 earlier sales keep their tags (#339, migration 184).
+- The P&G per-harvest view now offers next year, so Principal 2027, already on sale, can be read (#339).
+
+### Reportes
+- The weekly report now gets the biological targets of the planned applications, and the report wizard shows the real number of mixes, not "0 mezclas". Before, both queries failed in silence (ESCO-159, #336). The first weekly report that uses this is S43.
+
+### Interno
+- BUG_REPORT.md refreshed against production (#337). CLAUDE.md marks migration 184 as applied.
+
+### Requiere despliegue manual
+- None.
+
 ## 2026-10-22 — corrida jueves
 
 **Two PRs merged** (#338 and #333, both on 2026-10-19) and **two migrations applied**
