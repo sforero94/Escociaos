@@ -680,9 +680,9 @@ honestly is what makes the loud weeks credible.
 
 | | |
 |---|---|
-| Cloud Routine — Monday | `trig_01QusLNQd3snSbrn9UwBuqmQ` · `0 11 * * 1` UTC · bootstrapper prompt, reads this folder |
-| Cloud Routine — Thursday | `trig_01BnbYqstYhc1SjTfyrizYUB` · `0 11 * * 4` UTC · bootstrapper prompt, reads this folder |
-| Cloud Routine — Friday | `trig_01AbCfQPNmRh7Jq8fX8yktSe` · `0 11 * * 5` UTC · backlog drain, reads `runbooks/run-viernes.md` (created 2026-08-21, first fire 2026-08-28) |
+| Cloud Routine — Monday | `trig_01QusLNQd3snSbrn9UwBuqmQ` · `0 12 * * 1` UTC · bootstrapper prompt, reads this folder |
+| Cloud Routine — Thursday | `trig_01BnbYqstYhc1SjTfyrizYUB` · `0 12 * * 4` UTC · bootstrapper prompt, reads this folder |
+| Cloud Routine — Friday | `trig_01AbCfQPNmRh7Jq8fX8yktSe` · `0 12 * * 5` UTC · backlog drain, reads `runbooks/run-viernes.md` (created 2026-08-21, first fire 2026-08-28) |
 | Notifications | Routine push + email, one per run |
 | Runtime decision | Cloud Routines (2026-07-31): always fire, MCPs authenticated account-level, clean clone of `main` by construction — never sees Santiago's local worktrees/WIP |
 | DB connectors | **One, since 2026-09-21.** Everything — diagnosis reads AND remediation writes — goes through **Composio** (`2982c4d2-…`) on `account: supabase_bitis-coward` (alias `escocia-os`). Reads: `SUPABASE_RUN_READ_ONLY_QUERY`, which connects as `supabase_read_only_user` and has write statements rejected server-side, so that half is still mechanically enforced. Writes: `SUPABASE_APPLY_A_MIGRATION` (`ref`, `query`, `name`, `rollback`). **The dedicated `Supabase_Escritura` connector (`1eeabe38-…`) is retired from this operation** — Santiago reversed the 2026-09-14 decision on 2026-09-21 after `apply_migration` went missing from it for four consecutive sessions (ESCO-114). **What the reversal cost**: that connector permitted one tool, so freehand SQL was mechanically impossible; Composio's write tool shares `COMPOSIO_MULTI_EXECUTE_TOOL` with the reads, which `always_ask`/`always_allow` cannot gate per `tool_slug`. Monday and Thursday are therefore now *able* to write and are trusted not to. See §6 |
@@ -690,10 +690,11 @@ honestly is what makes the loud weeks credible.
 | Tool allowlists | `permitted_tools` + `tool_policy_overrides` per connector, **hand-maintained and therefore rot-prone** — this got worse, not better, after 2026-09-14: a Composio `tool_slug`/`account` pair now rots one layer below where this allowlist can even see it (§4 Phase 0). Corrected 2026-08-21: `get_logs` → `query_logs` on all three (see the Phase 0 preflight note in §4 for what the stale entry cost). Also dropped the deprecated `notion-query-database-view`. **The preflight is the durable fix, not the rename** — the next rot will happen too, and now at the Composio layer as easily as the connector layer |
 | Vercel | Read through **Composio** (`2982c4d2-…`), slugs `VERCEL_GET_*`, account `vercel_tetric-hash`. The direct Vercel connector is retired. **The six runs that filed "Vercel connector broken, re-authenticate" were chasing the wrong thing**: both connectors were healthy and both were OAuth'd as `thinksid`, who is not a member of the team owning the project — a 403 says *this user cannot*, not *this connector is broken*. Fixed 2026-08-21 by reconnecting as the owning account. **`COMPOSIO_MULTI_EXECUTE_TOOL` is a generic executor across every connected toolkit, so it bounds no blast radius at all.** That was already the accepted tradeoff for Vercel (2026-08-21) and for Supabase reads and Notion (2026-09-14). Since **2026-09-21 it also carries the Supabase write** (`SUPABASE_APPLY_A_MIGRATION`), so the old rule "never for a Supabase write" is retired and replaced by a narrower one: **`SUPABASE_BETA_RUN_SQL_QUERY` is forbidden in every phase, and a write only ever executes a reviewed migration file verbatim.** Slugs, the accounts and their traps: `memory/_compartida.md` |
 
-**DST**: both crons are UTC and currently resolve to 7:00 am EDT. When the US
-falls back on **1 November 2026**, 7:00 am ET becomes `0 12 * * 1` /
-`0 12 * * 4` — update both Routines then, or the runs arrive at 6:00 am. The
-first November run must flag this in `REQUIERE TU DECISIÓN` if not yet done.
+**DST — done 2026-10-26**: the crons are UTC. All three Routines are now
+`0 12 * * 1` / `0 12 * * 4` / `0 12 * * 5`, which is 7:00 am ET after the US
+falls back on **1 November 2026** (until then they resolve to 8:00 am EDT).
+Revert to `0 11` when US daylight saving time resumes (second Sunday of March
+2027) to keep 7:00 am ET.
 
 Set up 2026-07-31. Changes to the roster, cadence, priorities or guardrails
 belong in this file. The Routine prompts are bootstrappers and should almost
