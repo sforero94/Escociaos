@@ -90,8 +90,24 @@ describe('webhook de Telegram: secreto compartido obligatorio', () => {
 // Chat ids de Telegram fuera del código y de la documentación
 // ============================================================================
 
-/** Un chat id de Telegram es un entero de ~9-11 dígitos. */
-const DIGITOS = /(?<![\d.])\d{9,11}(?![\d.])/;
+/**
+ * Un chat id de Telegram es un entero suelto de 9 a 11 dígitos.
+ *
+ * El lookaround anterior (`(?<![\d.])…(?![\d.])`) solo impedía casar dentro
+ * de un número más largo o de un decimal. Una letra pegada a los dígitos sí
+ * pasaba: en el UUID `8386189a-91c3-432e-a668-22f436664833` la `f` del último
+ * grupo dejaba ver `436664833`. Ese token es el `usuarios.id` de
+ * `bot@escocia.com` (cuenta de la app), no un `telegram_id` — un chat id es
+ * un bigint que se puede mandar a la API, y este no lo es. La memoria del PO
+ * reescribe UUIDs cada semana y a menudo menciona Telegram unas líneas más
+ * abajo, así que allowlistear el fragmento no dura.
+ *
+ * El literal tiene que estar delimitado por algo que no sea letra, dígito ni
+ * punto. El `_` sigue siendo separador (`chat_id_123456789` es un entero
+ * publicado). También lo son el guion, el signo menos, las comillas y el
+ * backtick.
+ */
+const DIGITOS = /(?<![A-Za-z\d.])\d{9,11}(?![A-Za-z\d.])/;
 /** Palabras que delatan que el número de al lado es un chat id. */
 const CONTEXTO = /telegram|chat[_\s-]?id/i;
 /** Cuántas líneas alrededor se miran para decidir el contexto. */
@@ -122,6 +138,27 @@ const ALLOWLIST = new Map<string, string>([
   ['8759479581', 'id público del bot @escociaos_bot (botInfo de Grammy)'],
 ]);
 
+/**
+ * Líneas (1-based) con un literal de chat id fuera de ALLOWLIST.
+ * No devuelve el valor: un fallo no debe reimprimir el id.
+ */
+function lineasConLiteralDeChat(lineas: string[]): number[] {
+  const hallazgos: number[] = [];
+  lineas.forEach((linea, i) => {
+    const numeros = linea.match(new RegExp(DIGITOS.source, 'g'));
+    if (!numeros) return;
+    const desde = Math.max(0, i - VENTANA);
+    const hasta = Math.min(lineas.length, i + VENTANA + 1);
+    const contexto = lineas.slice(desde, hasta).join('\n');
+    if (!CONTEXTO.test(contexto)) return;
+    for (const numero of numeros) {
+      if (ALLOWLIST.has(numero)) continue;
+      hallazgos.push(i + 1);
+    }
+  });
+  return hallazgos;
+}
+
 function recolectar(dir: string, salida: string[] = []): string[] {
   let entradas: string[];
   try {
@@ -149,20 +186,10 @@ describe('chat ids de Telegram no se publican en el repo', () => {
     for (const dir of DIRECTORIOS) {
       for (const archivo of recolectar(join(RAIZ, dir))) {
         const lineas = readFileSync(archivo, 'utf8').split('\n');
-        lineas.forEach((linea, i) => {
-          const global = new RegExp(DIGITOS.source, 'g');
-          const numeros = linea.match(global);
-          if (!numeros) return;
-          const desde = Math.max(0, i - VENTANA);
-          const hasta = Math.min(lineas.length, i + VENTANA + 1);
-          const contexto = lineas.slice(desde, hasta).join('\n');
-          if (!CONTEXTO.test(contexto)) return;
-          for (const numero of numeros) {
-            if (ALLOWLIST.has(numero)) continue;
-            // Se reporta fichero:línea, NUNCA el valor.
-            hallazgos.push(`${relative(RAIZ, archivo)}:${i + 1}`);
-          }
-        });
+        for (const n of lineasConLiteralDeChat(lineas)) {
+          // Se reporta fichero:línea, NUNCA el valor.
+          hallazgos.push(`${relative(RAIZ, archivo)}:${n}`);
+        }
       }
     }
 
@@ -172,5 +199,41 @@ describe('chat ids de Telegram no se publican en el repo', () => {
         'Reemplazalo por un valor sintético o por una referencia a `telegram_usuarios`; ' +
         'si el número no es un chat id, agregalo a ALLOWLIST con su motivo.',
     ).toEqual([]);
+  });
+
+  it('no toma la cola numérica de un UUID por un chat id', () => {
+    // Mismo texto que puso en rojo a main en 466bd6f (usage-analytics.md:378).
+    // "Telegram" cae dentro de la ventana de 2 líneas. El id entre paréntesis
+    // es un UUID v4 de `usuarios`, citado junto al email de la cuenta.
+    const lineas = [
+      "- La cuenta bot se renombró 'Grok Bot' → 'Les Bots' (bot@escocia.com, id 8386189a-91c3-432e-a668-22f436664833). Resolver el bot por id o email, nunca por nombre.",
+      '- El bot captura las ventas de aguacate.',
+      '- Santiago apagó servicio_sin_confirmacion para todos en Telegram desde la UI.',
+    ];
+    expect(lineasConLiteralDeChat(lineas)).toEqual([]);
+    expect(lineasConLiteralDeChat(['sha deadbeef436664833 cerca de telegram'])).toEqual([]);
+    expect(lineasConLiteralDeChat(['CHATID123456789'])).toEqual([]);
+  });
+
+  it('sigue marcando un chat id suelto, negativo, entre comillas o en backtick', () => {
+    expect(lineasConLiteralDeChat(['chat_id: 123456789'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(['chat_id=-1234567890'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(['chat_id: 12345678901'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(['telegram "123456789"'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(['telegram `123456789`'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(["telegram '123456789'"])).toEqual([1]);
+    // El `_` no es letra: sigue siendo un entero publicado, no un fragmento de UUID.
+    expect(lineasConLiteralDeChat(['chat_id_123456789'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(['telegram_123456789'])).toEqual([1]);
+  });
+
+  it('respeta la ventana de contexto, la allowlist, los decimales y el largo', () => {
+    expect(lineasConLiteralDeChat(['123456789', 'x', 'aviso de telegram'])).toEqual([1]);
+    expect(lineasConLiteralDeChat(['123456789', 'a', 'b', 'telegram'])).toEqual([]);
+    expect(lineasConLiteralDeChat(['botInfo de telegram 8759479581'])).toEqual([]);
+    expect(lineasConLiteralDeChat(['telegram 12.123456789'])).toEqual([]);
+    expect(lineasConLiteralDeChat(['chat_id: 123456789012'])).toEqual([]);
+    expect(lineasConLiteralDeChat(['chat_id: 12345678'])).toEqual([]);
+    expect(lineasConLiteralDeChat(['sin contexto 123456789'])).toEqual([]);
   });
 });
