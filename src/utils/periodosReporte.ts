@@ -91,9 +91,10 @@ export function periodosTrimestrales(anio: number): PeriodoDef[] {
  *
  * Los ingresos se seleccionan por la etiqueta `fin_ingresos.cosecha`, no por
  * fecha. Desde ESCO-160 (2026-10-23) esa etiqueta se escoge al registrar la
- * venta (`src/utils/cosechaAguacate.ts`); `fn_cosecha_aguacate()` solo queda
- * como respaldo en la base para los caminos que no la mandan. Las ventanas de
- * venta de arriba son las de la regla vieja y ya no deciden nada.
+ * venta (`src/utils/cosechaAguacate.ts`), y desde la migración 184 la base
+ * rechaza una venta de aguacate sin etiqueta: `fn_cosecha_aguacate()` ya no
+ * etiqueta nada. Las ventanas de venta de arriba son las de la regla vieja y
+ * ya no deciden nada.
  */
 export function periodosCosecha(anio: number): PeriodoDef[] {
   const anioPrincipal = anio + DESFASE_ANIO_PRINCIPAL;

@@ -4,9 +4,13 @@
 // REGISTRAR la venta y es la fuente de verdad. Ya no se deriva de la fecha.
 // Las ventanas de venta cambiaron en 2026 (la Principal arrancó en
 // septiembre), y `fn_cosecha_aguacate()` (migración 043) sigue la regla
-// vieja: sólo queda como respaldo en la base para los caminos que no mandan
-// etiqueta (bot de Telegram). Las filas históricas conservan la etiqueta que
-// ya tienen — esa regla de fechas fue la que las etiquetó.
+// vieja. Desde la migración 184 ya NO es un respaldo: el trigger
+// `trg_set_cosecha_aguacate` rechaza con 23502 una venta de Aguacate Hass sin
+// etiqueta, y un CHECK exige la forma `Principal AAAA` / `Traviesa AAAA`. Todo
+// camino que inserte una venta de aguacate tiene que mandar la etiqueta (el
+// bot de Telegram la pide desde `cosecha-aguacate.ts`). Las filas históricas
+// conservan la etiqueta que ya tienen — esa regla de fechas fue la que las
+// etiquetó.
 //
 // Lógica pura, sin Supabase. Guardada por `src/__tests__/cosechaAguacate.test.ts`.
 
