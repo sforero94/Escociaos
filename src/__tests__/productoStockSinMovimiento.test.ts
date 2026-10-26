@@ -65,11 +65,19 @@ describe('prepararDatosProducto — el saldo de inventario no viaja en un UPDATE
     expect(datos.precio_unitario).toBe(1200);
   });
 
-  it('en CREACIÓN sí incluye cantidad_actual: es el saldo de apertura', () => {
+  it('en CREACIÓN el saldo nace SIEMPRE en 0, ignore lo que traiga el formulario (ESCO-164)', () => {
+    // Antes salía 999: el saldo de apertura tecleado entraba sin movimiento y
+    // la primera compra sumaba encima (Acidurez 2026-10-24: 1 + 1 = 2).
     const datos = prepararDatosProducto(formulario, false);
 
-    expect(datos.cantidad_actual).toBe(999);
+    expect(datos.cantidad_actual).toBe(0);
     expect(datos.activo).toBe(true);
+  });
+
+  it('en CREACIÓN con el campo vacío también manda 0, nunca null', () => {
+    const datos = prepararDatosProducto({ ...formulario, cantidad_actual: '' }, false);
+
+    expect(datos.cantidad_actual).toBe(0);
   });
 
   it('convierte los strings vacíos a null, no a 0 -- "sin dato" no es "cero"', () => {

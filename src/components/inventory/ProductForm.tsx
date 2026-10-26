@@ -128,8 +128,11 @@ const initialFormData: ProductData = {
  * `NuevoMovimientoModal` con `tipo = 'Ajuste'`, que inserta el movimiento
  * ANTES de tocar `productos`.
  *
- * En modo CREACIÓN sí viaja: es el saldo de apertura del producto, y no hay
- * nada anterior que un movimiento pudiera explicar.
+ * En modo CREACIÓN viaja SIEMPRE en 0 (decisión de Santiago, 2026-10-26,
+ * ESCO-164). Antes viajaba el valor tecleado como saldo de apertura sin
+ * movimiento, y la primera compra sumaba encima: el stock quedaba doble
+ * (Acidurez 2026-10-24, Naturboro 2026-08-05). El stock entra con la compra o
+ * con un Ajuste, que dejan su fila en `movimientos_inventario`.
  */
 export function prepararDatosProducto(
   formData: ProductData,
@@ -145,6 +148,7 @@ export function prepararDatosProducto(
   if (esEdicion) {
     delete datos.cantidad_actual;
   } else {
+    datos.cantidad_actual = 0;
     datos.activo = true;
   }
 
@@ -529,9 +533,9 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
 
                 <h4 className="text-md text-gray-800 mt-6 mb-3">Inventario</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Cantidad Actual — solo editable al CREAR (saldo de
-                      apertura). En edición es de solo lectura: el saldo se
-                      corrige con un movimiento de Ajuste, que deja rastro. */}
+                  {/* Cantidad Actual — nunca editable. Al crear, el saldo
+                      nace en 0 (ESCO-164); en edición se corrige con un
+                      movimiento de Ajuste, que deja rastro. */}
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">
                       Cantidad Actual
@@ -541,24 +545,18 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       type="number"
                       onWheel={(e) => e.currentTarget.blur()}
                       name="cantidad_actual"
-                      value={formData.cantidad_actual}
-                      onChange={handleChange}
-                      readOnly={Boolean(productId)}
+                      value={productId ? formData.cantidad_actual : 0}
+                      readOnly
                       step="0.01"
                       min="0"
-                      className={
-                        productId
-                          ? 'w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed'
-                          : 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent'
-                      }
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                       placeholder="Cantidad en inventario"
                     />
-                    {productId && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        El saldo solo cambia con un movimiento. Para corregirlo usa
-                        Movimientos → Nuevo movimiento → Ajuste.
-                      </p>
-                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      {productId
+                        ? 'El saldo solo cambia con un movimiento. Para corregirlo usa Movimientos → Nuevo movimiento → Ajuste.'
+                        : 'El insumo se crea con saldo 0. El stock entra al registrar la compra, o con un Ajuste si ya está en bodega.'}
+                    </p>
                   </div>
 
                   {/* Stock Mínimo */}
