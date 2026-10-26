@@ -5,7 +5,8 @@
 **Re-verificado contra producción y `main@1a97b2d`:** 2026-09-07 — sin cambio de veredicto; sólo se actualizan las cifras que habían quedado rancias
 **Re-verificado contra producción y `main@a852d3e`:** 2026-10-12 — sin cambio de veredicto; cifras de reportes al día, 3b idéntico
 **Re-verificado contra producción y `main@2947270`:** 2026-10-19 — 3b idéntico; cifras al día; **issue 7 nuevo** (dos consultas de aplicaciones planeadas en 400, PR #336)
-**Estado:** 5 de los 6 problemas originales están cerrados. 1 sigue abierto, y no por la causa que decía este archivo. 1 problema nuevo (issue 7), con arreglo en PR #336.
+**Re-verificado contra producción y `main@6f43bae`:** 2026-10-26 — issue 7 corregido (PR #336 fusionado y desplegado); 3b idéntico, líneas movidas a 531-535/541
+**Estado:** 5 de los 6 problemas originales están cerrados. 1 sigue abierto, y no por la causa que decía este archivo. El issue 7 (nuevo el 2026-10-19) está corregido.
 
 > **Cómo leer este archivo.** Cada issue lleva su veredicto y **la evidencia con la que se comprobó** (archivo:línea, SQL con su resultado). Un issue sin evidencia no se cierra. Si vuelve a aparecer un síntoma listado aquí como cerrado, es un bug **nuevo** — no una reapertura — y merece su propia entrada.
 
@@ -21,7 +22,7 @@
 | 4 | Vista por sublote muestra 1 observación en vez de 3 | ✅ **Corregido** |
 | 5 | Guardar el reporte falla con error de RLS | ✅ **Corregido** |
 | 6 | La descarga del PDF no funciona | ✅ **No reproducible** |
-| 7 | *(nuevo 2026-10-19)* Aplicaciones planeadas: blancos biológicos y mezclas siempre vacíos | 🔧 **Arreglo en PR #336** |
+| 7 | *(nuevo 2026-10-19)* Aplicaciones planeadas: blancos biológicos y mezclas siempre vacíos | ✅ **Corregido** (PR #336, 2026-10-23) |
 
 El módulo lleva **35 reportes generados y guardados**, con cadencia semanal hasta la **semana 42 de 2026 (generado 2026-10-19)**. La afirmación original de que "NADA funciona" dejó de ser cierta hace meses; este archivo simplemente no se actualizó.
 
@@ -111,7 +112,7 @@ El corte es limpio: **toda aplicación creada desde abril de 2026 escribe `costo
 
 ### 3b. El inventario consumido se valora en $0 — ❌ SIGUE ABIERTO (causa distinta a la reportada)
 
-`src/utils/fetchDatosReporteSemanal.ts:512-523` calcula el valor del inventario que la aplicación va a consumir derivando un precio unitario **a partir de lo que hay que comprar**:
+`src/utils/fetchDatosReporteSemanal.ts:531-535` calcula el valor del inventario que la aplicación va a consumir derivando un precio unitario **a partir de lo que hay que comprar**:
 
 ```ts
 const unitCost = item.costoEstimado > 0 && cantidadComprar > 0
@@ -119,12 +120,12 @@ const unitCost = item.costoEstimado > 0 && cantidadComprar > 0
   : 0;
 ```
 
-Cuando el producto está **totalmente cubierto por inventario** — el caso normal — `cantidadComprar` es 0, así que `unitCost` es 0 y ese insumo aporta **cero** al costo. Si ninguna línea requiere compra, `costoTotal` (línea 526) es 0 y `costoPorLitroKg` / `costoPorArbol` salen en 0.
+Cuando el producto está **totalmente cubierto por inventario** — el caso normal — `cantidadComprar` es 0, así que `unitCost` es 0 y ese insumo aporta **cero** al costo. Si ninguna línea requiere compra, `costoTotal` (línea 541) es 0 y `costoPorLitroKg` / `costoPorArbol` salen en 0.
 
-Al 2026-10-19 (sin cambio desde el 2026-09-07) eso aplica a **8 de las 22 aplicaciones** registradas — las que tienen lista de compras pero ninguna línea por comprar (`cantidad_faltante = 0` en todas): *Drench Enero 26*, *Fumigación 01*, *Foco Irlanda*, *Fumigación control monalonion y hongos - Mayo*, *Fertilizante mes de junio*, *Fumigacion Post cosecha junio*, *Fumigación control acaro - Julio* y *Drench agosto* (nueva desde el 2026-08-03).
+Al 2026-10-26 (sin cambio desde el 2026-09-07) eso aplica a **8 de las 23 aplicaciones** registradas — las que tienen lista de compras pero ninguna línea por comprar (`cantidad_faltante = 0` en todas): *Drench Enero 26*, *Fumigación 01*, *Foco Irlanda*, *Fumigación control monalonion y hongos - Mayo*, *Fertilizante mes de junio*, *Fumigacion Post cosecha junio*, *Fumigación control acaro - Julio* y *Drench agosto* (nueva desde el 2026-08-03).
 
 ```sql
--- verificado 2026-10-19 (mismo resultado que el 2026-09-07)
+-- verificado 2026-10-26 (mismo resultado que el 2026-09-07)
 select a.nombre_aplicacion, a.estado, count(c.id) items,
        sum((coalesce(c.cantidad_faltante,0) > 0)::int) items_a_comprar
 from aplicaciones a join aplicaciones_compras c on c.aplicacion_id = a.id
@@ -134,7 +135,7 @@ group by 1,2 having sum((coalesce(c.cantidad_faltante,0) > 0)::int) = 0;
 
 **Por qué no se corrige en este archivo:** existe una fuente de precio obvia (`productos.precio_unitario`, que es la que ya usa el motor de costo/kg en `calculosCostoKg.ts`), pero decidir **a qué precio se valora un insumo sacado de bodega** es una regla contable, no un bug de aritmética. Requiere aprobación del dueño antes de tocar un número que Gerencia lee.
 
-**Impacto acotado, re-verificado 2026-10-19:** `fetchAplicacionesPlaneadas()` solo trae aplicaciones en estado `Calculada`. Sigue habiendo **una** (*Aplicacion Enmienda*) y sigue sin filas en `aplicaciones_compras`; las 8 afectadas están todas `Cerrada`. Así que la sección de planeadas del reporte sale vacía casi siempre. Es un error latente, no uno que esté ensuciando el reporte cada semana.
+**Impacto acotado, re-verificado 2026-10-26:** `fetchAplicacionesPlaneadas()` solo trae aplicaciones en estado `Calculada`. Sigue habiendo **una** (*Aplicacion Enmienda*) y sigue sin filas en `aplicaciones_compras`; las 8 afectadas están todas `Cerrada`. Así que la sección de planeadas del reporte sale vacía casi siempre. Es un error latente, no uno que esté ensuciando el reporte cada semana.
 
 ---
 
@@ -200,7 +201,7 @@ Si vuelve a fallar una descarga, ábrase como bug nuevo con el error del navegad
 
 ---
 
-## Issue 7 — Aplicaciones planeadas: blancos y mezclas siempre vacíos 🔧 ARREGLO EN PR #336 (nuevo 2026-10-19)
+## Issue 7 — Aplicaciones planeadas: blancos y mezclas siempre vacíos ✅ CORREGIDO (nuevo 2026-10-19)
 
 **Síntoma:** cada generación del reporte hace dos consultas que PostgREST rechaza con **400**, ambas en `fetchAplicacionesPlaneadas()` (`src/utils/fetchDatosReporteSemanal.ts`). El error no se mira, así que el reporte sale sin blancos biológicos y el asistente muestra siempre «0 mezclas».
 
@@ -215,3 +216,5 @@ GET /rest/v1/aplicaciones_mezclas?select=id,nombre,numero_orden,...    -> 400
 
 **Causa:** `aplicaciones.blanco_biologico` es `text` con un arreglo JSON serializado (22 de 22 filas empiezan con `[`) y el código lo pasaba entero como si fuera un id; `aplicaciones_mezclas` tiene `nombre_mezcla`/`numero_mezcla`, no `nombre`/`numero_orden`. Independiente del issue 3b.
 
+
+**Arreglo (verificado 2026-10-26):** el PR #336 se fusionó el 2026-10-23 (`341d436`). `fetchAplicacionesPlaneadas()` parsea el texto JSON de `blanco_biologico` y lee `nombre_mezcla`/`numero_mezcla`, con pruebas de regresión en `src/__tests__/reporteSemanal.test.ts`. El frontend de producción corre `6f43bae`, que contiene el arreglo (Vercel, despliegue `READY`/`PROMOTED`). En las últimas 24 h los `edge_logs` no muestran ningún 400. **Límite honesto:** no se generó ningún reporte desde el 2026-10-19 (35 / 35 con `url_storage`, último semana 42), así que el arreglo todavía no se ejercitó en producción. Si el próximo reporte vuelve a dar 400 en esas dos rutas, es un bug nuevo.
