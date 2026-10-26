@@ -634,3 +634,4 @@ mensual sigue siendo la unica legible.**
 - 184 sin ejercitar: 0 fin_ingresos creados después de 2026-10-23 19:53Z. El jueves comprobar que las ventas nuevas de aguacate traen etiqueta. [corrida: 2026-10-26-lunes]
 - database.ts se atrasa tras cada migración aditiva (faltan 180 y 181 desde 10-16). Si crece, filar aparte, no como ESCO-143. [corrida: 2026-10-26-lunes]
 - Ráfaga del 10-23: 3 PR fusionados en 27 s. Próximo chequeo de cadencia mensual: 2026-11-02 (primer lunes). [corrida: 2026-10-26-lunes]
+- Fusionados tras la corrida: #342 (guard de chat-id de Telegram, 27aecef), #340 (475d1d6), #341 (0a95d60). Abierto: #343 (ESCO-164). #342 toca edge: verificar despliegue el jueves. [sesion en vivo 2026-10-26]

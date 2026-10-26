@@ -857,3 +857,5 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - describirUltimaCaptura ya trata liquidacion 'pendiente' como neutro. El aplazamiento del 2026-09-24 queda cerrado. [corrida: 2026-10-26-lunes]
 - El arreglo de issue 7 (#336) está desplegado pero no ha corrido: tras el próximo reporte semanal, buscar 400 en edge_logs. PRs abiertos hoy: #340 (BUG_REPORT, ESCO-161), #341 (comentarios cosecha, ESCO-163). [corrida: 2026-10-26-lunes]
 - aplicaciones total = 23. Editar un ingreso de aguacate y cambiarle el negocio deja la cosecha vieja en la fila: sin efecto en cifras (todo lector filtra por vista antes). No filar. [corrida: 2026-10-26-lunes]
+- PR #340 (ESCO-161) y #341 (ESCO-163) fusionados por Santiago: 475d1d6 y 0a95d60. Cerrados en Notion. [sesion en vivo 2026-10-26]
+- ESCO-164: decisión «cantidad actual 0 al crear el insumo siempre». PR #343 (ProductForm fuerza 0 en creación, campo de solo lectura). Pendiente fuera de alcance: importar-productos.tsx (CSV, ambos árboles) todavía acepta cantidad_actual en productos nuevos sin movimiento. [sesion en vivo 2026-10-26]
