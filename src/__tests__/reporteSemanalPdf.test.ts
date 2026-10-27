@@ -12,12 +12,30 @@ import {
 } from '@/utils/reporteSemanalPdf';
 
 /**
- * El PDF que salió de producción (jsPDF 3.0.4, 9 páginas de 960×540 pt) es
- * una captura html2canvas: un JPEG por página y pdftotext vacío. Estas
- * pruebas exigen lo contrario sobre el documento que arma el mismo módulo
- * que usa la descarga: capa de texto, cadenas sin espacios espurios, filas
- * de jornales completas y secciones que paginan en vez de recortarse.
+ * El PDF de producción es el mismo mazo de diapositivas 16:9 (1280×720,
+ * 960×540 pt) que se ve en pantalla. Estas pruebas exigen ese formato y
+ * ese orden, más texto seleccionable, sin huecos en números ni fechas, y
+ * sin recortar filas: lo que no cabe sigue en otra diapositiva igual.
  */
+
+const ANCHO_SLIDE = 960;
+const ALTO_SLIDE = 540;
+
+function cajasDelPdf(contenido: string): Array<{ ancho: number; alto: number }> {
+  return [...contenido.matchAll(/\/MediaBox\s*\[\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s*\]/g)].map(
+    (m) => ({ ancho: Number.parseFloat(m[1]), alto: Number.parseFloat(m[2]) }),
+  );
+}
+
+function assertDiapositivas(contenido: string): void {
+  const cajas = cajasDelPdf(contenido);
+  expect(cajas.length).toBeGreaterThan(0);
+  for (const caja of cajas) {
+    expect(caja.ancho).toBeCloseTo(ANCHO_SLIDE, 0);
+    expect(caja.alto).toBeCloseTo(ALTO_SLIDE, 0);
+    expect(caja.ancho / caja.alto).toBeCloseTo(16 / 9, 2);
+  }
+}
 
 const LIBS = { jsPDF, autoTable };
 
@@ -474,6 +492,16 @@ function textoDelPdf(contenido: string): string {
     .join('\n');
 }
 
+function paginasDeTexto(contenido: string): string[] {
+  const porPagina = new Map<number, string[]>();
+  for (const f of fragmentosDelPdf(contenido)) {
+    const lista = porPagina.get(f.pagina) ?? [];
+    lista.push(f.texto);
+    porPagina.set(f.pagina, lista);
+  }
+  return [...porPagina.keys()].sort((a, b) => a - b).map((n) => (porPagina.get(n) ?? []).join('\n'));
+}
+
 function documentoSemana43() {
   return construirDocumentoReporteSemanal(LIBS, datosSemana43(), ANALISIS_SEMANA_43);
 }
@@ -503,8 +531,10 @@ describe('PDF del informe semanal — semana 43', () => {
     expect(texto).toContain('Precipitación');
     expect(texto).toContain('18.4°');
     expect(texto).toContain('86%');
-    expect(texto).toContain('43.3 de 44.0');
-    expect(texto).not.toContain('104%');
+    // La diapositiva de Personal calcula la eficiencia como el HTML:
+    // jornales totales / posibles, no el campo de la ficha del asistente.
+    expect(texto).toContain('104%');
+    expect(texto).toContain('45.8 de 44');
     expect(texto).toContain('Fumigación control ácaro octubre');
     expect(texto).toContain('Clasificación cosecha principal');
     expect(texto).toContain('Recolección cosecha principal');
@@ -547,14 +577,19 @@ describe('PDF del informe semanal — semana 43', () => {
     const texto = textoDelPdf(crudo);
     for (const seccion of [
       'RESUMEN EJECUTIVO',
-      'Personal',
-      'Clima',
-      'Labores',
-      'Jornales',
-      'Conductividad eléctrica',
-      'Aplicaciones',
+      'PERSONAL',
+      'RESUMEN DEL CLIMA',
+      'LABORES',
+      'JORNALES',
+      'JORNALES PROPIOS',
+      'JORNALES POR CONTRATO',
+      'POR TAREA',
+      'POR LOTE',
+      'CONDUCTIVIDAD ELÉCTRICA',
+      'APLICACIONES',
+      'LISTA DE COMPRAS',
       'Plan: Enmienda',
-      'Conclusiones',
+      'Conclusiones y Recomendaciones',
     ]) {
       expect(texto).toContain(seccion);
     }
@@ -593,8 +628,45 @@ describe('PDF del informe semanal — semana 43', () => {
     for (let i = 1; i <= 36; i++) {
       expect(texto).toContain(`Labor de mantenimiento número ${String(i).padStart(2, '0')}`);
     }
-    expect(texto).toContain('Página 1 de');
-    expect(texto).toContain(`Página ${doc.getNumberOfPages()} de ${doc.getNumberOfPages()}`);
+    assertDiapositivas(doc.output());
+    const paginas = paginasDeTexto(doc.output());
+    const deLabores = paginas.filter((p) => p.includes('LABORES'));
+    expect(deLabores.length).toBeGreaterThan(1);
+    for (const pagina of deLabores) {
+      expect(pagina).toContain('Nombre');
+      expect(pagina).toContain('2026-01-29');
+    }
+  });
+
+  it('arma el mismo mazo 16:9 y en el mismo orden que las diapositivas de pantalla', () => {
+    const crudo = documentoSemana43().output();
+    assertDiapositivas(crudo);
+    const paginas = paginasDeTexto(crudo);
+    const marcas = [
+      'RESUMEN EJECUTIVO',
+      'PERSONAL',
+      'RESUMEN DEL CLIMA',
+      'LABORES',
+      'JORNALES',
+      'CONDUCTIVIDAD ELÉCTRICA',
+      'APLICACIONES',
+      'Plan: Enmienda',
+      'Conclusiones y Recomendaciones',
+    ];
+    expect(paginas).toHaveLength(marcas.length);
+    marcas.forEach((marca, i) => {
+      expect(paginas[i], `diapositiva ${i + 1}`).toContain(marca);
+    });
+    expect(paginas[0]).toContain('ESCOCIA HASS');
+    expect(paginas[0]).toContain('Informe Semanal');
+    expect(paginas[0]).not.toContain('PERSONAL');
+    expect(paginas[4]).toContain('JORNALES PROPIOS');
+    expect(paginas[4]).toContain('POR TAREA');
+    expect(paginas[4]).toContain('POR LOTE');
+    expect(paginas[6]).not.toContain('Plan: Enmienda');
+    expect(paginas[7]).toContain('LISTA DE COMPRAS');
+    expect(paginas[7]).toContain('Total estimado: $4.520.000');
+    expect(paginas[7]).toContain('APLICACIONES');
   });
 
   it('reconstruye el PDF desde el HTML que guarda el generador, sin rasterizar', () => {
