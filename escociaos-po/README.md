@@ -3,11 +3,23 @@
 Un equipo de agentes especialistas corre **lunes, jueves y viernes a las 7:00 am
 ET** en Cloud Routines, audita la app desplegada, verifica antes de reportar,
 archiva hallazgos en Notion, borrador-iza fixes como PRs y te manda un resumen
-por push + email. Este folder es la única fuente de verdad de la operación.
+por push + email. **El sábado a las 8:00 am ET** una cuarta Routine te manda el
+reporte de decisiones. Este folder es la única fuente de verdad de la operación.
 
-**Lunes y jueves encuentran; el viernes termina.** El viernes drena el backlog de
-P2/P3 y no abre hallazgos nuevos. Ninguna de las tres fusiona nunca: fusionar es
-tuyo, siempre.
+**El ciclo semanal** (decisión del 2026-10-26, detalle en `CLAUDE.md` §3):
+
+- **Lunes = salud.** Un P0 te llega de inmediato; todo lo demás va al tablero
+  con una `Ruta`: `VIERNES` si el robot puede solo, `FDS` si te necesita.
+- **Jueves = features y recomendaciones**, más una sonda mínima de P0.
+- **Viernes = ejecuta** lo que tiene `Ruta = VIERNES` (PRs y, como mucho, una
+  migración aditiva aplicada) y prepara las fichas `FDS`.
+- **Sábado = reporte de decisiones**: PRs para fusionar, decisiones para ti y
+  propuestas. Respondes en una sesión nueva desde el teléfono
+  ([`runbooks/respuesta-sabado.md`](./runbooks/respuesta-sabado.md)).
+
+La ruta la decide la rúbrica [`evals/rubrica-ruteo.md`](./evals/rubrica-ruteo.md).
+Ninguna Routine fusiona nunca: solo la sesión de respuesta fusiona, y solo los
+PRs que tú nombras.
 
 ## Dónde vive cada pieza
 
@@ -15,10 +27,11 @@ tuyo, siempre.
 |---|---|---|
 | Constitución | [`CLAUDE.md`](./CLAUDE.md) | Protocolo de corrida, contrato de hallazgos, rúbrica de severidad, guardrails, modos de escritura |
 | Agentes (8) | [`../.claude/agents/`](../.claude/agents/) | Un brief por especialista, en formato subagente de Claude Code — única copia |
-| Runbooks | [`runbooks/`](./runbooks/) | Qué hace cada corrida programada (lunes / jueves / viernes) |
+| Runbooks | [`runbooks/`](./runbooks/) | Qué hace cada corrida programada (lunes / jueves / viernes / sábado) y la sesión de respuesta del sábado |
+| Rúbrica de ruteo | [`evals/rubrica-ruteo.md`](./evals/rubrica-ruteo.md) | Qué va a `P0_AHORA`, al `VIERNES` o al `FDS` |
 | Memoria | [`memory/`](./memory/) | Un archivo por agente + `_compartida.md`; disciplina de escritura en [`memory/README.md`](./memory/README.md) |
 | Reportes | `reports/` | Un `.md` por corrida, escrito por el commit de memoria |
-| Scheduling | Cloud Routines `trig_01QusLNQd3snSbrn9UwBuqmQ` (lunes) · `trig_01BnbYqstYhc1SjTfyrizYUB` (jueves) · `trig_01AbCfQPNmRh7Jq8fX8yktSe` (viernes) | Prompts bootstrapper que clonan este repo y leen este folder — casi nunca hay que editarlos. La allowlist de tools SÍ vive ahí y se pudre en silencio: ver el preflight en `CLAUDE.md` §4 |
+| Scheduling | Cloud Routines `trig_01QusLNQd3snSbrn9UwBuqmQ` (lunes) · `trig_01BnbYqstYhc1SjTfyrizYUB` (jueves) · `trig_01AbCfQPNmRh7Jq8fX8yktSe` (viernes) · `<<por definir: id del trigger de la Routine del sábado>>` (sábado) | Prompts bootstrapper que clonan este repo y leen este folder — casi nunca hay que editarlos. La allowlist de tools SÍ vive ahí y se pudre en silencio: ver el preflight en `CLAUDE.md` §4 |
 | Hallazgos | [Notion — Escocia OS · Mantenimiento](https://app.notion.com/p/c52d9258fed7466d8e700fa92980d3df) | La base de datos que revisas |
 
 ## Cómo cambiar las prioridades
@@ -31,8 +44,8 @@ merge a `main`. La siguiente corrida las lee de ahí. Nada más que tocar.
 Edita el archivo en [`runbooks/`](./runbooks/), merge a `main`. Los prompts de
 las Routines no llevan copia del runbook — solo apuntan aquí — así que no hay
 nada que re-sincronizar. Solo edita la Routine si cambia el **horario** (ojo al
-cambio de DST del 1 de noviembre 2026: `0 11` → `0 12` UTC) o el bootstrapper
-mismo.
+cambio de DST del 1 de noviembre 2026: `0 11` → `0 12` UTC; el sábado propuesto,
+`0 13 * * 6`, ya está en hora de invierno) o el bootstrapper mismo.
 
 ## Cómo agregar (o retirar) un especialista
 
@@ -56,6 +69,9 @@ En una sesión normal de Claude Code sobre este repo:
 ## Reglas que no se negocian
 
 Están en `CLAUDE.md` §6. Las tres que más importan: la base de datos de
-producción es **solo `SELECT`**; nunca push a `main` (única excepción: el commit
-de memoria, limitado a `memory/**` + `reports/**`); y cambios de lógica de
-negocio son propuestas, nunca PRs.
+producción es **solo `SELECT`**, con una sola excepción desatendida: el viernes
+aplica como mucho una migración aditiva tras sus compuertas (desde el
+2026-10-26). Ninguna Routine escribe datos; eso solo pasa en la sesión de
+respuesta del sábado, contigo presente. Nunca push a `main` (única excepción: el
+commit de memoria, limitado a `memory/**` + `reports/**`); y cambios de lógica
+de negocio son propuestas, nunca PRs.
