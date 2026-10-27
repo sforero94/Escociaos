@@ -2171,6 +2171,11 @@ function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
   }
 
   const slides = allSlides.filter(Boolean).join('\n');
+  // El PDF ya no se rasteriza: la descarga lee este JSON y maqueta texto
+  // vectorial. El `<` se escapa para que un resumen con `</script>` no cierre
+  // la etiqueta. La vista de diapositivas ignora el script (type=json).
+  const jsonPayload = JSON.stringify({ v: 1, datos, analisis }).replace(/</g, '\\u003c');
+  const payloadTag = `<script type="application/json" id="escocia-reporte-pdf">${jsonPayload}</script>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -2190,6 +2195,7 @@ function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
 </head>
 <body>
 ${slides}
+${payloadTag}
 </body>
 </html>`;
 }

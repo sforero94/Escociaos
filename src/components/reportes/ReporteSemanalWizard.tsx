@@ -394,7 +394,9 @@ export function ReporteSemanalWizard() {
 
   const handleDescargar = () => {
     if (!pdfBlob) return;
-    if (pdfBlob.size < 10_000) {
+    // El umbral viejo (10 KB) medía un JPEG por página. Un PDF vectorial
+    // válido puede ser más chico que eso; un blob roto no llega a 500 B.
+    if (pdfBlob.size < 500) {
       toast.error('El PDF parece vacío. Genera el reporte nuevamente.');
       return;
     }
