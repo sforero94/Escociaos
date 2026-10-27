@@ -495,10 +495,12 @@ function slidePersonal(motor: Motor, datos: DatosReporteSemanal, analisis: Anali
       doc.setFontSize(12);
       doc.setTextColor(...CAFE);
       const nombre = sanear(f.empleado);
+      const anchoNombre = doc.getTextWidth(nombre);
       doc.text(nombre, MARGIN_X, y);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...GRIS_SUAVE);
-      doc.text(sanear(f.razon || ''), MARGIN_X + doc.getTextWidth(nombre) + 8, y);
+      const motivo = sanear(f.razon || '');
+      if (motivo) doc.text(motivo, MARGIN_X + anchoNombre + doc.getTextWidth(' '), y);
       y += 18;
     }
   }

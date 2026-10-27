@@ -506,6 +506,29 @@ function documentoSemana43() {
   return construirDocumentoReporteSemanal(LIBS, datosSemana43(), ANALISIS_SEMANA_43);
 }
 
+function separacionFalla(contenido: string): { hueco: number; espacio: number } {
+  const fragmentos = fragmentosDelPdf(contenido);
+  const nombre = fragmentos.find((f) => f.texto === 'José Muñoz');
+  const motivo = fragmentos.find((f) => f.texto === 'cita médica');
+  expect(nombre, 'nombre de la falla').toBeTruthy();
+  expect(motivo, 'motivo de la falla').toBeTruthy();
+  expect(motivo!.pagina).toBe(nombre!.pagina);
+  expect(Math.abs(motivo!.y - nombre!.y)).toBeLessThan(1);
+
+  const metro = new jsPDF({
+    orientation: 'landscape',
+    unit: 'px',
+    format: [1280, 720],
+    hotfixes: ['px_scaling'],
+  });
+  metro.setFont('helvetica', 'bold');
+  metro.setFontSize(12);
+  const anchoNombre = metro.getTextWidth('José Muñoz') * 0.75;
+  metro.setFont('helvetica', 'normal');
+  const espacio = metro.getTextWidth(' ') * 0.75;
+  return { hueco: motivo!.x - (nombre!.x + anchoNombre), espacio };
+}
+
 describe('PDF del informe semanal — semana 43', () => {
   it('tiene capa de texto real y no es una captura JPEG', () => {
     const crudo = documentoSemana43().output();
@@ -528,6 +551,10 @@ describe('PDF del informe semanal — semana 43', () => {
     expect(texto).toContain('95%');
     expect(texto).toContain('clasificación');
     expect(texto).toContain('José Muñoz');
+    const falla = separacionFalla(documentoSemana43().output());
+    // En pantalla el nombre va en negrita y el motivo, en gris, con un espacio
+    // entre los dos. Medir el nombre en regular deja el motivo pegado.
+    expect(falla.hueco).toBeGreaterThanOrEqual(falla.espacio - 0.05);
     expect(texto).toContain('Precipitación');
     expect(texto).toContain('18.4°');
     expect(texto).toContain('86%');
