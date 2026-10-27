@@ -4,6 +4,7 @@
 
 import { getSupabase, getCurrentUser } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info.tsx';
+import { armarPdfReporteDesdeHtml } from './reporteSemanalPdf';
 import type {
   DatosReporteSemanal,
   GenerateReportResponse,
@@ -105,81 +106,25 @@ export async function generarHTMLReporte(
 // ============================================================================
 
 /**
- * Convierte HTML a PDF renderizando cada slide individualmente con html2canvas + jsPDF.
- * Esto evita el problema de html2pdf.js donde slides se fusionan en una sola página
- * cuando algún slide no mide exactamente 720px.
+ * Arma el PDF del informe desde el payload que el generador deja en el HTML.
+ *
+ * Antes esta función capturaba cada `.slide` con html2canvas y pegaba un JPEG
+ * de 2560×1440 en una página de 960×540 pt. Eso no tiene capa de texto, parte
+ * los números ("8 .5", "95 %") y recorta lo que no cabe en 720 px. El PDF
+ * ahora es vectorial (jsPDF + autoTable) y pagina en vez de recortar.
  */
 export async function convertirHTMLaPDF(html: string): Promise<Blob> {
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.left = '0';
-  iframe.style.top = '0';
-  iframe.style.width = '1280px';
-  iframe.style.height = '2000px';
-  iframe.style.opacity = '0.01';
-  iframe.style.zIndex = '-1';
-  iframe.style.pointerEvents = 'none';
-  iframe.style.border = 'none';
-  document.body.appendChild(iframe);
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+  const doc = armarPdfReporteDesdeHtml({ jsPDF, autoTable }, html);
+  const pdfBlob = doc.output('blob');
 
-  try {
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) throw new Error('No se pudo acceder al documento del iframe');
-    iframeDoc.open();
-    iframeDoc.write(html);
-    iframeDoc.close();
-
-    // Wait for fonts + rendering
-    await iframeDoc.fonts?.ready;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const slides = Array.from(iframeDoc.querySelectorAll('.slide'));
-    if (slides.length === 0) {
-      throw new Error('No se encontraron slides en el HTML generado');
-    }
-
-    console.log(`[ReporteSemanal] Renderizando ${slides.length} slides individualmente...`);
-
-    const { default: jsPDF } = await import('jspdf');
-    const { default: html2canvas } = await import('html2canvas');
-
-    const pdf = new jsPDF({
-      unit: 'px',
-      format: [1280, 720],
-      orientation: 'landscape',
-      hotfixes: ['px_scaling'],
-    });
-
-    for (let i = 0; i < slides.length; i++) {
-      const slide = slides[i] as HTMLElement;
-      const canvas = await html2canvas(slide, {
-        scale: 2,
-        useCORS: true,
-        width: 1280,
-        height: 720,
-        windowWidth: 1280,
-        backgroundColor: '#ffffff',
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-
-      if (i > 0) {
-        pdf.addPage([1280, 720], 'landscape');
-      }
-      pdf.addImage(imgData, 'JPEG', 0, 0, 1280, 720);
-    }
-
-    const pdfBlob = pdf.output('blob');
-
-    if (pdfBlob.size < 10_000) {
-      throw new Error('PDF generado vacío o inválido. Intenta generar nuevamente.');
-    }
-
-    console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes,', slides.length, 'páginas');
-    return pdfBlob;
-  } finally {
-    if (iframe.parentNode) document.body.removeChild(iframe);
+  if (pdfBlob.size < 500) {
+    throw new Error('PDF generado vacío o inválido. Intenta generar nuevamente.');
   }
+
+  console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes,', doc.getNumberOfPages(), 'páginas');
+  return pdfBlob;
 }
 
 // ============================================================================
