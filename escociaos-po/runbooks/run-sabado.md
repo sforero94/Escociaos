@@ -3,7 +3,7 @@
 **Cadence**: Saturdays 08:00 America/New_York · proposed cron `0 13 * * 6` UTC
 (winter time, from 1 November 2026; on Saturday 31 October, still EDT, that cron
 fires at 09:00 ET) · **Agents**: none · **Trigger**:
-`<<por definir: id del trigger de la Routine del sábado>>`.
+`trig_01G7S43qgN2uiCKDEp1LZfKg` (created 2026-10-27; first fire 2026-10-31).
 
 Created 2026-10-26, decision of Santiago (cycle in constitution §3). Monday and
 Thursday find, Friday executes and prepares; **Saturday asks.** It turns the
