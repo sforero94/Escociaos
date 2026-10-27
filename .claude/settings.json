@@ -3,15 +3,31 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__Supabase.*|mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL|mcp__github__(merge_pull_request|enable_pr_auto_merge)",
+        "matcher": "mcp__.*[Ss][Uu][Pp][Aa][Bb][Aa][Ss][Ee].*__.*|mcp__Composio__.*|mcp__github__(merge_pull_request|enable_pr_auto_merge)",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/supabase-guard.py\"",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/supabase-guard.py\"",
             "timeout": 10
           }
         ]
       }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Edit(.claude/hooks/**)",
+      "Write(.claude/hooks/**)",
+      "Edit(/.claude/hooks/**)",
+      "Write(/.claude/hooks/**)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "Edit(/.claude/settings.json)",
+      "Write(/.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Write(.claude/settings.local.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Write(/.claude/settings.local.json)"
     ]
   }
 }

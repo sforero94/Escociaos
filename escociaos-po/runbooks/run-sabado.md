@@ -83,12 +83,14 @@ An empty section says `Nada esta semana.`
 
 **Phase 3 — Publish**
 
-- **Notion**: a new page with the full report, through Composio, account
-  `thinksid`, under `<<por definir: página padre en Notion para los reportes del sábado>>`,
-  with `<<por definir: slug Composio para crear la página>>`. The guard hook
-  does not yet allow page creation (constitution §6, pending): until it does,
-  the call is denied. Record it under NO CORRIÓ and continue; the file and the
-  push still carry everything.
+- **Notion**: one new page with the full report, through Composio
+  `NOTION_CREATE_NOTION_PAGE`, `account: thinksid`, `parent_id:
+  40667755-ed68-814f-b676-f9e28be7d2f3` (the "Escocia OS — Reportes del sábado" page,
+  created 2026-10-26 next to the Mantenimiento database), title `Reporte del sábado
+  YYYY-MM-DD`, and the whole report in the `markdown` argument, so that it is one call.
+  **The guard hook allows that slug under that parent only.** Any other parent, or any
+  other Notion write, is denied in this unattended run. If the call is denied or fails,
+  record it under NO CORRIÓ and continue: the file and the push still carry everything.
 - **File**: `escociaos-po/reports/YYYY-MM-DD-sabado.md`, in the memory commit,
   after the pre-commit check (constitution §4 Phase 5). Allowed paths only.
 

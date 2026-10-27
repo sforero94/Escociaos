@@ -139,10 +139,12 @@ Only for an eligible `ddl_aditivo` ficha (`Ruta = VIERNES`):
    statement must be in the "Aditivo: sí es del viernes" column of the rubric's
    V5 table (`evals/rubrica-ruteo.md`): `CREATE TABLE` · `CREATE INDEX` /
    `CREATE UNIQUE INDEX` · `ALTER TABLE … ADD COLUMN` (nullable or constant
-   `DEFAULT`) · `ADD CONSTRAINT … NOT VALID` · `CREATE FUNCTION` with no
-   existing callers · `CREATE TRIGGER` that only fills a column no current
-   writer sets (040/050/063 pattern) · `COMMENT ON` · a `DO $$ … $$` block whose
-   only effect is `RAISE EXCEPTION` guards. **Removed from the pre-2026-10-26
+   `DEFAULT`) · `CREATE TABLE` together with `ENABLE ROW LEVEL SECURITY` on it ·
+   `COMMENT ON` · a `DO $$ … $$` block whose only effect is `RAISE EXCEPTION`
+   guards. The guard hook enforces exactly this column and nothing wider: see
+   below. `CREATE FUNCTION`, `CREATE TRIGGER` and `ADD CONSTRAINT` are **not**
+   Friday's — the hook cannot verify their effect — so they go to `FDS` as
+   `datos`. **Removed from the pre-2026-10-26
    list on purpose:** `CREATE OR REPLACE FUNCTION` over an existing function
    (PR #222: it changes behaviour), `CREATE POLICY` / `ALTER POLICY` / `GRANT`
    / `REVOKE` and `ENABLE ROW LEVEL SECURITY` (they decide who has access —
@@ -176,11 +178,17 @@ Only for an eligible `ddl_aditivo` ficha (`Ruta = VIERNES`):
    abort — do not "fix" the guard to make it pass. Never more than one apply per
    run, and no other write tool, ever.
 
-**If the write tool is denied or asks for permission, that is expected** while
-`.claude/hooks/supabase-guard.py` still denies unattended Supabase writes
-(constitution §6, pending change). Record it under NO CORRIÓ and continue: the
-PR and the payload stay as they are, and Saturday lists the migration as
-"preparada, no aplicada". Never look for another tool that would let it through.
+**The guard hook is the mechanical floor under these gates** (`.claude/hooks/supabase-guard.py`,
+2026-10-26). In an unattended run it allows the apply only on a Friday (America/New_York),
+on the production project, for a migration-shaped `name`, once per session, and only if
+every statement of the SQL is in the rubric's "sí" column. A Composio apply must also be
+the only item of its call. **If the apply is denied, that is a finding about the
+migration, not a tool problem**: the reason names the failing condition. Record it under
+NO CORRIÓ and continue. The PR and the payload stay as they are, and Saturday lists the
+migration as "preparada, no aplicada" with `ESCO-NNN aplicar`. Never edit the SQL to slip
+past the hook, and never look for another tool that would let it through. The hook spends
+the session's one apply **before** the call runs, so a guard that aborts also ends the
+lane for that run: report the abort, do not retry.
 
 Monday's drift check still runs: it catches Friday's applied-but-unmerged
 migrations, and also migrations applied by hand without their file on `main`
