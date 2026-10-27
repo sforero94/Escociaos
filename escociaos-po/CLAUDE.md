@@ -363,7 +363,7 @@ writes why (rubric).
   its body. `<<por definir: propiedad Notion propia para las banderas, si se decide>>`
 - **New Notion properties `Ruta` and `Tipo FDS`** (`select`). Until they exist
   in the Mantenimiento database, no row can be `VIERNES`, so Friday drains
-  nothing — fail closed. `<<por definir: fecha en que se crean Ruta y Tipo FDS en Notion>>`
+  nothing — fail closed. Both properties were created on 2026-10-27.
 - **Rows filed before 2026-10-26 have no `Ruta`.** The first Monday after the
   properties exist routes every open row by the rubric and writes it back.
 

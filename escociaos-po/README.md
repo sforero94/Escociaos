@@ -31,7 +31,7 @@ PRs que tú nombras.
 | Rúbrica de ruteo | [`evals/rubrica-ruteo.md`](./evals/rubrica-ruteo.md) | Qué va a `P0_AHORA`, al `VIERNES` o al `FDS` |
 | Memoria | [`memory/`](./memory/) | Un archivo por agente + `_compartida.md`; disciplina de escritura en [`memory/README.md`](./memory/README.md) |
 | Reportes | `reports/` | Un `.md` por corrida, escrito por el commit de memoria |
-| Scheduling | Cloud Routines `trig_01QusLNQd3snSbrn9UwBuqmQ` (lunes) · `trig_01BnbYqstYhc1SjTfyrizYUB` (jueves) · `trig_01AbCfQPNmRh7Jq8fX8yktSe` (viernes) · `<<por definir: id del trigger de la Routine del sábado>>` (sábado) | Prompts bootstrapper que clonan este repo y leen este folder — casi nunca hay que editarlos. La allowlist de tools SÍ vive ahí y se pudre en silencio: ver el preflight en `CLAUDE.md` §4 |
+| Scheduling | Cloud Routines `trig_01QusLNQd3snSbrn9UwBuqmQ` (lunes) · `trig_01BnbYqstYhc1SjTfyrizYUB` (jueves) · `trig_01AbCfQPNmRh7Jq8fX8yktSe` (viernes) · `trig_01G7S43qgN2uiCKDEp1LZfKg` (sábado) | Prompts bootstrapper que clonan este repo y leen este folder — casi nunca hay que editarlos. La allowlist de tools SÍ vive ahí y se pudre en silencio: ver el preflight en `CLAUDE.md` §4 |
 | Hallazgos | [Notion — Escocia OS · Mantenimiento](https://app.notion.com/p/c52d9258fed7466d8e700fa92980d3df) | La base de datos que revisas |
 
 ## Cómo cambiar las prioridades
