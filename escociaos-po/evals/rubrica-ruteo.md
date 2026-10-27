@@ -78,15 +78,20 @@ entera al viernes.
 
 | Aditivo: sí es del viernes | **No** aditivo: va al FDS |
 |---|---|
-| `CREATE TABLE`, `CREATE INDEX` | `CREATE OR REPLACE FUNCTION` / `VIEW` sobre un objeto que **ya existe** |
+| `CREATE INDEX` | `CREATE OR REPLACE FUNCTION` / `VIEW` sobre un objeto que **ya existe** |
 | `ALTER TABLE … ADD COLUMN` nullable o con `DEFAULT` constante | `ALTER POLICY`, `DROP POLICY`, `REVOKE`, `GRANT` (también fallan V2a) |
-| `ADD CONSTRAINT … NOT VALID` | `ALTER TABLE … ALTER/DROP COLUMN`, `DROP` de lo que sea |
-| `CREATE FUNCTION` nueva, sin llamadores existentes | `cron.schedule`, `cron.alter_job` o `cron.unschedule` sobre un job existente |
-| `CREATE TRIGGER` que **solo** llena una columna que ningún escritor actual pone (patrón 040/050/063) | `CREATE TRIGGER` que valida, bloquea o reescribe lo que hoy se guarda |
-| `COMMENT ON` | Cualquier `UPDATE`/`DELETE`/`INSERT` de datos (V4) |
-| `DO $$ … $$` que solo hace `RAISE EXCEPTION` de guarda | |
+| `COMMENT ON` | `ALTER TABLE … ALTER/DROP COLUMN`, `DROP` de lo que sea |
+| `DO $$ … $$` que solo hace `RAISE EXCEPTION` de guarda | `cron.schedule`, `cron.alter_job` o `cron.unschedule` sobre un job existente |
+| `CREATE TABLE` nueva **con** `ENABLE ROW LEVEL SECURITY` en el mismo archivo | `CREATE FUNCTION`, `CREATE TRIGGER` y `ADD CONSTRAINT … NOT VALID` (ver abajo) |
+| | Cualquier `UPDATE`/`DELETE`/`INSERT` de datos (V4) |
 
-La lista de `run-viernes.md` §Phase 2 sigue vigente. Esta tabla le agrega la condición **"en efecto"**.
+**El hook es el piso mecánico de esta tabla** (`.claude/hooks/supabase-guard.py`, 2026-10-26). Deja pasar el
+apply del viernes solo si cada sentencia es de la columna "sí". Por eso tres tipos que la v1.1 contaba como
+aditivos pasan a "no": **el hook no puede comprobar su efecto**. Una función nueva queda ejecutable por
+`PUBLIC`, un trigger `BEFORE` puede reescribir cada escritura futura, y un `CHECK … NOT VALID` igual bloquea
+escrituras nuevas, como hizo la 184. Esos van al `FDS` como `datos`: el viernes los prepara y la sesión del
+sábado los aplica. **El set dorado no tenía ningún caso `VIERNES` de esos tres tipos**, así que el cambio no
+mueve ningún resultado del eval (comprobado 2026-10-26).
 
 ## Paso 4 — Si es `FDS`, ¿de qué tipo?
 

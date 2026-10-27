@@ -513,11 +513,27 @@ never by convenience.
   Supabase write and every merge included. A denial is expected: record it
   under NO CORRIÓ and continue, never look for a way around it. A denial on
   something from the allowed list is a P1 against the operation (the list
-  rotted). **Pending since 2026-10-26:** the hook still denies Friday's
-  `ddl_aditivo` apply (`apply_migration` and `SUPABASE_APPLY_A_MIGRATION` both
-  ask) and Saturday's Notion page (`NOTION_PERMITIDOS` has no page-creation
-  slug). Until it changes, both are expected denials with the fallbacks in
-  their runbooks. `<<por definir: cambio en .claude/hooks/supabase-guard.py para estas dos excepciones>>`
+  rotted). **Two exceptions since 2026-10-26**, both enforced by the hook. They do not rest
+  on the prompt:
+  1. **Friday's one additive apply**, when the session is unattended, it is Friday in
+     America/New_York, the project is production, it is the session's first apply, and
+     every statement passes the hook's own additive parser. The parser is stricter than
+     the rubric: no `CREATE FUNCTION`, `CREATE TRIGGER` or `ADD CONSTRAINT` (rubric V5).
+  2. **Saturday's report page**, `NOTION_CREATE_NOTION_PAGE` under the "Escocia OS —
+     Reportes del sábado" page and nowhere else.
+
+  Everything else stays as it was, and an attended session still asks.
+
+  **Since 2026-10-26 the hook also covers every `mcp__Composio__*` tool.**
+  `COMPOSIO_REMOTE_WORKBENCH` and `COMPOSIO_REMOTE_BASH_TOOL` are **denied in an unattended
+  run**, because both can reach the Composio API from code, out of the hook's sight:
+  - The workbench calls any slug with `run_composio_tool`. The 2026-10-23 Friday did exactly
+    that for a Notion query.
+  - The bash sandbox carries `BACKEND_URL` and `COMPOSIO_TOOLROUTER_SESSION_ID`.
+
+  Either one would let any write slug past the per-slug policy. **Do not use them in a
+  Routine.** For a large Notion response, filter at the source (`memory/_compartida.md`
+  shows how) and page with `page_size`. A denial here is expected, not a P1.
 - Any `INSERT`/`UPDATE`/`DELETE`, or any DDL that fails the rubric's "additive
   in effect" table (V5), goes into the finding as exact SQL with `ruta: FDS`,
   plus a matching rollback statement and the row count it will touch.
