@@ -137,7 +137,10 @@ export function lluviaDeLecturasVivas(
   let vioElDia = false;
 
   for (const lectura of ordenadas) {
-    const fechaLectura = fechaAISODate(new Date(lectura.timestamp));
+    // El día es el calendario de Bogotá, como en fn_clima_rollup_diario. Con
+    // la hora local del navegador, alguien que abre la app desde otra zona
+    // horaria vería la lluvia de una ventana de 24 h corrida.
+    const fechaLectura = getBogotaDateKey(lectura.timestamp);
     const valor = lectura.lluvia_evento_mm;
 
     if (fechaLectura === fechaISO) {

@@ -594,13 +594,23 @@ describe('lluviaDeLecturasVivas', () => {
 
   it('no vuelve a contar la lluvia que ya venía acumulada de ayer', () => {
     // El evento arranca ayer con 20 mm ya caídos; hoy caen 5 más. El día de hoy
-    // son 5, no 25.
+    // son 5, no 25. Horas en Bogotá (UTC-5): 23:00 del 25, 01:00 y 02:00 del 26.
     const lecturas = [
-      { timestamp: '2026-08-25T23:00:00Z', lluvia_evento_mm: 20 },
-      { timestamp: '2026-08-26T01:00:00Z', lluvia_evento_mm: 22 },
-      { timestamp: '2026-08-26T02:00:00Z', lluvia_evento_mm: 25 },
+      { timestamp: '2026-08-26T04:00:00Z', lluvia_evento_mm: 20 },
+      { timestamp: '2026-08-26T06:00:00Z', lluvia_evento_mm: 22 },
+      { timestamp: '2026-08-26T07:00:00Z', lluvia_evento_mm: 25 },
     ];
     expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBe(5);
+  });
+
+  it('el día es el calendario de Bogotá, no el de UTC ni el del navegador', () => {
+    // 02:00Z del 26 son las 21:00 del 25 en Bogotá: esa lluvia es del 25.
+    const lecturas = [
+      { timestamp: '2026-08-26T01:00:00Z', lluvia_evento_mm: 0 },
+      { timestamp: '2026-08-26T02:00:00Z', lluvia_evento_mm: 4 },
+    ];
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-25')).toBe(4);
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBeNull();
   });
 
   it('devuelve null — NUNCA 0 — si no hay ni una lectura de ese día', () => {
