@@ -36,6 +36,11 @@ describe('extraerNumeros', () => {
   it('ignora un punto o coma final de oración', () => {
     expect(extraerNumeros('Fueron 87.25.')).toContain(87.25);
   });
+
+  it('does not turn a negative balance into a matching positive amount', () => {
+    expect(extraerNumeros('Saldo -87,25; diferencia −12.5')).toEqual([-87.25, -12.5]);
+    expect(numeroCerca(87.25, 0, extraerNumeros('-87.25'))).toBe(false);
+  });
 });
 
 describe('numeroCerca', () => {
@@ -64,5 +69,16 @@ describe('fechaPresente', () => {
 
   it('no toma «112 de agosto» como día 12', () => {
     expect(fechaPresente('2026-08-12', '112 de agosto')).toBe(false);
+  });
+
+  it('rejects an explicitly different year in written and numeric dates', () => {
+    for (const texto of ['12 de agosto de 2025', 'Agosto 12, 2025', '12/08/2025', '2025-08-12']) {
+      expect(fechaPresente('2026-08-12', texto)).toBe(false);
+    }
+  });
+
+  it('does not reinterpret the suffix of an ISO date as day/month', () => {
+    expect(fechaPresente('2026-12-08', '2026-08-12')).toBe(false);
+    expect(fechaPresente('2026-08-12', '2026-12-08')).toBe(false);
   });
 });

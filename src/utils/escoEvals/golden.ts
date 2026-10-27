@@ -2,6 +2,7 @@
 // usa el arnés; no reescribe el contenido.
 
 import type { CasoDorado } from './tipos';
+import { asOfUtc } from './mensajes';
 
 export interface FiltrosCasos {
   /** IDs («ESCO-GS-012») o claves («A01»). */
@@ -18,6 +19,9 @@ function exigir(condicion: boolean, mensaje: string): void {
   if (!condicion) throw new Error(mensaje);
 }
 
+const cadenas = (valor: unknown): valor is string[] => Array.isArray(valor) && valor.every((v) => typeof v === 'string');
+const objeto = (valor: unknown): valor is Record<string, unknown> => typeof valor === 'object' && valor !== null && !Array.isArray(valor);
+
 export function validarCaso(caso: unknown, linea: number): CasoDorado {
   const c = caso as Partial<CasoDorado>;
   const donde = `línea ${linea}${c?.id ? ` (${c.id})` : ''}`;
@@ -33,6 +37,24 @@ export function validarCaso(caso: unknown, linea: number): CasoDorado {
   exigir(!!c.original && Array.isArray(c.original.runs), `${donde}: falta original.runs`);
   exigir(!!c.human_review && typeof c.human_review.verdict === 'string', `${donde}: falta human_review`);
   exigir(Array.isArray(c.prior_context) && Array.isArray(c.paraphrases) && Array.isArray(c.followup_turns), `${donde}: faltan contexto o variantes`);
+  for (const clave of ['key', 'title', 'domain'] as const) exigir(typeof c[clave] === 'string' && c[clave]!.length > 0, `${donde}: falta ${clave}`);
+  exigir(['factual_sql', 'behavior', 'rubric_analysis'].includes(c.kind!), `${donde}: kind inválido`);
+  exigir(typeof c.include_in_golden === 'boolean', `${donde}: include_in_golden inválido`);
+  exigir(typeof c.golden_status === 'string' && (!c.include_in_golden || c.golden_status === 'aprobado'), `${donde}: caso incluido sin aprobación`);
+  for (const clave of ['must', 'must_not', 'tags', 'paraphrases'] as const) exigir(cadenas(c[clave]), `${donde}: ${clave} debe contener texto`);
+  const esp = c.expected_behavior!;
+  for (const clave of ['tools_must_include', 'tools_any_of', 'tools_forbidden'] as const) exigir(cadenas(esp[clave]), `${donde}: ${clave} inválido`);
+  exigir(esp.max_tool_calls == null || (Number.isInteger(esp.max_tool_calls) && esp.max_tool_calls >= 0), `${donde}: max_tool_calls inválido`);
+  exigir(esp.should_clarify === undefined || typeof esp.should_clarify === 'boolean', `${donde}: should_clarify inválido`);
+  exigir(c.numeric_anchors!.every((a) => objeto(a) && typeof a.claim === 'string' &&
+    ((typeof a.value === 'number' && Number.isFinite(a.value)) || (typeof a.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(a.value))) &&
+    (a.tol == null || (typeof a.tol === 'number' && Number.isFinite(a.tol) && a.tol >= 0))), `${donde}: ancla numérica inválida`);
+  exigir(c.prior_context!.every((p) => objeto(p) && typeof p.user === 'string' && typeof p.assistant_original === 'string'), `${donde}: prior_context inválido`);
+  exigir(c.followup_turns!.every((p) => objeto(p) && typeof p.user === 'string'), `${donde}: followup_turns inválido`);
+  exigir(typeof c.original!.answer_primary === 'string' && c.original!.runs.every((r) => objeto(r) && typeof r.question === 'string' && Array.isArray(r.tools) &&
+    r.tools.every((h: unknown) => objeto(h) && typeof h.tool === 'string' && (h.error === undefined || typeof h.error === 'boolean'))), `${donde}: original inválido`);
+  exigir(['correcta', 'incorrecta', 'mixta', 'parcial', 'no_verificable'].includes(c.human_review!.verdict), `${donde}: veredicto humano inválido`);
+  try { asOfUtc(c.as_of_bogota!); } catch { throw new Error(`${donde}: fecha imposible`); }
   return c as CasoDorado;
 }
 

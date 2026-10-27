@@ -76,6 +76,7 @@
             "test:watch": "vitest",
             "lint": "eslint src",
             "typecheck": "tsc --noEmit",
-            "eval:esco": "vitest run --config evals/esco/vitest.config.ts"
+            "eval:esco": "vitest run --config evals/esco/vitest.config.ts",
+            "eval:esco:check": "tsc --noEmit -p tsconfig.esco-evals.json && eslint evals/esco src/utils/escoEvals src/__tests__/escoEvals*.ts && vitest run src/__tests__/escoEvals*.test.ts"
       }
 }

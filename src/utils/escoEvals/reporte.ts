@@ -88,7 +88,7 @@ export function resumir(resultados: ResultadoCaso[]): ResumenEval {
     const fallan = lista.filter((x) => x.estado === 'falla').length;
     const inconclusas = lista.length - pasan - fallan;
     let estado: FilaCaso['estado'];
-    if (pasan + fallan === 0) estado = 'inconcluso';
+    if (inconclusas > 0) estado = 'inconcluso';
     else if (fallan === 0) estado = 'estable_pasa';
     else if (pasan === 0) estado = 'estable_falla';
     else estado = 'inestable';
@@ -192,6 +192,10 @@ export interface MetaInforme {
   modelo_juez: string | null;
   modo_fecha: string;
   repeticiones: number;
+  conjunto_sha256?: string;
+  git_commit?: string;
+  git_dirty?: boolean;
+  datos?: string;
 }
 
 const pct = (x: number | null): string => (x === null ? '—' : `${(x * 100).toFixed(0)} %`);
@@ -212,9 +216,14 @@ export function aMarkdown(resumen: ResumenEval, meta: MetaInforme, comparacion?:
   partes.push(`- Modo: **${meta.modo}** · fecha de las corridas: ${meta.modo_fecha} · repeticiones: ${meta.repeticiones}`);
   partes.push(`- Conjunto: \`${meta.conjunto}\``);
   partes.push(`- Juez: ${meta.modelo_juez ?? '**ninguno (solo capa determinista)**'}`);
+  if (meta.git_commit) partes.push(`- Código: \`${meta.git_commit}\`${meta.git_dirty ? ' + cambios locales' : ''}`);
+  if (meta.conjunto_sha256) partes.push(`- SHA-256 del conjunto: \`${meta.conjunto_sha256}\``);
+  if (meta.datos) partes.push(`- Datos: ${meta.datos}`);
   partes.push(`- Tokens: ${resumen.tokens.entrada.toLocaleString('es-CO')} entrada / ${resumen.tokens.salida.toLocaleString('es-CO')} salida (Esco + juez)\n`);
   partes.push(`## Resultado\n\n**${resumen.pasa} pasan · ${resumen.falla} fallan · ${resumen.inconcluso} inconclusas** de ${resumen.total} corridas — ${pct(resumen.tasa_pasa)} sobre las concluyentes.\n`);
   if (resumen.solo_determinista) partes.push('> Sin juez: «pasa» solo significa que la capa determinista no encontró fallas. Los criterios «debe / no debe incluir» no se evaluaron.\n');
+  const inconclusos = resumen.casos.filter((c) => c.inconclusas > 0);
+  if (inconclusos.length > 0) partes.push(`## Casos con corridas inconclusas\n\n${inconclusos.map((c) => `- ${c.caso_id} (${c.clave}): ${c.inconclusas}/${c.corridas} inconclusas`).join('\n')}\n`);
 
   const inestables = resumen.casos.filter((c) => c.estado === 'inestable');
   if (inestables.length > 0) {
@@ -227,7 +236,7 @@ export function aMarkdown(resumen: ResumenEval, meta: MetaInforme, comparacion?:
   partes.push(tabla('Por tipo', resumen.por_tipo));
   partes.push(tabla('Por etiqueta', resumen.por_etiqueta));
 
-  const fallan = resumen.casos.filter((c) => c.estado === 'estable_falla' || c.estado === 'inestable');
+  const fallan = resumen.casos.filter((c) => c.fallan > 0);
   if (fallan.length > 0) {
     partes.push(`## Casos que fallan\n\n${fallan.map((c) => `### ${c.caso_id} (${c.clave}) — ${c.pasan}/${c.corridas} pasan\n${c.razones.map((r) => `- ${r}`).join('\n')}`).join('\n\n')}\n`);
   }

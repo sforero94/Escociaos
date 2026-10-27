@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "incremental": false
+  },
+  "include": ["evals/esco/**/*.ts", "src/utils/escoEvals/**/*.ts", "src/__tests__/escoEvals*.ts"],
+  "exclude": [],
+  "references": []
+}

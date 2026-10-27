@@ -23,6 +23,23 @@ export interface ConfigEval {
 
 const lista = (v: string | undefined): string[] => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
+function numero(env: NodeJS.ProcessEnv, clave: string, defecto: number, minimo: number, maximo: number, entero = false): number {
+  const raw = env[clave];
+  const valor = raw === undefined ? defecto : raw.trim() === '' ? NaN : Number(raw);
+  if (!Number.isFinite(valor) || valor < minimo || valor > maximo || (entero && !Number.isInteger(valor))) {
+    throw new Error(`${clave}: valor inválido (${minimo}–${maximo}${entero ? ', entero' : ''})`);
+  }
+  return valor;
+}
+
+function urlHttp(valor: string, clave: string): string {
+  const url = new URL(valor);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error(`${clave}: usa una URL HTTP(S) sin credenciales, parámetros ni fragmento`);
+  }
+  return valor.replace(/\/+$/, '');
+}
+
 export function leerConfig(env: NodeJS.ProcessEnv = process.env): ConfigEval {
   const modo = (env.EVAL_MODO ?? 'plan') as ModoEval;
   if (!['plan', 'live', 'originales'].includes(modo)) {
@@ -30,8 +47,10 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): ConfigEval {
   }
   const marca = new Date().toISOString().replace(/[:.]/g, '-');
   const juezModelo = env.JUEZ_MODELO?.trim();
-  const juezKey = (env.JUEZ_API_KEY ?? env.OPENROUTER_API_KEY)?.trim();
+  const juezKey = env.JUEZ_API_KEY?.trim() || env.OPENROUTER_API_KEY?.trim();
   const sinJuez = env.EVAL_SIN_JUEZ === '1';
+  if (sinJuez && env.EVAL_EXIGIR_JUEZ === '1') throw new Error('EVAL_SIN_JUEZ y EVAL_EXIGIR_JUEZ son incompatibles');
+  if (env.EVAL_FECHA && !['caso', 'ahora'].includes(env.EVAL_FECHA)) throw new Error('EVAL_FECHA: usa caso o ahora');
 
   return {
     modo,
@@ -42,22 +61,23 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): ConfigEval {
       dominios: lista(env.EVAL_DOMINIOS),
       etiquetas: lista(env.EVAL_ETIQUETAS),
       tipos: lista(env.EVAL_TIPOS),
-      limite: env.EVAL_LIMITE ? Number(env.EVAL_LIMITE) : undefined,
+      limite: env.EVAL_LIMITE !== undefined ? numero(env, 'EVAL_LIMITE', 1, 1, Number.MAX_SAFE_INTEGER, true) : undefined,
     },
-    repeticiones: Math.max(1, Number(env.EVAL_REPETICIONES ?? 1)),
+    repeticiones: numero(env, 'EVAL_REPETICIONES', 1, 1, Number.MAX_SAFE_INTEGER, true),
     conParafrasis: env.EVAL_PARAFRASIS === '1',
     fecha: env.EVAL_FECHA === 'ahora' ? 'ahora' : 'caso',
     base: env.EVAL_BASE ? path.resolve(env.EVAL_BASE) : null,
-    minimoPasa: env.EVAL_MIN_PASA ? Number(env.EVAL_MIN_PASA) : null,
+    minimoPasa: env.EVAL_MIN_PASA !== undefined ? numero(env, 'EVAL_MIN_PASA', 0, 0, 1) : null,
     verboso: env.EVAL_VERBOSO === '1',
     juez: !sinJuez && juezModelo && juezKey
-      ? { baseUrl: env.JUEZ_BASE_URL ?? 'https://openrouter.ai/api/v1', apiKey: juezKey, modelo: juezModelo }
+      ? { baseUrl: urlHttp(env.JUEZ_BASE_URL ?? 'https://openrouter.ai/api/v1', 'JUEZ_BASE_URL'), apiKey: juezKey, modelo: juezModelo }
       : null,
-    exigirJuez: env.EVAL_EXIGIR_JUEZ === '1',
+    // A score without semantic checks must always be an explicit choice.
+    exigirJuez: !sinJuez && (modo !== 'plan' || env.EVAL_EXIGIR_JUEZ === '1'),
     esco: {
-      supabaseUrl: env.SUPABASE_URL ?? '',
-      serviceKey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
-      openrouterKey: env.OPENROUTER_API_KEY ?? '',
+      supabaseUrl: env.SUPABASE_URL?.trim() ? urlHttp(env.SUPABASE_URL.trim(), 'SUPABASE_URL') : '',
+      serviceKey: env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? '',
+      openrouterKey: env.OPENROUTER_API_KEY?.trim() ?? '',
     },
   };
 }

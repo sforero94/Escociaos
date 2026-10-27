@@ -50,16 +50,18 @@ export function instalarGuardas(env: { supabaseUrl: string; verboso: boolean }):
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const metodo = (init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET')).toUpperCase();
 
-    if (env.supabaseUrl && url.startsWith(env.supabaseUrl) && metodo !== 'GET' && metodo !== 'HEAD') {
-      estado.escrituras.push(`${metodo} ${url.replace(env.supabaseUrl, '')}`);
+    const destino = new URL(url);
+    if (destino.origin === new URL(env.supabaseUrl).origin && metodo !== 'GET' && metodo !== 'HEAD') {
+      estado.escrituras.push(`${metodo} ${destino.pathname}`);
       return new Response(JSON.stringify({ message: 'bloqueado por el arnés de evaluación (solo lectura)' }), {
         status: 403,
         headers: { 'content-type': 'application/json' },
       });
     }
 
-    const respuesta = await fetchReal(input, init);
-    if (url.includes('openrouter.ai') && respuesta.ok) {
+    // Do not let an automatic redirect bypass the origin/method check.
+    const respuesta = await fetchReal(input, { ...init, redirect: 'error' });
+    if (destino.origin === 'https://openrouter.ai' && respuesta.ok) {
       try {
         const cuerpo = await respuesta.clone().json() as { usage?: { prompt_tokens?: number; completion_tokens?: number } };
         estado.tokens.entrada += cuerpo.usage?.prompt_tokens ?? 0;
@@ -135,10 +137,15 @@ export async function correrCaso(
         : mensajesParaSiguienteTurno(mensajes, anterior!.respuesta, anterior!.herramientas, p, caso.channel);
 
       const eventos: EventoHerramienta[] = [];
-      const t0 = Date.now();
-      const { text, toolInteractions } = await esco.llmToolLoop(mensajes, USUARIO_EVAL, (e) => eventos.push(e));
+      const inicios = new Map<number, number>();
+      const t0 = performance.now();
+      const { text, toolInteractions } = await esco.llmToolLoop(mensajes, USUARIO_EVAL, (e) => {
+        if (e.type === 'tool_start' && e.index !== undefined) inicios.set(e.index, performance.now());
+        const inicio = e.index === undefined ? undefined : inicios.get(e.index);
+        eventos.push(e.type === 'tool_done' && inicio !== undefined ? { ...e, ms: performance.now() - inicio } : e);
+      });
       const herramientas = aHerramientas(toolInteractions, eventos);
-      turnos.push({ pregunta: p, respuesta: text, herramientas, ms: Date.now() - t0 });
+      turnos.push({ pregunta: p, respuesta: text, herramientas, ms: performance.now() - t0 });
       anterior = { respuesta: text, herramientas };
     }
     return {
@@ -150,6 +157,7 @@ export async function correrCaso(
     return {
       modo: 'live', asOf, turnos,
       escriturasBloqueadas: guardas.escrituras.slice(escriturasAntes),
+      tokens: { entrada: guardas.tokens.entrada - tokensAntes.entrada, salida: guardas.tokens.salida - tokensAntes.salida },
       error: err instanceof Error ? err.message : String(err),
     };
   } finally {

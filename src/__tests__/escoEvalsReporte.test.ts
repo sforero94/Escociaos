@@ -83,6 +83,15 @@ describe('resumir', () => {
     expect(solo.solo_determinista).toBe(true);
     expect(aMarkdown(solo, { fecha: 'x', modo: 'live', conjunto: 'g', modelo_juez: null, modo_fecha: 'caso', repeticiones: 1 })).toContain('solo capa determinista');
   });
+
+  it('does not call a case stable when a repetition has an infrastructure error', () => {
+    const s = resumir([
+      resultado('ESCO-GS-020', 'correcta', 'ok'),
+      resultado('ESCO-GS-020', 'correcta', '', null, { rep: 2, error: 'network unavailable' }),
+    ]);
+    expect(s.casos[0].estado).toBe('inconcluso');
+    expect(aMarkdown(s, { fecha: 'x', modo: 'live', conjunto: 'g', modelo_juez: null, modo_fecha: 'caso', repeticiones: 2 })).toContain('1/2 inconclusas');
+  });
 });
 
 describe('compararConBase', () => {

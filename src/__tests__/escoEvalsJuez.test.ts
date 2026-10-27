@@ -46,6 +46,14 @@ describe('construirMensajesJuez', () => {
   it('el prompt de sistema fija que la verdad es la referencia', () => {
     expect(mensajes[0].content).toContain('La verdad es SOLO la referencia');
   });
+
+  it('keeps the complete answer and SQL that starts with a comment', () => {
+    const respuesta = 'a'.repeat(6500) + ' FALSE_CLAIM_AT_END';
+    const c = { ...caso, reference: { ...caso.reference, sql: '-- reference query\nselect 1;' } };
+    const u = construirMensajesJuez(c, corridaBase(respuesta))[1].content;
+    expect(u).toContain('FALSE_CLAIM_AT_END');
+    expect(u).toContain('select 1;');
+  });
 });
 
 describe('parsearRespuestaJuez', () => {
@@ -64,7 +72,7 @@ describe('parsearRespuestaJuez', () => {
   });
 
   it('rechaza un criterio sin calificar o con veredicto del tipo equivocado', () => {
-    const falta = JSON.stringify({ criterios: [{ id: 'debe_1', veredicto: 'cumple' }] });
+    const falta = JSON.stringify({ criterios: [{ id: 'debe_1', veredicto: 'cumple', evidencia: '(ausente)' }] });
     expect(() => parsearRespuestaJuez(falta, criterios)).toThrow(/no_debe_1/);
     const malTipo = JSON.stringify({ criterios: [
       { id: 'debe_1', veredicto: 'viola' }, { id: 'no_debe_1', veredicto: 'no_viola' },
@@ -74,6 +82,24 @@ describe('parsearRespuestaJuez', () => {
 
   it('lanza si no hay JSON', () => {
     expect(() => parsearRespuestaJuez('no sé', criterios)).toThrow();
+  });
+
+  it('rejects missing or malformed flags instead of treating them as approval', () => {
+    const base = JSON.parse(valida);
+    for (const patch of [
+      { contradice_referencia: undefined }, { contradice_referencia: 'false' },
+      { oculto_fallo_herramienta: undefined }, { oculto_fallo_herramienta: 'true' },
+      { comentario: null },
+    ]) expect(() => parsearRespuestaJuez(JSON.stringify({ ...base, ...patch }), criterios)).toThrow();
+    expect(() => parsearRespuestaJuez('null', criterios)).toThrow();
+    expect(() => parsearRespuestaJuez('[]', criterios)).toThrow();
+  });
+
+  it('rejects duplicate, unknown and malformed criteria', () => {
+    const base = JSON.parse(valida);
+    for (const extra of [base.criterios[0], { id: 'unknown' }, null]) {
+      expect(() => parsearRespuestaJuez(JSON.stringify({ ...base, criterios: [...base.criterios, extra] }), criterios)).toThrow();
+    }
   });
 });
 

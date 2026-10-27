@@ -78,8 +78,10 @@ export function mensajesParaSiguienteTurno(
 
 /** La hora a fijar para la corrida (UTC ISO) a partir de «AAAA-MM-DD HH:MM» en Bogotá (UTC-5, sin horario de verano). */
 export function asOfUtc(asOfBogota: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(asOfBogota);
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(asOfBogota);
   if (!m) throw new Error(`as_of inválido: ${asOfBogota}`);
   const utc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]) + 5, Number(m[5]));
+  const local = new Date(utc - 5 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  if (local !== asOfBogota.replace(' ', 'T')) throw new Error(`as_of inválido: ${asOfBogota}`);
   return new Date(utc).toISOString();
 }

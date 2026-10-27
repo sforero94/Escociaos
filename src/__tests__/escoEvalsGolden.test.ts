@@ -19,6 +19,15 @@ describe('parsearGolden', () => {
     expect(() => parsearGolden(linea({ ...casoBase(), must: undefined }))).toThrow(/must/);
     expect(() => parsearGolden('')).toThrow(/vacío/);
   });
+
+  it('rejects malformed nested data and impossible dates before any API call', () => {
+    for (const patch of [
+      { tags: [null] }, { include_in_golden: 'yes' }, { golden_status: 'pendiente' },
+      { as_of_bogota: '2026-02-30 10:00' }, { as_of_bogota: '2026-08-16 25:00' },
+      { numeric_anchors: [{ claim: 'x', value: 5, tol: -1 }] },
+      { prior_context: [null] }, { original: { runs: [], answer_primary: null } },
+    ]) expect(() => parsearGolden(linea({ ...casoBase(), ...patch }))).toThrow();
+  });
 });
 
 describe('seleccionarCasos', () => {
@@ -60,13 +69,16 @@ describe.skipIf(!existsSync(RUTA_GOLDEN))('conjunto dorado v2 (local)', () => {
     expect(incluidos.every((c) => c.golden_status === 'aprobado')).toBe(true);
   });
 
-  it('el arnés reprueba las respuestas originales que el dueño marcó incorrectas por cifra, y aprueba controles positivos', () => {
+  it('detecta errores de cifra y conserva las discrepancias con el veredicto humano', () => {
     const por = (id: string) => casos.find((c) => c.id === id)!;
     const pasa = (id: string) => evaluarDeterminista(por(id), corridaDesdeOriginalPura(por(id))).pasa;
     expect(pasa('ESCO-GS-015')).toBe(false); // 678/850 canecas (base: 573 de 634.7)
     expect(pasa('ESCO-GS-012')).toBe(false); // «No pude generar una respuesta»
     expect(pasa('ESCO-GS-050')).toBe(false); // negación falsa de partos
-    expect(pasa('ESCO-GS-001')).toBe(true); // control positivo (Zanjas 50.75)
+    // The historical human label is correct, but the approved rubric also
+    // requires the lote comparison (239.5), which this answer omits.
+    // Keep the discrepancy visible; never weaken the rubric to fit the label.
+    expect(pasa('ESCO-GS-001')).toBe(false);
     expect(pasa('ESCO-GS-040')).toBe(true); // control positivo (164 / 284 / 274)
   });
 });

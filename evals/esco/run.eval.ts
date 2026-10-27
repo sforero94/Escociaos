@@ -7,6 +7,8 @@
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { evaluarDeterminista } from '../../src/utils/escoEvals/deterministico';
 import { parsearGolden, seleccionarCasos, variantesDelCaso } from '../../src/utils/escoEvals/golden';
@@ -60,6 +62,10 @@ function escribirSalida(): ResumenEval {
     fecha: new Date().toISOString(), modo: cfg.modo, conjunto: path.relative(process.cwd(), cfg.golden),
     modelo_juez: cfg.juez?.modelo ?? null, modo_fecha: cfg.fecha === 'caso' ? 'hora de la pregunta original' : 'hora real',
     repeticiones: cfg.repeticiones,
+    conjunto_sha256: createHash('sha256').update(readFileSync(cfg.golden)).digest('hex'),
+    git_commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    git_dirty: execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], { encoding: 'utf8' }).trim().length > 0,
+    datos: cfg.modo === 'live' ? 'base actual; fijar Date no restaura datos históricos' : 'respuestas originales guardadas',
   };
   writeFileSync(path.join(cfg.salida, 'resumen.json'), JSON.stringify({ meta, resumen, comparacion, calibracion }, null, 2));
   writeFileSync(path.join(cfg.salida, 'informe.md'), aMarkdown(resumen, meta, comparacion, calibracion));
@@ -70,11 +76,14 @@ function escribirSalida(): ResumenEval {
 describe(`Esco — conjunto dorado (${cfg.modo})`, () => {
   beforeAll(() => {
     expect(existsSync(cfg.golden), `No existe el conjunto dorado: ${cfg.golden}`).toBe(true);
+    expect(casos.length, 'Ningún caso coincide con los filtros').toBeGreaterThan(0);
+    if (cfg.base && !existsSync(cfg.base)) throw new Error(`No existe la corrida base: ${cfg.base}`);
     const falta = faltantes(cfg);
     if (falta.length > 0) throw new Error(`Faltan variables de entorno para el modo ${cfg.modo}: ${falta.join(', ')}`);
     if (cfg.modo === 'live') {
       guardas = instalarGuardas({ supabaseUrl: cfg.esco.supabaseUrl, verboso: cfg.verboso });
       console.info(`[eval] Esco leerá de ${new URL(cfg.esco.supabaseUrl).host} en solo lectura. Juez: ${cfg.juez?.modelo ?? 'ninguno (solo capa determinista)'}`);
+      console.warn('[eval] Se consulta la base actual: fijar la hora NO restaura una instantánea histórica. Revisa replay_note en los casos con cambios de datos.');
     }
   });
 
@@ -86,6 +95,8 @@ describe(`Esco — conjunto dorado (${cfg.modo})`, () => {
       expect(casos.length).toBeGreaterThan(0);
     });
   } else {
+    // Vitest does not execute hooks for a suite without tests.
+    if (casos.length === 0) it('requiere casos seleccionados', () => { throw new Error('No hay casos: revisa EVAL_GOLDEN y los filtros'); });
     for (const caso of casos) {
       // En «originales» solo existe la respuesta principal y no hay repeticiones.
       const variantes = cfg.modo === 'originales' ? [{ nombre: 'principal', pregunta: caso.question }] : variantesDelCaso(caso, cfg.conParafrasis);
@@ -100,7 +111,7 @@ describe(`Esco — conjunto dorado (${cfg.modo})`, () => {
               // Con varias corridas originales, el veredicto del dueño no corresponde a una sola respuesta.
               if (caso.original.runs.length > 1) nombreVariante = 'origen_multiple';
             } else {
-              corrida = await correrCaso(caso, v.pregunta, v.nombre === 'principal', { fijarHora: cfg.fecha === 'caso', guardas: guardas! });
+              corrida = await correrCaso(caso, v.pregunta, true, { fijarHora: cfg.fecha === 'caso', guardas: guardas! });
             }
             const determinista = evaluarDeterminista(caso, corrida);
             const juzgado = corrida.error ? { juez: null, estado: 'omitido' as const, tokens: { entrada: 0, salida: 0 } } : await juzgar(caso, corrida);
@@ -121,6 +132,8 @@ describe(`Esco — conjunto dorado (${cfg.modo})`, () => {
     guardas?.restaurar();
     if (resultados.length === 0) return;
     const resumen = escribirSalida();
+    const errores = resultados.filter((r) => r.corrida.error || r.juez_estado === 'error').length;
+    if (errores > 0) throw new Error(`${errores} corrida(s) con errores de infraestructura; revisa resultados.jsonl`);
     if (cfg.minimoPasa !== null && resumen.tasa_pasa !== null && resumen.tasa_pasa < cfg.minimoPasa) {
       throw new Error(`Tasa de aprobación ${(resumen.tasa_pasa * 100).toFixed(0)} % < mínimo ${(cfg.minimoPasa * 100).toFixed(0)} % (EVAL_MIN_PASA)`);
     }

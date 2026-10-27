@@ -695,6 +695,15 @@ Note: The local source in `src/supabase/functions/server/` must be kept in sync 
 
 ## Testing
 
+Esco evaluation harness: [`evals/esco/README.md`](evals/esco/README.md). Run
+`npm run eval:esco:check` for its types, lint, and offline tests. `npm run eval:esco`
+defaults to a plan without network calls. Scoring modes require a configured
+judge unless `EVAL_SIN_JUEZ=1` explicitly opts out. The user selected Claude
+Sonnet as judge. Credentials belong in environment secrets or the ignored
+root `.env.eval`; the private golden set and run reports stay Git-ignored.
+Live evaluations read current Supabase data with writes blocked; fixing `Date`
+does not recreate a historical database snapshot. No edge deployment is needed.
+
 Tests use **Vitest** and live in `src/__tests__/`. They mock the Supabase client.
 
 ```bash

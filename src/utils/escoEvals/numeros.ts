@@ -16,6 +16,7 @@ function sinTildes(s: string): string {
 }
 
 function valoresDeToken(token: string): number[] {
+  const signo = /^[-−]/.test(token) ? -1 : 1;
   const limpio = token.replace(/[^\d.,]/g, '');
   if (!limpio || !/\d/.test(limpio)) return [];
   const tienePunto = limpio.includes('.');
@@ -49,14 +50,14 @@ function valoresDeToken(token: string): number[] {
   } else {
     salida.push(Number(limpio));
   }
-  return salida.filter((n) => Number.isFinite(n));
+  return salida.filter((n) => Number.isFinite(n)).map((n) => n * signo);
 }
 
 /** Todos los valores numéricos candidatos que aparecen en el texto. */
 export function extraerNumeros(texto: string): number[] {
   const encontrados = new Set<number>();
   // Un número (con separadores) seguido de un posible multiplicador: "M" / "millones" / "mil".
-  const re = /(\d[\d.,]*)(\s?(?:millones|M\b|mil\b))?/g;
+  const re = /(?<![\d\w])([-−]?\d[\d.,]*)(\s?(?:millones|M\b|mil\b))?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(texto)) !== null) {
     const token = m[1].replace(/[.,]+$/, '');
@@ -82,12 +83,14 @@ export function fechaPresente(iso: string, texto: string): boolean {
   const dia = Number(mm[3]);
   const t = sinTildes(texto);
 
-  if (t.includes(iso)) return true;
+  if (new RegExp(`(?<!\\d)${iso}(?!\\d)`).test(t)) return true;
 
   // d/m/aaaa, dd-mm-aa, d/m
-  const reNumerica = /(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/g;
+  // Do not reinterpret the month/day suffix of a different ISO date as d/m.
+  const sinIso = t.replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
+  const reNumerica = /(?<!\d)(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?(?!\d)/g;
   let m: RegExpExecArray | null;
-  while ((m = reNumerica.exec(t)) !== null) {
+  while ((m = reNumerica.exec(sinIso)) !== null) {
     if (Number(m[1]) === dia && Number(m[2]) === mes) {
       if (!m[3]) return true;
       const a = Number(m[3]);
@@ -101,9 +104,15 @@ export function fechaPresente(iso: string, texto: string): boolean {
     ...Object.entries(ABREVIATURAS).filter(([, n]) => n === mes).map(([k]) => k),
   ];
   for (const nombre of nombres) {
-    const antes = new RegExp(`(?:^|\\D)0?${dia}\\s*(?:de\\s+|-|/)?\\s*${nombre}\\b`);
-    const despues = new RegExp(`\\b${nombre}\\.?\\s*(?:de\\s+)?0?${dia}(?:\\D|$)`);
-    if (antes.test(t) || despues.test(t)) return true;
+    const antes = new RegExp(`(?:^|\\D)0?${dia}\\s*(?:de\\s+|-|/)?\\s*${nombre}\\b`, 'g');
+    const despues = new RegExp(`\\b${nombre}\\.?\\s*(?:de\\s+)?0?${dia}(?!\\d)`, 'g');
+    for (const patron of [antes, despues]) {
+      for (const match of t.matchAll(patron)) {
+        const resto = t.slice(match.index + match[0].length);
+        const explicito = /^[.,]?\s*(?:de(?:l)?\s+)?(\d{4})\b/.exec(resto);
+        if (!explicito || Number(explicito[1]) === anio) return true;
+      }
+    }
   }
   return false;
 }
