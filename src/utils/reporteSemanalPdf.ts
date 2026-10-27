@@ -106,6 +106,10 @@ interface Celda {
   fill?: Rgb;
   color?: Rgb;
   bold?: boolean;
+  flecha?: 'subiendo' | 'bajando' | 'estable';
+  /** La matriz por lote encierra la flecha entre paréntesis, como el HTML. */
+  parentesis?: boolean;
+  nota?: string;
 }
 
 const SECCIONES_ON: SeccionesReporte = {
@@ -353,6 +357,140 @@ function medirFila(doc: DocumentoPDF, celdas: Celda[], columnas: Columna[], font
   return Math.max(24, lineas * (font + 3) + 8);
 }
 
+function rgbDeHex(hex: string): Rgb {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Mismos umbrales y hex que incBg() en generar-reporte-semanal.tsx. */
+function rellenoIncidencia(inc: number | null): Rgb {
+  if (inc === null || inc === 0) return rgbDeHex('#ffffff');
+  if (inc < 10) return rgbDeHex('#fefce8');
+  if (inc < 20) return rgbDeHex('#fff7ed');
+  return rgbDeHex('#fef2f2');
+}
+
+/** Mismos hex que tendArrow() en generar-reporte-semanal.tsx. */
+function colorFlecha(dir: 'subiendo' | 'bajando' | 'estable'): Rgb {
+  if (dir === 'subiendo') return rgbDeHex('#dc2626');
+  if (dir === 'bajando') return rgbDeHex('#16a34a');
+  return rgbDeHex('#d97706');
+}
+
+const ANCHO_FLECHA = 8;
+
+function dibujarFlecha(
+  doc: DocumentoPDF,
+  x: number,
+  baseline: number,
+  dir: 'subiendo' | 'bajando' | 'estable',
+): void {
+  doc.setFillColor(...colorFlecha(dir));
+  const cy = baseline - 3.2;
+  const medio = x + ANCHO_FLECHA / 2;
+  const s = 3.2;
+  if (dir === 'subiendo') doc.triangle(medio, cy - s, x + ANCHO_FLECHA, cy + s * 0.65, x, cy + s * 0.65, 'F');
+  else if (dir === 'bajando') doc.triangle(medio, cy + s, x + ANCHO_FLECHA, cy - s * 0.65, x, cy - s * 0.65, 'F');
+  else doc.triangle(x + ANCHO_FLECHA, cy, x, cy - s * 0.75, x, cy + s * 0.75, 'F');
+}
+
+function anchoDecorado(doc: DocumentoPDF, celda: Celda, font: number): number {
+  let w = 0;
+  if (celda.flecha) {
+    w += 3 + ANCHO_FLECHA;
+    if (celda.parentesis) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(font);
+      w += doc.getTextWidth('()');
+    }
+  }
+  if (celda.nota) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(Math.max(8, font - 1));
+    w += 3 + doc.getTextWidth(sanear(celda.nota));
+  }
+  return w;
+}
+
+function pintarTextoCelda(
+  doc: DocumentoPDF,
+  celda: Celda,
+  col: Columna,
+  x: number,
+  y: number,
+  h: number,
+  font: number,
+  encabezado: boolean,
+  color: Rgb,
+): void {
+  const align = col.align ?? 'left';
+  const texto = sanear(celda.texto);
+  if (celda.flecha || celda.nota) {
+    let size = font;
+    const cabe = (s: number) => {
+      doc.setFont('helvetica', celda.bold ? 'bold' : 'normal');
+      doc.setFontSize(s);
+      return doc.getTextWidth(texto) + anchoDecorado(doc, celda, s) <= col.ancho - 8;
+    };
+    while (size > 7 && !cabe(size)) size -= 0.5;
+    doc.setFont('helvetica', celda.bold ? 'bold' : 'normal');
+    doc.setFontSize(size);
+    const anchoTexto = doc.getTextWidth(texto);
+    const extra = anchoDecorado(doc, celda, size);
+    const total = anchoTexto + extra;
+    let tx = x + 4;
+    if (align === 'center') tx = x + (col.ancho - total) / 2;
+    if (align === 'right') tx = x + col.ancho - total - 4;
+    const lineH = size + 3;
+    const baseline = y + (h - lineH) / 2 + size * 0.75;
+    doc.setTextColor(...color);
+    doc.text(texto, tx, baseline);
+    let cursor = tx + anchoTexto;
+    if (celda.flecha) {
+      cursor += 3;
+      if (celda.parentesis) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(size);
+        doc.setTextColor(...color);
+        doc.text('(', cursor, baseline);
+        cursor += doc.getTextWidth('(');
+      }
+      dibujarFlecha(doc, cursor, baseline, celda.flecha);
+      cursor += ANCHO_FLECHA;
+      if (celda.parentesis) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(size);
+        doc.setTextColor(...color);
+        doc.text(')', cursor, baseline);
+        cursor += doc.getTextWidth(')');
+      }
+    }
+    if (celda.nota) {
+      cursor += 3;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(Math.max(8, size - 1));
+      doc.setTextColor(...GRIS_SUAVE);
+      doc.text(sanear(celda.nota), cursor, baseline);
+    }
+    return;
+  }
+  doc.setFont('helvetica', encabezado || celda.bold ? 'bold' : 'normal');
+  doc.setFontSize(font);
+  doc.setTextColor(...color);
+  const lineas = lineasDe(doc, celda.texto, col.ancho - 8);
+  const lineH = font + 3;
+  const bloque = lineas.length * lineH;
+  let ty = y + (h - bloque) / 2 + font * 0.75;
+  for (const linea of lineas) {
+    const tw = doc.getTextWidth(linea);
+    let tx = x + 5;
+    if (align === 'center') tx = x + (col.ancho - tw) / 2;
+    if (align === 'right') tx = x + col.ancho - tw - 5;
+    doc.text(linea, tx, ty);
+    ty += lineH;
+  }
+}
+
 function pintarCeldas(
   doc: DocumentoPDF,
   x0: number,
@@ -373,22 +511,7 @@ function pintarCeldas(
     doc.setDrawColor(...(encabezado ? VERDE_OSCURO : LINEA));
     doc.setLineWidth(0.6);
     doc.rect(x, y, col.ancho, h, 'S');
-    doc.setFont('helvetica', encabezado || celda.bold ? 'bold' : 'normal');
-    doc.setFontSize(font);
-    doc.setTextColor(...color);
-    const lineas = lineasDe(doc, celda.texto, col.ancho - 8);
-    const lineH = font + 3;
-    const bloque = lineas.length * lineH;
-    let ty = y + (h - bloque) / 2 + font * 0.75;
-    const align = col.align ?? 'left';
-    for (const linea of lineas) {
-      const tw = doc.getTextWidth(linea);
-      let tx = x + 5;
-      if (align === 'center') tx = x + (col.ancho - tw) / 2;
-      if (align === 'right') tx = x + col.ancho - tw - 5;
-      doc.text(linea, tx, ty);
-      ty += lineH;
-    }
+    pintarTextoCelda(doc, celda, col, x, y, h, font, encabezado, color);
     x += col.ancho;
   });
 }
@@ -857,89 +980,254 @@ function barrasJornales(
   motor.y = Math.max(yDespuesTareas, motor.y) + Math.max(tareas.length, porLote.length) * 20 + 8;
 }
 
+type DirFlecha = 'subiendo' | 'bajando' | 'estable';
+
+function dirFlecha(tendencia: string): DirFlecha | undefined {
+  if (tendencia === 'subiendo' || tendencia === 'bajando' || tendencia === 'estable') return tendencia;
+  return undefined;
+}
+
+function celdaValor(valor: number | null): Celda {
+  if (valor == null) return { texto: '—', color: rgbDeHex('#d1d5db') };
+  return { texto: `${fmtN(valor)}%`, bold: true, fill: rellenoIncidencia(valor) };
+}
+
+function celdaTendencia(actual: number | null, anterior: number | null, tendencia: string): Celda {
+  if (actual == null) return { texto: 'Sin datos', color: rgbDeHex('#d1d5db') };
+  if (anterior == null || tendencia === 'sin_referencia') return { texto: `${fmtN(actual)}%`, bold: true };
+  return {
+    texto: `${fmtN(actual)}%`,
+    bold: true,
+    flecha: dirFlecha(tendencia),
+    nota: `(era ${fmtN(anterior)}%)`,
+  };
+}
+
+function celdaMatriz(actual: number | null, tendencia: string): Celda {
+  if (actual == null) return { texto: '—', color: rgbDeHex('#d1d5db') };
+  const flecha = dirFlecha(tendencia);
+  return {
+    texto: `${fmtN(actual)}%`,
+    bold: true,
+    fill: rellenoIncidencia(actual),
+    flecha,
+    parentesis: Boolean(flecha),
+  };
+}
+
+function fechaCorta(iso: string | null): string {
+  if (!iso) return '—';
+  return iso.slice(5).replace('-', '/');
+}
+
+function bannerMonitoreo(motor: Motor, texto: string): void {
+  const { doc } = motor;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  const lineas = lineasDe(doc, texto, CONTENT_W - 28);
+  const alto = 12 + lineas.length * 15 + 6;
+  continuarSi(motor, alto);
+  const y0 = motor.y;
+  doc.setFillColor(...rgbDeHex('#fffbeb'));
+  doc.setDrawColor(...rgbDeHex('#fbbf24'));
+  doc.setLineWidth(1);
+  doc.roundedRect(MARGIN_X, y0, CONTENT_W, alto, 4, 4, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  doc.setTextColor(...rgbDeHex('#92400e'));
+  lineas.forEach((linea, i) => doc.text(linea, MARGIN_X + 14, y0 + 18 + i * 15));
+  motor.y = y0 + alto + 8;
+}
+
+function lineaReferencia(motor: Motor, actual: string, anterior: string | null): void {
+  const texto = anterior ? `Monitoreo: ${actual} · Referencia: ${anterior}` : `Monitoreo: ${actual}`;
+  continuarSi(motor, 18);
+  const { doc } = motor;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  doc.setTextColor(...GRIS);
+  doc.text(sanear(texto), MARGIN_X, motor.y + 12);
+  motor.y += 18;
+}
+
+function tituloSeccionMonitoreo(motor: Motor, texto: string): void {
+  continuarSi(motor, 26);
+  const { doc } = motor;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(...TINTA);
+  doc.text(sanear(texto), MARGIN_X, motor.y + 16);
+  motor.y += 26;
+}
+
+function leyendaMonitoreo(motor: Motor): void {
+  const alto = 20;
+  continuarSi(motor, alto);
+  const { doc } = motor;
+  const y = motor.y + 11;
+  let x = MARGIN_X;
+  const etiqueta = (texto: string, bold = false) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...GRIS);
+    const limpio = sanear(texto);
+    doc.text(limpio, x, y);
+    x += doc.getTextWidth(limpio) + 6;
+  };
+  const muestra = (hex: string) => {
+    doc.setFillColor(...rgbDeHex(hex));
+    if (hex === '#ffffff') {
+      doc.setDrawColor(...rgbDeHex('#d1d5db'));
+      doc.setLineWidth(0.4);
+      doc.rect(x, y - 8, 10, 10, 'FD');
+    } else {
+      doc.rect(x, y - 8, 10, 10, 'F');
+    }
+    x += 14;
+  };
+  etiqueta('INCIDENCIA:', true);
+  muestra('#ffffff');
+  etiqueta('0%');
+  muestra('#fefce8');
+  etiqueta('<10%');
+  muestra('#fff7ed');
+  etiqueta('<20%');
+  muestra('#fef2f2');
+  etiqueta('>=20%');
+  x += 10;
+  etiqueta('TENDENCIA:', true);
+  dibujarFlecha(doc, x, y, 'subiendo');
+  x += ANCHO_FLECHA + 3;
+  etiqueta('Subiendo');
+  dibujarFlecha(doc, x, y, 'bajando');
+  x += ANCHO_FLECHA + 3;
+  etiqueta('Bajando');
+  dibujarFlecha(doc, x, y, 'estable');
+  x += ANCHO_FLECHA + 3;
+  etiqueta('Estable');
+  motor.y += alto + 4;
+}
+
+function subloteConDatos(v: DatosReporteSemanal['monitoreo']['vistasPorSublote'][number]): boolean {
+  if (v.sinDatos || !v.sublotes?.length || !v.plagas?.length) return false;
+  return v.plagas.some((plaga) => v.sublotes.some((sub) => v.celdas?.[plaga]?.[sub]?.actual != null));
+}
+
 function slidesMonitoreo(motor: Motor, datos: DatosReporteSemanal, analisis: AnalisisReportePdf): void {
   const mon = datos.monitoreo;
   if (!mon) return;
   const resumen = (mon.resumenGlobal || []).filter((r) => r.promedioActual != null || r.minLote != null || r.maxLote != null);
-  const porLote = (mon.vistasPorLote || []).filter((v) => !v.sinDatos && v.plagas?.length);
-  const porSublote = (mon.vistasPorSublote || []).filter((v) => v.sublotes?.length && !v.sinDatos);
-  if (resumen.length === 0 && porLote.length === 0 && porSublote.length === 0) return;
+  const porLote = mon.vistasPorLote || [];
+  const porSublote = (mon.vistasPorSublote || []).filter(subloteConDatos);
+  const hayIncidencia = resumen.length > 0 || Boolean(mon.avisoFechaDesactualizada);
+  if (!hayIncidencia && porLote.length === 0 && porSublote.length === 0) return;
+  if (hayIncidencia) slideIncidencia(motor, datos, analisis, resumen);
+  if (porLote.length > 0) slideVistaPorLote(motor, porLote);
+  for (const vista of porSublote) slideUnSublote(motor, vista);
+}
+
+function slideIncidencia(
+  motor: Motor,
+  datos: DatosReporteSemanal,
+  analisis: AnalisisReportePdf,
+  resumen: DatosReporteSemanal['monitoreo']['resumenGlobal'],
+): void {
+  const mon = datos.monitoreo;
   abrir(motor, 'MONITOREO');
   if (analisis.titulares.monitoreo) titular(motor, analisis.titulares.monitoreo);
-  if (mon.avisoFechaDesactualizada) {
-    continuarSi(motor, 20);
-    motor.doc.setFontSize(12);
-    motor.doc.setTextColor(146, 64, 14);
-    motor.doc.text(sanear(mon.avisoFechaDesactualizada), MARGIN_X, motor.y + 12);
-    motor.y += 20;
+  if (mon.avisoFechaDesactualizada) bannerMonitoreo(motor, mon.avisoFechaDesactualizada);
+  if (mon.fechaActual) lineaReferencia(motor, mon.fechaActual, mon.fechaAnterior);
+  if (resumen.length === 0) {
+    continuarSi(motor, 24);
+    motor.doc.setFont('helvetica', 'normal');
+    motor.doc.setFontSize(14);
+    motor.doc.setTextColor(...GRIS_SUAVE);
+    motor.doc.text('Sin datos de monitoreo para esta semana', MARGIN_X, motor.y + 16);
+    motor.y += 24;
+    return;
   }
-  if (resumen.length > 0) {
-    const anchos = anchoColumnas([34, 22, 22, 22]);
-    tabla(
-      motor,
-      [
-        { titulo: 'Plaga', ancho: anchos[0] },
-        { titulo: 'Incidencia Promedio', ancho: anchos[1], align: 'center' },
-        { titulo: 'Rango (Min–Max)', ancho: anchos[2], align: 'center' },
-        { titulo: 'Tendencia', ancho: anchos[3] },
-      ],
-      resumen.map((r) => [
-        { texto: r.plagaNombre, bold: true, color: TINTA },
-        { texto: r.promedioActual == null ? '—' : `${fmtN(r.promedioActual)}%`, bold: true },
-        { texto: r.minLote != null && r.maxLote != null ? `${fmtN(r.minLote)}%–${fmtN(r.maxLote)}%` : '—' },
-        { texto: textoTendencia(r.tendencia, r.promedioActual, r.promedioAnterior) },
-      ]),
-    );
-  }
-  for (const vista of porLote) {
-    if (motor.y > BOTTOM - 80) abrir(motor, 'MONITOREO');
-    etiqueta(motor, vista.loteNombre);
-    const anchos = anchoColumnas([40, 20, 20, 20]);
-    tabla(
-      motor,
-      [
-        { titulo: 'Plaga', ancho: anchos[0] },
-        { titulo: 'Actual', ancho: anchos[1], align: 'center' },
-        { titulo: 'Anterior', ancho: anchos[2], align: 'center' },
-        { titulo: 'Tendencia', ancho: anchos[3] },
-      ],
-      vista.plagas.map((p) => [
-        { texto: p.plagaNombre, bold: true, color: TINTA },
-        { texto: p.actual == null ? '—' : `${fmtN(p.actual)}%` },
-        { texto: p.anterior == null ? '—' : `${fmtN(p.anterior)}%` },
-        { texto: textoTendencia(p.tendencia, p.actual, p.anterior) },
-      ]),
-    );
-  }
-  for (const vista of porSublote) {
-    if (motor.y > BOTTOM - 80) abrir(motor, 'MONITOREO');
-    etiqueta(motor, `${vista.loteNombre} por sublote`);
-    const pesos = [20, ...vista.sublotes.map(() => 10)];
-    const anchos = anchoColumnas(pesos);
-    tabla(
-      motor,
-      [
-        { titulo: 'Plaga', ancho: anchos[0] },
-        ...vista.sublotes.map((sub, i) => ({ titulo: sub, ancho: anchos[i + 1], align: 'center' as const })),
-      ],
-      vista.plagas.map((plaga) => [
-        { texto: plaga, bold: true, color: TINTA },
-        ...vista.sublotes.map((sub) => {
-          const celda = vista.celdas?.[plaga]?.[sub];
-          return { texto: celda?.actual == null ? '—' : `${fmtN(celda.actual)}%` };
-        }),
-      ]),
-    );
-  }
+  const anchos = anchoColumnas([34, 22, 22, 22]);
+  tabla(
+    motor,
+    [
+      { titulo: 'Plaga', ancho: anchos[0] },
+      { titulo: 'Incidencia Promedio', ancho: anchos[1], align: 'center' },
+      { titulo: 'Rango (Min–Max)', ancho: anchos[2], align: 'center' },
+      { titulo: 'Tendencia', ancho: anchos[3] },
+    ],
+    resumen.map((r) => [
+      { texto: r.plagaNombre, bold: true, color: TINTA },
+      celdaValor(r.promedioActual),
+      { texto: r.minLote != null && r.maxLote != null ? `${fmtN(r.minLote)}%–${fmtN(r.maxLote)}%` : '—' },
+      celdaTendencia(r.promedioActual, r.promedioAnterior, r.tendencia),
+    ]),
+  );
+  leyendaMonitoreo(motor);
   const texto = analisis.interpretacion_monitoreo || analisis.interpretacion_tendencias_monitoreo;
   if (texto) llamada(motor, 'ANÁLISIS', texto);
 }
 
-function textoTendencia(tendencia: string, actual: number | null, anterior: number | null): string {
-  if (actual == null) return 'Sin datos';
-  if (anterior == null || tendencia === 'sin_referencia') return `${fmtN(actual)}%`;
-  const dir = tendencia === 'subiendo' ? 'sube' : tendencia === 'bajando' ? 'baja' : tendencia === 'estable' ? 'estable' : tendencia;
-  return `${fmtN(actual)}% (${dir}, era ${fmtN(anterior)}%)`;
+function slideVistaPorLote(motor: Motor, vistas: DatosReporteSemanal['monitoreo']['vistasPorLote']): void {
+  abrir(motor, 'MONITOREO');
+  tituloSeccionMonitoreo(motor, 'Vista por Lote');
+  const interes = new Set<string>();
+  const nombres = new Set<string>();
+  for (const lote of vistas) {
+    for (const p of lote.plagas || []) {
+      nombres.add(p.plagaNombre);
+      if (p.esPlaga_interes) interes.add(p.plagaNombre);
+    }
+  }
+  const plagas = [...nombres].sort((a, b) => {
+    const ai = interes.has(a);
+    const bi = interes.has(b);
+    if (ai !== bi) return ai ? -1 : 1;
+    return a.localeCompare(b, 'es');
+  });
+  const pesoLote = 78 / Math.max(vistas.length, 1);
+  const pesos = [22, ...vistas.map(() => pesoLote)];
+  const anchos = anchoColumnas(pesos);
+  const columnas: Columna[] = [
+    { titulo: 'Plaga', ancho: anchos[0] },
+    ...vistas.map((lote, i) => ({ titulo: lote.loteNombre, ancho: anchos[i + 1], align: 'center' as const })),
+  ];
+  const fecha: Celda[] = [
+    { texto: 'Fecha', bold: true, color: GRIS, fill: FONDO },
+    ...vistas.map((lote) => ({ texto: fechaCorta(lote.fechaUltimaObservacion), color: GRIS, fill: FONDO })),
+  ];
+  const filas = plagas.map((nombre) => {
+    const celdas: Celda[] = [{ texto: nombre, bold: interes.has(nombre), color: TINTA }];
+    for (const lote of vistas) {
+      const p = (lote.plagas || []).find((x) => x.plagaNombre === nombre);
+      celdas.push(p ? celdaMatriz(p.actual, p.tendencia) : { texto: '—', color: rgbDeHex('#d1d5db') });
+    }
+    return celdas;
+  });
+  tabla(motor, columnas, [fecha, ...filas], 10);
+}
+
+function slideUnSublote(motor: Motor, vista: DatosReporteSemanal['monitoreo']['vistasPorSublote'][number]): void {
+  abrir(motor, 'MONITOREO');
+  tituloSeccionMonitoreo(motor, `Sublotes — ${vista.loteNombre}`);
+  const pesos = [22, ...vista.sublotes.map(() => 10)];
+  const anchos = anchoColumnas(pesos);
+  tabla(
+    motor,
+    [
+      { titulo: 'Plaga', ancho: anchos[0] },
+      ...vista.sublotes.map((sub, i) => ({ titulo: sub, ancho: anchos[i + 1], align: 'center' as const })),
+    ],
+    vista.plagas.map((plaga) => [
+      { texto: plaga, bold: true, color: TINTA },
+      ...vista.sublotes.map((sub) => {
+        const celda = vista.celdas?.[plaga]?.[sub];
+        if (!celda || celda.actual == null) return { texto: '—', color: rgbDeHex('#d1d5db') };
+        return { ...celdaTendencia(celda.actual, celda.anterior, celda.tendencia), fill: rellenoIncidencia(celda.actual) };
+      }),
+    ]),
+    10,
+  );
+  leyendaMonitoreo(motor);
 }
 
 function slideFloracion(motor: Motor, datos: DatosReporteSemanal, analisis: AnalisisReportePdf): void {
