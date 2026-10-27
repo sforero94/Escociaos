@@ -1,0 +1,93 @@
+{"id": "ESCO-162", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-82", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-151", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2"], "banderas": ["preaprobado"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-140", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-81", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V2a", "V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-108", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-50", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-90", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-136", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-116", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-87", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4"], "banderas": ["p1", "requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-128", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-101", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V2a", "V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-109", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-54", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V2"], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-96", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2a", "V4", "V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-38", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-145", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-63", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5", "V4", "V3"], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": "ESCO-63 (parte DDL: fn_ronda_actor_nombre corregida)"}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-121", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V4", "V6"], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-143", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-158", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-110", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-47", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V2a", "V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-59", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2a", "V6", "V3"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-44", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-43", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-113", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V2", "V4", "V6", "V2b"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-39", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-131", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-106", "ruta": "P0_AHORA", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": []}
+{"id": "ESCO-91", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-67", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2a", "V6", "V3"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-56", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-36", "ruta": "P0_AHORA", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": []}
+{"id": "ESCO-135", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2", "V7"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-107", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3", "V1"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-58", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2a", "V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-146", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-53", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-98", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-134", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-104", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-97", "ruta": "P0_AHORA", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": []}
+{"id": "ESCO-42", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2", "V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-149", "ruta": "P0_AHORA", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": []}
+{"id": "ESCO-85", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V9"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-111", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-79", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-115", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5", "V7"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-125", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V9"], "banderas": ["p1"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-88", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-112", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-160", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-75", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V2a", "V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-117", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2a"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-73", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-150", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-45", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2b", "V4"], "banderas": ["requiere_deploy"], "partes": [{"ruta": "FDS", "bloqueada_por": null}, {"ruta": "VIERNES", "bloqueada_por": "ESCO-45 (parte decision: unidad canonica)"}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-153", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-129", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-123", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3", "V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-74", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-64", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V4", "V6"], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-152", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4", "V6"], "banderas": ["preaprobado", "requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": "ESCO-152 (parte migracion 180)"}, {"ruta": "FDS", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-156", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2", "V3"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-157", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V2b"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-124", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V3"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-55", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-148", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-137", "ruta": "P0_AHORA", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": []}
+{"id": "ESCO-102", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V2a", "V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-122", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-132", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V9"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-57", "ruta": "P0_AHORA", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": []}
+{"id": "ESCO-61", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4"], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-100", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V6", "V3", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-103", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V4", "V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-127", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V7"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-60", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5"], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-49", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "propuesta", "criterios_fallados": ["V7", "V2"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-114", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "accion_externa", "criterios_fallados": ["V6", "V9"], "banderas": ["p1"], "partes": [{"ruta": "FDS", "bloqueada_por": null}, {"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "VIERNES", "bloqueada_por": "ESCO-114 (parte accion_externa)"}]}
+{"id": "ESCO-89", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-126", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-95", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-147", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": [], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-119", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V2a", "V5", "V6"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-48", "ruta": "VIERNES", "bloqueada_por": null, "tipo_fds": null, "criterios_fallados": [], "banderas": ["requiere_deploy"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-62", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V2b", "V2"], "banderas": ["requiere_deploy"], "partes": [{"ruta": "FDS", "bloqueada_por": null}, {"ruta": "VIERNES", "bloqueada_por": "ESCO-62 (parte decision: valor de N)"}]}
+{"id": "ESCO-138", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V5"], "banderas": ["preaprobado"], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-99", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V3", "V4"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}
+{"id": "ESCO-139", "ruta": "MIXTO", "bloqueada_por": null, "tipo_fds": "datos", "criterios_fallados": ["V4", "V3"], "banderas": ["preaprobado"], "partes": [{"ruta": "VIERNES", "bloqueada_por": null}, {"ruta": "FDS", "bloqueada_por": null}, {"ruta": "VIERNES", "bloqueada_por": null}]}
+{"id": "ESCO-86", "ruta": "FDS", "bloqueada_por": null, "tipo_fds": "decision", "criterios_fallados": ["V3", "V9"], "banderas": [], "partes": [{"ruta": "FDS", "bloqueada_por": null}]}

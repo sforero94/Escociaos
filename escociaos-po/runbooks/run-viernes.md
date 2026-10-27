@@ -13,6 +13,10 @@ against the operation (§ Failure handling), and a finding it *causes* while
 fixing something. If Friday ever reports "we also noticed X in the codebase",
 that is a defect in how it was run.
 
+**Since 2026-10-26 Friday has two jobs** (cycle in constitution §3): **execute**
+every `Ruta = VIERNES` ficha it may touch, and **prepare** every `Ruta = FDS`
+ficha (Phase 3b) so that Saturday is a pick, not a study session.
+
 ---
 
 ## What Friday may touch
@@ -22,19 +26,34 @@ holds — no judgement calls, no "close enough":
 
 | Field | Required value |
 |---|---|
-| `Severidad` | `P2 — Medio` or `P3 — Bajo` |
+| `Ruta` | `VIERNES` (set by Monday or Thursday with `evals/rubrica-ruteo.md`) |
+| `Severidad` | never `P0`. `P1` only if it passes rubric V8 (flag `p1`) |
 | `Estado` | `Not started` |
 | `Confianza` | `Alta` |
-| `Requiere aprobacion` | unchecked |
 | `Clase` | `codigo` or `ddl_aditivo` |
 
-`Clase = datos` and `Clase = decision` are **never** Friday's. A row with no
-`Clase` set is not eligible either — Friday classifies it, writes the value back,
-and leaves it for next week. Guessing the class is how a data surgery gets run by
-a robot on a Friday morning.
+`Requiere aprobacion` is now only a mirror of `Ruta` (constitution §5). If it is
+checked on a `VIERNES` row, the row is inconsistent: do not act, set `Ruta =
+FDS` with the reason, and let Saturday surface it.
 
-**P0 and P1 are never Friday's**, regardless of class. They carry a refutation
-requirement and a decision that belong to a live exchange.
+`Clase = datos` and `Clase = decision` are **never** Friday's to execute — they
+are always `FDS`, and Friday only prepares them (Phase 3b). A row with no
+`Clase` set is not eligible either — Friday classifies it, writes the value back,
+and leaves it for next week. A row with no `Ruta` is not eligible and Friday
+does not route it: routing is Monday's and Thursday's. Guessing the class is how
+a data surgery gets run by a robot on a Friday morning.
+
+**Friday checks the route, it does not set it.** If a `VIERNES` ficha looks
+wrong against the rubric, Friday sets `Ruta = FDS` and writes which criterion
+failed — it never moves a ficha *into* `VIERNES`.
+
+**P0 is never Friday's**, regardless of class: it carries a refutation
+requirement and a decision that belong to a live exchange. A P1 is Friday's only
+under rubric V8.
+
+**Friday may edit the operation itself only in its docs and preflight checks.**
+Its rules, caps, eligibility, guardrails, roster and cadence are Santiago's
+(rubric V9): a ficha that touches them is `FDS`.
 
 ### Caps, per run
 
@@ -56,7 +75,7 @@ truncation is a reporting failure here exactly as it is on Monday.
 > **The `ddl_aditivo` cap stays at 1, and raising it later would be a different
 > argument.** That one is not a throughput limit: it is the blast radius of the
 > single unattended production write the operation permits, and it is what makes
-> the five gates affordable per run. The same day the code cap rose, the adversarial
+> the Phase 2 gates affordable per run. The same day the code cap rose, the adversarial
 > review returned `unsafe` and stopped a migration that would have put an e-mail
 > where the monthly report signs a name. One migration per run is what buys that
 > scrutiny.
@@ -80,9 +99,11 @@ A shared checkout makes that gate unrunnable, which is how it gets skipped.
 
 Plus one Friday-specific step:
 
-- Read the open backlog from Notion and compute the eligible set above. **If it
-  is empty, say so and stop.** A Friday with nothing to drain is the goal state,
-  not a failure — go straight to Phase 4 (aging) and Phase 6.
+- Read the open backlog from Notion and compute the eligible set above, and the
+  set of `Ruta = FDS` fichas still `Not started`. **If both are empty, say so and
+  stop.** A Friday with nothing to drain is the goal state, not a failure — go
+  straight to Phase 4 (aging) and Phase 6. If only the eligible set is empty, go
+  to Phase 3b.
 
 **Phase 1 — Fix (`codigo` lane)**
 
@@ -100,20 +121,33 @@ Each agent must, in this order:
    `npm test` are all green.
 4. Push `claude/po-viernes-<slug>` and open one PR per finding.
 
-**Phase 2 — Prepare (`ddl_aditivo` lane). The Friday run NEVER applies it.**
+**Phase 2 — Prepare and apply (`ddl_aditivo` lane). At most one per run.**
 
-Decision of Santiago, 2026-09-27 ("option A"): **no Routine writes to the
-database.** In five Fridays the unattended write lane applied one migration,
-and almost every permission change made to serve it left a new silent defect.
-The Friday run now does all the work up to the apply, and stops there:
+> **Option A (Santiago, 2026-09-27: "no Routine writes to the database") is
+> REVOKED for `ddl_aditivo` only, by Santiago on 2026-10-26.** Record, reason
+> and evidence (`escociaos-po/evals/README.md`): constitution §6. Under A this
+> phase stopped before the apply, because in five Fridays the unattended write
+> lane applied one migration and almost every permission change made to serve
+> it left a new silent defect. That lesson is why every gate below is
+> mandatory, and why a denied write is still an expected outcome, never
+> something to route around. **Data writes (`UPDATE`/`DELETE`/`INSERT` of
+> domain rows) stay forbidden here, even when pre-approved** (rubric V4).
 
-1. **Additive by allowlist, not by denylist.** Every statement must begin with
-   one of: `CREATE TABLE` · `CREATE INDEX` / `CREATE UNIQUE INDEX` · `CREATE OR
-   REPLACE FUNCTION` · `CREATE TRIGGER` · `CREATE POLICY` · `ALTER POLICY` ·
-   `ALTER TABLE … ADD COLUMN` · `ALTER TABLE … ADD CONSTRAINT` · `ALTER TABLE …
-   ENABLE ROW LEVEL SECURITY` · `GRANT` · `REVOKE` · `COMMENT ON` · a `DO $$ …
-   $$` block whose only effect is `RAISE EXCEPTION` guards. Anything else means
-   the finding is not `ddl_aditivo`: reclassify it and leave it.
+Only for an eligible `ddl_aditivo` ficha (`Ruta = VIERNES`):
+
+1. **Additive by allowlist, not by denylist — in syntax and in effect.** Every
+   statement must be in the "Aditivo: sí es del viernes" column of the rubric's
+   V5 table (`evals/rubrica-ruteo.md`): `CREATE TABLE` · `CREATE INDEX` /
+   `CREATE UNIQUE INDEX` · `ALTER TABLE … ADD COLUMN` (nullable or constant
+   `DEFAULT`) · `ADD CONSTRAINT … NOT VALID` · `CREATE FUNCTION` with no
+   existing callers · `CREATE TRIGGER` that only fills a column no current
+   writer sets (040/050/063 pattern) · `COMMENT ON` · a `DO $$ … $$` block whose
+   only effect is `RAISE EXCEPTION` guards. **Removed from the pre-2026-10-26
+   list on purpose:** `CREATE OR REPLACE FUNCTION` over an existing function
+   (PR #222: it changes behaviour), `CREATE POLICY` / `ALTER POLICY` / `GRANT`
+   / `REVOKE` and `ENABLE ROW LEVEL SECURITY` (they decide who has access —
+   rubric V2a, PR #182). Anything outside the column means the ficha is not
+   Friday's: set `Ruta = FDS` with the failed criterion, and leave it.
 2. **Guards.** `RAISE EXCEPTION` pre- and post-conditions (080/081/099 style).
    No absolute row-count literal against a table a cron writes (the 103 lesson).
 3. **Rehearse it, then review it.** Run the migration through `po_sonda`
@@ -125,19 +159,32 @@ The Friday run now does all the work up to the apply, and stops there:
    live schema and the rehearsal result.
 4. **Numbering**: `max()` over `src/sql/migrations/` **and** the ledger, and
    sweep the open branches (root CLAUDE.md, migration 144).
-5. **Open the PR** with the migration file, and write in the Notion finding the
-   exact apply payload for Santiago's live session: `tool_slug:
-   SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward`, `ref`, `name`,
-   `rollback`, the pre-state query, the expected post-state, and the reviewer's
-   verdict. Set the finding to "Listo para aplicar".
+5. **Open the PR** with the migration file (full write mode only: the file must
+   be in a PR before anything runs — the go rule, constitution §6). Write in the
+   Notion finding the apply payload: tool, `ref`, `name`, `rollback`, the
+   pre-state query, the expected post-state, and the reviewer's verdict.
+6. **Apply — only if gates 1–5 all passed and the reviewer said "safe".** Run
+   the pre-state query; it must still match. Then apply the file **verbatim**,
+   transferred by content from the PR (constitution §6, the go rule), with:
+   - `mcp__Supabase_Escritura__apply_migration`, if the Phase 0 preflight
+     resolved it;
+   - otherwise Composio `tool_slug: SUPABASE_APPLY_A_MIGRATION`,
+     `account: supabase_bitis-coward` (alias `escocia-os`), `ref:
+     ywhtjwawnkeqlwxbvgup`.
 
-**Do not call `SUPABASE_APPLY_A_MIGRATION`, `apply_migration` or any other
-write tool.** If a write tool is ever denied or asks for permission in this
-run, that is expected: record it under NO CORRIÓ and continue.
+   Then run the post-state query and report both. If a guard aborts, report the
+   abort — do not "fix" the guard to make it pass. Never more than one apply per
+   run, and no other write tool, ever.
 
-**Santiago applies it** in a session where he is present, usually when he
-merges the PR. Monday's drift check still runs: it also catches migrations
-applied by hand without their file on `main` (150 and 157 were found that way).
+**If the write tool is denied or asks for permission, that is expected** while
+`.claude/hooks/supabase-guard.py` still denies unattended Supabase writes
+(constitution §6, pending change). Record it under NO CORRIÓ and continue: the
+PR and the payload stay as they are, and Saturday lists the migration as
+"preparada, no aplicada". Never look for another tool that would let it through.
+
+Monday's drift check still runs: it catches Friday's applied-but-unmerged
+migrations, and also migrations applied by hand without their file on `main`
+(150 and 157 were found that way).
 
 **Friday never merges anything.** Not a doc fix, not a green PR, not its own
 migration. Merging is Santiago's, always.
@@ -155,12 +202,43 @@ migration. Merging is Santiago's, always.
   produccion YYYY-MM-DD, PR pendiente de fusion` plus the pre/post counts.
 - A finding whose defect could not be reproduced → `Estado = Done`,
   `Resolucion = Obsoleto`, `Motivo cierre` = what was tried.
+- **Deploy.** Friday cannot deploy the edge function: publishing is CLI-only
+  (root `CLAUDE.md`, ESCO-148) and the connector publish path is banned. A PR
+  that needs a deploy carries `requiere_deploy` (constitution §5) and says, in
+  its body, whether the migration goes before or after the deploy. Saturday
+  turns that into the merge-and-deploy order. Open item: a deploy-on-merge
+  GitHub Action is being proposed to Santiago separately (constitution §6).
+
+**Phase 3b — Preparar FDS** (2026-10-26)
+
+For each `Ruta = FDS` ficha still `Not started`, write what Saturday needs so
+Santiago only has to pick. By `Tipo FDS` (rubric step 4):
+
+- `decision` — options A/B/(C), the consequence of each, and a recommendation.
+  Lead with evidence, recommend, don't hedge (constitution §11).
+- `datos` — the draft data migration as a file in a **draft PR**
+  (`claude/po-fds-<slug>`), with `-- TODO(Santiago): …` wherever a value only he
+  has is missing, plus its rollback and the pre-state query. It backs up to
+  `respaldos` first (constitution §6) and takes its number from the same sweep
+  as Phase 2 step 4. When no `TODO` is
+  left, rehearse it in `po_sonda` and write the pre- and post-state. The PR
+  exists because the go rule needs a file in a PR before anything runs; it is
+  never merged before the apply, and it is not a fix, so it does not count
+  against the caps.
+- `propuesta` — what is proposed, what it costs, and the recommendation.
+- `accion_externa` — the exact steps only he can do.
+
+Write it into the ficha (`Accion recomendada`), and leave `Estado` and `Ruta`
+as they are. **Never apply any of it**: no migration, no data write, no merge.
+A `datos` draft with a `TODO` is not ready to apply — Saturday asks for the
+missing value instead of offering `aplicar`.
 
 **Phase 4 — Aging pass**
 
 The reason the board grew. For every open `P2`/`P3` untouched for **60+ days**,
 the report proposes `Resolucion = Aceptado (no se arregla)` with a one-line
-rationale, in `REQUIERE TU DECISIÓN`. **Friday proposes; it never accepts on
+rationale, in `REQUIERE TU DECISIÓN`, and sets the ficha to `Ruta = FDS`,
+`Tipo FDS = decision`, so it reaches the Saturday report. **Friday proposes; it never accepts on
 Santiago's behalf** — "we have decided not to fix this" is a judgement about his
 product, not a maintenance action.
 
@@ -172,7 +250,7 @@ finding that gets re-found next month means the ledger step was skipped.
 **Phase 5 — Memory commit** — as Monday. Report to
 `escociaos-po/reports/YYYY-MM-DD-viernes.md`.
 
-**Phase 6 — Notify** — the §10 summary, with two Friday-specific lines:
+**Phase 6 — Notify** — the §10 summary, with these Friday-specific lines:
 
 ```
 DRENADO
@@ -181,13 +259,22 @@ DRENADO
 
 APLICADO SIN FUSIONAR
 - migracion <NNN> → PR <url> — produccion ya la corre, main todavia no la tiene
+
+PREPARADO PARA EL FDS
+- ESCO-NNN · <tipo_fds> · <listo | falta tu dato: …>
+
+REQUIERE DEPLOY
+- PR <url> → <migracion antes | despues> del deploy
 ```
+
+Saturday reads this report: keep these sections exact.
 
 ---
 
 ## Self-pruning rule
 
-If **three consecutive Fridays** find an empty eligible set, the report must open
+If **three consecutive Fridays** find an empty eligible set and no `FDS` ficha to
+prepare, the report must open
 `REQUIERE TU DECISIÓN` with a recommendation to move Friday to monthly, citing
 the three run ids. Same principle as Thursday's: a routine that reliably has
 nothing to do should say so rather than invent work. Track the streak in

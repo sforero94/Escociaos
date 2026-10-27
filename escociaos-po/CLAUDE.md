@@ -59,34 +59,57 @@ Agent briefs live in `.claude/agents/` at the repo root — one file per
 specialist, in Claude Code subagent format. There is deliberately **no second
 copy** of the briefs anywhere.
 
-| Agent | File | Owns | Lun | 1er lun/mes | Jue | Vie |
+| Agent | File | Owns | Lun | Jue | 1er jue/mes | Vie |
 |---|---|---|---|---|---|---|
-| Data Integrity | `data-integrity.md` | Schema drift, orphans, duplicates, referential integrity, migration hygiene, backup posture | ✅ | ✅ | ✅ (72h scope) | — |
-| Security & Compliance | `security-compliance.md` | RLS, auth boundaries, secrets, dependency CVEs, PII, GlobalGAP traceability | ✅ | ✅ | — | — |
-| Infra & Performance | `infra-perf.md` | Vercel deploys, runtime errors, build health, slow queries, indexes, quotas, cron/edge functions | ✅ | ✅ | ✅ | — |
-| Bug Triage & Fix | `bug-triage.md` | Reproduce, root-cause and fix defects; owns `BUG_REPORT.md` | ✅ | ✅ | ✅ | ✅ (drenaje) |
-| Usage Analytics | `usage-analytics.md` | Who uses what, adoption, drop-off, dead features, data-capture behaviour | ✅ | ✅ | — | — |
-| Release & Changelog | `release-changelog.md` | What shipped, changelog, verifying deploys, closing merged findings | ✅ | ✅ | ✅ | — |
-| Feature Strategy | `feature-strategy.md` | Ranked, spec'd feature proposals grounded in observed friction | — | ✅ | — | — |
-| Code Quality | `code-quality.md` | Dead code, duplication, test gaps, typing debt, dependency staleness | — | ✅ | — | ✅ (drenaje) |
+| Data Integrity | `data-integrity.md` | Schema drift, orphans, duplicates, referential integrity, migration hygiene, backup posture | ✅ | ✅ (P0 probe, since Monday) | ✅ (P0 probe) | — |
+| Security & Compliance | `security-compliance.md` | RLS, auth boundaries, secrets, dependency CVEs, PII, GlobalGAP traceability | ✅ | — | — | — |
+| Infra & Performance | `infra-perf.md` | Vercel deploys, runtime errors, build health, slow queries, indexes, quotas, cron/edge functions | ✅ | ✅ (P0 probe, since Monday) | ✅ (P0 probe) | — |
+| Bug Triage & Fix | `bug-triage.md` | Reproduce, root-cause and fix defects; owns `BUG_REPORT.md` | ✅ | — | — | ✅ (drenaje) |
+| Usage Analytics | `usage-analytics.md` | Who uses what, adoption, drop-off, dead features, data-capture behaviour | — | ✅ | ✅ | — |
+| Release & Changelog | `release-changelog.md` | What shipped, changelog, verifying deploys, closing merged findings | ✅ | — | — | — |
+| Feature Strategy | `feature-strategy.md` | Ranked, spec'd feature proposals grounded in observed friction | — | ✅ | ✅ | — |
+| Code Quality | `code-quality.md` | Dead code, duplication, test gaps, typing debt, dependency staleness | — | — | ✅ | ✅ (drenaje) |
 
-**Monday** = 6 agents weekly; **the first Monday of each month** adds Feature
-Strategy and Code Quality (full 8). **Thursday** = 4-agent operational pulse.
-**Friday** = the backlog drain, sized to the work (`runbooks/run-viernes.md`).
-The trimmed weekly roster is deliberate: for a ~5-user app, running the
-strategy/debt agents weekly manufactures P3s to feel useful.
+**The weekly cycle (decision of Santiago, 2026-10-26).** Each day has one job:
 
-**Monday and Thursday find; Friday finishes.** That split is the whole point of
-the third run. Before it existed the operation had no scheduled capacity to close
-anything, so P2s accumulated — 15 open on 2026-08-21, the oldest 18 days, every
-one `Confianza: Alta` and none of them noise. That is a throughput problem, not a
-triage problem, and no severity rubric fixes it. **Friday never files a new
-finding**; a Friday report containing one (other than against the operation
-itself) means it was run wrong.
+| Day | Job | Runbook |
+|---|---|---|
+| **Monday** 07:00 ET | **Health.** 5 agents. A P0 is notified at once; everything else goes to the ledger with a `Ruta` | `runbooks/run-lunes.md` |
+| **Thursday** 07:00 ET | **New features and recommendations** (4 agents, 5 on the first Thursday of the month), plus a minimal P0-only health probe | `runbooks/run-jueves.md` |
+| **Friday** 07:00 ET | **Execute.** Drains `Ruta = VIERNES` and prepares every `Ruta = FDS` ficha so Saturday is a pick | `runbooks/run-viernes.md` |
+| **Saturday** 08:00 ET | **Decisions report.** No agents, no sweep, no PR, no DB write: one report with what Santiago must merge, decide or answer | `runbooks/run-sabado.md` |
+| Saturday or later, Santiago present | **The reply.** A new ordinary session he opens from his phone; it executes only what he named | `runbooks/respuesta-sabado.md` |
 
-**Thursday self-pruning rule**: if three consecutive Thursday runs file zero
-findings, the Thursday report must itself recommend cancelling the Thursday
-routine. Do not wait for Santiago to notice the noise.
+Routing between the days is decided by **the routing rubric,
+`evals/rubrica-ruteo.md`** — the source of truth for `Ruta`. This file and the
+runbooks point at it and do not restate it.
+
+Why the cycle changed: under the previous one the board blocked on Santiago,
+not on capacity. The 2026-10-23 Friday found an empty eligible set: 3 fichas
+waited on a decision of his and 3 on his PR review
+(`reports/2026-10-23-viernes.md`). The decisions now arrive pre-chewed in one
+Saturday report, answered in one line each. usage-analytics moved from Monday to
+Thursday; feature-strategy and code-quality moved from the first Monday to
+Thursday. The trimmed weekly roster stays deliberate: for a ~5-user app, running
+the debt agent weekly manufactures P3s to feel useful.
+
+**Monday and Thursday find; Friday finishes; Saturday asks.** The find/finish
+split is the whole point of the Friday run. Before it existed the operation had
+no scheduled capacity to close anything, so P2s accumulated — 15 open on
+2026-08-21, the oldest 18 days, every one `Confianza: Alta` and none of them
+noise. That is a throughput problem, not a triage problem, and no severity
+rubric fixes it. **Friday and Saturday never file a new finding**; a Friday or
+Saturday report containing one (other than against the operation itself) means
+it was run wrong.
+
+**Thursday self-pruning rule** (rewritten 2026-10-26 for the new role): Thursday
+is now judged by whether its proposals are worth Santiago's Saturday. If three
+consecutive Thursdays produce no proposal he answers `si` — all answered `no`,
+or none filed — the Thursday report must open `REQUIERE TU DECISIÓN` with a
+recommendation to move feature-strategy and usage-analytics to the first
+Thursday of the month. **The P0 probe is never pruned**: a quiet probe is the
+goal state, and its value is the Tuesday break it catches. Do not wait for
+Santiago to notice the noise. Details: `runbooks/run-jueves.md`.
 
 ### How to dispatch
 
@@ -142,7 +165,7 @@ injected either way.
 Every run follows this. Do not skip phases; do not reorder them.
 
 **Phase 0 — Boot (you, ~5 min)**
-- Establish the run id: `YYYY-MM-DD-lunes` or `YYYY-MM-DD-jueves`.
+- Establish the run id: `YYYY-MM-DD-lunes`, `-jueves`, `-viernes` or `-sabado`.
 - Clone the repo: `git clone --depth 50 https://github.com/sforero94/Escociaos.git`.
   Run `npm ci` only if an agent will run tests/lint/typecheck this run.
 - Read the repo's root `CLAUDE.md` — it is the contract for everything technical.
@@ -155,6 +178,8 @@ Every run follows this. Do not skip phases; do not reorder them.
      `SUPABASE_APPLY_A_MIGRATION` on the `supabase_bitis-coward` account via
      Composio) — confirm each still resolves.
      The canonical expected set lives in `memory/_compartida.md`.
+     **Friday also records whether `mcp__Supabase_Escritura__apply_migration`
+     resolves**: it decides Friday's write tool (§6, 2026-10-26).
   2. **Composio's own layer, underneath those three bare names.** A `tool_slug`
      (e.g. `SUPABASE_RUN_READ_ONLY_QUERY`) and an `account` (e.g.
      `supabase_bitis-coward`) are just JSON arguments to
@@ -207,7 +232,9 @@ Every run follows this. Do not skip phases; do not reorder them.
   too** (`SUPABASE_APPLY_A_MIGRATION`, same `escocia-os` account), so the read
   and the write path are now the same connector and the same bare tool name —
   which is exactly why §6 says the separation between them is now a prompt rule
-  and nothing more. Record it in the report. Confirm at boot that the write slug
+  and nothing more. (Since 2026-10-26 Friday prefers `apply_migration` on
+  `Supabase_Escritura` when it resolves, and falls back to this slug, §6.)
+  Record it in the report. Confirm at boot that the write slug
   still resolves: discovering at "go" time that it does not wastes a live
   exchange.
 - **Dead-man check**: find the date of the previous run (latest row in the
@@ -244,7 +271,9 @@ Every run follows this. Do not skip phases; do not reorder them.
   Silent truncation is a reporting failure.
 
 **Phase 4 — Act (only if write mode is ON)**
-- Bug Triage and Code Quality may open PRs, subject to §6.
+- **Since 2026-10-26 only Friday opens PRs.** Monday and Thursday file and route
+  (§3), and Friday executes the findings with `Ruta = VIERNES` (§5). On Friday,
+  Bug Triage and Code Quality open the PRs, subject to §6.
 - One PR per finding. Never batch unrelated fixes.
 - Link the PR URL back onto the Notion row.
 
@@ -274,7 +303,8 @@ Every run follows this. Do not skip phases; do not reorder them.
 **Phase 6 — Notify**
 - The run summary (§9) is the final message of the session — the Routine's
   push + email notification carries it to Santiago. Lead with the Spanish
-  executive summary; never bury it under logs.
+  executive summary; never bury it under logs. **A filed P0 (`Ruta = P0_AHORA`)
+  goes before even the summary** (§10): it does not wait for the weekend.
 
 ---
 
@@ -291,6 +321,8 @@ Every agent returns findings as JSON objects with exactly these fields:
   "confianza": "Alta | Media | Baja",
   "esfuerzo": "S | M | L",
   "clase": "codigo | ddl_aditivo | datos | decision",
+  "ruta": "P0_AHORA | VIERNES | FDS",
+  "tipo_fds": "decision | datos | propuesta | accion_externa | null",
   "evidencia": "file.ts:123, the exact SQL + its result, a log line, or a metric. Never a paraphrase.",
   "impacto": "What breaks, for whom, how often. Quantified where possible.",
   "accion_recomendada": "The specific next step. Not 'investigate further'.",
@@ -304,9 +336,36 @@ Notion property mapping: `titulo`→Hallazgo · `severidad`→Severidad ·
 `especialidad`→Especialidad · `modulo`→Modulo · `confianza`→Confianza ·
 `esfuerzo`→Esfuerzo · `evidencia`→Evidencia · `impacto`→Impacto ·
 `accion_recomendada`→Accion recomendada · `resumen_es`→Resumen (ES) ·
-`requiere_aprobacion`→Requiere aprobacion · `clase`→Clase · `pr`→PR ·
-run id→Corrida · run date→Detectado · Estado→`Not started` for everything new.
+`requiere_aprobacion`→Requiere aprobacion · `clase`→Clase · `ruta`→Ruta ·
+`tipo_fds`→Tipo FDS · `pr`→PR · run id→Corrida · run date→Detectado ·
+Estado→`Not started` for everything new.
 `Resolucion` and `Motivo cierre` are filled only when a finding closes.
+
+### `ruta` — who acts, and when (2026-10-26)
+
+**`ruta` is the routing authority.** Monday and Thursday set it on every
+finding they file, by applying `evals/rubrica-ruteo.md` — the rubric decides it,
+and its steps, criteria (V1–V9), FDS types and flags are not restated here.
+`tipo_fds` is set iff `ruta = FDS`. Friday checks the route before acting and
+never changes it on its own: if it thinks a route is wrong, it sets `FDS` and
+writes why (rubric).
+
+- **One ficha, one class (rubric R5).** A finding whose fix mixes classes
+  (code, DDL, data, decision) is split at filing time, one ficha per part,
+  linked to each other. Each part gets its own `clase` and `ruta`.
+- **`requiere_aprobacion` is now a mirror**, kept for one transition period
+  only: it must equal `ruta != VIERNES`. Where the two disagree, `ruta` wins and
+  the disagreement is a defect to fix on the row. It is retired on
+  `<<por definir: fecha en que Santiago retira el espejo requiere_aprobacion>>`.
+- **Rubric flags** (`requiere_deploy`, `preaprobado`, `p1`) go on the first line
+  of `Accion recomendada` as `Banderas: …`; `preaprobado` carries Santiago's
+  quote and date, or it does not count. A PR with `requiere_deploy` says so in
+  its body. `<<por definir: propiedad Notion propia para las banderas, si se decide>>`
+- **New Notion properties `Ruta` and `Tipo FDS`** (`select`). Until they exist
+  in the Mantenimiento database, no row can be `VIERNES`, so Friday drains
+  nothing — fail closed. `<<por definir: fecha en que se crean Ruta y Tipo FDS en Notion>>`
+- **Rows filed before 2026-10-26 have no `Ruta`.** The first Monday after the
+  properties exist routes every open row by the rubric and writes it back.
 
 ### `clase` — what kind of change the fix is
 
@@ -316,16 +375,17 @@ auto-flagged for approval even when the change itself was uncontroversial — an
 attribution trigger is not a business decision — and the Friday drain had no way
 to tell one from the other. They are now separate axes.
 
-| `clase` | Means | Who may act on it |
+| `clase` | Means | Who may act on it (2026-10-26) |
 |---|---|---|
-| `codigo` | Repo-only change: source, tests, docs, config | Friday, unattended, PR only |
-| `ddl_aditivo` | Strictly additive migration (allowlist in `run-viernes.md` §Phase 2) | Friday, unattended, one per run, five gates |
-| `datos` | Touches existing rows: UPDATE, DELETE, backfill, dedupe | Live exchange only, on a filed proposal |
-| `decision` | Changes a business rule, threshold, accounting contract or product behaviour | Santiago decides; never a PR |
+| `codigo` | Repo-only change: source, tests, docs, config | Friday, unattended, PR only, when `Ruta = VIERNES`. Santiago merges, from the Saturday reply |
+| `ddl_aditivo` | Strictly additive migration, in syntax and in effect (allowlist in `run-viernes.md` §Phase 2 + rubric V5) | Friday, unattended, when `Ruta = VIERNES`: one per run, PR **and apply** after the Phase 2 gates. Never merged by Friday |
+| `datos` | Touches existing rows: UPDATE, DELETE, INSERT, backfill, dedupe | **No Routine, ever, even pre-approved** (rubric V4). Always `FDS`. Friday prepares it; the Saturday reply session applies it on `ESCO-NNN aplicar`, with Santiago present |
+| `decision` | Changes a business rule, threshold, accounting contract or product behaviour | Always `FDS`. Santiago decides in the Saturday reply; never a PR. The follow-up that implements his decision may become `VIERNES` + `preaprobado` |
 
-`requiere_aprobacion: true` **overrides `clase` entirely** — nothing automatic
-touches it, whatever class it carries. Leaving `clase` unset is not neutral: an
-unclassified finding is ineligible for Friday, so it simply waits. Classify it.
+**`ruta` overrides `clase`**: only `Ruta = VIERNES` is eligible for anything
+automatic, whatever class it carries. Leaving `clase` or `ruta` unset is not
+neutral: an unclassified or unrouted finding is ineligible for Friday, so it
+simply waits. Classify and route it.
 
 ### Severity rubric — apply literally
 
@@ -362,7 +422,7 @@ never by convenience.
 | Phase | Path | Access |
 |---|---|---|
 | Diagnosis — Phases 0–3, every sweep, every agent | **Composio**, `tool_slug: SUPABASE_RUN_READ_ONLY_QUERY`, `account: supabase_bitis-coward` (alias `escocia-os`) | read-only, mechanically enforced by Supabase itself (runs as `supabase_read_only_user`; write statements are rejected server-side, not by a prompt rule — verified 2026-09-14) |
-| Remediation — Phase 4 only | **Composio**, `tool_slug: SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward` | write-capable. **Bounded by prompt, not by mechanism** — see the note below, this changed on 2026-09-21 |
+| Remediation — Phase 4 only | **`apply_migration` of the `Supabase_Escritura` connector** when the preflight resolves it; otherwise **Composio**, `tool_slug: SUPABASE_APPLY_A_MIGRATION`, `account: supabase_bitis-coward` (alias `escocia-os`) — order set 2026-10-26 | write-capable. **Bounded by prompt, not by mechanism** — see the notes below (2026-09-21, 2026-10-26) |
 | Logs (edge function, API, Postgres) — any phase | **`query_logs` of the `Supabase_Escritura` connector** (`mcp__Supabase_Escritura__query_logs`). **Never Composio `SUPABASE_GET_PROJECT_LOGS`**: it calls the retired `analytics/endpoints/logs.all` and answers **410 Gone** to every query (ESCO-131, 2026-09-24) | read-only. Use the OLD shape: table `logs`, `source='edge_logs'`, nested `log_attributes['response.status_code']` — not `cross join unnest(metadata)`. Match with `positionCaseInsensitive(...)>0`, not `ILIKE`. **The window is ~24 h**: asking two days back gives `FetchException`, so this path has no history |
 
 - **All diagnosis is `SELECT` only.** Agents may **compose** DDL/DML but must
@@ -385,6 +445,11 @@ never by convenience.
   `tool_slug: SUPABASE_APPLY_A_MIGRATION` on `account: supabase_bitis-coward`,
   which takes `ref`, `query`, `name` and `rollback`. The dedicated
   `Supabase_Escritura` connector is retired from this operation.
+  *(Amended 2026-10-26: for Friday's one `ddl_aditivo` apply, `apply_migration`
+  on `Supabase_Escritura` comes first when the preflight resolves it, and this
+  Composio slug is the fallback — see the 2026-10-26 record below. §12's
+  "DB connectors" row still says "retired":
+  `<<por definir: actualizar esa fila de §12 cuando se fusione el PR #344>>`.)*
   **Be clear about what was traded away.** The old connector permitted
   `apply_migration` and nothing else, so freehand SQL was *mechanically*
   impossible. Composio's tool is reached through `COMPOSIO_MULTI_EXECUTE_TOOL`,
@@ -401,14 +466,28 @@ never by convenience.
   **The compensating control is the go rule (below), and it is now the only one
   left.** Never compose a mutation in the moment. What runs is a numbered
   migration that exists as a file in a PR, transferred verbatim. An unattended
-  run that finds itself able to write must still not write.
+  run that finds itself able to write must still not write — the one exception
+  is Friday's single gated `ddl_aditivo` apply (2026-10-26, below).
   `SUPABASE_BETA_RUN_SQL_QUERY` stays forbidden in every phase — that
   prohibition did not move and is now the only distinction left between the safe
   and unsafe Supabase write tools.
-- **Since 2026-09-27 no Routine writes to the database ("option A", decision
-  of Santiago).** The Friday run prepares the migration and its apply payload;
-  Santiago applies it with `SUPABASE_APPLY_A_MIGRATION` in a session where he is
-  present. `run-viernes.md` Phase 2 carries the procedure.
+- **Option A — "no Routine writes to the database" (Santiago, 2026-09-27) —
+  REVOKED on 2026-10-26 for `ddl_aditivo` only. Decision of Santiago.**
+  - *What A was, and why:* in five Fridays the unattended write lane applied one
+    migration, and almost every permission change made to serve it left a new
+    silent defect. So Friday prepared the migration and its apply payload, and
+    Santiago applied it in a session where he was present.
+  - *Why it is revoked:* the routing eval over 97 real cases (24 Friday PRs and
+    73 findings that went to Santiago, 2026-08-24 → 2026-10-23) backs the rubric
+    that now decides what is autonomous, with zero false autonomous as its bar.
+    Evidence: `escociaos-po/evals/README.md`. Rule: `evals/rubrica-ruteo.md`.
+  - *What changes:* Friday **applies** at most one `ddl_aditivo` migration per
+    run, with `Ruta = VIERNES`, after every gate of `run-viernes.md` §Phase 2.
+  - *What does not change:* **data writes (`UPDATE`/`DELETE`/`INSERT` of domain
+    rows) stay forbidden to every Routine, even when pre-approved** (rubric V4).
+    They run only in the Saturday reply session, with Santiago present and on
+    his named ID (`runbooks/respuesta-sabado.md`). Friday still never merges.
+    Monday still never writes, and Thursday and Saturday never write.
 - **Hypothesis probes go through `public.po_sonda` (migration 170), never
   through freehand SQL.** A probe is a query that is neither a read nor a
   migration: simulate a role against an RLS policy, call a function that
@@ -434,26 +513,34 @@ never by convenience.
   Supabase write and every merge included. A denial is expected: record it
   under NO CORRIÓ and continue, never look for a way around it. A denial on
   something from the allowed list is a P1 against the operation (the list
-  rotted).
-- Any `INSERT`/`UPDATE`/`DELETE`/`ALTER`/`DROP` goes into the finding as exact
-  SQL with `requiere_aprobacion: true`, plus a matching rollback statement and
-  the row count it will touch.
+  rotted). **Pending since 2026-10-26:** the hook still denies Friday's
+  `ddl_aditivo` apply (`apply_migration` and `SUPABASE_APPLY_A_MIGRATION` both
+  ask) and Saturday's Notion page (`NOTION_PERMITIDOS` has no page-creation
+  slug). Until it changes, both are expected denials with the fallbacks in
+  their runbooks. `<<por definir: cambio en .claude/hooks/supabase-guard.py para estas dos excepciones>>`
+- Any `INSERT`/`UPDATE`/`DELETE`, or any DDL that fails the rubric's "additive
+  in effect" table (V5), goes into the finding as exact SQL with `ruta: FDS`,
+  plus a matching rollback statement and the row count it will touch.
 - **Monday and Thursday never write.** They fire at 07:00 with nobody watching;
   there is no one present to authorise anything, so the run ends with the SQL
-  filed. Their writes happen only in a live exchange — in practice, a follow-up
-  conversation about findings the run already filed.
+  filed. Their writes happen only in a live exchange — in practice, the Saturday
+  reply session (`runbooks/respuesta-sabado.md`) about findings already filed.
   **Since 2026-09-21 this rule has no mechanism behind it.** The write tool is
   now reachable from the same `COMPOSIO_MULTI_EXECUTE_TOOL` the reads use, so an
   unattended run *can* write and is trusted not to. Treat the rule as load-
   bearing rather than as a description of what is possible.
-- **Friday has exactly one unattended write**, and it is deliberately narrow:
-  a single strictly-additive migration per run, behind the five gates in
-  `runbooks/run-viernes.md` §Phase 2 (additive-by-allowlist, own guards,
-  independent adversarial review defaulting to "unsafe", correct sequential
-  number, byte-identical transfer from the file in the PR). Nothing else. No
-  `SUPABASE_BETA_RUN_SQL_QUERY` via Composio, ever — its write path is
-  `SUPABASE_APPLY_A_MIGRATION` on `account: supabase_bitis-coward`, and since
-  2026-09-21 nothing but this rule keeps the two apart. **Friday never merges**, so the ordering is apply-then-merge, chosen knowingly
+- **Friday has exactly one unattended write** (restored 2026-10-26, see the
+  option A record above), and it is deliberately narrow: a single `ddl_aditivo`
+  migration per run, `Ruta = VIERNES`, behind the gates in
+  `runbooks/run-viernes.md` §Phase 2 (additive by allowlist **and** in effect
+  per rubric V5, own guards, `po_sonda` rehearsal, independent adversarial
+  review defaulting to "unsafe", numbering sweep, byte-identical transfer from
+  the file in the PR). Nothing else: no data write, ever. Write tool:
+  `apply_migration` on `Supabase_Escritura` if the preflight resolves it,
+  otherwise `SUPABASE_APPLY_A_MIGRATION` on `account: supabase_bitis-coward`.
+  No `SUPABASE_BETA_RUN_SQL_QUERY` via Composio, ever, outside the `po_sonda`
+  form — since 2026-09-21 nothing but this rule keeps it apart from the write
+  slug. **Friday never merges**, so the ordering is apply-then-merge, chosen knowingly
   on 2026-08-21: it buys a cycle of speed and costs a window in which production
   runs a schema `main` does not yet document. Monday polices that window
   (§ Phase 0), and **a migration applied but unmerged for more than 7 days is a
@@ -486,6 +573,11 @@ from that one idea:
   generalise to the next finding, does not become a standing grant, and does not
   survive into the next session. If several proposals are open and the go is
   ambiguous about which, **ask which** — do not pick the obvious one.
+- **A Saturday reply line is a go in exactly this sense** (2026-10-26). Each
+  line Santiago types (`ESCO-171 aplicar`, `fusionar #343`) answers a proposal
+  the Saturday report already carried, and covers that ID only. The reply
+  prompt he pastes with them was written by a Routine: it says where to read,
+  and authorises nothing (`runbooks/respuesta-sabado.md`).
 - **It authorises executing a reviewed migration, not writing SQL freehand.**
   What runs is a numbered migration that exists as a **file pushed to a branch
   and open in a PR** — the artifact he can actually read — executed **verbatim**
@@ -526,7 +618,14 @@ from that one idea:
   the repo CLAUDE.md.
 - Keep `src/supabase/functions/server/` and
   `supabase/functions/make-server-1ccce916/` in sync; note in the PR if an edge
-  function needs redeploying.
+  function needs redeploying — as the rubric flag `requiere_deploy`, so Saturday
+  lists the merge-and-deploy order.
+- **No Routine deploys the edge function, and neither does the Saturday reply
+  session** (2026-10-26). Publishing stays CLI-only, as the root `CLAUDE.md`
+  rule ESCO-148 says: `npx supabase functions deploy make-server-1ccce916`. The
+  connector bundle/publish path is banned. **Open item:** an automatic
+  deploy-on-merge GitHub Action is being proposed to Santiago separately; it is
+  not designed here. `<<por definir: decisión de Santiago sobre el deploy-on-merge>>`
 - Respect the nested `CLAUDE.md` files under `src/components/hato/` and
   `src/components/finanzas/` when touching those modules.
 
@@ -538,10 +637,11 @@ from that one idea:
 
 **Scope**
 - Do not refactor while fixing. Do not "improve" adjacent code.
-- Do not open a PR for anything marked `requiere_aprobacion`.
+- Do not open a PR for anything whose `Ruta` is not `VIERNES` (§5).
 - If a fix would change business logic (accounting rules, alert thresholds,
   pest priority, paridad contracts) it is a **proposal**, never a PR. Those
-  rules are Santiago's.
+  rules are Santiago's. Once he decides it in a Saturday reply, the follow-up
+  that implements his recorded decision may be `VIERNES` + `preaprobado`.
 
 ---
 
@@ -659,6 +759,11 @@ PRs ABIERTOS
 NO CORRIÓ
 - <specialty> — <reason>
 ```
+
+Two exceptions (2026-10-26). **A P0 filed this run** (`Ruta = P0_AHORA`, Monday
+or Thursday) goes on the first line after the header, above `RESUMEN (ES)`:
+`P0 AHORA — <ESCO-NNN> <resumen_es>`, one line per P0. **Saturday** uses its own
+format, in `runbooks/run-sabado.md`.
 
 If a run finds nothing, say so plainly and briefly. **Do not manufacture
 findings to justify the run.** A quiet week is good news, and reporting it

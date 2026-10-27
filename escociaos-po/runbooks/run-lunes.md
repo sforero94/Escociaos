@@ -1,14 +1,20 @@
 # Runbook — Corrida del lunes (barrido semanal)
 
-**Cadence**: Mondays 07:00 America/New_York · **Agents**: 6 weekly, **8 on the
-first Monday of the month** · **Expected duration**: 30–60 min.
+**Cadence**: Mondays 07:00 America/New_York · **Agents**: 5 weekly ·
+**Expected duration**: 30–60 min.
 
-The Monday run is the strategic one. It answers *how is the system doing* and
-*what should this week be about*, not just *what broke*.
+**The Monday run is the health one** (cycle of 2026-10-26, constitution §3). It
+answers *how is the system doing* and *what broke*. New features and
+recommendations moved to Thursday: usage-analytics weekly, feature-strategy and
+code-quality off the first Monday.
 
 Weekly roster: `data-integrity` · `security-compliance` · `infra-perf` ·
-`bug-triage` · `usage-analytics` · `release-changelog`.
-First Monday of the month adds: `feature-strategy` · `code-quality`.
+`bug-triage` · `release-changelog`.
+
+**Where each finding goes.** A P0 is notified at once: the run's final message
+and push lead with it (Phase 6). Everything else goes to the ledger with a
+`Ruta`, set by `evals/rubrica-ruteo.md`: `VIERNES` if Friday can do it alone,
+`FDS` if it needs Santiago.
 
 ---
 
@@ -84,9 +90,7 @@ brief (`.claude/agents/<name>.md`) **+ its memory file**
 id, repo path, Supabase ref `ywhtjwawnkeqlwxbvgup`, Notion data source id,
 write mode, standing priorities, dedupe set):
 
-`data-integrity` · `security-compliance` · `infra-perf` · `bug-triage` ·
-`usage-analytics` — then, on first Mondays, `feature-strategy` after Usage
-Analytics returns (it needs those numbers) alongside `code-quality`.
+`data-integrity` · `security-compliance` · `infra-perf` · `bug-triage`.
 
 `release-changelog` runs **last**, after everything else, so it can close out
 PRs opened this run.
@@ -108,16 +112,22 @@ collide most). Update existing Notion rows rather than duplicating. Cap at 12
 new findings; if more survive, keep the highest severity × confianza and
 **state how many were dropped**.
 
-## Phase 4 — Act (full write mode only)
+## Phase 4 — Route, no PRs (since 2026-10-26)
 
-Bug Triage: up to 5 PRs. Code Quality (first Mondays): up to 2. One finding per
-PR, all checks green, branch `claude/po-<especialidad>-<slug>`. Nothing marked
-`requiere_aprobacion` becomes a PR, and nothing of `clase: datos` or
-`clase: decision` does either.
+**Monday opens no PRs.** It files and routes; Friday executes (constitution §3).
+A `VIERNES` finding found on Monday waits four days for Friday, on purpose: one
+day does the work, with its worktrees, caps and gates, and the board is never
+half-fixed by two runs at once.
 
-**Set `Clase` on every finding filed this run.** It is what makes a finding
-eligible for the Friday drain, and an unclassified one just waits. Monday is
-where the backlog's throughput is decided.
+**Set `Clase` and `Ruta` on every finding filed this run** (constitution §5),
+`Tipo FDS` too when the route is `FDS`. Apply `evals/rubrica-ruteo.md` step by
+step; do not restate or shortcut it. A finding whose fix mixes classes is split
+into one ficha per part (rubric R5) before filing. `Ruta` is what makes a
+finding eligible for the Friday drain, and an unrouted one just waits. Monday
+is where the backlog's throughput is decided.
+
+**First Monday after `Ruta` exists in Notion:** route every open row filed
+before 2026-10-26 the same way, and write `Ruta`/`Tipo FDS` back.
 
 ## Phase 5 — File and remember
 
@@ -129,19 +139,21 @@ where the backlog's throughput is decided.
 ## Phase 6 — Notify
 
 End the session with the §10 summary — the Routine's push + email carries the
-final message. Lead with the Spanish executive summary and the decisions
-Santiago owns this week.
+final message. **If a P0 was filed, it leads**, above the executive summary
+(constitution §10). Then the Spanish executive summary. Decisions for Santiago
+are no longer asked here: they go to the ledger as `FDS` and reach him in the
+Saturday report.
 
 ---
 
 ## Monday-specific emphasis
 
-- **Hato Lechero rollout** gets the deepest look: adoption, capture friction,
-  correction rates, what is left to finish the module.
+- **Hato Lechero rollout** gets the deepest health look: correctness, capture
+  errors, correction rates. Adoption and friction moved to Thursday with
+  usage-analytics (2026-10-26).
 - **Week-over-week deltas** on every priority module, against the baselines in
-  each agent's memory file — Monday is the only run that establishes trend.
-- **Feature Strategy** (first Mondays) publishes at most 3 proposals, and is
-  expected to recommend *finishing* over *starting* most weeks.
+  each agent's memory file — Monday is the only run that establishes the health
+  trend.
 - On first Mondays, Release & Changelog adds the cadence signal: commits/week,
   fix-vs-feature ratio, merge-to-deploy lag.
 
