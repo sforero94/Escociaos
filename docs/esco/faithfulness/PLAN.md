@@ -64,6 +64,22 @@ Disputed historical fixtures remain blocked on P0-02/D01.
 **Verify:** empty vs missing/error, partial pagination, stale data, summary truncation and legacy tool adapters. Synchronize generated edge copies when affected.
 **Handoff:** envelope contract, migrated/unmigrated tool inventory, consumer compatibility notes.
 
+#### P1-01 slices
+
+- **P1-01-a — typed adapter and context truncation:** versioned metadata contract,
+  conservative legacy projection, distinct empty/error/partial/stale/unknown
+  controls, and preservation of errors/incompleteness in persisted summaries.
+  Contract and inventory: [EVIDENCE.md](EVIDENCE.md).
+- **P1-01-b — scoped producers and consumers:** migrate selected tools and their
+  failure paths, bind known scope/calendar/units/authorized source identities,
+  preserve metadata in immediate and persisted contexts, and validate consumers
+  in both channels. First action:
+  `rg -n "finish|_evidencia|toolResultOk|evidenciaPartosSuficiente" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`.
+
+Split because producer migration and authorized source binding require a separate
+reviewable boundary from the generic legacy projection. All original P1-01
+acceptance criteria remain required; P1-01-a alone does not complete the parent.
+
 ### P1-02 — Bound the tool loop and route commands
 
 **Dependencies:** P0-03; P1-01 for outcome metadata. **First action:** inspect forced first-round `required`, duplicate detection and per-round tool arrays.

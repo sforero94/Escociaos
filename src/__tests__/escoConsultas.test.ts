@@ -190,7 +190,7 @@ describe('Contrato y enrutamiento', () => {
   });
   it('copias de motor y chat son idénticas; historial carga últimos 20', () => {
     const canonical = readFileSync('src/utils/escoConsultas.ts', 'utf8');
-    for (const tree of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) expect(readFileSync(`${tree}/esco-consultas.ts`, 'utf8')).toBe(canonical);
+    for (const tree of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) expect(readFileSync(`${tree}/esco-consultas.ts`, 'utf8')).toBe(canonical.replace("'./escoEvidencia.ts'", "'./esco-evidencia.ts'"));
     const chat = readFileSync('src/supabase/functions/server/chat.tsx', 'utf8');
     expect(readFileSync('supabase/functions/make-server-1ccce916/chat.tsx', 'utf8')).toBe(chat);
     expect(chat).toContain('order=created_at.desc,id.desc&limit=20');

@@ -1,3 +1,4 @@
+import { adaptarEvidenciaLegada } from './escoEvidencia.ts';
 /** Consultas de evidencia de Esco (#311). Sin Deno/SDK; I/O inyectado y probado. */
 export type FilaEsco = Record<string, unknown>;
 export type ConsultaPagina = (tabla: string, query: string) => Promise<FilaEsco[]>;
@@ -98,10 +99,16 @@ export async function leerCompleto(q: ConsultaPagina, tabla: string, query: stri
 export function resumirContexto(resultado: string, max = 24000): string {
   if (resultado.length <= max) return resultado;
   try {
-    const r = JSON.parse(resultado);
-    return JSON.stringify({ _evidencia: r._evidencia ?? null, resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
+    const parsed: unknown = JSON.parse(resultado);
+    const r = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as FilaEsco : {};
+    const legacy = r._evidencia !== null && typeof r._evidencia === 'object' && !Array.isArray(r._evidencia) ? r._evidencia as FilaEsco : null;
+    return JSON.stringify({
+      ...(Object.prototype.hasOwnProperty.call(r, 'error') ? { error: 'La consulta anterior falló; vuelve a consultar.' } : {}),
+      _evidencia: legacy ? { ...legacy, consulta_completa: false, detalle_completo: false } : null,
+      _evidencia_v1: adaptarEvidenciaLegada(parsed, { contextTruncated: true }),
+      resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
   } catch {
-    return JSON.stringify({ contexto_recortado: true, instruccion: 'Resultado anterior no preservado; vuelve a consultar antes de concluir.' });
+    return JSON.stringify({ _evidencia_v1: adaptarEvidenciaLegada(null, { contextTruncated: true }), contexto_recortado: true, instruccion: 'Resultado anterior no preservado; vuelve a consultar antes de concluir.' });
   }
 }
 export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: ConsultaPagina, hoy = fechaBogota()): Promise<FilaEsco> {
