@@ -22,7 +22,7 @@ Update this table and the current-state block in the same session. Add implement
 | S00 | done | Existing evaluation work | `027a162`: preserved prior judge safeguards; 91 passed, 2 private-dataset tests skipped; lint 0 errors |
 | P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
 | P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v1 prepared; private records/labels absent; D01 unresolved |
-| P0-03 | done | P0-01; P0-02 for disputed seeds | `48141b0` foundation + P0-03-b implementation recorded below: tool boundary, 14 synthetic scenarios, manifests, frozen CLI and isolation checks; historical disputed snapshots remain gated |
+| P0-03 | done | P0-01; P0-02 for disputed seeds | `48141b0` foundation + `61c684c` P0-03-b: tool boundary, 14 synthetic scenarios, manifests, frozen CLI and isolation checks; historical disputed snapshots remain gated |
 | P1-01 | ready | P0-03 | Evidence envelopes and compatible adapters; start with current `_evidencia`/summary/error inventory |
 | P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
 | P1-03 | todo | P1-01, P1-02 | Structured facts and prepublication checks |
@@ -98,7 +98,7 @@ Update this table and the current-state block in the same session. Add implement
 ### Session: P0-03-b tool fixtures and scenario pack, 2026-10-28 America/New_York
 
 - Task: P0-03-b and P0-03 parent complete locally on the integration branch.
-- Branch: `codex/esco-faithfulness-plan`; implementation commit: pending (recorded by follow-up handoff commit).
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: `61c684c`. Integration location: this branch, [GitHub branch](https://github.com/sforero94/Escociaos/tree/codex/esco-faithfulness-plan).
 - Start: clean branch at requested handoff `ff017e2`. Initial requested `rg` ran from `/workspace` before the checkout was located; reran in `/workspace/Escociaos`, then checked out the requested branch and inspected both files. No applicable AGENTS.md found. Original `work` branch preserved.
 - Changed: optional in-process tool transport in `llmToolLoop` (both edge trees); adapter keyed by scenario/turn/tool/canonical arguments; strict unknown/exhausted/unused-fixture failures; independent state and controlled date; frozen result labels. Added 14 explicitly synthetic scenarios and SHA-256/version/review manifest, seed map and limitations. Added separate mock/real frozen entrypoint with per-scenario metadata/results and documented repeatable commands. Existing production defaults and duplicate handling remain intact.
 - Verification: `npm run eval:esco:check` passed (120 passed / 2 private-data skips); `npm run lint` passed (0 errors / 910 existing warnings); `npm run typecheck` passed. `EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-synthetic npm run eval:esco` passed all 14 controls. Focused `escoToolLoopEvidencia`, `escoConsultas`, `arbolEdgeFunctionParidad`, and `escoHerramientas` tests passed 156 checks. Ran `python scripts/sync-esco-consultas.py`; both edge trees match. `git diff --check` passed. Temporary logs: `/tmp/esco-{check,lint,types,frozen,domain}.log`; synthetic CLI artifacts: `/tmp/esco-frozen-synthetic/`. Mobile smoke not applicable: no UI changes.
