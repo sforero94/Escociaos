@@ -54,4 +54,3 @@ describe('variantesDelCaso', () => {
     expect(variantesDelCaso(c, true)[1]).toEqual({ nombre: 'parafrasis_1', pregunta: 'otra forma' });
   });
 });
-
