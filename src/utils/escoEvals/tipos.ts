@@ -142,6 +142,7 @@ export interface ResultadoJuez {
 export type EstadoCaso = 'pasa' | 'falla' | 'inconcluso';
 
 export interface ResultadoCaso {
+  revision_medicion?: RevisionMedicion;
   caso_id: string;
   clave: string;
   dominio: string;
@@ -156,4 +157,15 @@ export interface ResultadoCaso {
   juez_estado: 'ok' | 'omitido' | 'error';
   corrida: CorridaEjecutada;
   veredicto_humano_original: VeredictoHumano;
+}
+
+// Optional, attributed review; never inferred from citations or answer wording.
+export type CategoriaFallo = 'afirmacion_sin_soporte' | 'recuperacion_incorrecta' | 'calculo_incorrecto' | 'contradiccion_conversacion';
+export interface RevisionMedicion {
+  revisor: string;
+  version: string;
+  resultado: 'respuesta_completa' | 'respuesta_parcial' | 'aclaracion' | 'abstencion';
+  apropiado: boolean;
+  fallos: { categoria: CategoriaFallo; severidad: 'menor' | 'mayor' | 'critica'; evidencia: string }[];
+  afirmaciones: { id: string; texto: string; soporte: 'completo' | 'parcial' | 'ausente' | 'no_verificable'; fuentes: string[]; evidencia: string }[];
 }

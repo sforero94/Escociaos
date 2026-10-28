@@ -1,6 +1,6 @@
 # Esco faithfulness: incremental implementation
 
-Status: planned; implementation has not started. This directory is the source of truth for work across sessions.
+Status: P0-01 implemented locally; see PROGRESS.md for verification and next task. This directory is the source of truth for work across sessions.
 
 ## Start a new session
 
@@ -17,6 +17,7 @@ The branch name remains stable as work proceeds. A session may use a task branch
 
 ## Documents
 
+- [METRICS.md](METRICS.md): versioned metric, denominator and human-review contract.
 - [PLAN.md](PLAN.md): phases, individual tasks, dependencies, acceptance criteria, and verification.
 - [PROGRESS.md](PROGRESS.md): current task, completed work, blockers, and append-only session history.
 - [DECISIONS.md](DECISIONS.md): accepted scope, implementation defaults, and owner decisions that gate production work.

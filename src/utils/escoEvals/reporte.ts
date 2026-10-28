@@ -1,6 +1,7 @@
 // Resumen, informe en Markdown, comparación con una corrida base y calibración
 // del arnés contra el veredicto del dueño.
 
+import { medir } from './medicion';
 import type { ResultadoCaso } from './tipos';
 
 export interface FilaCaso {
@@ -18,6 +19,7 @@ export interface FilaCaso {
 export interface ConteoGrupo { total: number; pasa: number; falla: number; inconcluso: number }
 
 export interface ResumenEval {
+  medicion?: ReturnType<typeof medir>;
   total: number;
   pasa: number;
   falla: number;
@@ -57,8 +59,9 @@ export function motivosDeFalla(r: ResultadoCaso): string[] {
   return motivos;
 }
 
-export function resumir(resultados: ResultadoCaso[]): ResumenEval {
+export function resumir(resultados: ResultadoCaso[], esperados = [...new Set(resultados.map((r) => r.caso_id))]): ResumenEval {
   const resumen: ResumenEval = {
+    medicion: medir(resultados, esperados),
     total: resultados.length, pasa: 0, falla: 0, inconcluso: 0, tasa_pasa: null,
     solo_determinista: resultados.length > 0 && resultados.every((r) => r.juez_estado === 'omitido'),
     por_dominio: {}, por_tipo: {}, por_etiqueta: {}, casos: [], motivos: [], tokens: { entrada: 0, salida: 0 },
@@ -221,6 +224,10 @@ export function aMarkdown(resumen: ResumenEval, meta: MetaInforme, comparacion?:
   if (meta.datos) partes.push(`- Datos: ${meta.datos}`);
   partes.push(`- Tokens: ${resumen.tokens.entrada.toLocaleString('es-CO')} entrada / ${resumen.tokens.salida.toLocaleString('es-CO')} salida (Esco + juez)\n`);
   partes.push(`## Resultado\n\n**${resumen.pasa} pasan · ${resumen.falla} fallan · ${resumen.inconcluso} inconclusas** de ${resumen.total} corridas — ${pct(resumen.tasa_pasa)} sobre las concluyentes.\n`);
+  if (resumen.medicion) {
+    const m = resumen.medicion;
+    partes.push(`## Medición v${m.version}\n\n- Éxito verificado: ${m.exito_verificado}/${m.total} (${pct(m.tasa_exito_verificado)}).\n- Ejecución fallida: ${m.ejecucion_fallida}; juez no disponible: ${m.juez_no_disponible}; traza ausente: ${m.traza_ausente}; sin revisión: ${m.sin_revision}.\n- Respuestas completas/parciales: ${m.respuesta_completa}/${m.respuesta_parcial}; aclaraciones/abstenciones apropiadas: ${m.aclaracion_apropiada}/${m.abstencion_apropiada}.\n- Casos presentes: ${m.casos_presentes.length}/${m.casos_esperados}; faltantes: ${m.casos_faltantes.join(', ') || '—'}.\n`);
+  }
   if (resumen.solo_determinista) partes.push('> Sin juez: «pasa» solo significa que la capa determinista no encontró fallas. Los criterios «debe / no debe incluir» no se evaluaron.\n');
   const inconclusos = resumen.casos.filter((c) => c.inconclusas > 0);
   if (inconclusos.length > 0) partes.push(`## Casos con corridas inconclusas\n\n${inconclusos.map((c) => `- ${c.caso_id} (${c.clave}): ${c.inconclusas}/${c.corridas} inconclusas`).join('\n')}\n`);

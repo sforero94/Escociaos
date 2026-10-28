@@ -55,7 +55,7 @@ async function juzgar(caso: CasoDorado, corrida: CorridaEjecutada): Promise<{ ju
 function escribirSalida(): ResumenEval {
   mkdirSync(cfg.salida, { recursive: true });
   writeFileSync(path.join(cfg.salida, 'resultados.jsonl'), resultados.map((r) => JSON.stringify(r)).join('\n') + '\n');
-  const resumen = resumir(resultados);
+  const resumen = resumir(resultados, casos.map((c) => c.id));
   let comparacion = null;
   if (cfg.base && existsSync(cfg.base)) {
     const base = JSON.parse(readFileSync(cfg.base, 'utf8')) as { resumen: ResumenEval };

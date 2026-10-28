@@ -150,3 +150,10 @@ The original v2 `ESCO-GS-001` answer has a historical `correcta` label but omits
 239.5, a required comparison anchor in the approved rubric. The harness retains
 that failure and reports the disagreement. Neither the uploaded dataset nor its
 human labels are rewritten to force calibration agreement.
+
+## Measurement contract
+
+Reports preserve legacy verdicts and add `medicion` v1. See
+[METRICS.md](../../docs/esco/faithfulness/METRICS.md) for denominators, missing-case
+coverage, and attributed human review. A deterministic-only pass is never verified
+service success. Absent human reviews remain explicit; no claim labels are inferred.

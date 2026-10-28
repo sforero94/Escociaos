@@ -4,10 +4,10 @@
 
 - Integration branch: `codex/esco-faithfulness-plan`.
 - Original code base: `14271f1`. Evaluation prerequisite commit: `027a162`.
-- Plan bootstrap: complete. Product implementation: **0/25 tasks complete**.
+- Plan bootstrap: complete. Product implementation: **1/25 tasks complete**.
 - Active implementation task: none.
-- **Next task: P0-01 — define the metric and case contract.**
-- First action: read `src/utils/escoEvals/tipos.ts`, `veredicto.ts`, `reporte.ts`, then `BASELINE.md`; write the metric specification and focused report/verdict tests.
+- **Next task: P0-02 — prepare the calibration adjudication ledger; P0-03 is also ready.**
+- First action: inspect the five disagreement records named in BASELINE.md and locate approved private evidence. If unavailable, record that gate and start P0-03 by inspecting `correrCaso` and transport guards.
 - Next useful milestone: checkpoint A, then complete animal-sales evidence and deterministic totals before building online infrastructure.
 - Production state: no deployment, migration, telemetry activation, worker, schedule, feedback UI, or canary performed by this plan bootstrap.
 - Private data: absent from this independent checkout. It is present only in the originating workspace; see BASELINE.md. Two private-dataset tests skip here.
@@ -20,9 +20,9 @@ Update this table and the current-state block in the same session. Add implement
 | Task | Status | Dependencies | Implementation / evidence / next action |
 |---|---|---|---|
 | S00 | done | Existing evaluation work | `027a162`: preserved prior judge safeguards; 91 passed, 2 private-dataset tests skipped; lint 0 errors |
-| P0-01 | ready | S00 | Define denominator/severity/outcome contract; no owner decision required |
-| P0-02 | todo | P0-01, D01 | Prepare disputed-case adjudication; do not rewrite original labels |
-| P0-03 | todo | P0-01; P0-02 for disputed seeds | Frozen replay adapter and 12–15 reviewed scenarios |
+| P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
+| P0-02 | ready | P0-01, D01 | Prepare disputed-case adjudication; do not rewrite original labels |
+| P0-03 | ready | P0-01; P0-02 for disputed seeds | Frozen replay adapter and 12–15 reviewed scenarios |
 | P1-01 | todo | P0-03 | Evidence envelopes and compatible adapters |
 | P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
 | P1-03 | todo | P1-01, P1-02 | Structured facts and prepublication checks |
@@ -51,7 +51,7 @@ Update this table and the current-state block in the same session. Add implement
 | Checkpoint | State | Evidence |
 |---|---|---|
 | Planning bootstrap | complete | PLAN/SESSION/BASELINE/DECISIONS documents and task tracker committed on integration branch |
-| A: reliable measurement | not started | Requires P0 tasks and reviewed fixture dispositions |
+| A: reliable measurement | in progress | P0-01 complete; adjudication and frozen fixtures remain |
 | B: offline candidate | not started | Requires P1–P3 tasks and agreed release gates |
 | C: online observation | not started | Requires P4–P5 and activation decisions |
 | D: production decision | not started | Requires P6 pilot and owner promotion decision |
