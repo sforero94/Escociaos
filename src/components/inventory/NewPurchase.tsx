@@ -29,6 +29,8 @@ import {
 } from '../ui/select';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { useGuardadoInventario } from '@/hooks/useGuardadoInventario';
+import { GuardadoPendiente } from './GuardadoPendiente';
 
 // Vendor interface
 interface Proveedor {
@@ -94,6 +96,7 @@ interface DatosCompra {
 export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const guardado = useGuardadoInventario(user?.id, 'compra');
   const { showSuccess, showError, showWarning, showInfo, ToastContainer } = useToast();
 
   // Estados principales
@@ -348,78 +351,24 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
     showInfo('💾 Guardando compra...');
 
     try {
-      // Para cada producto, registrar la compra
-      for (const item of productosCompra) {
-        // Fetch live quantity from DB to avoid stale in-memory state across loop iterations
-        const { data: productoLive, error: fetchError } = await getSupabase()
-          .from('productos')
-          .select('cantidad_actual, activo')
-          .eq('id', item.producto_id)
-          .single();
-
-        if (fetchError || !productoLive) {
-          throw new Error(`No se pudo obtener el producto con id ${item.producto_id}`);
-        }
-
-        const cantidadAnterior = productoLive.cantidad_actual || 0;
-        const cantidadNueva = cantidadAnterior + item.cantidad_total;
-
-        // Get vendor name for backward compatibility
-        const proveedorNombre = proveedores.find(p => p.id === datosCompra.proveedor_id)?.nombre || '';
-
-        // 1. Insertar en tabla compras
-        const { error: compraError } = await getSupabase().from('compras').insert({
-            fecha_compra: datosCompra.fecha,
-            proveedor: proveedorNombre,
-            proveedor_id: datosCompra.proveedor_id,
-            numero_factura: datosCompra.numero_factura,
-            producto_id: item.producto_id,
-            cantidad: item.cantidad_total,
-            unidad: item.presentacion_unidad,
-            numero_lote_producto: item.numero_lote || null,
-            fecha_vencimiento: item.fecha_vencimiento || null,
-            costo_unitario: item.precio_unitario_real,
-            costo_total: item.costo_total,
-            url_factura: datosCompra.url_factura || null,
-            usuario_registro: user?.email || null,
-          } as any);
-
-        if (compraError) throw compraError;
-
-        // 2. Actualizar cantidad en productos
-        const { error: updateError } = await getSupabase()
-          .from('productos')
-          .update({
-            cantidad_actual: cantidadNueva,
-            precio_unitario: item.precio_unitario_real,
-            // REGLA DE NEGOCIO: Si el producto está inactivo y ahora tiene cantidad > 0, activarlo automáticamente
-            activo: cantidadNueva > 0 ? true : productoLive.activo,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', item.producto_id);
-
-        if (updateError) throw updateError;
-
-        // 3. Crear movimiento de inventario
-        const { error: movimientoError } = await getSupabase()
-          .from('movimientos_inventario')
-          .insert({
-              fecha_movimiento: datosCompra.fecha,
-              producto_id: item.producto_id,
-              tipo_movimiento: 'Entrada' as const,
-              cantidad: item.cantidad_total,
-              unidad: item.presentacion_unidad,
-              factura: datosCompra.numero_factura,
-              saldo_anterior: cantidadAnterior,
-              saldo_nuevo: cantidadNueva,
-              valor_movimiento: item.costo_total,
-              responsable: user?.email || null,
-              observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${proveedorNombre} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad} a ${formatearPesos(item.precio_por_bulto)}/bulto`,
-              provisional: false,
-            } as any);
-
-        if (movimientoError) throw movimientoError;
-      }
+      const proveedorNombre = proveedores.find(p => p.id === datosCompra.proveedor_id)?.nombre || '';
+      await guardado.guardar({
+        fecha: datosCompra.fecha,
+        proveedor: proveedorNombre,
+        proveedor_id: datosCompra.proveedor_id,
+        numero_factura: datosCompra.numero_factura,
+        url_factura: datosCompra.url_factura,
+        productos: productosCompra.map(item => ({
+          producto_id: item.producto_id,
+          cantidad: item.cantidad_total,
+          unidad: item.presentacion_unidad,
+          numero_lote: item.numero_lote,
+          fecha_vencimiento: item.fecha_vencimiento,
+          costo_unitario: item.precio_unitario_real,
+          costo_total: item.costo_total,
+          observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${proveedorNombre} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad} a ${formatearPesos(item.precio_por_bulto)}/bulto`,
+        })),
+      });
 
       showSuccess(`✅ Compra registrada exitosamente: ${productosCompra.length} producto(s)`);
       showInfo('📊 Inventario actualizado automáticamente');
@@ -487,6 +436,18 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   return (
     <div className="space-y-6">
       <ToastContainer />
+      <GuardadoPendiente {...guardado} ocupado={guardando} onVerificar={async () => {
+        setGuardando(true);
+        try {
+          await guardado.reintentar();
+          draft.clearDraft();
+          showSuccess('Compra confirmada.');
+          navigate('/inventario/movimientos');
+          onSuccess?.();
+        } catch (err) {
+          showError(err instanceof Error ? err.message : 'No se pudo verificar el guardado.');
+        } finally { setGuardando(false); }
+      }} />
 
       <div className="max-w-7xl mx-auto px-4">
         <FormDraftBanner
@@ -495,6 +456,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
           onRestore={handleRestoreDraft}
           onDiscard={draft.discardDraft}
         />
+        <fieldset disabled={guardando || guardado.pendiente || !!guardado.errorLocal} className="contents">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUMNA PRINCIPAL - Formulario */}
           <div className="lg:col-span-2 space-y-6">
@@ -582,7 +544,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                   currentUrl={datosCompra.url_factura}
                   onUploadSuccess={(url) => setDatosCompra({ ...datosCompra, url_factura: url })}
                   onRemove={() => setDatosCompra({ ...datosCompra, url_factura: '' })}
-                  disabled={guardando}
+                  disabled={guardando || guardado.pendiente || !!guardado.errorLocal}
                 />
               </div>
             </div>
@@ -656,7 +618,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
               <Button
                 type="button"
                 onClick={guardarCompra}
-                disabled={guardando || productosCompra.length === 0}
+                disabled={guardando || guardado.pendiente || !!guardado.errorLocal || productosCompra.length === 0}
                 className="bg-brand-brown hover:bg-brand-brown/90 text-white"
               >
                 {guardando ? 'Guardando...' : 'Registrar Compra'}
@@ -729,6 +691,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
             </div>
           </div>
         </div>
+        </fieldset>
       </div>
 
       {/* Proveedor Creation Dialog */}
