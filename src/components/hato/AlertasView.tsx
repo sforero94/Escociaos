@@ -129,7 +129,7 @@ export function AlertasView() {
   const handleResponder = async (id: string, respuesta: RespuestaAlertaHato) => {
     setIdActuando(id);
     try {
-      await responderAlerta(id, respuesta, nombreActor);
+      await responderAlerta(id, respuesta, nombreActor, user?.id ?? null);
       toast.success(
         respuesta === 'si' ? 'Alerta confirmada' : respuesta === 'no' ? 'Anotado: todavía no' : 'Anotado: otra cosa',
       );

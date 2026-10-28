@@ -26,11 +26,10 @@ import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import {
   ESTADOS_ALERTA_RESPONSIBLES,
-  efectoDominioRespuestaAlerta,
   estadoTrasRespuestaAlerta,
-  payloadEventoSecadoDesdeAlerta,
   type RespuestaAlertaHato,
 } from '@/utils/hatoAlertas';
+import { persistirEfectoDominioAlerta } from '@/utils/hatoAlertasEfecto';
 import {
   datosConNotaGestor,
   validarAlertaManual,
@@ -170,23 +169,16 @@ export function useHatoAlertas() {
     async (
       alerta: { id: string; tipo: TipoAlertaHato; animal_id: string | null; paso_id: string | null },
       respuesta: RespuestaAlertaHato,
+      createdBy: string | null,
     ) => {
-      const supabase = getSupabase();
-      const efecto = efectoDominioRespuestaAlerta(alerta, respuesta);
-      const hoy = obtenerFechaHoy();
-      if (efecto.kind === 'secado_real') {
-        const { error: errorEvento } = await supabase
-          .from('hato_eventos')
-          .insert(payloadEventoSecadoDesdeAlerta(efecto.animal_id, alerta.id, hoy));
-        if (errorEvento) throw errorEvento;
-      } else if (efecto.kind === 'tratamiento_paso') {
-        const { error: errorPaso } = await supabase
-          .from('hato_tratamiento_pasos')
-          .update({ fecha_ejecutada: hoy })
-          .eq('id', efecto.paso_id)
-          .is('fecha_ejecutada', null);
-        if (errorPaso) throw errorPaso;
-      }
+      await persistirEfectoDominioAlerta(
+        getSupabase(),
+        alerta,
+        respuesta,
+        createdBy,
+        obtenerFechaHoy(),
+        createdBy == null ? 'sesion_sin_user_id' : null,
+      );
     },
     [],
   );
@@ -198,7 +190,12 @@ export function useHatoAlertas() {
    * domain write.
    */
   const responderAlerta = useCallback(
-    async (id: string, respuesta: RespuestaAlertaHato, respondidaPor: string | null) => {
+    async (
+      id: string,
+      respuesta: RespuestaAlertaHato,
+      respondidaPor: string | null,
+      createdBy: string | null,
+    ) => {
       const supabase = getSupabase();
       const { data: actualizada, error: updateError } = await supabase
         .from('hato_alertas')
@@ -215,7 +212,7 @@ export function useHatoAlertas() {
       if (!actualizada) {
         throw new Error('Esa alerta ya no está abierta. Recarga la página.');
       }
-      await aplicarEfectoDominio(actualizada as HatoAlertaRow, respuesta);
+      await aplicarEfectoDominio(actualizada as HatoAlertaRow, respuesta, createdBy);
       await reload();
     },
     [aplicarEfectoDominio, reload],

@@ -1472,10 +1472,10 @@ export const CLAVES_ALERTA_HATO_GERENCIA: readonly string[] = [
 
 export type RespuestaAlertaHato = 'si' | 'no' | 'otro';
 
-/** Estados on which Telegram (and the web Sí/Todavía no/Otra cosa buttons)
- * may still claim the row. Telegram historically only claimed pendiente/
- * enviada; the web manager also claims `escalada` so a never-answered
- * field alert can still close from the queue. */
+/** Estados on which Telegram and the web Sí/Todavía no/Otra cosa buttons
+ * may still claim the row. Since #355 the bot claims the same set as the
+ * web, including `escalada`: the tick re-sends that alert with buttons,
+ * and a Sí on it has to register. A closed row is never claimed again. */
 export const ESTADOS_ALERTA_RESPONSIBLES: readonly EstadoAlertaHato[] = [
   'pendiente',
   'enviada',
@@ -1531,11 +1531,16 @@ export function efectoDominioRespuestaAlerta(
 }
 
 /** Row shape the bot and the web manager both INSERT into `hato_eventos`
- * when Sí confirms a `secado_due`. One constructor, two callers. */
+ * when Sí confirms a `secado_due`. One constructor, two callers.
+ *
+ * `createdBy` is `usuarios.id` of whoever answered. Null is a real
+ * "we could not resolve an author" — never a placeholder uuid. A blank
+ * string is the same as null: it is not an author. */
 export function payloadEventoSecadoDesdeAlerta(
   animalId: string,
   alertaId: string,
   fecha: string,
+  createdBy: string | null,
 ): {
   animal_id: string;
   tipo: 'secado_real';
@@ -1543,7 +1548,9 @@ export function payloadEventoSecadoDesdeAlerta(
   fecha_confianza: 'aproximada';
   alerta_id: string;
   fuente: 'alerta';
+  created_by: string | null;
 } {
+  const autor = typeof createdBy === 'string' && createdBy.trim() !== '' ? createdBy.trim() : null;
   return {
     animal_id: animalId,
     tipo: 'secado_real',
@@ -1551,5 +1558,54 @@ export function payloadEventoSecadoDesdeAlerta(
     fecha_confianza: 'aproximada',
     alerta_id: alertaId,
     fuente: 'alerta',
+    created_by: autor,
   };
+}
+
+const MESES_CORTOS_ES = [
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+  'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+] as const;
+
+/** `2026-10-28` → `28 oct`. A date that is not `AAAA-MM-DD` is returned
+ * as-is: inventing a month would be worse than showing the raw string. */
+export function fechaCortaEs(iso: string): string {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!partes) return iso;
+  const mes = MESES_CORTOS_ES[Number(partes[2]) - 1];
+  if (!mes) return iso;
+  return `${Number(partes[3])} ${mes}`;
+}
+
+/**
+ * Texto que reemplaza el mensaje de quien acaba de responder una alerta.
+ * Hora y día ya vienen en calendario Bogotá; esta función no mira el reloj.
+ *
+ * Sí de secado: `✅ Registrado: Sí · Vaca 141 (CUCA) · secado del 28 oct · 20:00`.
+ * Todavía no / Otra cosa no afirman un secado que no se escribió.
+ */
+export function construirMensajeConfirmacionRespuesta(input: {
+  respuesta: RespuestaAlertaHato;
+  numero: number | null;
+  nombre: string | null;
+  fechaIso: string;
+  hora: string;
+  efecto: 'secado' | 'tratamiento' | 'ninguno';
+}): string {
+  const etiqueta = etiquetaRespuestaAlerta(input.respuesta);
+  const vaca = input.numero != null && input.nombre
+    ? `Vaca ${input.numero} (${input.nombre})`
+    : input.numero != null
+      ? `Vaca ${input.numero}`
+      : input.nombre
+        ? `Vaca ${input.nombre}`
+        : null;
+  const fechaCorta = fechaCortaEs(input.fechaIso);
+  const hecho = input.respuesta === 'si' && input.efecto === 'secado'
+    ? `secado del ${fechaCorta}`
+    : input.respuesta === 'si' && input.efecto === 'tratamiento'
+      ? `paso del ${fechaCorta}`
+      : fechaCorta;
+  const partes = [etiqueta, vaca, hecho, input.hora].filter((parte): parte is string => !!parte);
+  return `✅ Registrado: ${partes.join(' · ')}`;
 }
