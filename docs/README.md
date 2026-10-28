@@ -5,6 +5,7 @@ Esta carpeta contiene documentación vigente para operar, mantener y extender el
 ## Referencias vigentes
 
 - [`Evaluaciones de Esco`](../evals/esco/README.md) — configuración, conjunto dorado privado, calibración, ejecución y lectura de resultados.
+- [`Esco: fidelidad y consistencia`](./esco/faithfulness/README.md) — plan incremental por fases y tareas, protocolo de sesiones, decisiones y registro de avance en la rama `codex/esco-faithfulness-plan`.
 
 - [`supabase_tablas.md`](./supabase_tablas.md) — referencia del esquema de base de datos. Debe validarse contra las migraciones antes de modificar datos o RLS.
 - [`README_CARGA_CSV.md`](./README_CARGA_CSV.md) — importación masiva de monitoreos.
