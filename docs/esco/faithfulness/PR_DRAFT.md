@@ -1,38 +1,40 @@
-# Proposed I02 draft — publication not yet authorized
+# Proposed I03-a draft — publication approval pending
 
-Title: test(esco): aislar puntaje, medición e informes offline
+Title: test(esco): aislar validación y selección de entradas offline
 Base: main
-Head: codex/esco-faithfulness-eval-scoring
-Requested state: draft, only after explicit publication approval
+Head: codex/esco-faithfulness-eval-input
+Requested state: draft only after explicit publication approval
 
-El evaluador acumulado mezcla lógica de puntaje con transportes y runtime.
-Este alcance integra solo contratos tipados, puntaje determinista, prompt/parser
-puro del juez, combinación de veredictos, medición/informes y adjudicación inmutable.
-No importa runner, proveedor, fixtures de replay, runtime ni datos privados.
+I03 requiere separar el input puro del runner y sus dependencias de runtime.
+Este alcance integra solo el adaptador JSONL: validación de forma/campos anidados,
+selección y variantes; y conversión de fecha explícita de evidencia en Bogotá.
+No incorpora CLI, lectura de archivos/entorno/credenciales, runner, proveedor,
+mensajes de canal, fixture pack ni runtime. El adaptador recibe texto del llamador.
 
-Base: merge I01 `23d607648c35e0848c138efec6f976ad7e1dfdad` (PR #357).
+Base: merge I02 `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` (PR #358).
 Fuente preservada: `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-Candidato: consultar HEAD de esta rama; el handoff registra el SHA exacto y los
-checks finales. Los resultados históricos de I01 no son validación de I02.
+Head candidato y checks finales: ver handoff exacto; no se presume un check pendiente.
+I01/I02 están merged: CI exactos 40759015461 y 40765357918 en success.
+Esos resultados son históricos, no validación de I03-a.
 
-La revisión reprodujo y corrigió veredictos coercibles, capas ausentes/malformadas,
-revisión sin atribución, afirmaciones sin soporte que podían contar como éxito,
-y adjudicación sin hash, con evidencia mutable compartida o sin snapshot esperado.
-Los grupos del informe también cuentan correctamente etiquetas con nombres heredados de Object.
-Medición v1.1 conserva denominadores y distingue los nuevos controles de v1.
-No cambia etiquetas originales ni decisiones D01. La extracción numérica/de fechas
-conserva las correcciones I01; presencia de un token no demuestra soporte factual.
+La validación no omite filas defectuosas ni corrige/promueve etiquetas. Rechaza
+fechas imposibles, campos anidados incompletos, flags coercibles y filtros inválidos;
+conserva null explícito, respuestas originales vacías y estado histórico desconocido.
+Una selección sin coincidencias queda vacía: no hay fallback al conjunto completo.
+La forma válida no demuestra verdad, autenticidad ni autorización de datos.
 
-Validación enfocada del candidato corregido antes del commit: 92 pruebas sintéticas pasan, cero skips. El head anterior `115db6e` pasó 77 pruebas enfocadas / 4742 completas; esos resultados son históricos.
-Checks del head final: ver respuesta de handoff; no se presume un check no ejecutado.
-Los dos tests HTTP de `llamarJuez` permanecen fuera del alcance junto con esa función.
-No se leyó JSONL privado ni se llamó a proveedores. CI requiere publicar el PR.
+Proveniencia: lógica del adaptador fuente y seis tests de fábrica sintética;
+se excluyen tests que leen JSONL privado, sus imports I/O y el scenario pack.
+Los nuevos controles usan solo `casoBase` sintético. No lectura de archivos privados.
+Las regresiones reprodujeron 22 fallos antes de corregirlos. Antes del commit:
+53 tests de input / 145 tests conjuntos del evaluador pasan, cero skips.
+El check existente `eval:esco:check` cubre estos módulos; no cambia el guard de fechas.
 
-Recomendación: revisar I02 por separado; publicar solo con autorización explícita,
-y considerar merge después de CI y revisión. Rollback: revert normal, sin datos,
-esquema ni tráfico afectados. No despliegue, migración 186, activación ni QA vivo;
-los cambios futuros del runtime requieren QA autorizado Web/Telegram y alertas/F1.
-P1-02 y el siguiente alcance permanecen fuera de este trabajo.
+Puntaje v1.1 y adjudicación hash-gated permanecen intactos; no comparar v1/v1.1
+sin recomputar bajo el mismo contrato. El runner y el cálculo de hash de entrada
+se diseñarán en otro alcance; este PR no afirma tener un runner funcional.
 
-
-Correcciones de revisión independiente: el parser rechaza envelopes malformados sin rescatar objetos interiores; el informe cuenta cada motivo una vez por corrida y conserva las anclas detalladas; un error real de herramienta exige evaluación booleana del juez (null es no disponible); el prompt limita tolerancias a las explícitamente aprobadas, sin tolerancia automática por deriva histórica. No cambian etiquetas originales. No comparar tasas v1 con v1.1 sin recalcular bajo el mismo contrato de puntaje, prompt, evidencia y revisión.
+Recomendación: revisión independiente y autorización explícita antes de publicar,
+CI antes de considerar merge. Rollback: revert normal, sin esquema/datos/tráfico.
+No producción, QA vivo, proveedores, gasto, telemetría, migración 186 ni despliegue.
+I03 restante, I04 y P1-02 permanecen fuera de este trabajo.
