@@ -63,6 +63,33 @@ describe('salida del juez y evidencia no confiable', () => {
 });
 
 describe('ausencia y contradicción entre capas', () => {
+  function conFalloDeHerramienta(oculto_fallo_herramienta: boolean | null) {
+    const caso = casoBase();
+    const corrida = corridaBase('La consulta falló; no puedo confirmar la cifra', [herramienta('consulta', { error: true })]);
+    const r = combinarVeredicto({ caso, corrida, repeticion: 1, variante: 'principal', determinista: evaluarDeterminista(caso, corrida), juez: { ...juez, oculto_fallo_herramienta }, juezEstado: 'ok' });
+    return { ...r, revision_medicion: revision };
+  }
+  it('un fallo real requiere evaluación booleana aunque la revisión apruebe', () => {
+    const r = conFalloDeHerramienta(null);
+    expect(r.estado).toBe('inconcluso');
+    expect(r.juez_estado).toBe('error');
+    expect(r.juez).toBeNull();
+    expect(medir([r], [r.caso_id]).exito_verificado).toBe(0);
+  });
+  it('distingue fallo declarado de fallo oculto con evaluaciones explícitas', () => {
+    const declarado = conFalloDeHerramienta(false);
+    expect(declarado.estado).toBe('pasa');
+    expect(medir([declarado], [declarado.caso_id]).exito_verificado).toBe(1);
+    const oculto = conFalloDeHerramienta(true);
+    expect(oculto.estado).toBe('falla');
+    expect(medir([oculto], [oculto.caso_id]).exito_verificado).toBe(0);
+  });
+  it('un resumen histórico ausente no exige inventar un fallo', () => {
+    const corrida = corridaBase('Respuesta sintética', [herramienta('consulta', { error: undefined, result_summary: undefined })]);
+    const r = combinarVeredicto({ caso: casoBase(), corrida, repeticion: 1, variante: 'principal', determinista: evaluarDeterminista(casoBase(), corrida), juez, juezEstado: 'ok' });
+    expect(r.estado).toBe('pasa');
+    expect(r.juez?.oculto_fallo_herramienta).toBeNull();
+  });
   it('no aprueba un juez marcado ok pero ausente', () => {
     const r = combinarVeredicto({ caso: casoBase(), corrida: corridaBase('ok'), repeticion: 1, variante: 'principal', determinista: { pasa: true, chequeos: [] }, juez: null, juezEstado: 'ok' });
     expect(r.estado).toBe('inconcluso');

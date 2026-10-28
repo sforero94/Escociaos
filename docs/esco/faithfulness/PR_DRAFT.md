@@ -23,7 +23,7 @@ Medición v1.1 conserva denominadores y distingue los nuevos controles de v1.
 No cambia etiquetas originales ni decisiones D01. La extracción numérica/de fechas
 conserva las correcciones I01; presencia de un token no demuestra soporte factual.
 
-Validación enfocada previa al commit: 77 pruebas sintéticas pasan, cero skips.
+Validación enfocada del candidato corregido antes del commit: 92 pruebas sintéticas pasan, cero skips. El head anterior `115db6e` pasó 77 pruebas enfocadas / 4742 completas; esos resultados son históricos.
 Checks del head final: ver respuesta de handoff; no se presume un check no ejecutado.
 Los dos tests HTTP de `llamarJuez` permanecen fuera del alcance junto con esa función.
 No se leyó JSONL privado ni se llamó a proveedores. CI requiere publicar el PR.
@@ -33,3 +33,6 @@ y considerar merge después de CI y revisión. Rollback: revert normal, sin dato
 esquema ni tráfico afectados. No despliegue, migración 186, activación ni QA vivo;
 los cambios futuros del runtime requieren QA autorizado Web/Telegram y alertas/F1.
 P1-02 y el siguiente alcance permanecen fuera de este trabajo.
+
+
+Correcciones de revisión independiente: el parser rechaza envelopes malformados sin rescatar objetos interiores; el informe cuenta cada motivo una vez por corrida y conserva las anclas detalladas; un error real de herramienta exige evaluación booleana del juez (null es no disponible); el prompt limita tolerancias a las explícitamente aprobadas, sin tolerancia automática por deriva histórica. No cambian etiquetas originales. No comparar tasas v1 con v1.1 sin recalcular bajo el mismo contrato de puntaje, prompt, evidencia y revisión.

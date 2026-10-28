@@ -32,6 +32,7 @@ export interface ResumenEval {
   por_tipo: Record<string, ConteoGrupo>;
   por_etiqueta: Record<string, ConteoGrupo>;
   casos: FilaCaso[];
+  /** Corridas fallidas por motivo: cada motivo cuenta una vez por corrida. */
   motivos: { motivo: string; n: number }[];
   tokens: { entrada: number; salida: number };
 }
@@ -77,7 +78,7 @@ export function resumir(resultados: ResultadoCaso[], esperados = [...new Set(res
     sumar(resumen.por_dominio, r.dominio, r.estado);
     sumar(resumen.por_tipo, r.tipo, r.estado);
     for (const t of r.etiquetas) sumar(resumen.por_etiqueta, t, r.estado);
-    if (r.estado === 'falla') for (const m of motivosDeFalla(r)) motivos.set(m, (motivos.get(m) ?? 0) + 1);
+    if (r.estado === 'falla') for (const m of new Set(motivosDeFalla(r))) motivos.set(m, (motivos.get(m) ?? 0) + 1);
     resumen.tokens.entrada += r.corrida.tokens?.entrada ?? 0;
     resumen.tokens.salida += r.corrida.tokens?.salida ?? 0;
     const lista = porCaso.get(r.caso_id) ?? [];

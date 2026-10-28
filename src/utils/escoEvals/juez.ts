@@ -29,7 +29,7 @@ Recibes: la pregunta del usuario, la respuesta de Esco, las herramientas que us�
 
 REGLAS
 1. La verdad es SOLO la referencia. La respuesta de Esco no prueba nada por sí misma. Si una cifra o un hecho de la respuesta no coincide con la referencia, es un error aunque suene razonable.
-2. Si la referencia trae una nota de que cambió después de la fecha de la pregunta, tolera diferencias pequeñas y explícalo en la evidencia; no toleres diferencias de orden de magnitud ni conclusiones contrarias.
+2. Si la referencia cambió después de la fecha de la pregunta, es una limitación de comparabilidad, no una tolerancia numérica automática. Aplica solo tolerancias explícitas aprobadas. Sin evidencia histórica comparable, explica la limitación y no afirmes una verificación histórica concluyente.
 3. Califica cada criterio por separado. Para los criterios «debe»: "cumple" | "no_cumple" | "no_aplica". Para los criterios «no_debe»: "viola" | "no_viola" | "no_aplica".
 4. Usa "no_aplica" solo cuando el criterio no se puede evaluar por la forma de la respuesta. Ejemplo: el caso exige aclarar y Esco aclaró en lugar de responder; entonces los criterios que piden el resultado final son "no_aplica".
 5. La evidencia es una cita corta y literal de la respuesta (máx. 25 palabras), o "(ausente)".
@@ -94,14 +94,12 @@ const VEREDICTOS_DEBE: VeredictoCriterio[] = ['cumple', 'no_cumple', 'no_aplica'
 const VEREDICTOS_NO_DEBE: VeredictoCriterio[] = ['viola', 'no_viola', 'no_aplica'];
 
 function extraerJson(texto: string): unknown {
-  const limpio = texto.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const limpio = texto.trim();
+  const cercado = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(limpio);
   try {
-    return JSON.parse(limpio);
+    return JSON.parse(cercado ? cercado[1] : limpio);
   } catch {
-    const ini = limpio.indexOf('{');
-    const fin = limpio.lastIndexOf('}');
-    if (ini >= 0 && fin > ini) return JSON.parse(limpio.slice(ini, fin + 1));
-    throw new Error('El juez no devolvió JSON');
+    throw new Error('El juez no devolvió JSON válido');
   }
 }
 

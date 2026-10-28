@@ -54,6 +54,30 @@ describe('combinarVeredicto', () => {
 });
 
 describe('resumir', () => {
+  function fallaConDosAnclas() {
+    const caso = casoBase({ numeric_anchors: [{ claim: 'saldo', value: 87.25 }, { claim: 'peso', value: 200.5 }] });
+    const corrida = corridaBase('No hay cifras verificadas');
+    return combinarVeredicto({ caso, corrida, repeticion: 1, variante: 'principal', determinista: evaluarDeterminista(caso, corrida), juez: null, juezEstado: 'omitido' });
+  }
+
+  it('cuenta una corrida por motivo aunque fallen dos anclas, sin perder diagnósticos', () => {
+    const r = fallaConDosAnclas();
+    const s = resumir([r]);
+    expect(s.motivos).toEqual([{ motivo: 'ancla_numerica', n: 1 }]);
+    expect(r.razones).toHaveLength(2);
+    expect(r.determinista?.chequeos.filter((c) => c.id.startsWith('ancla:') && c.ok === false)).toHaveLength(2);
+    const md = aMarkdown(s, { fecha: 'synthetic', modo: 'offline', conjunto: 'synthetic', modelo_juez: null, modo_fecha: 'fija', repeticiones: 1 });
+    expect(md).toContain('| Motivo | Corridas |');
+    expect(md).toContain('| ancla_numerica | 1 |');
+    expect(md).toContain('ancla:saldo');
+    expect(md).toContain('ancla:peso');
+  });
+
+  it('cuenta el mismo motivo una vez en cada corrida que falla', () => {
+    const r = fallaConDosAnclas();
+    expect(resumir([r, { ...r, repeticion: 2 }]).motivos).toEqual([{ motivo: 'ancla_numerica', n: 2 }]);
+  });
+
   const rs = [
     resultado('ESCO-GS-010', 'correcta', 'ok'),
     resultado('ESCO-GS-011', 'incorrecta', 'No pude generar una respuesta.'),

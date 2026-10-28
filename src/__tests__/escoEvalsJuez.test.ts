@@ -47,6 +47,16 @@ describe('construirMensajesJuez', () => {
     expect(mensajes[0].content).toContain('La verdad es SOLO la referencia');
   });
 
+  it('el cambio histórico no concede tolerancia numérica automática', () => {
+    const c = { ...caso, reference: { ...caso.reference, tolerance: '±0.5 kg aprobados' } };
+    const m = construirMensajesJuez(c, corridaBase('Respuesta sintética'));
+    expect(m[0].content).not.toContain('tolera diferencias pequeñas');
+    expect(m[0].content).toContain('tolerancias explícitas aprobadas');
+    expect(m[0].content).toContain('limitación de comparabilidad');
+    expect(m[1].content).toContain('Tolerancia: ±0.5 kg aprobados');
+    expect(m[1].content).toContain('El 13-ago se reparó después');
+  });
+
   it('keeps the complete answer and SQL that starts with a comment', () => {
     const respuesta = 'a'.repeat(6500) + ' FALSE_CLAIM_AT_END';
     const c = { ...caso, reference: { ...caso.reference, sql: '-- reference query\nselect 1;' } };
@@ -82,6 +92,25 @@ describe('parsearRespuestaJuez', () => {
   it('acepta JSON válido, incluso envuelto en ```json', () => {
     expect(parsearRespuestaJuez(valida, criterios).oculto_fallo_herramienta).toBe(true);
     expect(parsearRespuestaJuez('```json\n' + valida + '\n```', criterios).criterios).toHaveLength(2);
+  });
+
+  it('acepta solo objetos JSON limpios o un bloque cercado completo', () => {
+    for (const texto of [valida, '  ' + valida + '\n', '```\n' + valida + '\n```', '```json\n' + valida + '\n```']) {
+      expect(parsearRespuestaJuez(texto, criterios).criterios).toHaveLength(2);
+    }
+  });
+
+  it.each([
+    ['array truncado', (objeto: string) => '[' + objeto],
+    ['array con texto final', (objeto: string) => '[' + objeto + '] trailing'],
+    ['objeto con texto inicial', (objeto: string) => 'aprueba: ' + objeto],
+    ['objeto con texto final', (objeto: string) => objeto + ' trailing'],
+    ['cerca sin cierre', (objeto: string) => '```json\n' + objeto],
+    ['cerca sin apertura', (objeto: string) => objeto + '\n```'],
+    ['cerca con texto final', (objeto: string) => '```json\n' + objeto + '\n``` trailing'],
+    ['array completo', (objeto: string) => '[' + objeto + ']'],
+  ])('rechaza %s sin rescatar un objeto interior', (_nombre, envolver) => {
+    expect(() => parsearRespuestaJuez(envolver(valida), criterios)).toThrow();
   });
 
   it('rechaza un criterio sin calificar o con veredicto del tipo equivocado', () => {

@@ -34,7 +34,12 @@ export function combinarVeredicto(e: EntradaVeredicto): ResultadoCaso {
   if (juezEstado === 'ok') {
     try {
       juez = parsearRespuestaJuez(JSON.stringify(e.juez), criteriosDelCaso(e.caso));
+      const hayFallo = e.corrida.turnos.some((t) => t.herramientas.some((h) => h.error === true));
+      if (hayFallo && juez.oculto_fallo_herramienta === null) {
+        throw new Error('Juez: falta evaluar el fallo registrado de una herramienta');
+      }
     } catch {
+      juez = null;
       juezEstado = 'error';
     }
   }

@@ -58,6 +58,24 @@ anchor may occur in any evaluated turn. This does not prove entity/period suppor
 calendar validity, retrieval truth or model quality. Reports remain offline Markdown;
 no UI, endpoint, stored history or release gate is activated.
 
+## Independent I02 correction pass
+
+Four findings from parent review were reproduced and corrected on I02 only:
+
+1. Judge envelopes now require a clean JSON object or one complete optional-`json` fenced response. No brace-slicing salvage; truncated arrays, trailing/prefixed prose, incomplete fences and array envelopes are rejected. Existing schema validation still applies after parsing.
+2. `motivos[].n` is explicitly the number of failed runs with that category, once per run. Multiple failed anchors remain separate in `determinista.chequeos` and detailed reasons, but count once under “Corridas”. One-run and multiple-run regressions verify both units and retained diagnostics.
+3. An actual `error: true` tool requires a boolean `oculto_fallo_herramienta`. Null assessment marks the judge unavailable/inconclusive and prevents verified success, even with an approving review. Explicit false permits a declared limitation; true fails. Unknown historical tool status/absent summary does not invent a failure.
+4. The judge prompt treats historical drift as a comparability limitation, not blanket numeric tolerance; only explicit approved tolerances apply. Original human labels and adjudication dispositions are unchanged.
+
+**Do not compare v1 rates directly with v1.1.** Recompute under the same scoring,
+judge-prompt, evidence and review contract before making comparisons; a matching
+headline version alone is insufficient. No quality-improvement claim is measured.
+
+Regressions initially failed 9 cases for the first pair, then 2 cases for the
+second pair; after fixes all 92 evaluator tests pass before commit, zero skips.
+Final-candidate checks are reported in the correction handoff; `115db6e`'s
+77 evaluator / 4742 full tests remain historical. No new scope or publication.
+
 ## Historical I01 evidence — not I02 validation
 
 - Original source was 18 ahead / 37 behind main `ad5455ffa371d847191f92c7f7dbdc3404628046` during I01 extraction.
