@@ -11,8 +11,8 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | F1 — three web inventory save flows | Deployed; live workflow confirmation open | Atomic manual movement, purchase batch and purchase reversal; durable browser retry recovery. Keep receipts and pending attempts. | [PR #353](https://github.com/sforero94/Escociaos/pull/353), [runbook](../runbook_inventario_f1.md). Live UI check blocked by cloud proxy CONNECT 403; no farm transaction used as a test. |
 | S1 — remaining writes and F1 boundaries | Assessed with gaps — read-only | Writer matrix and five medium integrity defects recorded; no new verified critical/high candidate or remediation. | [S1 assessment](s1-assessment.md). Frontend/F1 ledger reverified; backend v279 source parity is blocked by connector HTTP 413 after user-approved export; broader DB body export remains unapproved. |
 | S2 — active accounts, role isolation and exposure | Assessed with gaps — read-only | Access matrix and revocation analysis complete for named surfaces; no new verified critical/high issue. | [S2 assessment](s2-assessment.md). Auth ban in edit confirmed in source; inactive creation/service-role activity path unconfirmed. Owner-only revocation and existing broad SELECT class deferred. Edge payload limit and separate DB-export boundary remain. |
-| S3 — Telegram identity and privileged operations | Next — read-only assessment | Trace current linked role/activity/module checks through sensitive handlers and stale callbacks. | Linked app activity/role lead remains unconfirmed; do not refile documented binding behavior. |
-| S4 — secrets, files and reachable dependencies | Queued — read-only assessment | Triage file boundaries, secret handling and reachable dependency advisories. | `xlsx` parsing lead needs resolved-version, caller and current-advisory verification. No Storage operations. |
+| S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
+| S4 — secrets, files and reachable dependencies | Next — read-only assessment | Triage file boundaries, secret handling and reachable dependency advisories. | `xlsx` parsing lead needs resolved-version, caller and current-advisory verification. No Storage operations. |
 | S5 — ranked report and remediation scopes | Queued — assessment close-out | Consolidate verified findings, gaps and separate backlog; define only minimal verified critical/high remediation candidates. | Implementation/release status stays separate from assessment. No automatic fixes. |
 
 Scope IDs S1–S5 label this continuation queue. They do not rename F1 or assign
@@ -79,6 +79,10 @@ available; do not convert a lead into a finding merely to populate the register.
 | S1 — Telegram labor replacement | Verified code integrity defect; medium; production applicability unconfirmed | Pinned `jornal.ts` DELETE then INSERT in [S1](s1-assessment.md); deployed source export rejected | Bound labor operator replaces registrations and second request fails | High for repository code; backend parity open | Single replacement RPC with actor/request checks; failing INSERT preserves originals | Assessed code-only; backlog only; no implementation/release |
 | S1 — dairy death event/state | Verified source integrity defect; medium | Pinned hook and live G/A RLS/trigger metadata in [S1](s1-assessment.md) | Event commits but animal-status update fails; hook warns and asks manual correction | High for source path; partial-save warning limits impact | Atomic event/state operation; second-write failure and retry regressions | Assessed; backlog only; no implementation/release |
 
+
+| S3 — module revocation during conversation | Verified source authorization gap; medium; production applicability unconfirmed | Entry-only module checks, resumed save paths and Telegram-only resolver in [S3](s3-assessment.md) | Previously authorized operator resumes an active flow after only its bot module is removed; Telegram row remains active | High for mapped source predicates; deployed edge/plugin behavior remains open | Current module/identity check at write; development start/revoke/resume, disabled identity and field-exception regressions | Assessed code-only; backlog only; no implementation or release |
+| S3 — alert claim before domain effect | Verified source integrity defect; medium; production applicability unconfirmed | Conditional claim then separate domain write with log-only error in [S3](s3-assessment.md) | Legitimate alert response; claim commits and required secado/step write fails; closed state suppresses repair by retry | High for source failure path; full deployed edge/trigger parity open | Atomic claim/effect with focused failure, retry/concurrency and already-resolved tests; additive DB-before-edge rollout | Assessed code-only; backlog only; no implementation or release |
+
 Keep an unconfirmed path in its scope notes with its missing evidence. Do not
 assign it a verified severity. Add medium/low hardening and redesign below,
 separate from immediate remediation candidates.
@@ -103,6 +107,14 @@ hardening class. Confirm intended retained owner capability before selecting a
 policy change. Inactive account creation plus service-role role-only gates is an
 unconfirmed production path; resolve edge parity and development Auth evidence
 before assigning live severity. No account roster or real-user behavior verified.
+
+
+S3 adds the two medium source items above for later prioritization; neither is
+approved for implementation. [S3](s3-assessment.md) distinguishes independent
+app/bot revocation (medium design risk), legitimate stale buttons, session/delivery
+replay uncertainty and own-memory token expiry/replay (low-impact design risk).
+Do not refile accepted event-undo/binding behavior, the retained income permission
+or the retired expense flow. No new verified critical/high remediation candidate.
 
 ## Session log
 
@@ -229,6 +241,61 @@ before assigning live severity. No account roster or real-user behavior verified
   sensitive service-role handlers. Preserve documented binding exceptions, S1
   medium backlog, F1 receipts/pending attempts and its live confirmation gap.
 
+### 2026-10-28 — S3 assessed with gaps (read-only)
+
+- Source: `6bc295196237d2a9d855a406a333464e22b0fef8`, PR #354,
+  branch `docs/security-review-session-plan`. Pinned Git tree reads confirm
+  `src/` and `supabase/` match F1 `e1518d0…`; all 15 Telegram mirror blobs
+  match. Review guidance, S1/S2, security memory and relevant module contracts read.
+- Outcome: [S3 identity-to-operation/replay assessment](s3-assessment.md).
+  Webhook secret gate refutes the old anonymous-spoofing lead in source.
+  Active Telegram identity is checked before each resumed update; linked app
+  activity/role and current bot module checks differ across operations.
+  Two new medium source results: module removal during an active conversation,
+  and general alert claim before required domain effect. Production applicability
+  remains unconfirmed. No new verified critical/high issue or remediation.
+- Independent app/bot revocation is a medium design risk, not an asserted live
+  bypass. An Auth ban does not by itself establish Telegram revocation.
+  Preserve field identities, binding/undo exceptions, retained income permission,
+  retired expense flow, S2 uncertainties and S1's existing medium backlog.
+- Frontend metadata/alias reverified: `e1518d09ae8f27726499b4a93dfbffbb10516b4f`,
+  `dpl_95qo9C7UTxgRyCD8to9EiESevTXe`, READY/PROMOTED and
+  `escociaos.vercel.app`. No live browser/operator confirmation added.
+- Edge metadata reverified: v279 ACTIVE, verify_jwt=false, same hash and
+  version-278 entrypoint. Approved edge-source export remains blocked by
+  HTTP 413 / ToolRouterV2_PayloadTooLarge (4345), with no repeated export.
+  The separate broad database-source export remains unapproved after the earlier
+  automatic-review rejection. No body export or alternate route attempted.
+- Catalog/ledger SELECTs only: latest 185 unchanged; Telegram RLS, 15 selected
+  ronda/treatment function metadata entries, selected unique indexes and
+  noninternal trigger metadata. Literal hashes match 132, 147 and 177;
+  140's existing match retained. Other literal differences do not prove
+  semantic drift. 177's safe selected-step flow is distinct from general alerts.
+- Replay dispositions: ronda state/actor/lock guards, event/straw uniqueness,
+  per-cell weighing and documented undo limits retained. No durable webhook
+  receipt inferred from persisted conversations or `conversation.external`.
+  Delivery concurrency, exact plugin crash recovery and live recipient/account
+  state remain unchecked; no duplicate data or unauthorized operator asserted.
+- Execution gap: supplied local branch `5163501` lacked the requested commit
+  and documents. Direct Git access failed DNS; Composio clone timed out and its
+  file mount disconnected. Pinned GitHub file reads supplied the reviewed source.
+  A temporary subset supported local hash checks; the local execution environment
+  later disconnected. No clean full local checkout or local commit claimed.
+- Checks: pinned source/tree/blob identity and local literal-body MD5 comparison;
+  documentation links/line bounds, fences, whitespace, scope and credential
+  checks. Lint could not run after executor disconnection; do not reuse S2's
+  907-warning pass as a new result. No runtime suites, installations, mobile test,
+  production UI test or live probe. Publication verification recorded at close-out.
+- Changes: S3 assessment and this tracker only. No application changes,
+  business/personnel queries, production writes, Storage operations, messages,
+  migrations, merges, deployments, PR324 work or redesign. F1 receipts/pending
+  attempts, old-tab risk and legitimate-operator confirmation remain open.
+- Publication: commit with parent `6bc2951` through PR #354's existing branch;
+  resulting commit/publication outcome returned in the response. No merge/main
+  availability or production release is claimed.
+- Next: S4 only, beginning with source/configuration file boundaries and reachable
+  resolved-version/advisory triage. S4 was not started.
+
 ### Template for each completed or paused scope
 
 Copy and fill this block; do not overwrite previous session evidence.
@@ -259,25 +326,25 @@ in the next session entry. Do not loop commits to embed self-referential hashes.
 
 ```text
 Continue the Escocia OS security review from PR #354, branch
-docs/security-review-session-plan, after the S2 assessment commit.
-Read CLAUDE.md and docs/security-review/{plan,session-guide,progress,s1-assessment,s2-assessment}.md,
+docs/security-review-session-plan, after the S3 assessment commit.
+Read CLAUDE.md and docs/security-review/{plan,session-guide,progress,s1-assessment,s2-assessment,s3-assessment}.md,
 plus relevant module instructions and skills.
-Start only S3 — Telegram identity and privileged operations — as a bounded
-READ-ONLY assessment. S2 is assessed with gaps; no new verified critical/high
-issue and no fix started. First verify the exact code/deployment/catalog baseline;
-continue code-only where live evidence is unavailable and record the exact gap.
-Start with webhook validation, linked identity and current app activity/role/module
-checks before sensitive service-role operations; then stale callbacks and replay.
-Preserve documented binding behavior and exceptions; do not infer current account
-roles/counts from old memory or query business/personnel rows.
-Last observed frontend: e1518d09ae8f27726499b4a93dfbffbb10516b4f; edge v279,
-source parity pending. Edge-source export is already approved but blocked by
-connector/workbench HTTP 413 PayloadTooLarge. Broad database-source export remains
-separately rejected and unapproved. Do not reroute either boundary.
-Carry forward S2 inactive-creation/Auth uncertainty and owner-only revocation limits,
-S1 medium backlog, F1 receipts/pending attempts and open live operator confirmation.
-No fixes, production writes, live probes, Storage operations, bot messages,
-new credentials, installations, PR324 work or redesign. Do not auto-start S4.
-Update and commit the tracker. Report evidence, checks, gaps and release state.
-Conclude with a copy-ready S4 prompt.
+Start only S4 — secrets, file access and reachable dependencies — as a bounded
+READ-ONLY assessment. S3 is assessed with gaps; no new verified critical/high
+issue and no fixes. First verify the exact code/deployment/catalog baseline;
+continue code-only where unavailable and record the precise gap.
+Start with source/configuration file boundaries and the resolved xlsx parsing
+lead: actual callers/file provenance and current primary advisories.
+No Storage operations, secret values, business/personnel queries, production
+writes, live probes, bot messages, new credentials, installations or test payloads.
+Last observed frontend: e1518d09ae8f27726499b4a93dfbffbb10516b4f; edge v279.
+Edge-source export is approved but blocked by HTTP 413 PayloadTooLarge.
+Broad database-source export remains separately rejected and unapproved.
+Do not reroute either boundary. Carry forward S2 Auth/provisioning and owner-only
+revocation uncertainties; S3 independent bot revocation, module freshness,
+alert claim/effect and delivery-replay gaps; documented exceptions; S1 backlog.
+Preserve F1 receipts, pending attempts, old-tab risk and open operator confirmation.
+Local execution disconnected during S3; its lint remains unrun, not passed.
+No PR324 work or redesign. Update and commit the tracker.
+Conclude with a copy-ready S5 prompt. Do not start S5.
 ```
