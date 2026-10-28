@@ -43,7 +43,7 @@ One task is one intended session, not a promise that every task fits every conte
 - **P0-03-a — closed HTTP transport foundation:** independent model/read adapters,
   network-denial controls, sticky invalid-run diagnostics and production-loop
   runtime verification. Complete locally; see PROGRESS.md for commit evidence.
-- **P0-03-b — tool fixture adapter and scenario pack:** next ready slice. First
+- **P0-03-b — tool fixture adapter and scenario pack:** implemented locally; see PROGRESS.md. First
   inspect `executeTool` and `correrCaso` for a tool-boundary injection that keeps
   production defaults intact. Add canonical argument/scenario/turn matching,
   12–15 synthetic cases, version/hash/review manifests, controlled multi-turn
@@ -51,7 +51,7 @@ One task is one intended session, not a promise that every task fits every conte
 
 Split because the transport safety boundary can be verified independently while
 fixture provenance and tool-boundary matching require a separate reviewable slice.
-All original P0-03 acceptance criteria remain required; P0-03 stays in progress.
+All original P0-03 acceptance criteria remain required; local completion evidence is recorded in PROGRESS.md.
 Disputed historical fixtures remain blocked on P0-02/D01.
 
 ## Phase 1 — evidence and execution controls
@@ -63,6 +63,23 @@ Disputed historical fixtures remain blocked on P0-02/D01.
 **Accept:** no truncating adapter can set complete=true; no error becomes empty success; metadata survives the immediate loop and persisted context. Source references resolve to authorized evidence. No key/header leaks into envelopes.
 **Verify:** empty vs missing/error, partial pagination, stale data, summary truncation and legacy tool adapters. Synchronize generated edge copies when affected.
 **Handoff:** envelope contract, migrated/unmigrated tool inventory, consumer compatibility notes.
+
+#### P1-01 slices
+
+- **P1-01-a — typed adapter and context truncation:** versioned metadata contract,
+  conservative legacy projection, distinct empty/error/partial/stale/unknown
+  controls, and preservation of errors/incompleteness in persisted summaries.
+  Contract and inventory: [EVIDENCE.md](EVIDENCE.md).
+- **P1-01-b — scoped producers and consumers:** migrate selected tools and their
+  failure paths, bind known scope/calendar/units/authorized source identities,
+  preserve metadata in immediate and persisted contexts, and validate consumers
+  in both channels. First scoped tools: `get_hato_partos` and `get_hato_animales`;
+  other tools keep conservative generic adapters until their P2 domain tasks. First action:
+  `rg -n "finish|_evidencia|toolResultOk|evidenciaPartosSuficiente" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`.
+
+Split because producer migration and authorized source binding require a separate
+reviewable boundary from the generic legacy projection. All original P1-01
+acceptance criteria remain required; P1-01-a alone does not complete the parent.
 
 ### P1-02 — Bound the tool loop and route commands
 

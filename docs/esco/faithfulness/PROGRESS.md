@@ -4,10 +4,10 @@
 
 - Integration branch: `codex/esco-faithfulness-plan`.
 - Original code base: `14271f1`. Evaluation prerequisite commit: `027a162`.
-- Plan bootstrap: complete. Product implementation: **1/25 tasks complete**.
-- Active implementation task: none; P0-02 adjudication recorded, paid verification blocked on disclosure approval.
-- **Next task: P0-02 paid calibration after disclosure approval; independent fallback P0-03-b.**
-- First action: check the pending explicit approval to send the seven cases to OpenRouter; prepare a hash-pinned private calibration script with a $1 total reservation cap. Until approved, continue P0-03-b locally.
+- Plan bootstrap: complete. Product implementation: **3/25 tasks complete**.
+- Latest implementation: P1-01 complete locally on the integration branch; scoped birth/animal producers, conservative generic adapters, typed validation and context compatibility.
+- **Next task: P0-02 paid verification after explicit disclosure approval; independent fallback P1-02 — bound the tool loop and route commands.**
+- First action: `rg -n "maxRounds|llamadas|tool_choice|fnArgs|toolTransport" src/supabase/functions/server/chat.tsx`; inspect budgets, duplicate detection, argument parsing and forced query behavior.
 - Next useful milestone: checkpoint A, then complete animal-sales evidence and deterministic totals before building online infrastructure.
 - Production state: no deployment, migration, telemetry activation, worker, schedule, feedback UI, or canary performed by this plan bootstrap.
 - Private data: approved JSONL uploaded and hash-verified; local ignored `evals/esco/golden/esco_golden_set_v2.jsonl`. All 105 tests pass, including two formerly skipped private-dataset checks. Earlier calibration report and historical tool payloads remain unavailable.
@@ -21,10 +21,10 @@ Update this table and the current-state block in the same session. Add implement
 |---|---|---|---|
 | S00 | done | Existing evaluation work | `027a162`: preserved prior judge safeguards; 91 passed, 2 private-dataset tests skipped; lint 0 errors |
 | P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
-| P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v2 and immutable evaluation view complete; focused paid verification awaits explicit OpenRouter payload-disclosure approval |
-| P0-03 | in_progress | P0-01; P0-02 for disputed seeds | `48141b0`: P0-03-a closed HTTP foundation complete; P0-03-b ready: tool matching, 12–15 scenarios, manifests and frozen CLI remain |
-| P1-01 | todo | P0-03 | Evidence envelopes and compatible adapters |
-| P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
+| P0-02 | blocked | P0-01, D01 | `b1cf3f0`: D01 resolved, v2 ledger and immutable view implemented. Paid verification awaits explicit OpenRouter private-payload disclosure approval; $1 cap already authorized. |
+| P0-03 | done | P0-01; P0-02 for disputed seeds | `48141b0` foundation + `61c684c` P0-03-b: tool boundary, 14 synthetic scenarios, manifests, frozen CLI and isolation checks; historical disputed snapshots remain gated |
+| P1-01 | done | P0-03 | `6d2e80b` P1-01-a + `c85d288` P1-01-b: scoped birth/animal metadata, generic reads/errors and validated consumers; EVIDENCE.md records contract, deferred domain tools and compatibility limits |
+| P1-02 | ready | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
 | P1-03 | todo | P1-01, P1-02 | Structured facts and prepublication checks |
 | P1-04 | todo | P1-01, P1-03 | Scope-aware facts across turns |
 | P2-01 | todo | P1-01, P1-03; D02 if needed | Complete animal-sales aggregate and routing |
@@ -51,7 +51,7 @@ Update this table and the current-state block in the same session. Add implement
 | Checkpoint | State | Evidence |
 |---|---|---|
 | Planning bootstrap | complete | PLAN/SESSION/BASELINE/DECISIONS documents and task tracker committed on integration branch |
-| A: reliable measurement | in progress | P0-01 complete; adjudication and frozen fixtures remain |
+| A: reliable measurement | in progress | P0-01/P0-03 complete locally; P0-02 adjudication remains blocked |
 | B: offline candidate | not started | Requires P1–P3 tasks and agreed release gates |
 | C: online observation | not started | Requires P4–P5 and activation decisions |
 | D: production decision | not started | Requires P6 pilot and owner promotion decision |
@@ -95,6 +95,48 @@ Update this table and the current-state block in the same session. Add implement
 - Production state: local harness/documentation only; no provider calls, production reads/writes, deployments, migrations, telemetry, schedules or rollout. All approval gates retained.
 
 
+### Session: P0-03-b tool fixtures and scenario pack, 2026-10-28 America/New_York
+
+- Task: P0-03-b and P0-03 parent complete locally on the integration branch.
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: `61c684c`. Integration location: this branch, [GitHub branch](https://github.com/sforero94/Escociaos/tree/codex/esco-faithfulness-plan).
+- Start: clean branch at requested handoff `ff017e2`. Initial requested `rg` ran from `/workspace` before the checkout was located; reran in `/workspace/Escociaos`, then checked out the requested branch and inspected both files. No applicable AGENTS.md found. Original `work` branch preserved.
+- Changed: optional in-process tool transport in `llmToolLoop` (both edge trees); adapter keyed by scenario/turn/tool/canonical arguments; strict unknown/exhausted/unused-fixture failures; independent state and controlled date; frozen result labels. Added 14 explicitly synthetic scenarios and SHA-256/version/review manifest, seed map and limitations. Added separate mock/real frozen entrypoint with per-scenario metadata/results and documented repeatable commands. Existing production defaults and duplicate handling remain intact.
+- Verification: `npm run eval:esco:check` passed (120 passed / 2 private-data skips); `npm run lint` passed (0 errors / 910 existing warnings); `npm run typecheck` passed. `EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-synthetic npm run eval:esco` passed all 14 controls. Focused `escoToolLoopEvidencia`, `escoConsultas`, `arbolEdgeFunctionParidad`, and `escoHerramientas` tests passed 156 checks. Ran `python scripts/sync-esco-consultas.py`; both edge trees match. `git diff --check` passed. Temporary logs: `/tmp/esco-{check,lint,types,frozen,domain}.log`; synthetic CLI artifacts: `/tmp/esco-frozen-synthetic/`. Mobile smoke not applicable: no UI changes.
+- Findings: the original synthetic SYN-07 wording triggered the existing birth-query guard. Changed the synthetic question to request the animal ficha/last check; kept the production guard unchanged. Exact fixture payload delivery, duplicate refusal, prior-turn context, changed entity/evidence, unmatched tool failure, hash tampering, canonical keys and independent scenario state are verified. Mock outputs measure transport/context behavior only.
+- Decisions: none resolved. D01 remains open; mapping synthetic controls to disputed 040 is not adjudication. Simplified/extended control payloads do not claim current retrieval correctness or reviewed historical truth. P0-02 still requires approved private evidence, attributed decisions and an authorized calibration budget. The real-model command is documented, not executed; no paid calls occurred.
+- Remaining: none for P0-03's local synthetic replay acceptance. Approved historical fixtures, real-model semantic scoring and retrieval integration remain explicit gaps for their dependent tasks. Checkpoint A remains blocked on P0-02.
+- Next: P1-01 — typed evidence envelopes. First action: `rg -n "_evidencia|resumirContexto|toolResultOk" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`. Continue synthetic controls while P0-02 is blocked.
+- Production state: local code and harness only; no deployment, production reads/writes, migration, telemetry, worker, schedule or rollout. User instruction preserves production approval gates; plan inclusion and the repository's general redeploy convention do not authorize activation of this incomplete program.
+
+
+### Session: P1-01-a typed adapter and context truncation, 2026-10-28 America/New_York
+
+- Task: P1-01-a complete locally; P1-01 parent remains in progress (2/25 parent tasks complete).
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: `6d2e80b`. Integration location: this branch.
+- Start: requested handoff `135273a`; clean checkout, original `work` branch preserved. Requested first search ran before other repository reads, then reran in the located checkout. No applicable AGENTS.md found. Read root CLAUDE.md, SESSION/PROGRESS, P1-01 and relevant accepted/open decisions.
+- Changed: canonical `src/utils/escoEvidencia.ts` defines version 1 metadata and a conservative legacy adapter; both edge copies generated by updated sync script. Shared `resumirContexto` adds typed metadata on truncation, downgrades legacy completeness, and preserves error presence without raw long error text. Short results remain byte-identical. Added EVIDENCE.md with contract, migrated/unmigrated inventory and compatibility limits; PLAN.md records the slice and retains all parent acceptance criteria.
+- Verification: `npm run eval:esco:check` passed (120 passed / 2 private-data skips). Final focused Vitest suite (`escoEvidencia`, `escoConsultas`, `escoToolLoopEvidencia`, `arbolEdgeFunctionParidad`, `escoHerramientas`, `hatoFechaLocalGuard`) passed 178 tests. `npm run typecheck` passed after correcting ES2020 compatibility and coverage typing in this slice. `npm run lint` passed with 0 errors / 910 existing warnings. `EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-p1-01-a npm run eval:esco` passed all 14 synthetic controls. Ran `python scripts/sync-esco-consultas.py`; mirror checks passed. `git diff --check` passed. Temporary logs: `/tmp/esco-{check,domain,types,lint,frozen}.log`; frozen artifacts: `/tmp/esco-frozen-p1-01-a/`. Mobile smoke is inapplicable: no UI changes.
+- Findings: synthetic tests distinguish complete-empty/missing/error/partial/stale and validate falsy error keys, pagination, unknown metadata, safe projection and truncation. Production-loop mock test confirms full immediate payload delivery with incomplete persisted metadata. Mock controls establish transport/adapter behavior only, not semantic model quality or reviewed historical truth.
+- Decisions: none resolved. P0-02/D01 remain blocked by missing approved private evidence and attributed adjudication. Unknown entity scope, timezone, observation/retrieval timestamp precision, units and authorized row references stay null; the adapter invents none.
+- Remaining: P1-01-b must migrate scoped producers/failures and consumers, establish known authorized source identities and semantic metadata, and verify immediate/persisted compatibility in both channels. All producer outputs still use legacy shapes; typed metadata is currently added only at the truncated-summary boundary. Existing summary threshold is not a hard output-size cap. Existing stored history is not rewritten. See EVIDENCE.md for explicit limits.
+- Next: P1-01-b — scoped evidence producers and consumers. First action: `rg -n "finish|_evidencia|toolResultOk|evidenciaPartosSuficiente" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`. Read EVIDENCE.md before migration. Continue explicitly synthetic controls while private adjudication is blocked.
+- Production state: local branch implementation only; no paid provider calls, production data reads/writes, deployment, migration, telemetry, worker, paid schedule or rollout. User instruction preserves production approval gates despite the general repository redeploy convention.
+
+
+### Session: P1-01-b scoped producers and consumers, 2026-10-28 America/New_York
+
+- Task: P1-01-b and P1-01 parent complete locally on the integration branch (3/25 parent tasks complete).
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: `c85d288`. Integration location: this branch.
+- Start: clean branch at handoff `9a31c17`; continued in this chat. Ran requested producer/consumer search and reviewed current contract/state. Root and applicable repository instructions, session protocol and decision gates remain in force; no new AGENTS.md or owner decision applies.
+- Changed: `escoConsultas.finish` emits typed metadata alongside legacy output for every consultation. `get_hato_partos`/`get_hato_animales` bind delivered-page primary rows/animal IDs, Bogotá calendar, count units and retrieval timestamps. Other consultation tools keep conservative generic metadata. `executeTool` adapts legacy `get_*` results and caught failures. `leerEvidencia` rejects invalid versions/shapes/completeness instead of falling back to legacy success; event status and birth guard consume it. Truncation preserves validated producer metadata while remaining incomplete. Both edge trees synchronized. EVIDENCE.md records scoped semantics, reference limits, channel compatibility and deferred tools. Calendar constant moved into the shared envelope module; the local-date guard records this relocation, not a new time conversion.
+- Verification: `npm run eval:esco:check` passed (122 passed / 2 private-data skips), including Web/Telegram persisted-context format tests. Focused domain suite (`escoEvidencia`, `escoConsultas`, `escoToolLoopEvidencia`, `arbolEdgeFunctionParidad`, `escoHerramientas`, `hatoFechaLocalGuard`, `escoChatPropiedadConversacion`) passed 191 tests. Additional existing compatibility suite (`esco-improvements`, `esco108112Guard`, `esco-evals`) passed 129 tests. `npm run typecheck` passed. `npm run lint` passed (0 errors / 910 existing warnings); final changed-file ESLint also passed. `EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-p1-01-b npm run eval:esco` passed all 14 synthetic controls. Ran `python scripts/sync-esco-consultas.py`; parity passed. `git diff --check` passed. Logs `/tmp/esco-p1b-{types,lint,lint-focused,check,domain,compat,frozen}.log` and frozen artifacts are temporary. Mobile smoke is inapplicable: no UI changes.
+- Findings: direct production-loop mocks prove immediate/persisted typed identity preservation and unavailable error/event status. Synthetic references originate only in returned primary rows, never caller-supplied source lists. Complete retrieval with paginated detail stays partial; the narrow birth guard still permits aggregate retrieval without claiming a complete list. Stale/invalid/context-truncated results cannot satisfy it. Context-format tests cover both channel formats, not live Telegram delivery or full HTTP persistence.
+- Decisions: none resolved. D01/P0-02 remain blocked by missing approved private evidence and attributed adjudication. No paid model campaign or historical label change occurred. Existing authorized query boundaries remain responsible for row access; envelopes grant no capability or new read endpoint.
+- Remaining: none for P1-01's first scoped migration. Additional domain-specific metadata/freshness/reference migration remains in P2; numeric/reference claim validation in P1-03; scope-aware multi-turn state in P1-04; controlled database/access integration in P3-02. Generic adapters cannot prove observation coverage or aggregate provenance. Large summaries remain a trigger-based truncation policy, not a hard storage bound. Old persisted history is not rewritten.
+- Next: P1-02 — bound the tool loop and route commands. First action: `rg -n "maxRounds|llamadas|tool_choice|fnArgs|toolTransport" src/supabase/functions/server/chat.tsx`. Use explicitly synthetic controls while P0-02 remains blocked.
+- Production state: local implementation only; no paid provider calls, production reads/writes, deployment, migration, telemetry activation, worker, paid schedule or rollout. All production approval gates retained.
+
+
 ### Session: owner adjudication v2, 2026-10-28 America/New_York
 
 - Task: P0-02 reviewed dispositions implemented; focused paid verification remains blocked.
@@ -104,5 +146,9 @@ Update this table and the current-state block in the same session. Add implement
 - Verification: source SHA-256 matches BASELINE.md. `npm run eval:esco:check` passed 105 tests, zero skips, including original dataset and parser/prompt checks. No old calibration output recovered. `npm run lint` passed (0 errors, 910 existing warnings), `npm run typecheck` passed, and `git diff --check` passed. No mobile smoke needed for evaluation-only work.
 - Decisions: Santiago's 001 partial; 030 incorrect; 039 historical inventory excluded from enforced comparison; 040 contextual scope allowed; 042 correct with warning; 054 acknowledgement allowed, premature completed storage forbidden. 056 malformed output remains unavailable and missing follow-up answer remains outside a full-conversation gate.
 - Remaining: automatic approval review rejected private payload disclosure to OpenRouter despite the approved spend. An explicit question describing questions/answers/criteria/reference figures/tool metadata is pending. No paid call occurred; no cost incurred. A private script was subsequently prepared locally at ignored `evals/esco/runs/2026-10-28-adjudication/calibrate.eval.ts`, without execution. It requires a disclosure flag, pins provider price limits, reserves costs before dispatch, retains reservations after failures, and includes retries under $1. Review/run it only after disclosure approval; record private per-case results before marking P0-02 done.
-- Next: P0-02 paid calibration if disclosure is approved; otherwise independent P0-03-b. First action: inspect the disclosure answer and ADJUDICATION.md campaign requirements. Keep the original labels and reviewed version separate.
+- Next: P0-02 paid calibration if disclosure is approved; otherwise independent P1-02. First action: inspect the disclosure answer and ADJUDICATION.md campaign requirements. Keep the original labels and reviewed version separate.
 - Production state: no deployment, migrations, telemetry, schedule, production queries, or external judge dispatch. Production gates preserved. Upload stays ignored and private.
+
+- Integration: preserved remote commits through `b62e2f6` (P0-03 and P1-01 complete). Merge conflict resolved only in this progress record; all prior session entries retained. Independent next task is now P1-02, not P0-03-b. Combined checks recorded below.
+
+- Combined verification after merge: `npm run eval:esco:check` passed 127 tests with zero skips; `npm run lint` and `npm run typecheck` passed; `git diff --check` passed. No production source was authored by this adjudication session; incoming edge changes are preserved from the remote implementation commits. No deployment performed.

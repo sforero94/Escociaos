@@ -109,3 +109,9 @@ call, pins provider maximum prices, retains reservations on failures, and stops
 before the aggregate reservation exceeds $1. Include retries in that ledger.
 Save per-case parsed output, unavailable results, tokens/cost and rubric/source
 versions privately. Do not replace original human labels with judge verdicts.
+
+### Integration update
+
+Remote work through `b62e2f6` completed P0-03 and P1-01 while this owner review
+was in progress. The independent fallback is now P1-02 (bounded loop/commands).
+Earlier v1 fallback text records the prior state and is not the current task.

@@ -1,0 +1,700 @@
+{
+  "schema": "esco-tool-fixtures/v1",
+  "source": "explicitly-synthetic",
+  "reference_version": "synthetic-controls/v1",
+  "rubric_version": "synthetic-transport/v1",
+  "review_status": "synthetic-control-unadjudicated",
+  "scenarios": [
+    {
+      "id": "SYN-01",
+      "title": "Animal sales from explicit detail",
+      "seeds": [
+        "ESCO-GS-040"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "¿Cuántas cabezas de ceba se vendieron del 1 de enero al 28 de octubre de 2026?",
+          "fixtures": [
+            {
+              "tool": "get_financial_summary",
+              "args": {
+                "type": "ganado",
+                "date_from": "2026-01-01",
+                "date_to": "2026-10-28"
+              },
+              "result": {
+                "periodo": {
+                  "desde": "2026-01-01",
+                  "hasta": "2026-10-28"
+                },
+                "ganado": {
+                  "total_compras": 0,
+                  "total_ventas": 900,
+                  "registros": 2,
+                  "detalle": [
+                    {
+                      "id": "syn-sale-a",
+                      "tipo": "venta",
+                      "cantidad_cabezas": 2,
+                      "valor_total": 400
+                    },
+                    {
+                      "id": "syn-sale-b",
+                      "tipo": "venta",
+                      "cantidad_cabezas": 3,
+                      "valor_total": 500
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: 5 cabezas sintéticas."
+        }
+      ],
+      "criteria": [
+        "Sum 2 + 3 heads, distinguish value 900 from head count; no historical 040 assertion."
+      ]
+    },
+    {
+      "id": "SYN-02",
+      "title": "Incomplete annual sales",
+      "seeds": [
+        "ESCO-GS-040",
+        "ESCO-GS-021"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "¿Tenemos el total anual completo de ventas de ceba?",
+          "fixtures": [
+            {
+              "tool": "get_financial_summary",
+              "args": {
+                "type": "ganado",
+                "date_from": "2026-01-01",
+                "date_to": "2026-10-28"
+              },
+              "result": {
+                "ganado": {
+                  "registros": 2000,
+                  "detalle": [
+                    {
+                      "tipo": "venta",
+                      "cantidad_cabezas": 2
+                    }
+                  ]
+                },
+                "_evidencia": {
+                  "cobertura": "parcial",
+                  "detalle_completo": false
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: cobertura parcial, no total anual."
+        }
+      ],
+      "criteria": [
+        "Do not assert a complete annual total from partial evidence."
+      ]
+    },
+    {
+      "id": "SYN-03",
+      "title": "Identical duplicate request",
+      "seeds": [
+        "ESCO-GS-012",
+        "ESCO-GS-014",
+        "ESCO-GS-044"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta dos veces el stock de Producto Sintetico A.",
+          "fixtures": [
+            {
+              "tool": "get_inventory_status",
+              "args": {
+                "product_name": "Producto Sintetico A"
+              },
+              "result": {
+                "total_productos": 1,
+                "productos": [
+                  {
+                    "nombre": "Producto Sintetico A",
+                    "cantidad_actual": 7,
+                    "stock_minimo": 2
+                  }
+                ]
+              }
+            }
+          ],
+          "control_answer": "Control: 7 unidades, segunda consulta rechazada.",
+          "duplicate": true
+        }
+      ],
+      "criteria": [
+        "Preserve current production duplicate error, one fixture execution only."
+      ]
+    },
+    {
+      "id": "SYN-04",
+      "title": "Missing measurement is unknown",
+      "seeds": [
+        "ESCO-GS-024",
+        "ESCO-GS-045"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "¿Cuánta leche produjo la chapeta 9001?",
+          "fixtures": [
+            {
+              "tool": "get_hato_produccion",
+              "args": {
+                "animal_numero": 9001
+              },
+              "result": {
+                "pesajes": [],
+                "mensaje": "Sin pesaje registrado; no equivale a cero."
+              }
+            }
+          ],
+          "control_answer": "Control: sin dato, no cero."
+        }
+      ],
+      "criteria": [
+        "No invented measurement or zero."
+      ]
+    },
+    {
+      "id": "SYN-05",
+      "title": "Ambiguous animal then identifier",
+      "seeds": [
+        "ESCO-GS-009",
+        "ESCO-GS-048"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta la ficha de Sintetica.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "nombre": "Sintetica"
+              },
+              "result": {
+                "encontrado": false,
+                "coincidencias": [
+                  {
+                    "numero": 9001,
+                    "nombre": "Sintetica A"
+                  },
+                  {
+                    "numero": 9002,
+                    "nombre": "Sintetica B"
+                  }
+                ],
+                "mensaje": "Precisa chapeta."
+              }
+            }
+          ],
+          "control_answer": "Control: precisa chapeta."
+        },
+        {
+          "question": "La chapeta 9002.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9002
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9002",
+                  "numero": 9002,
+                  "nombre": "Sintetica 9002"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 4
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: chapeta 9002, 4 partos."
+        }
+      ],
+      "criteria": [
+        "Do not equate candidates; use explicit identifier on follow-up."
+      ]
+    },
+    {
+      "id": "SYN-06",
+      "title": "Inventory enum failure",
+      "seeds": [
+        "ESCO-GS-036"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta el inventario de fertilizantes.",
+          "fixtures": [
+            {
+              "tool": "get_inventory_status",
+              "args": {
+                "category": "Fertilizante"
+              },
+              "result": {
+                "error": "42883: operator does not exist: categoria_producto ~~* unknown"
+              }
+            }
+          ],
+          "control_answer": "Control: consulta fallida, stock desconocido."
+        }
+      ],
+      "criteria": [
+        "Disclose tool failure; never convert error to empty stock."
+      ]
+    },
+    {
+      "id": "SYN-07",
+      "title": "Same animal across turns",
+      "seeds": [
+        "ESCO-GS-041"
+      ],
+      "channel": "Telegram",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta la ficha y el último chequeo de la chapeta 9001.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9001
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9001",
+                  "numero": 9001,
+                  "nombre": "Sintetica 9001"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 2
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: 2 partos."
+        },
+        {
+          "question": "Verifica otra vez la misma chapeta.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9001
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9001",
+                  "numero": 9001,
+                  "nombre": "Sintetica 9001"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 2
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: siguen 2 partos."
+        }
+      ],
+      "criteria": [
+        "Same evidence preserves the same fact across turns."
+      ]
+    },
+    {
+      "id": "SYN-08",
+      "title": "Changed entity across turns",
+      "seeds": [
+        "ESCO-GS-041",
+        "ESCO-GS-004"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta la chapeta 9001.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9001
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9001",
+                  "numero": 9001,
+                  "nombre": "Sintetica 9001"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 2
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: 9001 tiene 2 partos."
+        },
+        {
+          "question": "Ahora la chapeta 9002.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9002
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9002",
+                  "numero": 9002,
+                  "nombre": "Sintetica 9002"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 4
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: 9002 tiene 4 partos."
+        }
+      ],
+      "criteria": [
+        "Do not reuse the previous entity fact for a different chapeta."
+      ]
+    },
+    {
+      "id": "SYN-09",
+      "title": "New evidence corrects prior value",
+      "seeds": [
+        "ESCO-GS-041"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta la chapeta 9001.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9001
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9001",
+                  "numero": 9001,
+                  "nombre": "Sintetica 9001"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 2
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: 2 partos."
+        },
+        {
+          "question": "Vuelve a consultar tras corregir el chequeo.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9001
+              },
+              "result": {
+                "encontrado": true,
+                "animal": {
+                  "id": "synthetic-9001",
+                  "numero": 9001,
+                  "nombre": "Sintetica 9001"
+                },
+                "ultimo_chequeo": {
+                  "num_partos": 3
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: evidencia corregida, ahora 3 partos."
+        }
+      ],
+      "criteria": [
+        "Explain correction when the controlled evidence changes."
+      ]
+    },
+    {
+      "id": "SYN-10",
+      "title": "Application cost definition",
+      "seeds": [
+        "ESCO-GS-013",
+        "ESCO-GS-015",
+        "ESCO-GS-016",
+        "ESCO-GS-017"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta el detalle de la aplicación Sintetica A y distingue compras de consumo.",
+          "fixtures": [
+            {
+              "tool": "get_application_cost_by_lote",
+              "args": {
+                "application_name": "Sintetica A"
+              },
+              "result": {
+                "nombre": "Sintetica A",
+                "estado": "Cerrada",
+                "compras": {
+                  "total": 100
+                },
+                "consumo": {
+                  "total": 60
+                },
+                "_evidencia": {
+                  "source": "synthetic-v1",
+                  "definiciones": "compras no equivalen a consumo"
+                }
+              }
+            }
+          ],
+          "control_answer": "Control: compras 100, consumo 60."
+        }
+      ],
+      "criteria": [
+        "Do not invent a dose explanation or mix cost definitions."
+      ]
+    },
+    {
+      "id": "SYN-11",
+      "title": "Unequal production denominators",
+      "seeds": [
+        "ESCO-GS-028",
+        "ESCO-GS-033",
+        "ESCO-GS-037"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta la producción de 2026 y calcula kg por árbol.",
+          "fixtures": [
+            {
+              "tool": "get_production_data",
+              "args": {
+                "year": 2026
+              },
+              "result": {
+                "por_lote": [
+                  {
+                    "lote": "Sintetico A",
+                    "kg": 100,
+                    "arboles": 10
+                  },
+                  {
+                    "lote": "Sintetico B",
+                    "kg": 100,
+                    "arboles": 100
+                  }
+                ],
+                "total_kg": 200,
+                "total_arboles": 110
+              }
+            }
+          ],
+          "control_answer": "Control: 200/110 kg por árbol, no promedio simple."
+        }
+      ],
+      "criteria": [
+        "Weighted ratio 200/110; never average 10 and 1."
+      ]
+    },
+    {
+      "id": "SYN-12",
+      "title": "Attribution and formal closure",
+      "seeds": [
+        "ESCO-GS-004",
+        "ESCO-GS-005",
+        "ESCO-GS-032",
+        "ESCO-GS-058"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "¿El trabajo registrado demuestra el cierre formal de la tarea Sintetica A?",
+          "fixtures": [
+            {
+              "tool": "get_tarea_ejecucion",
+              "args": {
+                "tarea_id": "synthetic-task-a",
+                "date_from": "2026-01-01",
+                "date_to": "2026-10-28"
+              },
+              "result": {
+                "tarea": {
+                  "id": "synthetic-task-a",
+                  "estado": "En Proceso"
+                },
+                "registros_trabajo": [
+                  {
+                    "id": "synthetic-work-a",
+                    "lote": "Sintetico A",
+                    "jornales": 2
+                  }
+                ],
+                "capturador": null
+              }
+            }
+          ],
+          "control_answer": "Control: trabajo registrado, cierre y capturador no confirmados."
+        }
+      ],
+      "criteria": [
+        "Work is not closure; do not invent who captured the work or a causal explanation."
+      ]
+    },
+    {
+      "id": "SYN-13",
+      "title": "Optional failure and independent data",
+      "seeds": [
+        "ESCO-GS-025",
+        "ESCO-GS-026",
+        "ESCO-GS-055",
+        "ESCO-GS-057",
+        "ESCO-GS-036"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta el pronóstico y el stock de Producto Sintetico A.",
+          "fixtures": [
+            {
+              "tool": "get_weather_forecast",
+              "args": {},
+              "result": {
+                "error": "OPENWEATHER_API_KEY no configurada"
+              }
+            },
+            {
+              "tool": "get_inventory_status",
+              "args": {
+                "product_name": "Producto Sintetico A"
+              },
+              "result": {
+                "total_productos": 1,
+                "productos": [
+                  {
+                    "nombre": "Producto Sintetico A",
+                    "cantidad_actual": 7,
+                    "stock_minimo": null
+                  }
+                ]
+              }
+            }
+          ],
+          "control_answer": "Control: stock 7, mínimo desconocido, pronóstico no disponible."
+        }
+      ],
+      "criteria": [
+        "Keep verified stock while disclosing weather failure and unknown stock minimum."
+      ]
+    },
+    {
+      "id": "SYN-14",
+      "title": "Explicit empty result",
+      "seeds": [
+        "ESCO-GS-021",
+        "ESCO-GS-024"
+      ],
+      "channel": "Web",
+      "as_of_bogota": "2026-10-28 09:00",
+      "turns": [
+        {
+          "question": "Consulta la ficha de la chapeta 9999.",
+          "fixtures": [
+            {
+              "tool": "get_hato_animal",
+              "args": {
+                "numero": 9999
+              },
+              "result": {
+                "encontrado": false,
+                "criterio_busqueda": {
+                  "numero": 9999
+                },
+                "mensaje": "No se encontró ningún animal con ese criterio."
+              }
+            }
+          ],
+          "control_answer": "Control: no encontrado con este criterio."
+        }
+      ],
+      "criteria": [
+        "Scope absence to this exact identifier and evidence, unlike query errors."
+      ]
+    }
+  ],
+  "hashes": {
+    "SYN-01": "ae100b14b5e7a03d05603e4a1d2591d9fceb6c264cdf104617a6ef0f3a8bae6c",
+    "SYN-02": "a2197cfee4f7dad81c4422e46481dfa4280fa5259cdd3289b294f9fad51fe263",
+    "SYN-03": "ba199549c2694b7fe55828c9119733c119ecac86a0091545cf3104f5e3012f0c",
+    "SYN-04": "fb1f4add22c0b56b41428b45ce0735e25f1a4d6dbdaea55ffd094d0d7f4bffbb",
+    "SYN-05": "15d617d88d20719f52b1449964e7ac17863e7125cfff1c4fcd96ec33b857b687",
+    "SYN-06": "c6ed166c022721bf541feb2a2d8edbeb28d1b3ac6c0f4857df8020c32b281d8b",
+    "SYN-07": "794e05230ebf2b6d8af47cb12477fde5b4775da093917243dab0729f9bcede22",
+    "SYN-08": "2eaba5faf447b945562deaca8efc60b45a8faa96fcd36a46c40fde5fdff0b25f",
+    "SYN-09": "b391df4ad02a80ee64768f3076247f9091dfeb081ae44129d73735406128e874",
+    "SYN-10": "42a986cc1abd7ed11464b98bd357a36792325b3b6e74dd878c405eb6753b86b2",
+    "SYN-11": "fdd0c3e6891e65baa42727f9169c0842d3e517abd4c76b351df8015ef63c553a",
+    "SYN-12": "91cf95db8160698e12e2c4b50969fd6f7f088f5429663a0510913acf13d8c491",
+    "SYN-13": "31631537fb9becfec881cb17d26afc39ab491508d02900d49ec66a2f42240f42",
+    "SYN-14": "b3d58b88eb1c32ed38b7e848719625c6de00235e05a65850f6f719fac7031859"
+  }
+}

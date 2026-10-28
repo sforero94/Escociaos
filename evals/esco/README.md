@@ -180,3 +180,56 @@ isolation, a runner mode labeled frozen rather than live, and a separately
 budgeted real-model replay command. There is no real-model frozen CLI yet;
 `EVAL_MODO=live` still reads current data and must not be described as frozen.
 Disputed historical values await P0-02. This foundation does not complete P0-03.
+
+## Frozen tool replay (P0-03)
+
+`EVAL_MODO=frozen` selects a separate entrypoint. It does not read the private
+JSONL or run the semantic judge. The committed pack is
+[`fixtures/synthetic-v1.json`](fixtures/synthetic-v1.json); its contract, seed map
+and limitations are in [`fixtures/README.md`](fixtures/README.md).
+
+Free, zero-network transport baseline (scripted model, actual production loop):
+
+```sh
+EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-synthetic npm run eval:esco
+```
+
+Real-model frozen evidence, **only with an authorized one-time provider budget**:
+
+```sh
+NODE_USE_ENV_PROXY=1 EVAL_MODO=frozen EVAL_FROZEN_MODEL=real \
+  EVAL_CASOS=SYN-01 EVAL_SALIDA=/tmp/esco-frozen-real npm run eval:esco
+```
+
+The real command requires `OPENROUTER_API_KEY`; it does not require Supabase or
+optional-tool credentials. `NODE_USE_ENV_PROXY=1` is for Node 24 proxy environments;
+keep the configured proxy and CA settings. The current production model is
+`google/gemini-3-flash-preview`; requested model IDs and prompt/tool-schema hashes
+are recorded per provider request. Provider determinism is not guaranteed.
+
+The fixture adapter matches scenario ID, zero-based turn, tool name and recursively
+canonical JSON arguments. Object-key order is irrelevant; array order, explicit
+nulls, additional arguments and value types remain significant. Unknown or exhausted
+keys and unused required fixtures invalidate the run. The production duplicate
+check still runs before dispatch. Duplicate control SYN-03 therefore consumes one
+fixture and receives the existing duplicate-query error for its second call.
+
+Only the exact OpenRouter completions endpoint can use the independent model
+transport. All other HTTP reads, writes and redirects remain blocked. The adapter
+never falls through to `executeTool`. Each scenario installation has independent
+state; each turn selects its own evidence snapshot and fixes the scenario date.
+Web/Telegram follow-ups use the existing channel message construction.
+
+Each selected scenario writes `<EVAL_SALIDA>/SYN-NN.json`, including frozen labeling,
+source/schema/reference/rubric/review versions, scenario/pack/source hashes, request
+prompt/tool hashes, Git commit/dirty state, controlled date, tokens and invalid-run
+diagnostics. Reusing an output directory replaces those scenario files; use a fresh
+explicit directory for comparisons. Reports remain private, outside Git.
+
+**Interpretation:** passing mock runs prove transport and context behavior only.
+The real command records answers for review; it has no judge or semantic release
+threshold. Neither command demonstrates model improvement, adjudicates D01, or
+validates retrieval/calculation correctness. Strict matches can reject a real
+model that chooses different arguments or routes; add reviewed fixtures rather than
+allowing live fallback. Historical private fixtures and semantic calibration remain
+blocked by P0-02. No production activation is part of these commands.

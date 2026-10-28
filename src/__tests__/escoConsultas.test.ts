@@ -190,7 +190,7 @@ describe('Contrato y enrutamiento', () => {
   });
   it('copias de motor y chat son idénticas; historial carga últimos 20', () => {
     const canonical = readFileSync('src/utils/escoConsultas.ts', 'utf8');
-    for (const tree of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) expect(readFileSync(`${tree}/esco-consultas.ts`, 'utf8')).toBe(canonical);
+    for (const tree of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) expect(readFileSync(`${tree}/esco-consultas.ts`, 'utf8')).toBe(canonical.replace("'./escoEvidencia.ts'", "'./esco-evidencia.ts'"));
     const chat = readFileSync('src/supabase/functions/server/chat.tsx', 'utf8');
     expect(readFileSync('supabase/functions/make-server-1ccce916/chat.tsx', 'utf8')).toBe(chat);
     expect(chat).toContain('order=created_at.desc,id.desc&limit=20');
@@ -223,5 +223,47 @@ describe('Contrato del esquema real, sin datos de negocio', () => {
       const value = new RegExp(`const ${name} = '([^']+)'`).exec(source)![1];
       for (const c of value.split(',')) expect(schema[table], `${table}.${c}`).toContain(c);
     }
+  });
+});
+
+describe('scoped producer migration (synthetic)', () => {
+  it('binds references to delivered rows, never a caller-provided source list', async () => {
+    const db = { hato_animales: [{ id: 'authorized-animal', nombre: 'SYNTHETIC', numero: 1 }],
+      hato_eventos: [{ id: 'authorized-event', animal_id: 'authorized-animal', fecha: '2026-09-10', tipo: 'parto' }] };
+    const result = await ejecutarConsultaEsco('get_hato_partos', { ...rango, source_refs: [{ table: 'secret', id: 'invented' }], Authorization: 'synthetic-secret' }, consulta(db));
+    const typed = result._evidencia_v1 as import('@/utils/escoEvidencia').EvidenciaEscoV1;
+    expect(typed).toMatchObject({ outcome: 'success', complete: true,
+      period: { from: rango.date_from, to: rango.date_to, timezone: 'America/Bogota' },
+      scope: { entity_ids: ['authorized-animal'] }, units: { 'resumen.total_eventos': 'eventos' }, observed_at: null,
+      source_refs: [{ table: 'hato_eventos', id: 'authorized-event' }] });
+    expect(Number.isFinite(Date.parse(typed.retrieved_at!))).toBe(true);
+    expect(JSON.stringify(typed)).not.toContain('synthetic-secret');
+    expect(JSON.stringify(typed)).not.toContain('invented');
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: JSON.stringify(result) }])).toBe(true);
+    const animal = await ejecutarConsultaEsco('get_hato_animales', { numero: 1 }, consulta(db));
+    expect(animal._evidencia_v1).toMatchObject({ source_refs: [{ table: 'hato_animales', id: 'authorized-animal' }], scope: { entity_ids: ['authorized-animal'] } });
+    const unmatched = await ejecutarConsultaEsco('get_hato_animales', { numero: 9999 }, consulta(db));
+    expect(unmatched._evidencia_v1).toMatchObject({ outcome: 'complete-empty', source_refs: [], scope: { entity_ids: [] } });
+  });
+  it('keeps page references and entity IDs within delivered evidence', async () => {
+    const rows = Array.from({ length: 101 }, (_, i) => ({ id: `synthetic-${i}`, nombre: 'SYNTHETIC', numero: i }));
+    const result = await ejecutarConsultaEsco('get_hato_animales', { detalle_offset: 100 }, consulta({ hato_animales: rows }));
+    expect(result._evidencia_v1).toMatchObject({ outcome: 'partial', complete: false,
+      retrieval_complete: true, detail_complete: false, total_facts: 101,
+      source_refs: [{ table: 'hato_animales', id: 'synthetic-100' }], scope: { entity_ids: ['synthetic-100'] } });
+  });
+  it('birth guard rejects stale, malformed and contradictory typed evidence instead of falling back to legacy success', async () => {
+    const result = await ejecutarConsultaEsco('get_hato_partos', rango, consulta({}));
+    const typed = result._evidencia_v1 as import('@/utils/escoEvidencia').EvidenciaEscoV1;
+    const enough = (r: unknown) => evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: JSON.stringify(r) }]);
+    expect(enough(result)).toBe(true);
+    for (const e of [null, { ...typed, version: 9 }, { ...typed, outcome: 'stale', complete: false }, { ...typed, outcome: 'unavailable', complete: false }]) {
+      expect(enough({ ...result, _evidencia_v1: e })).toBe(false);
+    }
+    expect(enough({ ...result, error: false })).toBe(false);
+    expect(enough(JSON.parse(resumirContexto(JSON.stringify(result), 1)))).toBe(false);
+    const legacy = { _evidencia: { herramienta: 'get_hato_partos', consulta_completa: true,
+      detalle_completo: false, total_hechos: 101, rango: { desde: rango.date_from, hasta: rango.date_to } } };
+    expect(enough(legacy)).toBe(true); // Complete query supports aggregate, not a complete detail list.
   });
 });

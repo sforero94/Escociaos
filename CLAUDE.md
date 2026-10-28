@@ -703,6 +703,11 @@ Sonnet as judge. Credentials belong in environment secrets or the ignored
 root `.env.eval`; the private golden set and run reports stay Git-ignored.
 Live evaluations read current Supabase data with writes blocked; fixing `Date`
 does not recreate a historical database snapshot. No edge deployment is needed.
+Frozen replay uses `EVAL_MODO=frozen` with an explicit `EVAL_SALIDA`; see the README
+for the free synthetic baseline and separate real-model command. The optional fourth
+`llmToolLoop` argument is an in-process tool transport; existing web/Telegram callers
+keep the production default and cannot select it through an HTTP parameter. Frozen
+tests block network/side effects independently and do not establish model quality.
 
 Tests use **Vitest** and live in `src/__tests__/`. They mock the Supabase client.
 
