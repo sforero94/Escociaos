@@ -1325,14 +1325,23 @@ describe('respuesta web/Telegram — mismo efecto de dominio', () => {
     )).toEqual({ kind: 'ninguno' });
   });
 
-  it('el payload de secado_real es el mismo que escribe el bot desde S6', () => {
-    expect(payloadEventoSecadoDesdeAlerta('a1', 'alert-1', '2026-09-10')).toEqual({
+  it('el payload de secado_real es el mismo que escribe el bot desde S6, con autor', () => {
+    expect(payloadEventoSecadoDesdeAlerta('a1', 'alert-1', '2026-09-10', null)).toEqual({
       animal_id: 'a1',
       tipo: 'secado_real',
       fecha: '2026-09-10',
       fecha_confianza: 'aproximada',
       alerta_id: 'alert-1',
       fuente: 'alerta',
+      created_by: null,
     });
+  });
+
+  it('el payload incluye created_by de quien respondió y no inventa uno (#355)', () => {
+    expect(
+      payloadEventoSecadoDesdeAlerta('a1', 'alert-1', '2026-10-28', 'user-fernando').created_by,
+    ).toBe('user-fernando');
+    expect(payloadEventoSecadoDesdeAlerta('a1', 'alert-1', '2026-10-28', null).created_by).toBeNull();
+    expect(payloadEventoSecadoDesdeAlerta('a1', 'alert-1', '2026-10-28', '   ').created_by).toBeNull();
   });
 });

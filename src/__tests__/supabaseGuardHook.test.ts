@@ -816,12 +816,22 @@ describe('adversarial (qa 2026-10-26)', () => {
 describe('endurecimiento tras la revisión de QA', () => {
   const composio = 'mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL';
   const crudo = (entrada: string | Buffer, desatendida = true) => {
-    const salida = execFileSync('python3', [script], {
-      input: entrada,
-      encoding: 'utf8',
-      env: { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_CODE_SESSION_ATTENDED: desatendida ? '' : '1' },
-    }).trim();
-    return salida ? (JSON.parse(salida).hookSpecificOutput.permissionDecision as string) : null;
+    let salida: string;
+    try {
+      salida = execFileSync('python3', [script], {
+        input: entrada,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_CODE_SESSION_ATTENDED: desatendida ? '' : '1' },
+      });
+    } catch (err) {
+      const fallo = err as { status?: number | null; stdout?: string };
+      // Node 22 avisa EPIPE si el guard cierra stdin al rechazar una entrada
+      // de más de 256 KB, aunque el proceso haya salido 0 con el veredicto.
+      if (fallo.status === 0 && typeof fallo.stdout === 'string') salida = fallo.stdout;
+      else throw err;
+    }
+    const texto = salida.trim();
+    return texto ? (JSON.parse(texto).hookSpecificOutput.permissionDecision as string) : null;
   };
 
   describe('falla cerrado', () => {
