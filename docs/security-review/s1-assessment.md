@@ -27,6 +27,16 @@ changes only. No remediation or production release is authorized by this report.
   as a separate sensitive production-source export. Neither rejected action
   returned source. No alternate identity/endpoint or indirect export was used.
   Metadata-only reads succeeded; those do not close the body-comparison gap.
+- Follow-up after S1 commit `1bb37a99cd3804ee546272e135410087a574cd28`:
+  the user explicitly approved the deployed edge-source export through the
+  connector/workbench. Both `SUPABASE_GET_FUNCTION_BODY` via multi-execute and
+  its workbench execution returned HTTP 413 / `ToolRouterV2_PayloadTooLarge`
+  (code 4345), with no source content. The discovered tool accepts only project
+  and function slug, with no pagination or field filter. Source comparison could
+  not run. Edge metadata was reverified as v279 with the same hash/entrypoint
+  discrepancy. **Edge export is approved; parity is blocked by payload size.**
+  The separate database-source export is still unapproved. No new access,
+  alternate identity, custom API or production operation was used.
 - Only catalog/ledger SELECTs and deployment metadata were read. No business
   rows, account roster, Auth sessions, logs, Storage objects, bot messages,
   live probes, or farm transactions were requested.

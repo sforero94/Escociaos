@@ -9,7 +9,7 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | Scope | Status | Recorded result / required next action | Evidence and gap |
 |---|---|---|---|
 | F1 — three web inventory save flows | Deployed; live workflow confirmation open | Atomic manual movement, purchase batch and purchase reversal; durable browser retry recovery. Keep receipts and pending attempts. | [PR #353](https://github.com/sforero94/Escociaos/pull/353), [runbook](../runbook_inventario_f1.md). Live UI check blocked by cloud proxy CONNECT 403; no farm transaction used as a test. |
-| S1 — remaining writes and F1 boundaries | Assessed with gaps — read-only | Writer matrix and five medium integrity defects recorded; no new verified critical/high candidate or remediation. | [S1 assessment](s1-assessment.md). Frontend/F1 ledger reverified; backend v279 source parity and broader DB body comparisons remain open after export rejections. |
+| S1 — remaining writes and F1 boundaries | Assessed with gaps — read-only | Writer matrix and five medium integrity defects recorded; no new verified critical/high candidate or remediation. | [S1 assessment](s1-assessment.md). Frontend/F1 ledger reverified; backend v279 source parity is blocked by connector HTTP 413 after user-approved export; broader DB body export remains unapproved. |
 | S2 — active accounts, role isolation and exposure | Next — read-only assessment | Complete endpoint/RLS/RPC access matrix and revocation analysis, including owner-only daily movement UPDATE/DELETE. | `usuarios.tsx` and importer activity leads need full Auth/revocation and backend-parity verification. Current account roster is unchecked; historical counts are not current evidence. |
 | S3 — Telegram identity and privileged operations | Queued — read-only assessment | Trace current linked role/activity/module checks through sensitive handlers and stale callbacks. | Linked app activity/role lead remains unconfirmed; do not refile documented binding behavior. |
 | S4 — secrets, files and reachable dependencies | Queued — read-only assessment | Triage file boundaries, secret handling and reachable dependency advisories. | `xlsx` parsing lead needs resolved-version, caller and current-advisory verification. No Storage operations. |
@@ -154,6 +154,29 @@ previously documented design choice. No historical data repair is authorized.
   read/write/exposure matrix. Full backend parity is a gap, not a prerequisite for
   independent read-only source assessment. Next prompt below.
 
+### 2026-10-28 — approved edge export follow-up (S1 only)
+
+- User explicitly approved retrieving the full deployed edge-function source
+  through connector/workbench after S1 closed at commit
+  `1bb37a99cd3804ee546272e135410087a574cd28` on PR #354.
+- Retrieval ran through `SUPABASE_GET_FUNCTION_BODY` using the documented
+  `supabase_bitis-coward` account/project, first through multi-execute and then
+  within the approved workbench to handle the oversized response. Both returned
+  HTTP 413, code 4345 / `ToolRouterV2_PayloadTooLarge`; neither returned source.
+  The tool schema has no pagination or field-selection argument. No source
+  comparison ran, no new backend parity result was established, and no source
+  was added to the repository.
+- `SUPABASE_LIST_FUNCTIONS` reverified v279 ACTIVE, verify_jwt=false, same hash
+  and version-278 entrypoint directory. This remains metadata, not source proof.
+- The edge-source permission gap is resolved; its current blocker is the
+  connector payload limit. The distinct broad database-source export rejection
+  remains unresolved and unapproved. Do not treat edge approval as DB approval.
+- Checks: documentation links/fences and `git diff --check`; lint passed with
+  the same 907 warnings and zero errors. Documentation only; no runtime tests
+  or production operations. Findings, severity and release state are unchanged.
+- Next remains S2; no S2 assessment or remediation was started. Independent
+  source/catalog work can proceed with the size-limit parity gap recorded.
+
 ### Template for each completed or paused scope
 
 Copy and fill this block; do not overwrite previous session evidence.
@@ -184,7 +207,7 @@ in the next session entry. Do not loop commits to embed self-referential hashes.
 
 ```text
 Continue the Escocia OS security review from PR #354,
-branch docs/security-review-session-plan (S1 assessment committed after 3fd28b9).
+branch docs/security-review-session-plan (S1 assessment 1bb37a9 plus edge-export follow-up).
 Read CLAUDE.md, docs/security-review/plan.md,
 docs/security-review/session-guide.md, docs/security-review/progress.md and
 docs/security-review/s1-assessment.md, plus relevant module instructions/skills.
@@ -197,9 +220,10 @@ Start with usuarios.tsx deactivation/Auth banning and session revocation, then
 trace active-role enforcement, owner-only daily movement UPDATE/DELETE and
 cross-role finance/personnel/export access through handlers, RLS and RPCs.
 Do not infer current account roles/counts from historical memory. No business-data
-or personnel-row queries. Full deployed edge/DB source exports were rejected by
-automatic approval review; keep those comparisons pending unless specifically
-approved. Independent repository and permitted metadata assessment can proceed.
+or personnel-row queries. The user approved deployed edge-source export, but connector/workbench retrieval
+returned HTTP 413 PayloadTooLarge without source; parity remains pending on that
+tool limit. Broad DB-source export remains separately rejected and unapproved.
+Independent repository and permitted metadata assessment can proceed.
 Preserve F1 receipts/pending attempts and its open live operator-confirmation gap.
 No production writes, live probes, Storage operations, new credentials,
 installations, PR324 work or redesign. Do not start fixes or S3 automatically.
