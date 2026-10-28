@@ -34,11 +34,15 @@ async function juzgar(caso: CasoDorado, corrida: CorridaEjecutada): Promise<{ ju
   const mensajes = construirMensajesJuez(caso, corrida);
   for (let intento = 0; intento < 2; intento++) {
     try {
-      const r = await llamarJuez(mensajes, cfg.juez);
+      const r = await llamarJuez(mensajes, { ...cfg.juez, criterios: criteriosDelCaso(caso) });
       tokens.entrada += r.tokens.entrada;
       tokens.salida += r.tokens.salida;
       return { juez: parsearRespuestaJuez(r.texto, criteriosDelCaso(caso)), estado: 'ok', tokens };
     } catch (err) {
+      if (intento === 0) mensajes.push({
+        role: 'user',
+        content: `La respuesta anterior no superó la validación: ${err instanceof Error ? err.message : String(err)}. Devuelve el JSON completo con exactamente estos IDs, una vez cada uno: ${criteriosDelCaso(caso).map((c) => c.id).join(', ')}. No agregues criterios.`,
+      });
       if (intento === 1) {
         console.warn(`[juez] ${caso.id}: ${err instanceof Error ? err.message : String(err)}`);
         return { juez: null, estado: 'error', tokens };

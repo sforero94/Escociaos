@@ -49,6 +49,10 @@ host. Also allow `api.tavily.com` and `api.openweathermap.org` if those tools ar
 needed. Missing optional tool credentials are visible to Esco as tool errors;
 they limit what can be concluded about the affected cases.
 
+On Node 24 in a proxy-only cloud environment, prefix evaluation commands with
+`NODE_USE_ENV_PROXY=1` so Node's `fetch` uses the inherited proxy and CA trust.
+Successful access from Python or curl alone does not verify Node's network path.
+
 Run the original-answer calibration first. This calls only the judge, without
 Supabase credentials. Then smoke-test a small live selection before the full run:
 
@@ -100,7 +104,10 @@ anywhere in an answer is only a heuristic: it cannot establish that the number
 belongs to the correct claim, animal, lote, or period. The semantic judge checks
 each approved `must`/`must_not` criterion and factual contradictions against the
 frozen reference. The judge receives the complete answer and no human verdict.
-Invalid judge JSON is retried once, then recorded as an infrastructure error.
+Judge requests use a strict JSON schema. Invalid judge JSON is retried once,
+then recorded as an infrastructure error. Missing historical tool summaries are
+identified as unrecorded evidence, not tool failures; only recorded errors count
+toward hiding a failed tool call.
 
 Without a judge, `pasa` means only that deterministic checks found no failure.
 Scoring without a judge requires the explicit `EVAL_SIN_JUEZ=1` option.

@@ -54,6 +54,19 @@ describe('construirMensajesJuez', () => {
     expect(u).toContain('FALSE_CLAIM_AT_END');
     expect(u).toContain('select 1;');
   });
+
+  it('distinguishes absent historical summaries from recorded tool failures', () => {
+    const m = construirMensajesJuez(caso, corridaBase('Respuesta', [
+      herramienta('successful', { error: false, result_summary: undefined }),
+      herramienta('unknown', { error: undefined, result_summary: undefined }),
+      herramienta('failed', { error: true, result_summary: undefined }),
+    ]));
+    expect(m[1].content).toContain('successful({}) [SIN ERROR]');
+    expect(m[1].content).toContain('unknown({}) [ESTADO NO REGISTRADO]');
+    expect(m[1].content).toContain('failed({}) [ERROR]');
+    expect(m[1].content).toContain('resumen no registrado; no implica fallo');
+    expect(m[0].content).toContain('Si ninguna está marcada [ERROR], null');
+  });
 });
 
 describe('parsearRespuestaJuez', () => {
@@ -126,10 +139,15 @@ describe('llamarJuez', () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: '{"criterios":[]}' } }], usage: { prompt_tokens: 100, completion_tokens: 20 },
     }), { status: 200 })) as unknown as typeof fetch;
-    const r = await llamarJuez([{ role: 'user', content: 'x' }], { baseUrl: 'https://x.test/api/v1/', apiKey: 'k', modelo: 'm', fetchImpl });
+    const r = await llamarJuez([{ role: 'user', content: 'x' }], { baseUrl: 'https://x.test/api/v1/', apiKey: 'k', modelo: 'm', criterios: criteriosDelCaso(caso), fetchImpl });
     const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://x.test/api/v1/chat/completions');
     expect(JSON.parse(String(init.body))).toMatchObject({ model: 'm', temperature: 0 });
+    expect(JSON.parse(String(init.body)).response_format).toMatchObject({
+      type: 'json_schema', json_schema: { strict: true },
+    });
+    expect(JSON.parse(String(init.body)).response_format.json_schema.schema.properties.criterios.items.properties.id.enum)
+      .toEqual(['debe_1', 'no_debe_1']);
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer k');
     expect(r.tokens).toEqual({ entrada: 100, salida: 20 });
   });
