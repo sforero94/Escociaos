@@ -69,3 +69,15 @@ Update this table and the current-state block in the same session. Add implement
 - Remaining: all 25 implementation tasks. Private-dataset verification requires authorized artifact access. Prior measured run has 93 passing checks with dataset present; this session does not claim to have rerun those private tests.
 - Next: P0-01; first inspect current metric/result/report types and define service-success denominators.
 - Production state: local documentation/evaluation tooling only; no edge deployment, migrations, or paid calls in this session.
+
+### Session: P0-01 measurement contract, 2026-10-27 America/New_York
+
+- Task: P0-01 complete.
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: `1fab465`.
+- Start: planning bootstrap at `1edd391`; no implementation tasks complete, clean checkout.
+- Changed: METRICS.md defines denominators, severity, outcome/review labels, legacy mappings and exact seed list. Added optional attributed review types, pure measurement aggregation, JSON/Markdown report fields and selected-case coverage in the runner. Historical verdicts and calibration are preserved.
+- Verification: `npm run eval:esco:check` passed (95 tests passed, 2 private-dataset tests skipped); `npm run lint` and `npm run typecheck` passed; `git diff --check` passed. Synthetic tests cover all 56 selected positions, missing judge/trace, execution exception, partial completion, appropriate clarification/abstention and citations without support. Logs in `/tmp/esco-{check,lint,types}.log` are temporary only. Mobile smoke is inapplicable to evaluation-only changes; no UI or edge source changed.
+- Decisions: no owner decisions resolved. No private labels or evidence invented. Verified-success metrics require attributed review; absent review remains visible. Case coverage does not claim scheduled repetition coverage (explicit limitation in METRICS.md).
+- Remaining: none for P0-01. Real dataset coverage verification is unavailable without the private JSONL; the runner derives the actual included IDs when supplied.
+- Next: P0-02; inspect the disagreement records and approved private labels named in BASELINE.md. If absent, record the evidence block and continue ready P0-03 with `rg -n 'correrCaso|fetch|transport' evals/esco/lib/ejecutor.ts`.
+- Production state: local evaluation tooling only; no paid calls, deployment, migration or schedule.
