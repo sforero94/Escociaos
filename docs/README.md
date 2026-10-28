@@ -4,6 +4,8 @@ Esta carpeta contiene documentación vigente para operar, mantener y extender el
 
 ## Referencias vigentes
 
+- [Esco: integración de fidelidad](esco/faithfulness/INTEGRATION.md) — primer alcance independiente, pruebas y dependencias pendientes; [avance](esco/faithfulness/PROGRESS.md).
+
 - [`supabase_tablas.md`](./supabase_tablas.md) — referencia del esquema de base de datos. Debe validarse contra las migraciones antes de modificar datos o RLS.
 - [`README_CARGA_CSV.md`](./README_CARGA_CSV.md) — importación masiva de monitoreos.
 - [`GUIA_CONFIGURACION_LOTES_SUBLOTES.md`](./GUIA_CONFIGURACION_LOTES_SUBLOTES.md) — gestión de lotes y sublotes.
