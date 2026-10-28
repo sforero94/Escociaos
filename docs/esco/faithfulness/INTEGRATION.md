@@ -120,3 +120,14 @@ Only helper/tests and review notes changed. Final-head checks are reported to
 the parent after commit; prior verification totals above remain historical.
 PR publication remains denied/pending explicit authorization. No retry, runtime
 change, private data, paid provider call, migration, deployment or next slice.
+
+
+### Publication authorization update
+
+After the earlier denial, the user explicitly approved publishing this first
+slice as a draft at 19:55 UTC on 2026-10-28. The parent transmitted the approval
+and required both narrow review corrections before publication. Commit `abb0ec5`
+contains those corrections. The following handoff only updates documentation.
+Final publication text must record the actual final SHA and executed checks;
+prior 4,678-test totals are historical. Check duplicates before retrying only the
+draft creation. Stop if review denies again. No merge, deployment or next slice.

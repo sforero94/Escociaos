@@ -2,8 +2,8 @@
 
 ## Current state — current-main integration, 2026-10-28 UTC
 
-- Review correction: two reproduced parsing defects fixed; 15 focused synthetic tests passed before commit. Final-head checks are reported in the continuation response. Publication authorization remains pending.
-- Active slice: **I01 — offline numeric/date anchor helpers**, `codex/esco-faithfulness-eval-anchors`; PR publication blocked by automatic review; local review text in [PR_DRAFT.md](PR_DRAFT.md). Stop after this slice. P1-02 is not authorized in this continuation.
+- Review correction: two reproduced parsing defects fixed in `abb0ec5`; 15 focused synthetic tests passed before commit. Final-head checks are reported in the continuation response. User explicitly authorized draft publication at 19:55 UTC, after the earlier denial. No merge/deployment authorization.
+- Active slice: **I01 — offline numeric/date anchor helpers**, `codex/esco-faithfulness-eval-anchors`; draft publication now authorized after the earlier automatic-review denial; review text in [PR_DRAFT.md](PR_DRAFT.md). Stop after this slice. P1-02 is not authorized in this continuation.
 - Baseline: current main `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356, alert attribution/confirmation); preserved source `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`. Reverified remote heads; source is 18 ahead / 37 behind main.
 - This fresh branch imports only the existing pure `numeros.ts` helper and its synthetic tests, plus this tracker and integration notes. No source-branch merge or whole-commit cherry-pick. See [INTEGRATION.md](INTEGRATION.md) for slice dependencies and release checks.
 - The task table and session history below describe **source-branch implementation**, not code integrated into main or deployed. The remaining planning documents stay on the [pinned source branch](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness); do not infer their runtime exists here.
@@ -174,3 +174,5 @@ Update this table and the current-state block in the same session. Add implement
 - Verification before commit: 15 focused synthetic tests passed; final-head checks run after commit and reported to parent. Current helper/test intentionally differ from the pinned source after these reviewed fixes. INTEGRATION.md records remaining parser limits.
 - Remaining: explicit authorization to publish the draft PR, then CI and parent merge review. PR creation was not retried. P1-02 and next slice remain unstarted.
 - Production: unchanged; no private dataset, provider calls, runtime edits, migration or deployment.
+
+- Publication authorization update, 2026-10-28: parent supplied the user's explicit “si” at 19:55 UTC for this first-slice draft, including completion of the two review fixes before publication. Recheck for duplicates and retry only draft creation after final checks. If denied again, stop. No merge, deploy or next slice authorized.
