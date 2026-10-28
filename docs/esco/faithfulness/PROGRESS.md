@@ -98,7 +98,7 @@ Update this table and the current-state block in the same session. Add implement
 ### Session: owner adjudication v2, 2026-10-28 America/New_York
 
 - Task: P0-02 reviewed dispositions implemented; focused paid verification remains blocked.
-- Branch: `codex/esco-faithfulness-plan`; implementation commit: pending handoff update.
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: `b1cf3f0`.
 - Start: clean `ff017e2`; owner supplied the exact baseline JSONL and six direct decisions, plus $1 total for the seven-case campaign including retries.
 - Changed: ADJUDICATION.md v2 records old labels, new attributed dispositions, rubric changes, evidence exclusions and dispatch state. DECISIONS.md resolves D01 and records the narrow D05 authorization. `adjudicacion.ts` creates a cloned evaluation view; tests verify source immutability, inventory exclusion and warning/acknowledgement separation. Default runner and original dataset are unchanged.
 - Verification: source SHA-256 matches BASELINE.md. `npm run eval:esco:check` passed 105 tests, zero skips, including original dataset and parser/prompt checks. No old calibration output recovered. `npm run lint` passed (0 errors, 910 existing warnings), `npm run typecheck` passed, and `git diff --check` passed. No mobile smoke needed for evaluation-only work.
