@@ -13,7 +13,12 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | S2 — active accounts, role isolation and exposure | Assessed with gaps — read-only | Access matrix and revocation analysis complete for named surfaces; no new verified critical/high issue. | [S2 assessment](s2-assessment.md). Auth ban in edit confirmed in source; inactive creation/service-role activity path unconfirmed. Owner-only revocation and existing broad SELECT class deferred. Edge payload limit and separate DB-export boundary remain. |
 | S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
 | S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
-| S5 — ranked report and remediation scopes | Next — assessment close-out | Consolidate verified findings, gaps and separate backlog; define only minimal verified critical/high remediation candidates. | Implementation/release status stays separate from assessment. No automatic fixes. |
+| S5 — ranked report and remediation scopes | Closed with gaps — read-only consolidation | Seven medium source findings retained; no new verified critical/high candidate. Proposed next backlog decision: expense-batch retry only; no implementation. | [S5 consolidation](s5-consolidation.md). Documentation-only merge recommendation is conditional on reviewer acceptance, stale PR metadata refresh and final-head checks. Local full-lint/evidence gaps remain. |
+
+The bounded S1–S5 review is closed with gaps. No remediation or S6 started.
+The current decision and merge/test qualifications are in
+[S5](s5-consolidation.md); the PR title/body still describe S1 and are stale.
+Existing CI success is recorded separately from historical local lint counts.
 
 Scope IDs S1–S5 label this continuation queue. They do not rename F1 or assign
 new finding IDs/severities to unverified leads. Reorder only with a documented
@@ -124,6 +129,16 @@ risk), local log minimization and archive/input resource limits. Preserve intent
 draft recovery/cancel behavior and F1's separate receipts/pending attempts.
 Live Storage authorization remains unchecked by explicit scope restriction.
 No new verified critical/high candidate was added to the remediation register.
+
+
+S5 selects **no immediate critical/high remediation**. The proposed next
+medium-priority decision is an expense-batch-only slice of S1 finance retry:
+one save/receipt boundary with synthetic lost-response/reload/role/ownership
+regressions, database-before-frontend ordering and receipt-preserving rollback.
+Income, attachments/Storage, individual editors, bots, historical repair and F1
+are excluded. This is a concrete backlog proposal, not implementation approval.
+See [S5](s5-consolidation.md). The existing seven findings and separate risks
+keep their classifications; the review does not certify production security.
 
 ## Session log
 
@@ -361,6 +376,60 @@ No new verified critical/high candidate was added to the remediation register.
   one. Otherwise state that none qualifies and identify the next bounded decision.
   S5 was not started.
 
+### 2026-10-28 — S5 consolidated and closed with gaps (read-only)
+
+- Reviewed source: `9720032de31ed8ab6b7283f7bb1d22f06d3b3152`, PR #354,
+  branch `docs/security-review-session-plan`, open/unmerged at start.
+  Root/review guidance and S1–S4 evidence, exceptions and limits consolidated.
+  Source/edge tree IDs and lockfile blob still match F1 `e1518d0…`.
+- Outcome: [S5 ranked consolidation and decision](s5-consolidation.md).
+  Seven medium source findings retained; no new verified critical/high production
+  candidate, remediation approval or fix. Access/identity/dependency/privacy
+  risks remain separate from verified source findings and from live exploits.
+- Proposed next decision: expense-batch retry only, with scope/exclusions,
+  acceptance regressions, migration/frontend ordering and rollback defined.
+  It remains medium backlog requiring separate bounded authorization.
+  No income expansion, attachment work, role redesign or historical repair.
+- Frontend routing reverified: `e1518d09ae8f27726499b4a93dfbffbb10516b4f`,
+  `dpl_95qo9C7UTxgRyCD8to9EiESevTXe`, READY/PROMOTED and
+  `escociaos.vercel.app`. No live assets/UI/operator check.
+- Backend reverified: v279 ACTIVE, verify_jwt=false, same reported hash and
+  version-278 entrypoint. Edge-source export remains approved but blocked by
+  HTTP 413 / ToolRouterV2_PayloadTooLarge (4345); no retry or reroute.
+  Separate broad database-source export remains rejected/unapproved.
+  Latest ledger remains 185 `20261028014545`; other live policy/body equivalence
+  is not established by that fact. Metadata/ledger reads only in S5.
+- Preserved gaps: live Storage/signing/activity behavior, Auth TTL/provisioning/
+  session runtime, owner-only revocation semantics, current account/module
+  distribution, unsampled policies/body parity, S3 stale/replay/alert paths,
+  secret/log/runtime configuration and F1 operator confirmation/old-tab risk.
+  Receipts and pending attempts must survive any later rollback.
+- Test qualification: existing [CI run](https://github.com/sforero94/Escociaos/actions/runs/40724289586)
+  on exact `9720032…` has successful Lint, Chequeo de tipos and Pruebas steps,
+  independently verified through run/jobs metadata. No logs or counts read,
+  no CI rerun dispatched, and no install/test suite executed by S5.
+  S1/S2's historical 907 warnings and S4's partial-snapshot 705 warnings are
+  not new counts. The full exact-baseline local reproduction gap remains;
+  current CI step success is separate evidence, not a fabricated local pass.
+- Local execution: supplied branch initially clean at unrelated `5163501`;
+  executor disconnected during S5. No local branch switch, source edit or
+  full local lint. Supported pinned GitHub reads and remote commit route used.
+- Documentation-only merge recommendation: after parent/reviewer accepts gaps,
+  refreshes stale PR metadata and verifies final-head required checks. PR title
+  still says S1/S2; body still says completed S1, next S2 and 907 warnings.
+  These are flagged as historical/stale, not treated as current evidence.
+  Suggested replacement metadata is in S5; actual PR title/body not edited.
+- Checks: documentation links/evidence paths, fences, whitespace, scope/
+  credential-pattern review, committed diff and publication verification at
+  close-out. No production tests, business/personnel queries, Storage operations,
+  secret values, bot messages, fixes, new credentials, installs, migrations,
+  merges or deployments. No PR324 work or redesign.
+- Publication: S5 consolidation and tracker only, on the existing PR branch;
+  resulting commit/final-check state returned in the response. No merge or
+  production release claimed. S1–S4 historical records remain intact.
+- Closure: S5 is closed with gaps. No automatic next audit or implementation.
+  The decision prompt below is for later explicit selection, not execution here.
+
 ### Template for each completed or paused scope
 
 Copy and fill this block; do not overwrite previous session evidence.
@@ -387,32 +456,26 @@ A commit cannot record its own final SHA. Record the source/reviewed SHA in the
 file and return the resulting commit/PR in the session response; link that result
 in the next session entry. Do not loop commits to embed self-referential hashes.
 
-## Prompt to start the next scope
+## Decision prompt after S5 closure
+
+S5 closes the planned review. Do not create S6 or start this proposal automatically.
 
 ```text
-Continue the Escocia OS security review from PR #354, branch
-docs/security-review-session-plan, after the S4 assessment commit.
-Read CLAUDE.md and docs/security-review/{plan,session-guide,progress,s1-assessment,s2-assessment,s3-assessment,s4-assessment}.md.
-Start only S5 — consolidated decision and minimal remediation scopes.
-Mode: READ-ONLY assessment close-out. Reverify baseline applicability without
-restarting the audit. Consolidate verified results, unconfirmed paths, accepted
-exceptions, medium/low backlog, unchecked areas and release risks.
-S4 found locked/pinned xlsx 0.18.5 reader reachability and retained its known
-contextual dependency risk; no new verified critical/high production candidate.
-Separate advisory severity from application impact. Draft privacy/resource risks
-are backlog decisions; preserve intentional recovery and cancel behavior.
-Preserve approved edge-source export blocked by HTTP 413 PayloadTooLarge and
-the separate rejected/unapproved database-source export. Do not reroute.
-Carry S2 Auth/provisioning and owner-only revocation uncertainties; S3 bot
-identity/module freshness, alert claim/effect and delivery-replay gaps.
-Full exact-baseline lint remains open: S4's 0-error/705-warning result was only
-an incomplete source snapshot. Do not call it a full pass or replace S3's gap.
-Keep F1 receipts/pending attempts, old-tab risk and legitimate-operator
-confirmation. No fixes, production writes, personnel/business queries, live
-probes, Storage operations, secret values, bot messages, installations, PR324,
-redesign, merges or deployments.
-Define a smallest scope/test/ordering/rollback only for a verified critical/high
-candidate; implementation requires separate applicable authorization.
-Update and commit the tracker. Conclude with the concrete remediation/backlog
-decision prompt. Do not implement it.
+Continue from PR #354 after the S5 closure commit.
+Read CLAUDE.md, docs/security-review/progress.md and
+docs/security-review/s5-consolidation.md, with its S1–S4 evidence links.
+Decide whether to select only expense-batch retry as the next medium-priority
+backlog item. No new verified critical/high remediation is established.
+Keep the proposal's exclusions, acceptance tests, deployment ordering and
+receipt-preserving rollback. Do not implement or release until explicitly
+authorized for that bounded scope.
+Preserve approved edge-source HTTP 413 blockage, separately unapproved DB
+export, Storage restrictions, identity/runtime uncertainties and full local
+lint reproduction gap. Existing CI step success is separate from local counts.
+Keep F1 receipts/pending attempts, old-tab risk and operator-confirmation gap.
+No PR324, redesign, production writes, business/personnel queries, probes,
+Storage operations, secret values, messages, installations, merges or deployments.
+The documentation-only merge recommendation does not authorize any of those
+actions. Refresh the stale PR description and verify final-head checks before
+a separately authorized merge.
 ```
