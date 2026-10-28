@@ -12,8 +12,8 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | S1 — remaining writes and F1 boundaries | Assessed with gaps — read-only | Writer matrix and five medium integrity defects recorded; no new verified critical/high candidate or remediation. | [S1 assessment](s1-assessment.md). Frontend/F1 ledger reverified; backend v279 source parity is blocked by connector HTTP 413 after user-approved export; broader DB body export remains unapproved. |
 | S2 — active accounts, role isolation and exposure | Assessed with gaps — read-only | Access matrix and revocation analysis complete for named surfaces; no new verified critical/high issue. | [S2 assessment](s2-assessment.md). Auth ban in edit confirmed in source; inactive creation/service-role activity path unconfirmed. Owner-only revocation and existing broad SELECT class deferred. Edge payload limit and separate DB-export boundary remain. |
 | S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
-| S4 — secrets, files and reachable dependencies | Next — read-only assessment | Triage file boundaries, secret handling and reachable dependency advisories. | `xlsx` parsing lead needs resolved-version, caller and current-advisory verification. No Storage operations. |
-| S5 — ranked report and remediation scopes | Queued — assessment close-out | Consolidate verified findings, gaps and separate backlog; define only minimal verified critical/high remediation candidates. | Implementation/release status stays separate from assessment. No automatic fixes. |
+| S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
+| S5 — ranked report and remediation scopes | Next — assessment close-out | Consolidate verified findings, gaps and separate backlog; define only minimal verified critical/high remediation candidates. | Implementation/release status stays separate from assessment. No automatic fixes. |
 
 Scope IDs S1–S5 label this continuation queue. They do not rename F1 or assign
 new finding IDs/severities to unverified leads. Reorder only with a documented
@@ -115,6 +115,15 @@ app/bot revocation (medium design risk), legitimate stale buttons, session/deliv
 replay uncertainty and own-memory token expiry/replay (low-impact design risk).
 Do not refile accepted event-undo/binding behavior, the retained income permission
 or the retired expense flow. No new verified critical/high remediation candidate.
+
+
+S4 records the known reachable SheetJS risk as medium in this internal workflow,
+separate from advisory severity; no replacement or upgrade is approved.
+[S4](s4-assessment.md) also records shared-profile draft persistence (medium design
+risk), local log minimization and archive/input resource limits. Preserve intentional
+draft recovery/cancel behavior and F1's separate receipts/pending attempts.
+Live Storage authorization remains unchecked by explicit scope restriction.
+No new verified critical/high candidate was added to the remediation register.
 
 ## Session log
 
@@ -296,6 +305,62 @@ or the retired expense flow. No new verified critical/high remediation candidate
 - Next: S4 only, beginning with source/configuration file boundaries and reachable
   resolved-version/advisory triage. S4 was not started.
 
+### 2026-10-28 — S4 assessed with gaps (read-only)
+
+- Source: `71f4d57feedca33dccf25ff94eb1b51ba4383efb`, PR #354,
+  branch `docs/security-review-session-plan`. PR open/unmerged at start.
+  Git tree/blob metadata confirms `src/`, `supabase/` and lockfile still
+  match F1 frontend `e1518d0…`. Root/review guidance, S1–S3, relevant
+  module contracts and security exceptions read.
+- Outcome: [S4 secret/file/dependency assessment](s4-assessment.md). The lockfile
+  resolves production `xlsx` to 0.18.5; the dairy preview independently pins it.
+  Browser expense/income/monitoring readers and authenticated G/A edge preview
+  are reachable in source. Parsing can precede write-role checks. Current vendor
+  and GitHub primary advisories CVE-2023-30533 / CVE-2024-22363 apply to these
+  readers; export-only helpers are distinguished. Known risk retained as
+  contextual medium/backlog, not a newly asserted high production exploit.
+- File/source map: invoice uploads/signing, hato workbook/photo/OCR endpoints,
+  Word extraction/confirm-before-persist, report/download paths, browser
+  credentials, selected logs and drafts. No Storage API/catalog or object
+  operations. Historical Storage exceptions remain gaps, not claimed closed.
+  No secret values, logs, business/personnel rows, private files or live
+  recipient/account state were read.
+- Drafts: fixed form keys omit account identity; normal sign-out does not clear
+  application drafts. Quincena intentionally retains a financial draft on cancel.
+  Medium shared-browser-profile design risk; preserve recovery behavior.
+  No actual cross-account session tested; financial form reset effects qualify
+  any claim of visible restore. Hook age handling differs; no universal TTL claim.
+- Frontend metadata/alias reverified: `e1518d09ae8f27726499b4a93dfbffbb10516b4f`,
+  `dpl_95qo9C7UTxgRyCD8to9EiESevTXe`, READY/PROMOTED and
+  `escociaos.vercel.app`. No live UI/operator test.
+- Edge metadata remains v279 ACTIVE, verify_jwt=false, same hash/version-278
+  entrypoint; edge observations remain code-only. Approved source export remains
+  blocked by HTTP 413 / ToolRouterV2_PayloadTooLarge (4345). Separate broad
+  database-source export remains rejected/unapproved. Neither export retried
+  or rerouted. Latest ledger remains 185 `20261028014545`.
+- Execution: original local branch `5163501` is unrelated and unchanged.
+  Existing Git blobs plus pinned GitHub file reads supplied a temporary source
+  snapshot. The bulk read host closed stdout; 174 source files remain unavailable.
+  `npm run lint` on the incomplete snapshot using installed local dependencies
+  reported 0 errors / 705 warnings. This is a partial result, not an improvement
+  over S2's 907 warnings or a full target lint pass. S3's full-lint gap remains.
+- Checks: source/lock/tree identity, primary advisory review, document
+  links/pinned line bounds, fence/whitespace checks, credential-pattern/scope
+  checks and publication verification at close-out. No test payloads, runtime
+  suite, installations, mobile test or backend calls from local scripts.
+- No fixes, application changes, production writes, new credentials,
+  permissions changes, Storage operations, messages, migrations, merges or
+  deployments. No PR324 work or redesign. F1 receipts/pending attempts and
+  legitimate-operator confirmation, S1 backlog, S2 uncertainties and S3
+  identity/replay/alert gaps all carried forward.
+- Publication: S4 assessment and tracker only on PR #354's existing branch;
+  resulting commit/publication outcome returned at close-out. No main/production
+  availability claimed.
+- Next: S5 only — consolidate S1–S4, preserve classifications and exact gaps,
+  and propose only minimal verified critical/high remediation if evidence supports
+  one. Otherwise state that none qualifies and identify the next bounded decision.
+  S5 was not started.
+
 ### Template for each completed or paused scope
 
 Copy and fill this block; do not overwrite previous session evidence.
@@ -326,25 +391,28 @@ in the next session entry. Do not loop commits to embed self-referential hashes.
 
 ```text
 Continue the Escocia OS security review from PR #354, branch
-docs/security-review-session-plan, after the S3 assessment commit.
-Read CLAUDE.md and docs/security-review/{plan,session-guide,progress,s1-assessment,s2-assessment,s3-assessment}.md,
-plus relevant module instructions and skills.
-Start only S4 — secrets, file access and reachable dependencies — as a bounded
-READ-ONLY assessment. S3 is assessed with gaps; no new verified critical/high
-issue and no fixes. First verify the exact code/deployment/catalog baseline;
-continue code-only where unavailable and record the precise gap.
-Start with source/configuration file boundaries and the resolved xlsx parsing
-lead: actual callers/file provenance and current primary advisories.
-No Storage operations, secret values, business/personnel queries, production
-writes, live probes, bot messages, new credentials, installations or test payloads.
-Last observed frontend: e1518d09ae8f27726499b4a93dfbffbb10516b4f; edge v279.
-Edge-source export is approved but blocked by HTTP 413 PayloadTooLarge.
-Broad database-source export remains separately rejected and unapproved.
-Do not reroute either boundary. Carry forward S2 Auth/provisioning and owner-only
-revocation uncertainties; S3 independent bot revocation, module freshness,
-alert claim/effect and delivery-replay gaps; documented exceptions; S1 backlog.
-Preserve F1 receipts, pending attempts, old-tab risk and open operator confirmation.
-Local execution disconnected during S3; its lint remains unrun, not passed.
-No PR324 work or redesign. Update and commit the tracker.
-Conclude with a copy-ready S5 prompt. Do not start S5.
+docs/security-review-session-plan, after the S4 assessment commit.
+Read CLAUDE.md and docs/security-review/{plan,session-guide,progress,s1-assessment,s2-assessment,s3-assessment,s4-assessment}.md.
+Start only S5 — consolidated decision and minimal remediation scopes.
+Mode: READ-ONLY assessment close-out. Reverify baseline applicability without
+restarting the audit. Consolidate verified results, unconfirmed paths, accepted
+exceptions, medium/low backlog, unchecked areas and release risks.
+S4 found locked/pinned xlsx 0.18.5 reader reachability and retained its known
+contextual dependency risk; no new verified critical/high production candidate.
+Separate advisory severity from application impact. Draft privacy/resource risks
+are backlog decisions; preserve intentional recovery and cancel behavior.
+Preserve approved edge-source export blocked by HTTP 413 PayloadTooLarge and
+the separate rejected/unapproved database-source export. Do not reroute.
+Carry S2 Auth/provisioning and owner-only revocation uncertainties; S3 bot
+identity/module freshness, alert claim/effect and delivery-replay gaps.
+Full exact-baseline lint remains open: S4's 0-error/705-warning result was only
+an incomplete source snapshot. Do not call it a full pass or replace S3's gap.
+Keep F1 receipts/pending attempts, old-tab risk and legitimate-operator
+confirmation. No fixes, production writes, personnel/business queries, live
+probes, Storage operations, secret values, bot messages, installations, PR324,
+redesign, merges or deployments.
+Define a smallest scope/test/ordering/rollback only for a verified critical/high
+candidate; implementation requires separate applicable authorization.
+Update and commit the tracker. Conclude with the concrete remediation/backlog
+decision prompt. Do not implement it.
 ```
