@@ -10,8 +10,8 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 |---|---|---|---|
 | F1 — three web inventory save flows | Deployed; live workflow confirmation open | Atomic manual movement, purchase batch and purchase reversal; durable browser retry recovery. Keep receipts and pending attempts. | [PR #353](https://github.com/sforero94/Escociaos/pull/353), [runbook](../runbook_inventario_f1.md). Live UI check blocked by cloud proxy CONNECT 403; no farm transaction used as a test. |
 | S1 — remaining writes and F1 boundaries | Assessed with gaps — read-only | Writer matrix and five medium integrity defects recorded; no new verified critical/high candidate or remediation. | [S1 assessment](s1-assessment.md). Frontend/F1 ledger reverified; backend v279 source parity is blocked by connector HTTP 413 after user-approved export; broader DB body export remains unapproved. |
-| S2 — active accounts, role isolation and exposure | Next — read-only assessment | Complete endpoint/RLS/RPC access matrix and revocation analysis, including owner-only daily movement UPDATE/DELETE. | `usuarios.tsx` and importer activity leads need full Auth/revocation and backend-parity verification. Current account roster is unchecked; historical counts are not current evidence. |
-| S3 — Telegram identity and privileged operations | Queued — read-only assessment | Trace current linked role/activity/module checks through sensitive handlers and stale callbacks. | Linked app activity/role lead remains unconfirmed; do not refile documented binding behavior. |
+| S2 — active accounts, role isolation and exposure | Assessed with gaps — read-only | Access matrix and revocation analysis complete for named surfaces; no new verified critical/high issue. | [S2 assessment](s2-assessment.md). Auth ban in edit confirmed in source; inactive creation/service-role activity path unconfirmed. Owner-only revocation and existing broad SELECT class deferred. Edge payload limit and separate DB-export boundary remain. |
+| S3 — Telegram identity and privileged operations | Next — read-only assessment | Trace current linked role/activity/module checks through sensitive handlers and stale callbacks. | Linked app activity/role lead remains unconfirmed; do not refile documented binding behavior. |
 | S4 — secrets, files and reachable dependencies | Queued — read-only assessment | Triage file boundaries, secret handling and reachable dependency advisories. | `xlsx` parsing lead needs resolved-version, caller and current-advisory verification. No Storage operations. |
 | S5 — ranked report and remediation scopes | Queued — assessment close-out | Consolidate verified findings, gaps and separate backlog; define only minimal verified critical/high remediation candidates. | Implementation/release status stays separate from assessment. No automatic fixes. |
 
@@ -97,6 +97,13 @@ concurrency/nullable uniqueness. These need bounded evidence or an owner decisio
 do not promote them to verified high findings. CSV opening balances remain a
 previously documented design choice. No historical data repair is authorized.
 
+S2 adds no immediate remediation candidate. [S2](s2-assessment.md) records a
+medium design risk in owner-only role revocation and the existing broad-read
+hardening class. Confirm intended retained owner capability before selecting a
+policy change. Inactive account creation plus service-role role-only gates is an
+unconfirmed production path; resolve edge parity and development Auth evidence
+before assigning live severity. No account roster or real-user behavior verified.
+
 ## Session log
 
 ### Plan and handoff committed
@@ -177,6 +184,51 @@ previously documented design choice. No historical data repair is authorized.
 - Next remains S2; no S2 assessment or remediation was started. Independent
   source/catalog work can proceed with the size-limit parity gap recorded.
 
+### 2026-10-28 — S2 assessed with gaps (read-only)
+
+- Source: `470c2d41934a40e9b23af50b91924b438b5e06d8` from PR #354;
+  clean isolated branch `security-s2-assessment`. `src/` and `supabase/` match
+  F1 production source `e1518d0…`. Unrelated work and PR324 were not touched.
+- Outcome: [S2 access/revocation assessment](s2-assessment.md). Normal account edit
+  includes an Auth ban; current-role backend checks refute cached-role-only
+  escalation. No new verified critical/high issue. No remediation started.
+- Inactive creation has no ban in source, while privileged handlers read role
+  without activity. This remains an unconfirmed production path, requiring
+  deployed source parity and development Auth/provisioning evidence. No claim of
+  actual affected accounts, indefinite normal-ban access or live self-reactivation.
+- Live policy revocation limit: daily-movement owner UPDATE/DELETE has no active
+  role clause; report owner DELETE and memory owner ALL have related own-data
+  limits. Medium design risk; no observed deactivated session or data mutation.
+  Existing broad authenticated SELECT class remains deferred, not refiled.
+- Frontend reverified: `e1518d09ae8f27726499b4a93dfbffbb10516b4f`,
+  `dpl_95qo9C7UTxgRyCD8to9EiESevTXe`, READY/PROMOTED and production alias
+  `escociaos.vercel.app`. No live browser/operator confirmation added.
+- Backend reverified: v279 ACTIVE, verify_jwt=false, same recorded hash and
+  version-278 entrypoint. Approved edge-source export remains blocked by HTTP
+  413 / ToolRouterV2_PayloadTooLarge (4345); no repeated export attempted.
+  Separate broad database-source export remains unapproved after the earlier
+  automatic-review rejection; no body export or alternate route attempted.
+- Catalog: latest 185 ledger unchanged; all 13 finance tables' policies examined,
+  named personnel/labor/owner/chat policies, grants/RLS for 22 relations, seven
+  INVOKER view options and 18 selected/DEFINER function metadata entries checked.
+  Local literal MD5 matches live role helper 137, author resolver 155 and both
+  schedule helpers 175. Cleanup 082 literal differs; no behavioral drift inferred.
+  Daily parent creator column and trigger metadata checked without domain rows.
+- Gaps: Auth TTL/session/ban runtime behavior, provisioning hooks, current roster,
+  complete live RPC/trigger bodies, unsampled child/column policies and Storage
+  remain unchecked. S3 linked app/Telegram identity analysis remains next.
+- Checks: documentation links/pinned line references, fence balance, scope-only
+  diff and `git diff --check` passed; repository lint passed with zero errors
+  and the same 907 existing warnings.
+  No runtime tests or mobile retest: documentation only. No installations,
+  whole-suite/replay loops or production operations.
+- Publication: continue PR #354 through its existing documentation branch;
+  resulting commit and publication outcome reported at close-out. The tracker
+  does not claim merge or availability on main.
+- Next: S3 only; start at webhook validation and linked-identity freshness before
+  sensitive service-role handlers. Preserve documented binding exceptions, S1
+  medium backlog, F1 receipts/pending attempts and its live confirmation gap.
+
 ### Template for each completed or paused scope
 
 Copy and fill this block; do not overwrite previous session evidence.
@@ -206,27 +258,26 @@ in the next session entry. Do not loop commits to embed self-referential hashes.
 ## Prompt to start the next scope
 
 ```text
-Continue the Escocia OS security review from PR #354,
-branch docs/security-review-session-plan (S1 assessment 1bb37a9 plus edge-export follow-up).
-Read CLAUDE.md, docs/security-review/plan.md,
-docs/security-review/session-guide.md, docs/security-review/progress.md and
-docs/security-review/s1-assessment.md, plus relevant module instructions/skills.
-Start only S2 — active accounts, role isolation and data exposure — as a bounded
-READ-ONLY assessment. S1 is assessed with gaps; five medium integrity defects
-are deferred, no new critical/high finding or remediation was approved.
-First verify current code/deployment/catalog baseline. Last observed frontend:
-e1518d09ae8f27726499b4a93dfbffbb10516b4f; edge metadata v279, source parity open.
-Start with usuarios.tsx deactivation/Auth banning and session revocation, then
-trace active-role enforcement, owner-only daily movement UPDATE/DELETE and
-cross-role finance/personnel/export access through handlers, RLS and RPCs.
-Do not infer current account roles/counts from historical memory. No business-data
-or personnel-row queries. The user approved deployed edge-source export, but connector/workbench retrieval
-returned HTTP 413 PayloadTooLarge without source; parity remains pending on that
-tool limit. Broad DB-source export remains separately rejected and unapproved.
-Independent repository and permitted metadata assessment can proceed.
-Preserve F1 receipts/pending attempts and its open live operator-confirmation gap.
-No production writes, live probes, Storage operations, new credentials,
-installations, PR324 work or redesign. Do not start fixes or S3 automatically.
-Update and commit the tracker, report evidence/checks/gaps and release state,
-then conclude with a copy-ready prompt for S3.
+Continue the Escocia OS security review from PR #354, branch
+docs/security-review-session-plan, after the S2 assessment commit.
+Read CLAUDE.md and docs/security-review/{plan,session-guide,progress,s1-assessment,s2-assessment}.md,
+plus relevant module instructions and skills.
+Start only S3 — Telegram identity and privileged operations — as a bounded
+READ-ONLY assessment. S2 is assessed with gaps; no new verified critical/high
+issue and no fix started. First verify the exact code/deployment/catalog baseline;
+continue code-only where live evidence is unavailable and record the exact gap.
+Start with webhook validation, linked identity and current app activity/role/module
+checks before sensitive service-role operations; then stale callbacks and replay.
+Preserve documented binding behavior and exceptions; do not infer current account
+roles/counts from old memory or query business/personnel rows.
+Last observed frontend: e1518d09ae8f27726499b4a93dfbffbb10516b4f; edge v279,
+source parity pending. Edge-source export is already approved but blocked by
+connector/workbench HTTP 413 PayloadTooLarge. Broad database-source export remains
+separately rejected and unapproved. Do not reroute either boundary.
+Carry forward S2 inactive-creation/Auth uncertainty and owner-only revocation limits,
+S1 medium backlog, F1 receipts/pending attempts and open live operator confirmation.
+No fixes, production writes, live probes, Storage operations, bot messages,
+new credentials, installations, PR324 work or redesign. Do not auto-start S4.
+Update and commit the tracker. Report evidence, checks, gaps and release state.
+Conclude with a copy-ready S4 prompt.
 ```
