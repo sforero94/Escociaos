@@ -47,6 +47,15 @@ Future frozen replay, CI, and worker commands are deliverables of their tasks, n
 3. Add one append-only session entry using the template below. Update `DECISIONS.md` only with attributed decisions.
 4. Commit scoped work. Record the implementation commit in the progress record; a follow-up documentation commit can reference it without circular self-hashes. Include branch/PR links if applicable.
 5. Record the exact next task and first command/action. Push the branch when authorized/available, or state that it is local only. Do not commit private runs, fixtures, credentials, or a `node_modules` symlink.
+6. End every task-completion response with a ready-to-copy prompt for the next session, using the template below. Fill in the actual next task, branch, latest committed handoff, first action, and any blocking input/fallback from `PROGRESS.md`. Include it even when the user has not asked to start another chat. For an unfinished slice, name the remaining slice instead of implying completion. If no ready task remains, name the concrete review or owner decision needed.
+
+### Next-session prompt template
+
+Place this prompt at the end of the final response in a fenced text block. Resolve placeholders before sending; keep private evidence and credentials out of the prompt.
+
+```text
+Continue Esco faithfulness work in https://github.com/sforero94/Escociaos on branch `<branch>`, starting from the committed handoff at `<commit>`. Read root CLAUDE.md, applicable AGENTS.md, and docs/esco/faithfulness/SESSION.md and PROGRESS.md. Then read task `<next task ID and title>` in PLAN.md and its relevant decisions in DECISIONS.md. First action: <exact command or action>. <Known blocker and independent fallback, if any.> Complete one session-sized task or documented slice, run the required checks, update the progress and handoff records, commit, and push when available. Preserve unrelated work. Do not enable production telemetry, paid schedules, migrations, or rollout solely because they appear in the plan. End with a ready-to-copy prompt for the following session.
+```
 
 ### Session entry template
 
