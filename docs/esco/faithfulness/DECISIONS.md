@@ -15,7 +15,7 @@ An owner-approved general direction does not approve every proposed threshold, r
 
 | ID | Decision needed | Proposed default | Gates | Independent work allowed |
 |---|---|---|---|---|
-| D01 | Adjudicate five calibration disagreements and acknowledgement-vs-persistence wording | Keep original labels; version any reviewed truth/rubric change | P0-02 completion; disputed cases as release gates | All undisputed fixture and control work |
+| D01 | Resolved for adjudication on 2026-10-28; see attributed v2 ledger below | Original dataset preserved; separate reviewed view | Historical evidence exclusions remain explicit | P0-03 can use reviewed dispositions without inventing historical snapshots |
 | D02 | Intended domain definitions: sale scope/transfers, cost basis, yield denominator, calendar boundaries | Reuse documented business rules; ask only where sources conflict | Affected P2 task acceptance | Synthetic calculations, extraction, unrelated domains |
 | D03 | Who may read online traces, evidence snapshots, feedback, and review decisions | Gerencia-only review; narrowly scoped worker access; explicit user/conversation ownership | P4-01 production schema and P4-02 activation | Local schema design, access tests, synthetic traces |
 | D04 | Snapshot and metadata retention and permitted provider payloads | Propose 14 days for minimized snapshots and 90 days for metadata; retention per data class; never capture credentials | Online capture/judging activation | Synthetic storage and cleanup tests |
@@ -36,3 +36,20 @@ Do not ask all seven questions at session startup. Raise the concrete decision w
 - Shadow generation may consume captured read-only evidence; it must not repeat memory writes, business actions, or external side effects.
 - Failure to persist telemetry must not silently create a passing evaluation or indefinitely delay a response. Expose capture gaps.
 - Out of initial scope: fine-tuning, changing model family, rebuilding every tool, auto-editing business data from a judge, and automatic promotion of feedback into golden truth.
+
+
+## Attributed decisions — 2026-10-28
+
+Santiago Forero answered the six review questions directly in chat: 001 partial;
+030 incorrect; 039 historical data changed, preserve original and exclude an
+unverified inventory comparison; 040 scope can follow context, clarify only when
+ambiguous; 042 correct with warning (avoid excessive strictness); 054 allow an
+acknowledgement that says confirmation is pending, forbid premature persistence
+claims. D01 adjudication is resolved; see ADJUDICATION.md v2 and its explicit
+historical-evidence exclusions. Original uploaded labels remain immutable.
+
+D05 limited authorization: $1 total including retries for the seven-case focused
+calibration only. Online/recurring/full-campaign budget remains undecided.
+Automatic approval review requires separate explicit disclosure approval for
+private farm evidence sent to OpenRouter. The question is pending; no paid calls
+were dispatched in this session.

@@ -5,13 +5,13 @@
 - Integration branch: `codex/esco-faithfulness-plan`.
 - Original code base: `14271f1`. Evaluation prerequisite commit: `027a162`.
 - Plan bootstrap: complete. Product implementation: **1/25 tasks complete**.
-- Active implementation task: P0-03 parent in progress; P0-03-a complete locally.
-- **Next task: P0-03-b — tool fixture adapter and scenario pack. P0-02 is blocked.**
-- First action: `rg -n "executeTool|correrCaso|instalarGuardas" src/supabase/functions/server/chat.tsx evals/esco/lib/ejecutor.ts`; design tool-boundary injection and scenario/turn matching.
+- Active implementation task: none; P0-02 adjudication recorded, paid verification blocked on disclosure approval.
+- **Next task: P0-02 paid calibration after disclosure approval; independent fallback P0-03-b.**
+- First action: check the pending explicit approval to send the seven cases to OpenRouter; prepare a hash-pinned private calibration script with a $1 total reservation cap. Until approved, continue P0-03-b locally.
 - Next useful milestone: checkpoint A, then complete animal-sales evidence and deterministic totals before building online infrastructure.
 - Production state: no deployment, migration, telemetry activation, worker, schedule, feedback UI, or canary performed by this plan bootstrap.
-- Private data: absent from this independent checkout. It is present only in the originating workspace; see BASELINE.md. Two private-dataset tests skip here.
-- Blocking owner decision for P0-01: none. Open decisions D01–D07 are tracked in DECISIONS.md and apply at named gates.
+- Private data: approved JSONL uploaded and hash-verified; local ignored `evals/esco/golden/esco_golden_set_v2.jsonl`. All 105 tests pass, including two formerly skipped private-dataset checks. Earlier calibration report and historical tool payloads remain unavailable.
+- D01 resolved by owner chat on 2026-10-28. One-time $1 focused budget approved; disclosure approval is pending after automatic review rejected dispatch. Other D02–D07 gates remain scoped as recorded.
 
 ## Task tracker
 
@@ -21,7 +21,7 @@ Update this table and the current-state block in the same session. Add implement
 |---|---|---|---|
 | S00 | done | Existing evaluation work | `027a162`: preserved prior judge safeguards; 91 passed, 2 private-dataset tests skipped; lint 0 errors |
 | P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
-| P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v1 prepared; private records/labels absent; D01 unresolved |
+| P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v2 and immutable evaluation view complete; focused paid verification awaits explicit OpenRouter payload-disclosure approval |
 | P0-03 | in_progress | P0-01; P0-02 for disputed seeds | `48141b0`: P0-03-a closed HTTP foundation complete; P0-03-b ready: tool matching, 12–15 scenarios, manifests and frozen CLI remain |
 | P1-01 | todo | P0-03 | Evidence envelopes and compatible adapters |
 | P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
@@ -93,3 +93,16 @@ Update this table and the current-state block in the same session. Add implement
 - Remaining: P0-02 requires authorized private evidence and attributed D01 decisions; paid calibration also requires budget. P0-03-b retains all unmet parent criteria: tool/argument/scenario/turn keys, fixture pack/manifests, multi-turn isolation and real-model frozen command. Current runtime results still use legacy `live` labeling; no CLI exposes this foundation yet. Mocked outputs establish transport behavior only.
 - Next: P0-03-b; first run `rg -n "executeTool|correrCaso|instalarGuardas" src/supabase/functions/server/chat.tsx evals/esco/lib/ejecutor.ts`. Continue synthetic controls while private adjudication remains blocked.
 - Production state: local harness/documentation only; no provider calls, production reads/writes, deployments, migrations, telemetry, schedules or rollout. All approval gates retained.
+
+
+### Session: owner adjudication v2, 2026-10-28 America/New_York
+
+- Task: P0-02 reviewed dispositions implemented; focused paid verification remains blocked.
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: pending handoff update.
+- Start: clean `ff017e2`; owner supplied the exact baseline JSONL and six direct decisions, plus $1 total for the seven-case campaign including retries.
+- Changed: ADJUDICATION.md v2 records old labels, new attributed dispositions, rubric changes, evidence exclusions and dispatch state. DECISIONS.md resolves D01 and records the narrow D05 authorization. `adjudicacion.ts` creates a cloned evaluation view; tests verify source immutability, inventory exclusion and warning/acknowledgement separation. Default runner and original dataset are unchanged.
+- Verification: source SHA-256 matches BASELINE.md. `npm run eval:esco:check` passed 105 tests, zero skips, including original dataset and parser/prompt checks. No old calibration output recovered. `npm run lint` passed (0 errors, 910 existing warnings), `npm run typecheck` passed, and `git diff --check` passed. No mobile smoke needed for evaluation-only work.
+- Decisions: Santiago's 001 partial; 030 incorrect; 039 historical inventory excluded from enforced comparison; 040 contextual scope allowed; 042 correct with warning; 054 acknowledgement allowed, premature completed storage forbidden. 056 malformed output remains unavailable and missing follow-up answer remains outside a full-conversation gate.
+- Remaining: automatic approval review rejected private payload disclosure to OpenRouter despite the approved spend. An explicit question describing questions/answers/criteria/reference figures/tool metadata is pending. No paid call occurred; no cost incurred. A private script was subsequently prepared locally at ignored `evals/esco/runs/2026-10-28-adjudication/calibrate.eval.ts`, without execution. It requires a disclosure flag, pins provider price limits, reserves costs before dispatch, retains reservations after failures, and includes retries under $1. Review/run it only after disclosure approval; record private per-case results before marking P0-02 done.
+- Next: P0-02 paid calibration if disclosure is approved; otherwise independent P0-03-b. First action: inspect the disclosure answer and ADJUDICATION.md campaign requirements. Keep the original labels and reviewed version separate.
+- Production state: no deployment, migrations, telemetry, schedule, production queries, or external judge dispatch. Production gates preserved. Upload stays ignored and private.
