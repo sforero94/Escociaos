@@ -1,4 +1,4 @@
-import { adaptarEvidenciaLegada } from './escoEvidencia.ts';
+import { adaptarEvidenciaLegada, leerEvidencia, recortarEvidencia, ZONA_EVIDENCIA_ESCO } from './escoEvidencia.ts';
 /** Consultas de evidencia de Esco (#311). Sin Deno/SDK; I/O inyectado y probado. */
 export type FilaEsco = Record<string, unknown>;
 export type ConsultaPagina = (tabla: string, query: string) => Promise<FilaEsco[]>;
@@ -67,7 +67,7 @@ export const ETIQUETAS_CONSULTA: Record<string, string> = Object.fromEntries([
   ['get_clima_cobertura', 'Cobertura de historia climática'], ['get_capturas_estado', 'Capturas y revisiones registradas'],
 ]);
 export function fechaBogota(ahora = new Date()): string {
-  const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(ahora);
+  const partes = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_EVIDENCIA_ESCO, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(ahora);
   const p = (tipo: string) => partes.find(x => x.type === tipo)!.value;
   return `${p('year')}-${p('month')}-${p('day')}`;
 }
@@ -105,7 +105,7 @@ export function resumirContexto(resultado: string, max = 24000): string {
     return JSON.stringify({
       ...(Object.prototype.hasOwnProperty.call(r, 'error') ? { error: 'La consulta anterior falló; vuelve a consultar.' } : {}),
       _evidencia: legacy ? { ...legacy, consulta_completa: false, detalle_completo: false } : null,
-      _evidencia_v1: adaptarEvidenciaLegada(parsed, { contextTruncated: true }),
+      _evidencia_v1: recortarEvidencia(parsed),
       resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
   } catch {
     return JSON.stringify({ _evidencia_v1: adaptarEvidenciaLegada(null, { contextTruncated: true }), contexto_recortado: true, instruccion: 'Resultado anterior no preservado; vuelve a consultar antes de concluir.' });
@@ -143,10 +143,27 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
   };
   const animals = async () => read('hato_animales', animalCols);
   const seleccionAnimal = (f: FilaEsco) => contiene(f.nombre, args.nombre) && (args.numero == null || Number(f.numero) === Number(args.numero));
-  const finish = (detalle: FilaEsco[], resumen: FilaEsco = {}) => ({
-    _evidencia: { herramienta: nombre, fuentes: [...new Set(fuentes)], rango: { desde, hasta }, consultado_en: hoy, consulta_completa: true, cobertura_registros: cobertura, total_hechos: detalle.length, detalle_completo: offset === 0 && detalle.length <= 100, detalle_offset: offset, siguiente_offset: offset + 100 < detalle.length ? offset + 100 : null, limites },
-    resumen, detalle: detalle.slice(offset, offset + 100),
-  });
+  const finish = (detalle: FilaEsco[], resumen: FilaEsco = {}) => {
+    const result = {
+      _evidencia: { herramienta: nombre, fuentes: [...new Set(fuentes)], rango: { desde, hasta }, consultado_en: hoy, consulta_completa: true, cobertura_registros: cobertura, total_hechos: detalle.length, detalle_completo: offset === 0 && detalle.length <= 100, detalle_offset: offset, siguiente_offset: offset + 100 < detalle.length ? offset + 100 : null, limites },
+      resumen, detalle: detalle.slice(offset, offset + 100),
+    };
+    const evidence = adaptarEvidenciaLegada(result);
+    // Only these scoped producers establish row identities and calendar semantics.
+    if (nombre === 'get_hato_partos' || nombre === 'get_hato_animales') {
+      const table = nombre === 'get_hato_partos' ? 'hato_eventos' : 'hato_animales';
+      evidence.source_refs = result.detalle.flatMap(row => typeof row.id === 'string' && /^[a-zA-Z0-9_-]+$/.test(row.id)
+        ? [{ table, id: row.id }] : []);
+      evidence.scope.entity_ids = [...new Set(result.detalle.flatMap(row => {
+        const identity = nombre === 'get_hato_animales' ? row : row.madre_o_animal as FilaEsco | null;
+        return typeof identity?.id === 'string' ? [identity.id] : [];
+      }))];
+      evidence.period.timezone = ZONA_EVIDENCIA_ESCO;
+      evidence.retrieved_at = new Date().toISOString();
+      evidence.units = nombre === 'get_hato_partos' ? { 'resumen.total_eventos': 'eventos' } : { 'resumen.total_animales': 'animales' };
+    }
+    return { ...result, _evidencia_v1: evidence };
+  };
   if (nombre === 'get_hato_partos' || nombre === 'get_hato_eventos' || nombre === 'get_hato_salidas_finanzas') {
     const [animales, eventos] = await Promise.all([animals(), read('hato_eventos', eventoCols, 'fecha', nombre === 'get_hato_partos' ? '&tipo=eq.parto' : '')]);
     const am = mapa(animales);
@@ -394,6 +411,12 @@ export function requiereConsultaPartos(pregunta: string): boolean {
 export function evidenciaPartosSuficiente(interacciones: Array<{ tool: string; result_summary: string }>): boolean {
   return interacciones.some(t => {
     if (t.tool !== 'get_hato_partos') return false;
-    try { const r = JSON.parse(t.result_summary); return !r.error && r._evidencia?.consulta_completa === true && !!r._evidencia?.rango?.desde && !!r._evidencia?.rango?.hasta; } catch { return false; }
+    try {
+      const r: unknown = JSON.parse(t.result_summary);
+      const evidence = leerEvidencia(r);
+      return ['success', 'complete-empty', 'partial'].includes(evidence.outcome)
+        && evidence.tool === 'get_hato_partos' && evidence.retrieval_complete === true
+        && !evidence.truncation.context && !!evidence.period.from && !!evidence.period.to;
+    } catch { return false; }
   });
 }

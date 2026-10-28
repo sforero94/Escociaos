@@ -322,7 +322,7 @@ const PATRON_BOGOTA = /America\/Bogota/g;
  *  -- su ocurrencia es `diaBogota()`. Las otras cuatro son preexistentes y
  *  se documentan para que el guard las reconozca sin taparlas. */
 const LISTA_BLANCA_BOGOTA: { archivo: string; ocurrencias: number; razon: string }[] = [
-  { archivo: 'src/utils/escoConsultas.ts', ocurrencias: 1, razon: 'Motor autocontenido compartido con Deno (#311): conversión explícita en servidor; no puede importar el helper de navegador a través de la frontera de despliegue.' },
+  { archivo: 'src/utils/escoEvidencia.ts', ocurrencias: 1, razon: 'Identificador único de calendario de evidencia, compartido con Deno. escoConsultas.fechaBogota conserva su conversión existente (#311) mediante esta constante; no introduce un cálculo nuevo ni importa el helper de navegador.' },
   {
     archivo: 'src/utils/fechas.ts',
     ocurrencias: 2,

@@ -73,7 +73,8 @@ Disputed historical fixtures remain blocked on P0-02/D01.
 - **P1-01-b — scoped producers and consumers:** migrate selected tools and their
   failure paths, bind known scope/calendar/units/authorized source identities,
   preserve metadata in immediate and persisted contexts, and validate consumers
-  in both channels. First action:
+  in both channels. First scoped tools: `get_hato_partos` and `get_hato_animales`;
+  other tools keep conservative generic adapters until their P2 domain tasks. First action:
   `rg -n "finish|_evidencia|toolResultOk|evidenciaPartosSuficiente" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`.
 
 Split because producer migration and authorized source binding require a separate

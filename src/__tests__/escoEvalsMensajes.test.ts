@@ -5,6 +5,8 @@ import {
   AJUSTES_TELEGRAM, ENCABEZADO_CONTEXTO_TELEGRAM, ENCABEZADO_CONTEXTO_WEB, asOfUtc,
   mensajesIniciales, mensajesParaSiguienteTurno,
 } from '@/utils/escoEvals/mensajes';
+import { ejecutarConsultaEsco, resumirContexto } from '@/utils/escoConsultas';
+import { leerEvidencia } from '@/utils/escoEvidencia';
 import { casoBase, herramienta } from './escoEvalsFixtures';
 
 const fuente = (ruta: string) => readFileSync(resolve(__dirname, ruta), 'utf8');
@@ -73,5 +75,25 @@ describe('asOfUtc', () => {
   });
   it('rechaza un formato inválido', () => {
     expect(() => asOfUtc('ayer')).toThrow();
+  });
+});
+
+
+describe('typed persisted context compatibility (synthetic)', () => {
+  it.each(['Web', 'Telegram'] as const)('preserves scoped producer metadata for %s follow-ups', async channel => {
+    const result = await ejecutarConsultaEsco('get_hato_animales', {}, async table =>
+      table === 'hato_animales' ? [{ id: 'synthetic-animal', nombre: 'SYNTHETIC', numero: 1 }] : []);
+    const summary = resumirContexto(JSON.stringify(result));
+    const messages = mensajesParaSiguienteTurno([{ role: 'system', content: 'S' }], 'r1',
+      [herramienta('get_hato_animales', { result_summary: summary })], 'q2', channel);
+    expect(messages[1].content).toContain(summary);
+    const metadata = leerEvidencia(JSON.parse(summary));
+    expect(metadata).toMatchObject({ complete: true, source_refs: [{ table: 'hato_animales', id: 'synthetic-animal' }] });
+    const truncated = resumirContexto(JSON.stringify(result), 1);
+    const followup = mensajesParaSiguienteTurno([{ role: 'system', content: 'S' }], 'r1',
+      [herramienta('get_hato_animales', { result_summary: truncated })], 'q2', channel);
+    expect(followup[1].content).toContain(truncated);
+    expect(leerEvidencia(JSON.parse(truncated))).toMatchObject({ complete: false, outcome: 'partial',
+      source_refs: metadata.source_refs, scope: metadata.scope });
   });
 });

@@ -1,3 +1,4 @@
+import { adjuntarEvidencia, leerEvidencia } from './esco-evidencia.ts';
 import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, type FilaEsco } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
@@ -124,7 +125,8 @@ export interface ToolLoopEvent {
 function toolResultOk(result: string): boolean {
   try {
     const parsed = JSON.parse(result);
-    return !(parsed && typeof parsed === 'object' && 'error' in parsed);
+    return !(parsed && typeof parsed === 'object' && 'error' in parsed)
+      && !(parsed && typeof parsed === 'object' && '_evidencia_v1' in parsed && leerEvidencia(parsed).outcome === 'unavailable');
   } catch {
     return true; // no es JSON — es texto plano de una herramienta que respondio bien
   }
@@ -779,19 +781,21 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_tareas': result = await execTareas(args); break;
       case 'get_weekly_reports': result = await execWeeklyReports(args); break;
       case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;
-      default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
+      default: return adjuntarEvidencia(JSON.stringify({ error: `Tool desconocido: ${name}` }), name);
     }
 
     // Herramientas legadas pueden limitar universo y detalle: nunca evidencia de ausencia global.
     if (!HERRAMIENTAS_CONSULTA.some(t => t.name === name) && name.startsWith('get_')) {
       const parsed = JSON.parse(result);
-      if (!parsed.error) parsed._evidencia = {
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'error')) parsed._evidencia = {
         herramienta: name, rango: { desde: args.date_from ?? null, hasta: args.date_to ?? null },
         consulta_completa: false,
         limites: ['Consulta legada con límites de filas/detalle. Para listas completas o negar registros usa las herramientas de evidencia por período.'],
       };
       result = JSON.stringify(parsed);
     }
+
+    if (name.startsWith('get_')) result = adjuntarEvidencia(result, name);
 
     // Add diagnostic info when no results found
     try {
@@ -806,7 +810,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
     return result;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error ejecutando tool';
-    return JSON.stringify({ error: msg });
+    return name.startsWith('get_') ? adjuntarEvidencia(JSON.stringify({ error: msg }), name) : JSON.stringify({ error: msg });
   }
 }
 

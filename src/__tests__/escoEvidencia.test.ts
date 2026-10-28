@@ -74,3 +74,39 @@ describe('typed legacy evidence adapter (synthetic)', () => {
     }
   });
 });
+
+describe('typed producer metadata consumers (synthetic)', () => {
+  it('preserves known metadata through truncation without accepting a contradictory complete flag', async () => {
+    const { leerEvidencia, recortarEvidencia } = await import('@/utils/escoEvidencia');
+    const typed = { ...adaptarEvidenciaLegada(complete(1)), period: { from: '2026-09-01', to: '2026-09-30', timezone: 'America/Bogota' },
+      retrieved_at: '2026-10-07T12:00:00.000Z', units: { 'resumen.total_eventos': 'eventos' },
+      scope: { entity_ids: ['synthetic-animal'] }, source_refs: [{ table: 'hato_eventos', id: 'synthetic-event' }] };
+    const result = { ...complete(1), _evidencia_v1: typed };
+    expect(leerEvidencia(result)).toEqual(typed);
+    const persisted = JSON.parse(resumirContexto(JSON.stringify(result), 1));
+    expect(persisted._evidencia_v1).toMatchObject({ complete: false, outcome: 'partial',
+      retrieved_at: typed.retrieved_at, units: typed.units, scope: typed.scope, source_refs: typed.source_refs, period: typed.period });
+    expect(leerEvidencia(persisted).outcome).toBe('partial');
+    expect(recortarEvidencia({ ...result, _evidencia_v1: { ...typed, outcome: 'stale', complete: false } }).outcome).toBe('stale');
+    for (const mutation of [
+      { version: 2 }, { period: { ...typed.period, from: '2026-02-30' } },
+      { period: { ...typed.period, from: '2026-10-01' } },
+      { truncation: { context: true, detail: false } }, { detail_complete: false },
+      { outcome: 'unavailable' }, { outcome: 'stale' }, { outcome: 'complete-empty' },
+      { observed_at: '2026-02-30T12:00:00.000Z' }, { coverage: { hato_eventos: -1 } },
+      { source_refs: [{ table: 'hato_eventos', id: 'https://not-a-row.test' }] },
+    ]) expect(leerEvidencia({ ...result, _evidencia_v1: { ...typed, ...mutation } })).toMatchObject({ outcome: 'unavailable', complete: false });
+    expect(leerEvidencia({ ...result, error: '' }).outcome).toBe('unavailable');
+    expect(leerEvidencia({ ...result, _evidencia_v1: null }).outcome).toBe('unavailable');
+  });
+  it('adapts legacy reads and failures without inventing precision or accepting invalid JSON', async () => {
+    const { adjuntarEvidencia } = await import('@/utils/escoEvidencia');
+    const legacy = { _evidencia: { consulta_completa: false }, total_registros: 0 };
+    const adapted = JSON.parse(adjuntarEvidencia(JSON.stringify(legacy), 'get_inventory_status'));
+    expect(adapted._evidencia_v1).toMatchObject({ outcome: 'partial', complete: false, tool: 'get_inventory_status', source_refs: null });
+    expect(adapted.total_registros).toBe(0);
+    for (const result of ['not-json', 'null', '[]', '{"error":null}', '{"error":"503"}']) {
+      expect(JSON.parse(adjuntarEvidencia(result, 'get_hato_partos'))._evidencia_v1).toMatchObject({ outcome: 'unavailable', complete: false });
+    }
+  });
+});

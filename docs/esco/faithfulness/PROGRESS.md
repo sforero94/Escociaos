@@ -4,10 +4,10 @@
 
 - Integration branch: `codex/esco-faithfulness-plan`.
 - Original code base: `14271f1`. Evaluation prerequisite commit: `027a162`.
-- Plan bootstrap: complete. Product implementation: **2/25 tasks complete**.
-- Latest implementation: P1-01-a complete locally on the integration branch; typed legacy projection and conservative context truncation. P1-01 parent remains in progress.
-- **Next task: P1-01-b — scoped evidence producers and consumers. P0-02 remains blocked by missing approved private evidence and D01 adjudication.**
-- First action: `rg -n "finish|_evidencia|toolResultOk|evidenciaPartosSuficiente" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`; read EVIDENCE.md and select a scoped producer/consumer migration.
+- Plan bootstrap: complete. Product implementation: **3/25 tasks complete**.
+- Latest implementation: P1-01 complete locally on the integration branch; scoped birth/animal producers, conservative generic adapters, typed validation and context compatibility.
+- **Next task: P1-02 — bound the tool loop and route commands. P0-02 remains blocked by missing approved private evidence and D01 adjudication.**
+- First action: `rg -n "maxRounds|llamadas|tool_choice|fnArgs|toolTransport" src/supabase/functions/server/chat.tsx`; inspect budgets, duplicate detection, argument parsing and forced query behavior.
 - Next useful milestone: checkpoint A, then complete animal-sales evidence and deterministic totals before building online infrastructure.
 - Production state: no deployment, migration, telemetry activation, worker, schedule, feedback UI, or canary performed by this plan bootstrap.
 - Private data: absent from this independent checkout. It is present only in the originating workspace; see BASELINE.md. Two private-dataset tests skip here.
@@ -23,8 +23,8 @@ Update this table and the current-state block in the same session. Add implement
 | P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
 | P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v1 prepared; private records/labels absent; D01 unresolved |
 | P0-03 | done | P0-01; P0-02 for disputed seeds | `48141b0` foundation + `61c684c` P0-03-b: tool boundary, 14 synthetic scenarios, manifests, frozen CLI and isolation checks; historical disputed snapshots remain gated |
-| P1-01 | in_progress | P0-03 | `6d2e80b` P1-01-a complete locally: typed legacy adapter and conservative context truncation; see EVIDENCE.md and session below. P1-01-b retains scoped producer/consumer migration |
-| P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
+| P1-01 | done | P0-03 | `6d2e80b` P1-01-a + P1-01-b recorded below: scoped birth/animal metadata, generic reads/errors and validated consumers; EVIDENCE.md records contract, deferred domain tools and compatibility limits |
+| P1-02 | ready | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
 | P1-03 | todo | P1-01, P1-02 | Structured facts and prepublication checks |
 | P1-04 | todo | P1-01, P1-03 | Scope-aware facts across turns |
 | P2-01 | todo | P1-01, P1-03; D02 if needed | Complete animal-sales aggregate and routing |
@@ -121,3 +121,17 @@ Update this table and the current-state block in the same session. Add implement
 - Remaining: P1-01-b must migrate scoped producers/failures and consumers, establish known authorized source identities and semantic metadata, and verify immediate/persisted compatibility in both channels. All producer outputs still use legacy shapes; typed metadata is currently added only at the truncated-summary boundary. Existing summary threshold is not a hard output-size cap. Existing stored history is not rewritten. See EVIDENCE.md for explicit limits.
 - Next: P1-01-b — scoped evidence producers and consumers. First action: `rg -n "finish|_evidencia|toolResultOk|evidenciaPartosSuficiente" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`. Read EVIDENCE.md before migration. Continue explicitly synthetic controls while private adjudication is blocked.
 - Production state: local branch implementation only; no paid provider calls, production data reads/writes, deployment, migration, telemetry, worker, paid schedule or rollout. User instruction preserves production approval gates despite the general repository redeploy convention.
+
+
+### Session: P1-01-b scoped producers and consumers, 2026-10-28 America/New_York
+
+- Task: P1-01-b and P1-01 parent complete locally on the integration branch (3/25 parent tasks complete).
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: pending.
+- Start: clean branch at handoff `9a31c17`; continued in this chat. Ran requested producer/consumer search and reviewed current contract/state. Root and applicable repository instructions, session protocol and decision gates remain in force; no new AGENTS.md or owner decision applies.
+- Changed: `escoConsultas.finish` emits typed metadata alongside legacy output for every consultation. `get_hato_partos`/`get_hato_animales` bind delivered-page primary rows/animal IDs, Bogotá calendar, count units and retrieval timestamps. Other consultation tools keep conservative generic metadata. `executeTool` adapts legacy `get_*` results and caught failures. `leerEvidencia` rejects invalid versions/shapes/completeness instead of falling back to legacy success; event status and birth guard consume it. Truncation preserves validated producer metadata while remaining incomplete. Both edge trees synchronized. EVIDENCE.md records scoped semantics, reference limits, channel compatibility and deferred tools. Calendar constant moved into the shared envelope module; the local-date guard records this relocation, not a new time conversion.
+- Verification: `npm run eval:esco:check` passed (122 passed / 2 private-data skips), including Web/Telegram persisted-context format tests. Focused domain suite (`escoEvidencia`, `escoConsultas`, `escoToolLoopEvidencia`, `arbolEdgeFunctionParidad`, `escoHerramientas`, `hatoFechaLocalGuard`, `escoChatPropiedadConversacion`) passed 191 tests. Additional existing compatibility suite (`esco-improvements`, `esco108112Guard`, `esco-evals`) passed 129 tests. `npm run typecheck` passed. `npm run lint` passed (0 errors / 910 existing warnings); final changed-file ESLint also passed. `EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-p1-01-b npm run eval:esco` passed all 14 synthetic controls. Ran `python scripts/sync-esco-consultas.py`; parity passed. `git diff --check` passed. Logs `/tmp/esco-p1b-{types,lint,lint-focused,check,domain,compat,frozen}.log` and frozen artifacts are temporary. Mobile smoke is inapplicable: no UI changes.
+- Findings: direct production-loop mocks prove immediate/persisted typed identity preservation and unavailable error/event status. Synthetic references originate only in returned primary rows, never caller-supplied source lists. Complete retrieval with paginated detail stays partial; the narrow birth guard still permits aggregate retrieval without claiming a complete list. Stale/invalid/context-truncated results cannot satisfy it. Context-format tests cover both channel formats, not live Telegram delivery or full HTTP persistence.
+- Decisions: none resolved. D01/P0-02 remain blocked by missing approved private evidence and attributed adjudication. No paid model campaign or historical label change occurred. Existing authorized query boundaries remain responsible for row access; envelopes grant no capability or new read endpoint.
+- Remaining: none for P1-01's first scoped migration. Additional domain-specific metadata/freshness/reference migration remains in P2; numeric/reference claim validation in P1-03; scope-aware multi-turn state in P1-04; controlled database/access integration in P3-02. Generic adapters cannot prove observation coverage or aggregate provenance. Large summaries remain a trigger-based truncation policy, not a hard storage bound. Old persisted history is not rewritten.
+- Next: P1-02 — bound the tool loop and route commands. First action: `rg -n "maxRounds|llamadas|tool_choice|fnArgs|toolTransport" src/supabase/functions/server/chat.tsx`. Use explicitly synthetic controls while P0-02 remains blocked.
+- Production state: local implementation only; no paid provider calls, production reads/writes, deployment, migration, telemetry activation, worker, paid schedule or rollout. All production approval gates retained.
