@@ -16,6 +16,8 @@ import {
 } from '../../../src/utils/escoEvals/mensajes';
 import type { CasoDorado, CorridaEjecutada, HerramientaLlamada, TurnoEjecutado } from '../../../src/utils/escoEvals/tipos';
 
+import type { AdaptadorFixtures } from './fixtures';
+
 interface EventoHerramienta {
   type: string;
   tool?: string;
@@ -29,6 +31,7 @@ interface ModuloEsco {
     mensajes: MensajeLlm[],
     userId?: string,
     onEvent?: (e: EventoHerramienta) => void,
+    toolTransport?: (name: string, args: Record<string, unknown>) => Promise<string>,
   ) => Promise<{ text: string; toolInteractions: { tool: string; args: Record<string, unknown>; result_summary: string }[] }>;
   getSystemPrompt: (memorias?: unknown[]) => string;
 }
@@ -38,6 +41,7 @@ const USUARIO_EVAL = '00000000-0000-0000-0000-00000000e5c0';
 
 export interface GuardasInstaladas {
   erroresReplay?: string[];
+  fixtures?: AdaptadorFixtures;
   escrituras: string[];
   tokens: { entrada: number; salida: number };
   restaurar: () => void;
@@ -47,6 +51,7 @@ export interface GuardasInstaladas {
  * A failed lookup is sticky because production tools can catch fetch exceptions.
  */
 export interface TransporteCongelado {
+  fixtures?: AdaptadorFixtures;
   modelo: typeof fetch;
   lectura: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   errores: string[];
@@ -54,7 +59,7 @@ export interface TransporteCongelado {
 
 export function instalarGuardas(env: { supabaseUrl: string; verboso: boolean; replay?: TransporteCongelado }): GuardasInstaladas {
   const fetchReal = globalThis.fetch.bind(globalThis);
-  const estado: GuardasInstaladas = { erroresReplay: env.replay?.errores, escrituras: [], tokens: { entrada: 0, salida: 0 }, restaurar: () => undefined };
+  const estado: GuardasInstaladas = { erroresReplay: env.replay?.errores, fixtures: env.replay?.fixtures, escrituras: [], tokens: { entrada: 0, salida: 0 }, restaurar: () => undefined };
 
   const guardado: typeof fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -156,6 +161,8 @@ export async function correrCaso(
     vi.setSystemTime(new Date(asOf));
   }
   try {
+    if (guardas.erroresReplay && !asOf) throw new Error('Frozen replay requires a controlled date');
+    guardas.fixtures?.iniciarCaso(caso.id);
     const esco = await cargarEsco();
     const preguntas = [pregunta, ...(conSeguimientos ? caso.followup_turns.map((f) => f.user) : [])];
     let mensajes: MensajeLlm[] = [];
@@ -168,6 +175,7 @@ export async function correrCaso(
         ? mensajesIniciales(caso, base, p)
         : mensajesParaSiguienteTurno(mensajes, anterior!.respuesta, anterior!.herramientas, p, caso.channel);
 
+      guardas.fixtures?.iniciarTurno(i);
       const eventos: EventoHerramienta[] = [];
       const inicios = new Map<number, number>();
       const t0 = performance.now();
@@ -175,7 +183,8 @@ export async function correrCaso(
         if (e.type === 'tool_start' && e.index !== undefined) inicios.set(e.index, performance.now());
         const inicio = e.index === undefined ? undefined : inicios.get(e.index);
         eventos.push(e.type === 'tool_done' && inicio !== undefined ? { ...e, ms: performance.now() - inicio } : e);
-      });
+      }, guardas.fixtures?.ejecutar);
+      guardas.fixtures?.verificarFin();
       if ((guardas.erroresReplay?.length ?? 0) > erroresReplayAntes) {
         throw new Error('Frozen replay invalid: blocked or unmatched transport request');
       }
@@ -184,13 +193,13 @@ export async function correrCaso(
       anterior = { respuesta: text, herramientas };
     }
     return {
-      modo: 'live', asOf, turnos,
+      modo: guardas.erroresReplay ? 'frozen' : 'live', asOf, turnos,
       tokens: { entrada: guardas.tokens.entrada - tokensAntes.entrada, salida: guardas.tokens.salida - tokensAntes.salida },
       escriturasBloqueadas: guardas.escrituras.slice(escriturasAntes),
     };
   } catch (err) {
     return {
-      modo: 'live', asOf, turnos,
+      modo: guardas.erroresReplay ? 'frozen' : 'live', asOf, turnos,
       escriturasBloqueadas: guardas.escrituras.slice(escriturasAntes),
       tokens: { entrada: guardas.tokens.entrada - tokensAntes.entrada, salida: guardas.tokens.salida - tokensAntes.salida },
       error: err instanceof Error ? err.message : String(err),

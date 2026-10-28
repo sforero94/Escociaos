@@ -14,7 +14,7 @@ export default defineConfig(() => {
   const env = loadEnv('eval', process.cwd(), '');
   return {
     test: {
-      include: ['evals/esco/**/*.eval.ts'],
+      include: [env.EVAL_MODO === 'frozen' ? 'evals/esco/frozen.eval.ts' : 'evals/esco/run.eval.ts'],
       environment: 'node',
       env,
       // Una corrida de Esco hace hasta 3 rondas de LLM más el juez.

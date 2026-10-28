@@ -3850,6 +3850,8 @@ export async function llmToolLoop(
   messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>,
   userId?: string,
   onEvent?: (event: ToolLoopEvent) => void,
+  // In-process evaluation only. HTTP callers cannot select this transport.
+  toolTransport?: (name: string, args: Record<string, unknown>) => Promise<string>,
 ): Promise<{ text: string; toolInteractions: ToolInteraction[] }> {
   const headers = getOpenRouterHeaders();
   const tools = getToolsForAPI();
@@ -3925,7 +3927,7 @@ export async function llmToolLoop(
         const claveLlamada = `${fnName}:${JSON.stringify(fnArgs)}`;
         const toolResult = llamadas.has(claveLlamada)
           ? JSON.stringify({ error: 'Consulta idéntica ya realizada. Usa el resultado previo o cambia criterio con fundamento; no inventes variantes de nombres.' })
-          : await executeTool(fnName, fnArgs, userId);
+          : await (toolTransport ? toolTransport(fnName, fnArgs) : executeTool(fnName, fnArgs, userId));
         llamadas.add(claveLlamada);
 
         onEvent?.({

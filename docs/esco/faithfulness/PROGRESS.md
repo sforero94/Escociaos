@@ -4,10 +4,10 @@
 
 - Integration branch: `codex/esco-faithfulness-plan`.
 - Original code base: `14271f1`. Evaluation prerequisite commit: `027a162`.
-- Plan bootstrap: complete. Product implementation: **1/25 tasks complete**.
-- Active implementation task: P0-03 parent in progress; P0-03-a complete locally.
-- **Next task: P0-03-b — tool fixture adapter and scenario pack. P0-02 is blocked.**
-- First action: `rg -n "executeTool|correrCaso|instalarGuardas" src/supabase/functions/server/chat.tsx evals/esco/lib/ejecutor.ts`; design tool-boundary injection and scenario/turn matching.
+- Plan bootstrap: complete. Product implementation: **2/25 tasks complete**.
+- Latest implementation: P0-03 complete on the integration branch; both replay slices verified locally.
+- **Next task: P1-01 — typed evidence envelopes. P0-02 remains blocked by missing approved private evidence and D01 adjudication.**
+- First action: `rg -n "_evidencia|resumirContexto|toolResultOk" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`; inventory current evidence and summary contracts before defining compatible envelopes.
 - Next useful milestone: checkpoint A, then complete animal-sales evidence and deterministic totals before building online infrastructure.
 - Production state: no deployment, migration, telemetry activation, worker, schedule, feedback UI, or canary performed by this plan bootstrap.
 - Private data: absent from this independent checkout. It is present only in the originating workspace; see BASELINE.md. Two private-dataset tests skip here.
@@ -22,8 +22,8 @@ Update this table and the current-state block in the same session. Add implement
 | S00 | done | Existing evaluation work | `027a162`: preserved prior judge safeguards; 91 passed, 2 private-dataset tests skipped; lint 0 errors |
 | P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
 | P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v1 prepared; private records/labels absent; D01 unresolved |
-| P0-03 | in_progress | P0-01; P0-02 for disputed seeds | `48141b0`: P0-03-a closed HTTP foundation complete; P0-03-b ready: tool matching, 12–15 scenarios, manifests and frozen CLI remain |
-| P1-01 | todo | P0-03 | Evidence envelopes and compatible adapters |
+| P0-03 | done | P0-01; P0-02 for disputed seeds | `48141b0` foundation + P0-03-b implementation recorded below: tool boundary, 14 synthetic scenarios, manifests, frozen CLI and isolation checks; historical disputed snapshots remain gated |
+| P1-01 | ready | P0-03 | Evidence envelopes and compatible adapters; start with current `_evidencia`/summary/error inventory |
 | P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
 | P1-03 | todo | P1-01, P1-02 | Structured facts and prepublication checks |
 | P1-04 | todo | P1-01, P1-03 | Scope-aware facts across turns |
@@ -51,7 +51,7 @@ Update this table and the current-state block in the same session. Add implement
 | Checkpoint | State | Evidence |
 |---|---|---|
 | Planning bootstrap | complete | PLAN/SESSION/BASELINE/DECISIONS documents and task tracker committed on integration branch |
-| A: reliable measurement | in progress | P0-01 complete; adjudication and frozen fixtures remain |
+| A: reliable measurement | in progress | P0-01/P0-03 complete locally; P0-02 adjudication remains blocked |
 | B: offline candidate | not started | Requires P1–P3 tasks and agreed release gates |
 | C: online observation | not started | Requires P4–P5 and activation decisions |
 | D: production decision | not started | Requires P6 pilot and owner promotion decision |
@@ -93,3 +93,17 @@ Update this table and the current-state block in the same session. Add implement
 - Remaining: P0-02 requires authorized private evidence and attributed D01 decisions; paid calibration also requires budget. P0-03-b retains all unmet parent criteria: tool/argument/scenario/turn keys, fixture pack/manifests, multi-turn isolation and real-model frozen command. Current runtime results still use legacy `live` labeling; no CLI exposes this foundation yet. Mocked outputs establish transport behavior only.
 - Next: P0-03-b; first run `rg -n "executeTool|correrCaso|instalarGuardas" src/supabase/functions/server/chat.tsx evals/esco/lib/ejecutor.ts`. Continue synthetic controls while private adjudication remains blocked.
 - Production state: local harness/documentation only; no provider calls, production reads/writes, deployments, migrations, telemetry, schedules or rollout. All approval gates retained.
+
+
+### Session: P0-03-b tool fixtures and scenario pack, 2026-10-28 America/New_York
+
+- Task: P0-03-b and P0-03 parent complete locally on the integration branch.
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: pending (recorded by follow-up handoff commit).
+- Start: clean branch at requested handoff `ff017e2`. Initial requested `rg` ran from `/workspace` before the checkout was located; reran in `/workspace/Escociaos`, then checked out the requested branch and inspected both files. No applicable AGENTS.md found. Original `work` branch preserved.
+- Changed: optional in-process tool transport in `llmToolLoop` (both edge trees); adapter keyed by scenario/turn/tool/canonical arguments; strict unknown/exhausted/unused-fixture failures; independent state and controlled date; frozen result labels. Added 14 explicitly synthetic scenarios and SHA-256/version/review manifest, seed map and limitations. Added separate mock/real frozen entrypoint with per-scenario metadata/results and documented repeatable commands. Existing production defaults and duplicate handling remain intact.
+- Verification: `npm run eval:esco:check` passed (120 passed / 2 private-data skips); `npm run lint` passed (0 errors / 910 existing warnings); `npm run typecheck` passed. `EVAL_MODO=frozen EVAL_SALIDA=/tmp/esco-frozen-synthetic npm run eval:esco` passed all 14 controls. Focused `escoToolLoopEvidencia`, `escoConsultas`, `arbolEdgeFunctionParidad`, and `escoHerramientas` tests passed 156 checks. Ran `python scripts/sync-esco-consultas.py`; both edge trees match. `git diff --check` passed. Temporary logs: `/tmp/esco-{check,lint,types,frozen,domain}.log`; synthetic CLI artifacts: `/tmp/esco-frozen-synthetic/`. Mobile smoke not applicable: no UI changes.
+- Findings: the original synthetic SYN-07 wording triggered the existing birth-query guard. Changed the synthetic question to request the animal ficha/last check; kept the production guard unchanged. Exact fixture payload delivery, duplicate refusal, prior-turn context, changed entity/evidence, unmatched tool failure, hash tampering, canonical keys and independent scenario state are verified. Mock outputs measure transport/context behavior only.
+- Decisions: none resolved. D01 remains open; mapping synthetic controls to disputed 040 is not adjudication. Simplified/extended control payloads do not claim current retrieval correctness or reviewed historical truth. P0-02 still requires approved private evidence, attributed decisions and an authorized calibration budget. The real-model command is documented, not executed; no paid calls occurred.
+- Remaining: none for P0-03's local synthetic replay acceptance. Approved historical fixtures, real-model semantic scoring and retrieval integration remain explicit gaps for their dependent tasks. Checkpoint A remains blocked on P0-02.
+- Next: P1-01 — typed evidence envelopes. First action: `rg -n "_evidencia|resumirContexto|toolResultOk" src/utils/escoConsultas.ts src/supabase/functions/server/chat.tsx`. Continue synthetic controls while P0-02 is blocked.
+- Production state: local code and harness only; no deployment, production reads/writes, migration, telemetry, worker, schedule or rollout. User instruction preserves production approval gates; plan inclusion and the repository's general redeploy convention do not authorize activation of this incomplete program.

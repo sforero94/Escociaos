@@ -87,7 +87,7 @@ export interface TurnoEjecutado {
 }
 
 export interface CorridaEjecutada {
-  modo: 'live' | 'originales';
+  modo: 'live' | 'originales' | 'frozen';
   /** Fecha/hora fijada para la corrida (ISO UTC) o null si corrió con la hora real. */
   asOf: string | null;
   turnos: TurnoEjecutado[];

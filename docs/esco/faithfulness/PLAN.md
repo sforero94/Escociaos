@@ -43,7 +43,7 @@ One task is one intended session, not a promise that every task fits every conte
 - **P0-03-a — closed HTTP transport foundation:** independent model/read adapters,
   network-denial controls, sticky invalid-run diagnostics and production-loop
   runtime verification. Complete locally; see PROGRESS.md for commit evidence.
-- **P0-03-b — tool fixture adapter and scenario pack:** next ready slice. First
+- **P0-03-b — tool fixture adapter and scenario pack:** implemented locally; see PROGRESS.md. First
   inspect `executeTool` and `correrCaso` for a tool-boundary injection that keeps
   production defaults intact. Add canonical argument/scenario/turn matching,
   12–15 synthetic cases, version/hash/review manifests, controlled multi-turn
@@ -51,7 +51,7 @@ One task is one intended session, not a promise that every task fits every conte
 
 Split because the transport safety boundary can be verified independently while
 fixture provenance and tool-boundary matching require a separate reviewable slice.
-All original P0-03 acceptance criteria remain required; P0-03 stays in progress.
+All original P0-03 acceptance criteria remain required; local completion evidence is recorded in PROGRESS.md.
 Disputed historical fixtures remain blocked on P0-02/D01.
 
 ## Phase 1 — evidence and execution controls
