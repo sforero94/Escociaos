@@ -2,7 +2,7 @@
 
 ## Current state — current-main integration, 2026-10-28 UTC
 
-- Active slice: **I01 — offline numeric/date anchor helpers**, `codex/esco-faithfulness-eval-anchors`; pending draft review. Stop after this slice. P1-02 is not authorized in this continuation.
+- Active slice: **I01 — offline numeric/date anchor helpers**, `codex/esco-faithfulness-eval-anchors`; PR publication blocked by automatic review; local review text in [PR_DRAFT.md](PR_DRAFT.md). Stop after this slice. P1-02 is not authorized in this continuation.
 - Baseline: current main `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356, alert attribution/confirmation); preserved source `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`. Reverified remote heads; source is 18 ahead / 37 behind main.
 - This fresh branch imports only the existing pure `numeros.ts` helper and its synthetic tests, plus this tracker and integration notes. No source-branch merge or whole-commit cherry-pick. See [INTEGRATION.md](INTEGRATION.md) for slice dependencies and release checks.
 - The task table and session history below describe **source-branch implementation**, not code integrated into main or deployed. The remaining planning documents stay on the [pinned source branch](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness); do not infer their runtime exists here.
@@ -155,11 +155,11 @@ Update this table and the current-state block in the same session. Add implement
 ### Session: I01 current-main integration, 2026-10-28 UTC
 
 - Task: I01 only; independent non-production extraction. Draft review pending, not integrated.
-- Branch: `codex/esco-faithfulness-eval-anchors`; implementation commit: this session commit (see draft PR head).
+- Branch: `codex/esco-faithfulness-eval-anchors`; implementation commit: `16e95e342620b7412d6614493c9e66ddc00c8f6a`.
 - Start: source `3d3e65454d8d2f78971593f1fe90a0514ce22301`; baseline `ad5455ffa371d847191f92c7f7dbdc3404628046`. Clean new worktree; original checkout and source branch preserved.
 - Changed: byte-identical numeric/date anchor helper and its 13 synthetic tests, evaluator check command, docs index, this preserved tracker and INTEGRATION.md. Runtime/evidence changes remain on source.
-- Verification before commit: evaluator check (types/lint/13 tests) passed; repository lint zero errors / 907 baseline warnings; build passed; alert/F1/edge parity 232 tests passed; zero skips; diff whitespace and source-byte equality passed. Final-commit results belong in the draft PR. Temporary logs `/tmp/esco-i01-*.log`.
+- Verification before commit: evaluator check (types/lint/13 tests) passed; repository lint zero errors / 907 baseline warnings; build passed; alert/F1/edge parity 232 tests passed; zero skips; diff whitespace and source-byte equality passed. Implementation-commit checks also passed: evaluator 13 tests; full suite 212 files / 4,678 tests / zero skips; types/lint/build passed. See INTEGRATION.md. Temporary logs `/tmp/esco-i01-*.log`.
 - Decisions: no new owner decision. Existing D01 retained; private disclosure rejection respected. No private JSONL or paid calls.
-- Remaining: parent review, final-commit checks/CI and merge decision; subsequent integration slices require a new scope. No claim of deployed model improvement or live QA.
-- Next: parent review I01; first action `git fetch origin main` and inspect this draft's head/checks. If merged, propose I02 offline scoring scope from the pinned source. Do not start P1-02 or I02 in this continuation.
+- Remaining: automatic review denied draft PR creation for missing explicit publication authorization; branch push succeeded, no PR created. Proposed PR text saved in PR_DRAFT.md. Parent review, CI and merge decision; subsequent integration slices require a new scope. No claim of deployed model improvement or live QA.
+- Next: parent review I01; first action `git fetch origin main` and review PR_DRAFT.md plus this branch's head/checks. If merged, propose I02 offline scoring scope from the pinned source. Do not start P1-02 or I02 in this continuation.
 - Production state: no deployment, migration or activation. PR #356 describes 186/deployment as pending; no live-ledger verification attempted.

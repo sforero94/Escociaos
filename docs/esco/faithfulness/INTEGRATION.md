@@ -50,12 +50,28 @@ Candidate-tree checks before commit:
 - Focused alert/F1/parity regression: 6 files, 232 tests passed, zero skips (`hatoAlertaRespuesta355`, `hatoAlertas`, `eliminarCompraConReversion`, `movimientoInventarioResponsable`, `productoStockSinMovimiento`, `arbolEdgeFunctionParidad`).
 - `git diff --check`: passed. The two imported code/test files match the pinned source.
 
-Final-commit checks and CI are reported in the draft PR; do not infer them from
-these precommit results. Local logs: `/tmp/esco-i01-{check,lint,build,regression}.log`
+Implementation commit `16e95e342620b7412d6614493c9e66ddc00c8f6a` passed:
+`npm run eval:esco:check` (13 tests, types and focused lint), `npm run lint`
+(zero errors / 907 warnings), `npm run build`, and `npm test` (212 files,
+4,678 tests, zero skips). `git diff --check HEAD^ HEAD` passed.
+Logs: `/tmp/esco-i01-final-{check,lint,build,suite}.log`.
+
+The fresh branch push succeeded. **Draft PR creation was denied by automatic
+approval review**, which requires explicit user authorization to publish/open
+this PR as an external repository commitment and disclosure. No PR number exists;
+GitHub PR search returned no match and #357 returned 404 before the confirmed
+rejection. CLI GitHub API reads also returned Forbidden; connector reads worked.
+No workaround or further creation attempt will occur. CI for this head has no
+PR workflow runs. The proposed PR text is saved in `PR_DRAFT.md`; parent review
+and explicit publication authorization are the remaining blocker.
+
+This follow-up handoff changes documentation only. Code and tests remain
+byte-identical to the verified implementation commit. Final handoff checks are
+reported to the parent separately; no unrun check is marked passed here. Local logs: `/tmp/esco-i01-{check,lint,build,regression}.log`
 (temporary, no private data). Installed dependencies are reused through a local,
 ignored `node_modules` symlink; no dependencies or lockfile changed.
 
-Recommend merging only I01 after final-commit verification and parent review.
+Recommend publishing and merging only I01 after explicit PR publication authorization, CI and parent review.
 Rollback is a normal revert of this PR; no schema, stored history, traffic or
 backend deployment rollback is needed. Desktop/mobile and live Web/Telegram QA
 are not exercised by this pure helper slice. Before any future runtime release,
