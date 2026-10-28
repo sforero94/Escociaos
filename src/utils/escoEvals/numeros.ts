@@ -57,7 +57,7 @@ function valoresDeToken(token: string): number[] {
 export function extraerNumeros(texto: string): number[] {
   const encontrados = new Set<number>();
   // Un número (con separadores) seguido de un posible multiplicador: "M" / "millones" / "mil".
-  const re = /(?<![\d\w])([-−]?\d[\d.,]*)(\s?(?:millones|M\b|mil\b))?/g;
+  const re = /(?<![\d\w])([-−]?\$?\d[\d.,]*)(\s?(?:millones|M\b|mil\b))?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(texto)) !== null) {
     const token = m[1].replace(/[.,]+$/, '');
@@ -109,7 +109,7 @@ export function fechaPresente(iso: string, texto: string): boolean {
     for (const patron of [antes, despues]) {
       for (const match of t.matchAll(patron)) {
         const resto = t.slice(match.index + match[0].length);
-        const explicito = /^[.,]?\s*(?:de(?:l)?\s+)?(\d{4})\b/.exec(resto);
+        const explicito = /^[.,]?\s*(?:-\s*|de(?:l)?\s+)?(\d{4})\b/.exec(resto);
         if (!explicito || Number(explicito[1]) === anio) return true;
       }
     }

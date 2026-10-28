@@ -41,6 +41,23 @@ describe('extraerNumeros', () => {
     expect(extraerNumeros('Saldo -87,25; diferencia −12.5')).toEqual([-87.25, -12.5]);
     expect(numeroCerca(87.25, 0, extraerNumeros('-87.25'))).toBe(false);
   });
+
+  it('preserva el signo antes o después del símbolo monetario', () => {
+    for (const texto of ['-$87,25', '−$87,25', '$-87,25', '$−87,25']) {
+      const numeros = extraerNumeros(texto);
+      expect(numeros).toEqual([-87.25]);
+      expect(numeroCerca(-87.25, 0, numeros)).toBe(true);
+      expect(numeroCerca(87.25, 0, numeros)).toBe(false);
+    }
+    for (const texto of ['$87,25', '+$87,25', '$+87,25']) {
+      const numeros = extraerNumeros(texto);
+      expect(numeros).toEqual([87.25]);
+      expect(numeroCerca(87.25, 0, numeros)).toBe(true);
+      expect(numeroCerca(-87.25, 0, numeros)).toBe(false);
+    }
+    expect(extraerNumeros('-$1.234,56')).toEqual([-1234.56]);
+    expect(extraerNumeros('-$2,5M')).toEqual([-2500000]);
+  });
 });
 
 describe('numeroCerca', () => {
@@ -75,6 +92,16 @@ describe('fechaPresente', () => {
     for (const texto of ['12 de agosto de 2025', 'Agosto 12, 2025', '12/08/2025', '2025-08-12']) {
       expect(fechaPresente('2026-08-12', texto)).toBe(false);
     }
+  });
+
+  it('exige el año explícito en fechas escritas con guion', () => {
+    for (const texto of ['12-ago-2026', '12-agosto-2026', '12-ago.-2026', 'Agosto 12-2026']) {
+      expect(fechaPresente('2026-08-12', texto)).toBe(true);
+    }
+    for (const texto of ['12-ago-2025', '12-agosto-2025', '12-ago.-2025', 'Agosto 12-2025']) {
+      expect(fechaPresente('2026-08-12', texto)).toBe(false);
+    }
+    expect(fechaPresente('2026-08-12', '12-ago')).toBe(true);
   });
 
   it('does not reinterpret the suffix of an ISO date as day/month', () => {

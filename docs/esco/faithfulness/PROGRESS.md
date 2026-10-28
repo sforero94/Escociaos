@@ -2,6 +2,7 @@
 
 ## Current state — current-main integration, 2026-10-28 UTC
 
+- Review correction: two reproduced parsing defects fixed; 15 focused synthetic tests passed before commit. Final-head checks are reported in the continuation response. Publication authorization remains pending.
 - Active slice: **I01 — offline numeric/date anchor helpers**, `codex/esco-faithfulness-eval-anchors`; PR publication blocked by automatic review; local review text in [PR_DRAFT.md](PR_DRAFT.md). Stop after this slice. P1-02 is not authorized in this continuation.
 - Baseline: current main `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356, alert attribution/confirmation); preserved source `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`. Reverified remote heads; source is 18 ahead / 37 behind main.
 - This fresh branch imports only the existing pure `numeros.ts` helper and its synthetic tests, plus this tracker and integration notes. No source-branch merge or whole-commit cherry-pick. See [INTEGRATION.md](INTEGRATION.md) for slice dependencies and release checks.
@@ -163,3 +164,13 @@ Update this table and the current-state block in the same session. Add implement
 - Remaining: automatic review denied draft PR creation for missing explicit publication authorization; branch push succeeded, no PR created. Proposed PR text saved in PR_DRAFT.md. Parent review, CI and merge decision; subsequent integration slices require a new scope. No claim of deployed model improvement or live QA.
 - Next: parent review I01; first action `git fetch origin main` and review PR_DRAFT.md plus this branch's head/checks. If merged, propose I02 offline scoring scope from the pinned source. Do not start P1-02 or I02 in this continuation.
 - Production state: no deployment, migration or activation. PR #356 describes 186/deployment as pending; no live-ledger verification attempted.
+
+
+### Session: I01 independent review corrections, 2026-10-28 UTC
+
+- Task/branch: I01 only, `codex/esco-faithfulness-eval-anchors`; starting head `f7ad0dae0df236771ddd7e18767f0e5343e0f8c5`.
+- Reproduced: `-$87,25` lost the negative sign; `12-ago-2025` matched a 2026 anchor. Added tests first: 2 failed / 13 passed.
+- Changed: preserve minus before a dollar symbol; recognize a hyphen before an explicit four-digit written year. Add correct/opposite-sign and correct/different-year controls, including Unicode minus, suffixes and abbreviated/full month variants.
+- Verification before commit: 15 focused synthetic tests passed; final-head checks run after commit and reported to parent. Current helper/test intentionally differ from the pinned source after these reviewed fixes. INTEGRATION.md records remaining parser limits.
+- Remaining: explicit authorization to publish the draft PR, then CI and parent merge review. PR creation was not retried. P1-02 and next slice remain unstarted.
+- Production: unchanged; no private dataset, provider calls, runtime edits, migration or deployment.

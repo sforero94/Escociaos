@@ -11,8 +11,10 @@ and source branch remain unchanged. No applicable checkout `AGENTS.md` or
 protocol were read. This explicit current-main extraction supersedes the source
 README's default instruction to continue on the accumulated planning branch.
 
-I01 copies `src/utils/escoEvals/numeros.ts` and
-`src/__tests__/escoEvalsNumeros.test.ts` byte-for-byte from that source. It makes
+I01 initially copied `src/utils/escoEvals/numeros.ts` and
+`src/__tests__/escoEvalsNumeros.test.ts` byte-for-byte from that source. Independent
+review then found two defects; the bounded corrections below supersede that
+byte-equality claim for the current head. I01 makes
 numeric/date anchor matching independently reviewable before the remaining
 scoring stack. It handles Colombian separators, ambiguous numeric candidates,
 million suffixes, negative balances, tolerances and Spanish date forms. These
@@ -89,3 +91,32 @@ D01 remains resolved. P0-02 calibration is blocked by the rejected private-paylo
 disclosure to OpenRouter. The $1 cap alone does not authorize disclosure. No
 private JSONL is retrieved/read/transmitted, and no paid provider is called.
 Security PR #324, medium security fixes, credentials and access are outside scope.
+
+
+## Independent review corrections — I01 only
+
+Both reported defects reproduced with synthetic regressions before changing code:
+`extraerNumeros('-$87,25')` returned positive 87.25, and
+`fechaPresente('2026-08-12', '12-ago-2025')` returned true. The reproduction run
+had 2 failures / 13 passes (`/tmp/esco-i01-review-repro.log`).
+
+The numeric token now includes a dollar symbol after a preceding minus, so the
+existing sign parser retains it. Tests cover ASCII/Unicode minus before/after
+currency, positive currency (including plus), opposite-sign rejection, Colombian
+thousands/decimals and million suffixes. The written-date year guard now accepts
+a hyphen before the four-digit year, including an abbreviated month with a period.
+Tests require the correct year and reject a different year for abbreviated/full
+months and month-first dates. Dates without a year retain their prior behavior.
+All 15 focused tests passed after the fix (`/tmp/esco-i01-review-focused.log`).
+
+Scope limits remain: `1.234` can mean 1234 or 1.234; either candidate is emitted.
+This is permissive token matching, not a general currency-expression parser or
+calendar validator. These corrections cover adjacent currency/sign forms and
+four-digit written years; they do not establish support for accounting parentheses,
+spaced negative currency signs or two-digit written years. A mismatched explicit
+four-digit year and an opposite-sign numeric anchor are rejected by these tests.
+
+Only helper/tests and review notes changed. Final-head checks are reported to
+the parent after commit; prior verification totals above remain historical.
+PR publication remains denied/pending explicit authorization. No retry, runtime
+change, private data, paid provider call, migration, deployment or next slice.
