@@ -1,0 +1,75 @@
+# Faithfulness integration — I01
+
+## Candidate and provenance
+
+Baseline main: `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356).
+Preserved source: `codex/esco-faithfulness-plan` at
+`3d3e65454d8d2f78971593f1fe90a0514ce22301` (18 ahead, 37 behind main).
+Both remote heads were reverified on 2026-10-28 UTC. The original `work` checkout
+and source branch remain unchanged. No applicable checkout `AGENTS.md` or
+`.agents/skills` exists in either tree; root `CLAUDE.md` and the source planning
+protocol were read. This explicit current-main extraction supersedes the source
+README's default instruction to continue on the accumulated planning branch.
+
+I01 copies `src/utils/escoEvals/numeros.ts` and
+`src/__tests__/escoEvalsNumeros.test.ts` byte-for-byte from that source. It makes
+numeric/date anchor matching independently reviewable before the remaining
+scoring stack. It handles Colombian separators, ambiguous numeric candidates,
+million suffixes, negative balances, tolerances and Spanish date forms. These
+are **permissive token-presence helpers**, not proof of claim support, scope,
+retrieval correctness, valid calendar dates or model quality. No production
+module imports the helper. No HTTP, database, provider or edge dependency exists.
+
+`npm run eval:esco:check` runs repository types, evaluator lint and the imported
+synthetic tests. This slice has no `eval:esco` runner, fixture replay or semantic
+judge. Do not run commands described only in the source-branch historical record.
+
+## Integration sequence — proposals, not authorization to continue
+
+| Slice | Contents from preserved source | Dependencies / review boundary |
+|---|---|---|
+| I01 (this draft) | Numeric/date helper, 13 synthetic tests, check command, tracker | Independent of runtime and private data; stop for parent review |
+| I02 (next scope proposal) | Remaining `src/utils/escoEvals/` scoring/measurement/report modules and matching pure tests | Reconcile against merged I01; preserve judge/parser safeguards and owner adjudication; separate private-data skips |
+| I03 (later) | `evals/esco/` transports, runner, fixture pack/config and harness docs | I02; replay CLI tests additionally need I04's optional loop transport. Split pure adapter tests from production-loop tests rather than importing a broken runner |
+| I04 (later runtime candidate) | Canonical `escoConsultas.ts`, `escoEvidencia.ts`, `chat.tsx`, sync script, corresponding edge copies and runtime tests | Reconcile on then-current main; separate transport injection from evidence producer/consumer changes where independently testable. Preserve alert #356 and inventory F1 changes. Synchronize both edge trees; deployment remains gated |
+| P1-02 | Bounded loop and command routing | Not implemented or started by this continuation; review after required evidence/runtime integration |
+
+The source `hatoFechaLocalGuard.test.ts` allow-list change belongs with its
+associated evaluator files, not a general relaxation on main. Do not merge the
+entire planning branch or cherry-pick the combined merge commits. Inspect each
+slice's imports and tests before choosing its final size. Existing contracts and
+history remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+
+## Validation and merge decision
+
+Candidate-tree checks before commit:
+
+- `npm run eval:esco:check`: passed; 13 synthetic tests, zero skips; includes `tsc --noEmit` and focused ESLint.
+- `npm run lint`: passed; zero errors, 907 warnings in unchanged baseline files. Focused evaluator lint has no findings. Node also warns that the existing ESLint config has no package module type.
+- `npm run build`: passed; Vite 6.3.5, 17.97 seconds.
+- Focused alert/F1/parity regression: 6 files, 232 tests passed, zero skips (`hatoAlertaRespuesta355`, `hatoAlertas`, `eliminarCompraConReversion`, `movimientoInventarioResponsable`, `productoStockSinMovimiento`, `arbolEdgeFunctionParidad`).
+- `git diff --check`: passed. The two imported code/test files match the pinned source.
+
+Final-commit checks and CI are reported in the draft PR; do not infer them from
+these precommit results. Local logs: `/tmp/esco-i01-{check,lint,build,regression}.log`
+(temporary, no private data). Installed dependencies are reused through a local,
+ignored `node_modules` symlink; no dependencies or lockfile changed.
+
+Recommend merging only I01 after final-commit verification and parent review.
+Rollback is a normal revert of this PR; no schema, stored history, traffic or
+backend deployment rollback is needed. Desktop/mobile and live Web/Telegram QA
+are not exercised by this pure helper slice. Before any future runtime release,
+test Web and Telegram history/evidence handling and the preserved alert/F1 flows
+in an authorized environment; do not claim these unit tests are live QA.
+
+## Gates and production state
+
+PR #356 is merged. Its fetched description reports migration 186 **not applied**
+and edge deployment pending. No live database ledger was queried here; no claim
+that the alert backend is live. This draft changes neither edge tree and needs no
+edge deployment. No migration, deployment, telemetry, schedule, pilot or canary.
+
+D01 remains resolved. P0-02 calibration is blocked by the rejected private-payload
+disclosure to OpenRouter. The $1 cap alone does not authorize disclosure. No
+private JSONL is retrieved/read/transmitted, and no paid provider is called.
+Security PR #324, medium security fixes, credentials and access are outside scope.
