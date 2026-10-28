@@ -1,48 +1,38 @@
-# Proposed draft PR — I01 only
+# Proposed I02 draft — publication not yet authorized
 
-Title: test(esco): aislar controles numéricos y de fechas sin runtime
+Title: test(esco): aislar puntaje, medición e informes offline
 Base: main
-Head: codex/esco-faithfulness-eval-anchors
-State requested: draft
+Head: codex/esco-faithfulness-eval-scoring
+Requested state: draft, only after explicit publication approval
 
-## Problema y alcance
+El evaluador acumulado mezcla lógica de puntaje con transportes y runtime.
+Este alcance integra solo contratos tipados, puntaje determinista, prompt/parser
+puro del juez, combinación de veredictos, medición/informes y adjudicación inmutable.
+No importa runner, proveedor, fixtures de replay, runtime ni datos privados.
 
-La rama acumulada de Faithfulness mezcla evaluación con cambios del runtime y
-quedó 37 commits detrás de main. Este primer alcance extrae únicamente el lector
-numérico/de fechas y sus pruebas sintéticas. Permite revisar los controles de
-formato antes del resto del evaluador. No tiene importadores de producción ni
-conexiones externas. Incluye comando `eval:esco:check`, tracker conservado con
-estados históricos delimitados y plan de integración por alcances.
+Base: merge I01 `23d607648c35e0848c138efec6f976ad7e1dfdad` (PR #357).
+Fuente preservada: `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+Candidato: consultar HEAD de esta rama; el handoff registra el SHA exacto y los
+checks finales. Los resultados históricos de I01 no son validación de I02.
 
-La revisión independiente detectó y reprodujo dos defectos: `-$87,25` perdía el
-signo y `12-ago-2025` coincidía con un ancla de 2026. El arreglo conserva el signo
-monetario y exige coincidencia del año explícito con guion. Las 15 pruebas
-sintéticas enfocadas pasan antes del commit. La extracción ambigua de `1.234`
-conserva ambas interpretaciones; estos helpers comprueban presencia de tokens,
-no soporte de afirmaciones, validez general del calendario ni calidad del modelo.
+La revisión reprodujo y corrigió veredictos coercibles, capas ausentes/malformadas,
+revisión sin atribución, afirmaciones sin soporte que podían contar como éxito,
+y adjudicación sin hash, con evidencia mutable compartida o sin snapshot esperado.
+Los grupos del informe también cuentan correctamente etiquetas con nombres heredados de Object.
+Medición v1.1 conserva denominadores y distingue los nuevos controles de v1.
+No cambia etiquetas originales ni decisiones D01. La extracción numérica/de fechas
+conserva las correcciones I01; presencia de un token no demuestra soporte factual.
 
-## Proveniencia y verificaciones
+Validación enfocada del candidato corregido antes del commit: 92 pruebas sintéticas pasan, cero skips. El head anterior `115db6e` pasó 77 pruebas enfocadas / 4742 completas; esos resultados son históricos.
+Checks del head final: ver respuesta de handoff; no se presume un check no ejecutado.
+Los dos tests HTTP de `llamarJuez` permanecen fuera del alcance junto con esa función.
+No se leyó JSONL privado ni se llamó a proveedores. CI requiere publicar el PR.
 
-- Base main: `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356).
-- Fuente preservada: `3d3e65454d8d2f78971593f1fe90a0514ce22301`, rama `codex/esco-faithfulness-plan`.
-- Implementación inicial: `16e95e342620b7412d6614493c9e66ddc00c8f6a`; handoff histórico: `f7ad0dae0df236771ddd7e18767f0e5343e0f8c5`. Ambos pasaron 13 pruebas enfocadas, 4678 pruebas completas, tipos, lint y build. Son resultados históricos anteriores al arreglo.
-- Arreglo de los dos defectos y regresiones: `abb0ec5`. Reproducción: 2 fallos / 13 pases. Después del arreglo: 15 pases enfocados.
-- Candidato de publicación: HEAD de esta rama después de este handoff documental. El cuerpo del PR registrará el SHA completo y los resultados ejecutados sobre ese head; este archivo no inventa verificaciones aún no ejecutadas.
+Recomendación: revisar I02 por separado; publicar solo con autorización explícita,
+y considerar merge después de CI y revisión. Rollback: revert normal, sin datos,
+esquema ni tráfico afectados. No despliegue, migración 186, activación ni QA vivo;
+los cambios futuros del runtime requieren QA autorizado Web/Telegram y alertas/F1.
+P1-02 y el siguiente alcance permanecen fuera de este trabajo.
 
-## Revisión y rollback
 
-Recomendación: mezclar solo I01 después de CI y revisión del padre/dueño. Revertir
-este PR basta para rollback: no cambia esquemas, historial almacenado ni tráfico.
-P1-02 y el siguiente alcance no comenzaron. QA vivo Web/Telegram no aplica al
-helper; antes de un futuro release del runtime requiere verificación autorizada
-de ambos canales y de alertas/F1.
-
-No despliegue, migración, telemetría ni activación. PR #356 informa migración 186
-sin aplicar y despliegue edge pendiente; este alcance no los ejecuta ni afirma
-que estén activos. No datos privados ni llamadas pagadas. La calibración privada
-sigue bloqueada por autorización de divulgación a OpenRouter.
-
-La revisión automática rechazó antes crear el PR por falta de autorización de
-publicación. El usuario autorizó abrir este draft el 2026-10-28 a las 19:55 UTC.
-El padre transmitió esa autorización y pidió terminar estos arreglos antes de
-publicar. Solo permite reintentar la creación del draft; no merge ni despliegue.
+Correcciones de revisión independiente: el parser rechaza envelopes malformados sin rescatar objetos interiores; el informe cuenta cada motivo una vez por corrida y conserva las anclas detalladas; un error real de herramienta exige evaluación booleana del juez (null es no disponible); el prompt limita tolerancias a las explícitamente aprobadas, sin tolerancia automática por deriva histórica. No cambian etiquetas originales. No comparar tasas v1 con v1.1 sin recalcular bajo el mismo contrato de puntaje, prompt, evidencia y revisión.

@@ -1,16 +1,16 @@
 # Progress and handoff
 
-## Current state — current-main integration, 2026-10-28 UTC
+## Current state — I02, 2026-10-28 UTC
 
-- Review correction: two reproduced parsing defects fixed in `abb0ec5`; 15 focused synthetic tests passed before commit. Final-head checks are reported in the continuation response. User explicitly authorized draft publication at 19:55 UTC, after the earlier denial. No merge/deployment authorization.
-- Active slice: **I01 — offline numeric/date anchor helpers**, `codex/esco-faithfulness-eval-anchors`; draft publication now authorized after the earlier automatic-review denial; review text in [PR_DRAFT.md](PR_DRAFT.md). Stop after this slice. P1-02 is not authorized in this continuation.
-- Baseline: current main `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356, alert attribution/confirmation); preserved source `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`. Reverified remote heads; source is 18 ahead / 37 behind main.
-- This fresh branch imports only the existing pure `numeros.ts` helper and its synthetic tests, plus this tracker and integration notes. No source-branch merge or whole-commit cherry-pick. See [INTEGRATION.md](INTEGRATION.md) for slice dependencies and release checks.
-- The task table and session history below describe **source-branch implementation**, not code integrated into main or deployed. The remaining planning documents stay on the [pinned source branch](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness); do not infer their runtime exists here.
-- Next action after parent review: review I01 draft and final-commit CI; merge only this independent slice when checks pass. Then scope the remaining offline evaluator separately. Do not advance another slice automatically.
-- D01 is resolved. P0-02 paid calibration remains blocked: private JSONL disclosure to OpenRouter was rejected; the $1 budget does not authorize disclosure. This checkout does not retrieve, read or transmit that dataset. Synthetic tests only.
-- Source handoff reports 125 passed / 2 missing-private-data skips. Historical entries below include earlier runs with private data present. Those are not results from this continuation.
-- Production state: no deployment, migration, telemetry, schedule, pilot/canary or production activation. PR #356 merged; its description reports migration 186 unapplied and edge deployment pending. That is recorded provenance, not a live-ledger check or a claim that alerts are live.
+- **I01 merged:** [PR #357](https://github.com/sforero94/Escociaos/pull/357), reviewed head `b6470a496b72e98d0db7fde7e93a2d520a0426a9`, merge/main `23d607648c35e0848c138efec6f976ad7e1dfdad`. The two I01 review corrections and 15 numeric/date tests are included. Historical publication denials below were superseded by the user's explicit approval and completed merge.
+- **Active scope: I02 only**, pure scoring/measurement/report/adjudication on fresh `codex/esco-faithfulness-eval-scoring`, based on that main. Candidate review and draft publication are pending; I01 publication approval does not cover I02. No I02 PR creation attempt.
+- Preserved source: `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`; remote heads reverified. I01 worktree and original `work` checkout preserved.
+- I02 includes typed contracts, deterministic scoring, pure judge prompt/parser, verdict combination, measurement/report and immutable owner adjudication. Provider call/config, runner/transports/replay fixtures, golden loader and channel-message construction remain deferred. See [INTEGRATION.md](INTEGRATION.md) and [proposed I02 draft](PR_DRAFT.md).
+- Independent correction pass: four findings resolved after reproduction—malformed judge envelopes, report reason counts per run, missing required tool-error assessment, and historical-drift tolerance wording. All 92 evaluator tests pass before commit; final-head checks are reported with this correction handoff. Earlier `115db6e` passed 77 evaluator / 4742 full tests; those are historical, not final-correction results.
+- Next: parent independently reviews this candidate and obtains explicit I02 draft-publication approval. Stop after I02; no I03, I04 or P1-02 implementation authorized here.
+- The task table and historical entries below describe accumulated **source-branch** implementation, not code deployed or all integrated into main. The remaining plan/decisions/contracts stay at the [pinned source directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+- D01 remains resolved. P0-02 paid calibration remains blocked by private-payload disclosure authorization; a $1 cap does not authorize disclosure. No private JSONL access or provider calls.
+- Production: no migration, deployment, telemetry, schedule, pilot or activation. PR #356 described migration 186 and edge deployment as pending; their owner remains responsible. No live-ledger or deployment verification attempted here.
 
 ## Task tracker — preserved source-branch status
 
@@ -176,3 +176,23 @@ Update this table and the current-state block in the same session. Add implement
 - Production: unchanged; no private dataset, provider calls, runtime edits, migration or deployment.
 
 - Publication authorization update, 2026-10-28: parent supplied the user's explicit “si” at 19:55 UTC for this first-slice draft, including completion of the two review fixes before publication. Recheck for duplicates and retry only draft creation after final checks. If denied again, stop. No merge, deploy or next slice authorized.
+
+
+### Session: I02 pure evaluator integration, 2026-10-28 UTC
+
+- Task/branch: I02 only, `codex/esco-faithfulness-eval-scoring`, from main/I01 merge `23d607648c35e0848c138efec6f976ad7e1dfdad`; source `3d3e654` preserved.
+- Changed: seven pure scorer/measurement/report/adjudication modules and synthetic tests. `juez.ts` excludes provider config and `llamarJuez`; its two source mock-HTTP tests are deferred with that transport. No fixture transport or runtime dependency was added.
+- Review: seven new regression failures reproduced coercible judge verdicts, absent/malformed layers, unattributed review, unsupported claims without an explicit failure entry, and missing source-hash enforcement. Two more failures reproduced nested adjudication aliasing and absent purchase evidence; a final negative control reproduced corrupt counts for inherited object names in report groups. Corrected before candidate verification. Measurement v1.1 explicitly versions stricter attribution/support guards; original human labels and v1 historical results remain unchanged.
+- Verification before commit: 77 focused synthetic tests passed, zero skips. Initial type check caught use of ES2022 `Object.hasOwn`; corrected to the ES2020-compatible API without changing compiler configuration. Final-head checks run after commit and are reported in the handoff. Logs `/tmp/esco-i02-*.log` are temporary.
+- Remaining: independent parent review, explicit I02 draft publication approval, then PR CI/merge decision. No PR attempted. Next action: inspect candidate diff and final-head checks; stop before another slice.
+- Production: no runtime changes, live QA, private dataset, provider calls, migrations or deployments. Rollback is a normal revert; no schema/data/traffic rollback.
+
+
+### Session: I02 independent review corrections, 2026-10-28 UTC
+
+- Scope: four parent findings only on existing `codex/esco-faithfulness-eval-scoring`, starting from `115db6ed6bad580565bc327415da3490b1a1fc49`.
+- Reproduced first pair before fixes: 9 failing cases / 28 passing across judge/report tests. The brace-salvage parser accepted malformed envelopes; two failed anchors in one run produced a count of 2 under “Corridas”.
+- Reproduced second pair before fixes: 2 failing cases / 43 passing across judge/boundary tests. A null tool-error assessment could pass despite an actual recorded error and approving review; prompt allowed blanket small historical differences.
+- Changed: accept only clean JSON or a complete fenced response and reject invalid envelopes; deduplicate report reason categories per failed run while retaining detailed checks/reasons; require a boolean assessment for an actual tool error, otherwise mark judge unavailable/inconclusive; align historical-drift wording with owner v2 without relabeling. Measurement v1/v1.1 rates are not directly comparable without recomputation under the same contract.
+- Verification before commit: 92 focused evaluator tests passed, zero skips. Final-head types/lint/build/full-suite checks run after commit and are reported with the exact handoff SHA. Temporary logs `/tmp/esco-i02-{envelope-count-repro,applicability-drift-repro,corrections-focused}.log` retain reproduction evidence.
+- Remaining: parent review and explicit I02 draft-publication approval, then PR CI. No publication attempt. No other scope, runtime, provider call, private JSONL, migration, deployment or next slice.

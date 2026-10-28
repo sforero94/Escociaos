@@ -1,133 +1,102 @@
-# Faithfulness integration — I01
+# Faithfulness integration — current scope I02
 
-## Candidate and provenance
+## Current baseline and scope
 
-Baseline main: `ad5455ffa371d847191f92c7f7dbdc3404628046` (PR #356).
-Preserved source: `codex/esco-faithfulness-plan` at
-`3d3e65454d8d2f78971593f1fe90a0514ce22301` (18 ahead, 37 behind main).
-Both remote heads were reverified on 2026-10-28 UTC. The original `work` checkout
-and source branch remain unchanged. No applicable checkout `AGENTS.md` or
-`.agents/skills` exists in either tree; root `CLAUDE.md` and the source planning
-protocol were read. This explicit current-main extraction supersedes the source
-README's default instruction to continue on the accumulated planning branch.
+I01 is **merged** through [PR #357](https://github.com/sforero94/Escociaos/pull/357),
+reviewed head `b6470a496b72e98d0db7fde7e93a2d520a0426a9`, merge/current main
+`23d607648c35e0848c138efec6f976ad7e1dfdad`. Source branch
+`codex/esco-faithfulness-plan` remains at
+`3d3e65454d8d2f78971593f1fe90a0514ce22301`; both remote heads were reverified.
+I02 uses fresh branch `codex/esco-faithfulness-eval-scoring` from current main.
+The original `work` and I01 worktrees remain unchanged. No applicable checkout
+`AGENTS.md`/`.agents/skills` exists; root `CLAUDE.md` and source session protocol
+apply. This explicit extraction supersedes the source README's accumulated-branch
+default. No source-branch merge or whole-commit cherry-pick.
 
-I01 initially copied `src/utils/escoEvals/numeros.ts` and
-`src/__tests__/escoEvalsNumeros.test.ts` byte-for-byte from that source. Independent
-review then found two defects; the bounded corrections below supersede that
-byte-equality claim for the current head. I01 makes
-numeric/date anchor matching independently reviewable before the remaining
-scoring stack. It handles Colombian separators, ambiguous numeric candidates,
-million suffixes, negative balances, tolerances and Spanish date forms. These
-are **permissive token-presence helpers**, not proof of claim support, scope,
-retrieval correctness, valid calendar dates or model quality. No production
-module imports the helper. No HTTP, database, provider or edge dependency exists.
+I02 imports only `tipos`, `deterministico`, the **pure** `juez` prompt/parser,
+`veredicto`, `medicion`, `reporte` and `adjudicacion` from `src/utils/escoEvals/`,
+plus matching synthetic tests and test factories. `juez.ts` deliberately excludes
+`ConfigJuez` and `llamarJuez`; the two source mock-HTTP tests remain deferred with
+that provider transport, not removed to hide a failing implemented feature.
+No runner, transport, golden loader, replay fixture pack or channel-message
+constructor is included. All imports resolve locally; no app module imports these
+scorers. The existing `eval:esco:check` command now covers them automatically.
 
-`npm run eval:esco:check` runs repository types, evaluator lint and the imported
-synthetic tests. This slice has no `eval:esco` runner, fixture replay or semantic
-judge. Do not run commands described only in the source-branch historical record.
+## Integration sequence
 
-## Integration sequence — proposals, not authorization to continue
-
-| Slice | Contents from preserved source | Dependencies / review boundary |
+| Slice | Contents | Dependencies / review boundary |
 |---|---|---|
-| I01 (this draft) | Numeric/date helper, 13 synthetic tests, check command, tracker | Independent of runtime and private data; stop for parent review |
-| I02 (next scope proposal) | Remaining `src/utils/escoEvals/` scoring/measurement/report modules and matching pure tests | Reconcile against merged I01; preserve judge/parser safeguards and owner adjudication; separate private-data skips |
-| I03 (later) | `evals/esco/` transports, runner, fixture pack/config and harness docs | I02; replay CLI tests additionally need I04's optional loop transport. Split pure adapter tests from production-loop tests rather than importing a broken runner |
-| I04 (later runtime candidate) | Canonical `escoConsultas.ts`, `escoEvidencia.ts`, `chat.tsx`, sync script, corresponding edge copies and runtime tests | Reconcile on then-current main; separate transport injection from evidence producer/consumer changes where independently testable. Preserve alert #356 and inventory F1 changes. Synchronize both edge trees; deployment remains gated |
-| P1-02 | Bounded loop and command routing | Not implemented or started by this continuation; review after required evidence/runtime integration |
+| I01 (merged) | Numeric/date helper, 15 synthetic tests, check command, tracker | PR #357; two reviewed parser corrections retained |
+| I02 (this candidate) | Pure scoring, judge prompt/parser, measurement/report, immutable adjudication and synthetic tests | Based on merged I01; parent acceptance and explicit draft publication approval pending |
+| I03 (deferred) | Golden input validation, channel messages, provider/runner/transports and fixture pack/config | Consume I02 pure API; move provider call into its own transport module. Compute source hash before adjudication. Replay CLI tests also need I04 transport injection; split rather than importing a broken runner |
+| I04 (deferred runtime) | Canonical consultation/evidence/chat changes, sync script and both edge copies | Reconcile on then-current main; preserve alert #356 and inventory F1. Independently test transport injection and evidence changes. Synchronize trees; deployment separately gated |
+| P1-02 (not started here) | Bounded loop and command routing | Requires reviewed evidence/runtime prerequisites; not authorized in this continuation |
 
-The source `hatoFechaLocalGuard.test.ts` allow-list change belongs with its
-associated evaluator files, not a general relaxation on main. Do not merge the
-entire planning branch or cherry-pick the combined merge commits. Inspect each
-slice's imports and tests before choosing its final size. Existing contracts and
-history remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+The source `hatoFechaLocalGuard.test.ts` allow-list change belongs with its future
+channel-message constructor, not a general relaxation now. Source plans and D01
+owner decisions remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
 
-## Validation and merge decision
+## Review corrections and measurement semantics
 
-Candidate-tree checks before commit:
+- Strict judge verdict types: an array such as `["cumple"]` is rejected, not string-coerced. Duplicate/unknown/missing criterion checks and typed flags remain required.
+- Verdict combination validates an `ok` judge against the case criteria. Missing/malformed judges become unavailable/inconclusive; a missing or inconsistent deterministic layer cannot pass. Hard deterministic failures remain conclusive without a judge. Infrastructure failures retain the source legacy `inconcluso` behavior.
+- Measurement **v1.1** retains v1 denominators and explicit missing-case coverage, but requires nonblank reviewer/version and fully supported reviewed claims for verified success. Citations alone and contradictory/incomplete reviews cannot produce success. Partial answers can succeed when their actual claims are supported and the review approves the limitation. Legacy pass rate remains separate from service success.
+- Adjudication requires the expected source SHA-256 argument; unknown/missing hashes fail. The future loader must compute it from authorized source bytes. Synthetic tests supply the declared test value; they do not verify any private dataset. Purchase-only views require the expected evidence key/criterion and retain cloned nested values, so later view edits cannot mutate originals. D01 labels/rubric dispositions are unchanged.
 
-- `npm run eval:esco:check`: passed; 13 synthetic tests, zero skips; includes `tsc --noEmit` and focused ESLint.
-- `npm run lint`: passed; zero errors, 907 warnings in unchanged baseline files. Focused evaluator lint has no findings. Node also warns that the existing ESLint config has no package module type.
-- `npm run build`: passed; Vite 6.3.5, 17.97 seconds.
-- Focused alert/F1/parity regression: 6 files, 232 tests passed, zero skips (`hatoAlertaRespuesta355`, `hatoAlertas`, `eliminarCompraConReversion`, `movimientoInventarioResponsable`, `productoStockSinMovimiento`, `arbolEdgeFunctionParidad`).
-- `git diff --check`: passed. The two imported code/test files match the pinned source.
+Review tests reproduced seven failures before correction, then two additional
+adjudication failures (shared nested evidence and absent purchase snapshot).
+A further regression reproduced corrupt report counts for inherited object names; grouping now uses dictionaries without inherited properties. Initial imported suite: 58 passed. After correction: 77 focused tests passed,
+zero skips. An initial type check caught ES2022 `Object.hasOwn`; the implementation
+now uses the existing ES2020-compatible API. No test or compiler setting relaxed.
+Final-candidate checks are reported with the exact handoff SHA after commit.
 
-Implementation commit `16e95e342620b7412d6614493c9e66ddc00c8f6a` passed:
-`npm run eval:esco:check` (13 tests, types and focused lint), `npm run lint`
-(zero errors / 907 warnings), `npm run build`, and `npm test` (212 files,
-4,678 tests, zero skips). `git diff --check HEAD^ HEAD` passed.
-Logs: `/tmp/esco-i01-final-{check,lint,build,suite}.log`.
+These are typed pure APIs, not a general decoder of arbitrary run/review JSON.
+Golden input validation remains I03. Prompt separation is tested synthetically;
+no real model injection-resistance claim follows. Anchors only check token presence:
+`1.234` retains both numeric candidates, small integers remain soft, and a strong
+anchor may occur in any evaluated turn. This does not prove entity/period support,
+calendar validity, retrieval truth or model quality. Reports remain offline Markdown;
+no UI, endpoint, stored history or release gate is activated.
 
-The fresh branch push succeeded. **Draft PR creation was denied by automatic
-approval review**, which requires explicit user authorization to publish/open
-this PR as an external repository commitment and disclosure. No PR number exists;
-GitHub PR search returned no match and #357 returned 404 before the confirmed
-rejection. CLI GitHub API reads also returned Forbidden; connector reads worked.
-No workaround or further creation attempt will occur. CI for this head has no
-PR workflow runs. The proposed PR text is saved in `PR_DRAFT.md`; parent review
-and explicit publication authorization are the remaining blocker.
+## Independent I02 correction pass
 
-This follow-up handoff changes documentation only. Code and tests remain
-byte-identical to the verified implementation commit. Final handoff checks are
-reported to the parent separately; no unrun check is marked passed here. Local logs: `/tmp/esco-i01-{check,lint,build,regression}.log`
-(temporary, no private data). Installed dependencies are reused through a local,
-ignored `node_modules` symlink; no dependencies or lockfile changed.
+Four findings from parent review were reproduced and corrected on I02 only:
 
-Recommend publishing and merging only I01 after explicit PR publication authorization, CI and parent review.
-Rollback is a normal revert of this PR; no schema, stored history, traffic or
-backend deployment rollback is needed. Desktop/mobile and live Web/Telegram QA
-are not exercised by this pure helper slice. Before any future runtime release,
-test Web and Telegram history/evidence handling and the preserved alert/F1 flows
-in an authorized environment; do not claim these unit tests are live QA.
+1. Judge envelopes now require a clean JSON object or one complete optional-`json` fenced response. No brace-slicing salvage; truncated arrays, trailing/prefixed prose, incomplete fences and array envelopes are rejected. Existing schema validation still applies after parsing.
+2. `motivos[].n` is explicitly the number of failed runs with that category, once per run. Multiple failed anchors remain separate in `determinista.chequeos` and detailed reasons, but count once under “Corridas”. One-run and multiple-run regressions verify both units and retained diagnostics.
+3. An actual `error: true` tool requires a boolean `oculto_fallo_herramienta`. Null assessment marks the judge unavailable/inconclusive and prevents verified success, even with an approving review. Explicit false permits a declared limitation; true fails. Unknown historical tool status/absent summary does not invent a failure.
+4. The judge prompt treats historical drift as a comparability limitation, not blanket numeric tolerance; only explicit approved tolerances apply. Original human labels and adjudication dispositions are unchanged.
 
-## Gates and production state
+**Do not compare v1 rates directly with v1.1.** Recompute under the same scoring,
+judge-prompt, evidence and review contract before making comparisons; a matching
+headline version alone is insufficient. No quality-improvement claim is measured.
 
-PR #356 is merged. Its fetched description reports migration 186 **not applied**
-and edge deployment pending. No live database ledger was queried here; no claim
-that the alert backend is live. This draft changes neither edge tree and needs no
-edge deployment. No migration, deployment, telemetry, schedule, pilot or canary.
+Regressions initially failed 9 cases for the first pair, then 2 cases for the
+second pair; after fixes all 92 evaluator tests pass before commit, zero skips.
+Final-candidate checks are reported in the correction handoff; `115db6e`'s
+77 evaluator / 4742 full tests remain historical. No new scope or publication.
 
-D01 remains resolved. P0-02 calibration is blocked by the rejected private-payload
-disclosure to OpenRouter. The $1 cap alone does not authorize disclosure. No
-private JSONL is retrieved/read/transmitted, and no paid provider is called.
-Security PR #324, medium security fixes, credentials and access are outside scope.
+## Historical I01 evidence — not I02 validation
 
+- Original source was 18 ahead / 37 behind main `ad5455ffa371d847191f92c7f7dbdc3404628046` during I01 extraction.
+- Initial candidate: 13 tests, zero skips; types/focused lint passed. Repository lint passed with 907 warnings; build passed in 17.97s; alert/F1/edge parity regression 232 tests across 6 files passed. Source code/test byte equality and whitespace check passed then.
+- Initial implementation `16e95e342620b7412d6614493c9e66ddc00c8f6a` and documentation handoff `f7ad0dae0df236771ddd7e18767f0e5343e0f8c5`: 13 focused / 4678 full tests, zero skips, types/lint/build passed. Logs `/tmp/esco-i01-final-*` and `/tmp/esco-i01-handoff-*`.
+- Independent I01 review: sign/year regressions reproduced 2 failures / 13 passes; fixes in `abb0ec5`. Reviewed final head `b6470a4`: 15 focused / 4680 full tests, zero skips; types/lint/build/whitespace passed. Corrected build 30.29s; 907 existing lint warnings. Logs `/tmp/esco-i01-corrected-*`.
+- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication is a separate approval and has not been attempted.
 
-## Independent review corrections — I01 only
+## Gates, QA and rollback
 
-Both reported defects reproduced with synthetic regressions before changing code:
-`extraerNumeros('-$87,25')` returned positive 87.25, and
-`fechaPresente('2026-08-12', '12-ago-2025')` returned true. The reproduction run
-had 2 failures / 13 passes (`/tmp/esco-i01-review-repro.log`).
+Only synthetic tests; no private JSONL retrieval/read/transmission or provider
+calls. D01 remains resolved; P0-02 private disclosure to OpenRouter remains blocked.
+The $1 cap does not authorize disclosure. Security PR #324, medium security fixes,
+credentials and access remain outside scope.
 
-The numeric token now includes a dollar symbol after a preceding minus, so the
-existing sign parser retains it. Tests cover ASCII/Unicode minus before/after
-currency, positive currency (including plus), opposite-sign rejection, Colombian
-thousands/decimals and million suffixes. The written-date year guard now accepts
-a hyphen before the four-digit year, including an abbreviated month with a period.
-Tests require the correct year and reject a different year for abbreviated/full
-months and month-first dates. Dates without a year retain their prior behavior.
-All 15 focused tests passed after the fix (`/tmp/esco-i01-review-focused.log`).
+PR #356 described migration 186 unapplied and edge deployment pending. No live
+ledger or deployment state is queried here; that owner remains responsible.
+No migration, deployment, telemetry, recurring spend, pilot or canary.
 
-Scope limits remain: `1.234` can mean 1234 or 1.234; either candidate is emitted.
-This is permissive token matching, not a general currency-expression parser or
-calendar validator. These corrections cover adjacent currency/sign forms and
-four-digit written years; they do not establish support for accounting parentheses,
-spaced negative currency signs or two-digit written years. A mismatched explicit
-four-digit year and an opposite-sign numeric anchor are rejected by these tests.
-
-Only helper/tests and review notes changed. Final-head checks are reported to
-the parent after commit; prior verification totals above remain historical.
-PR publication remains denied/pending explicit authorization. No retry, runtime
-change, private data, paid provider call, migration, deployment or next slice.
-
-
-### Publication authorization update
-
-After the earlier denial, the user explicitly approved publishing this first
-slice as a draft at 19:55 UTC on 2026-10-28. The parent transmitted the approval
-and required both narrow review corrections before publication. Commit `abb0ec5`
-contains those corrections. The following handoff only updates documentation.
-Final publication text must record the actual final SHA and executed checks;
-prior 4,678-test totals are historical. Check duplicates before retrying only the
-draft creation. Stop if review denies again. No merge, deployment or next slice.
+Recommend publishing/merging I02 only after parent review, explicit draft-publication
+authorization and PR CI. Rollback is a normal revert; no schema, history or traffic
+rollback. Desktop/mobile/live Web/Telegram QA is not exercised by these pure
+modules. A future runtime release requires authorized checks in both channels and
+preservation of alert/F1 behavior; these synthetic tests do not establish live QA.
