@@ -20,6 +20,10 @@ See `package.json` for the full dependency list. The three facts it does **not**
 - There is no `tailwind.config.js` (CSS-first config); theme lives in `src/styles/globals.css`, which reaches the compiler through `index.css`, not through a JS import.
 - TypeScript runs in strict mode with `@/*` aliased to `./src/*`.
 
+## Security Review Continuation
+
+For the bounded security review after F1, read [`docs/security-review/session-guide.md`](docs/security-review/session-guide.md), then the linked plan and progress tracker. Work one recorded scope at a time. At every scope close-out, update and commit the tracker and conclude the response with a copy-ready prompt to start the next scope; do not silently start it. Assessment does not authorize remediation or production changes.
+
 ## Quick Reference Commands
 
 Standard npm scripts — see `package.json`. `npm run dev` serves on port 3000; `npm run build` outputs to `/build` (not `dist`).
