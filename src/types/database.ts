@@ -6289,6 +6289,10 @@ export type Database = {
         }[]
       }
       fn_cerrar_aplicacion: { Args: { payload: Json }; Returns: Json }
+      fn_inventario_guardar: {
+        Args: { p_solicitud_id: string; p_operacion: string; p_datos: Json }
+        Returns: Json
+      }
       fn_cleanup_compra_dependencies: {
         Args: { p_compra_id: string }
         Returns: undefined

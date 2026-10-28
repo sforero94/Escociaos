@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { useGuardadoInventario } from '@/hooks/useGuardadoInventario';
+import { GuardadoPendiente } from './GuardadoPendiente';
 
 interface Product {
   id: string;
@@ -26,6 +28,7 @@ interface NuevoMovimientoModalProps {
 
 export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimientoModalProps) {
   const { user } = useAuth();
+  const guardado = useGuardadoInventario(user?.id, 'movimiento');
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -94,7 +97,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
     }
 
     const cantidadNum = parseFloat(cantidad);
-    if (isNaN(cantidadNum) || cantidadNum < 0) {
+    if (!Number.isFinite(cantidadNum) || cantidadNum < 0) {
       setError('La cantidad debe ser mayor o igual a 0');
       return;
     }
@@ -102,68 +105,14 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
     setLoading(true);
 
     try {
-      const supabase = getSupabase();
-
-      // Calcular nuevo saldo según tipo de movimiento
-      const saldoAnterior = selectedProduct.cantidad_actual ?? 0;
-      let cantidadMovimiento = 0;
-      let nuevoSaldo = 0;
-
-      switch (tipoMovimiento) {
-        case 'Entrada':
-          // Para entrada: sumar al stock actual
-          cantidadMovimiento = cantidadNum;
-          nuevoSaldo = saldoAnterior + cantidadMovimiento;
-          break;
-        case 'Salida Otros':
-          // Para salida: restar del stock actual
-          if (cantidadNum > saldoAnterior) {
-            setError(`La cantidad no puede ser mayor al stock actual (${saldoAnterior} ${selectedProduct.unidad_medida})`);
-            setLoading(false);
-            return;
-          }
-          cantidadMovimiento = -cantidadNum; // Negativo para salidas
-          nuevoSaldo = saldoAnterior + cantidadMovimiento;
-          break;
-        case 'Ajuste':
-          // Para ajuste: la cantidad ingresada ES el nuevo saldo deseado
-          nuevoSaldo = cantidadNum;
-          cantidadMovimiento = nuevoSaldo - saldoAnterior; // Puede ser positivo o negativo
-          break;
-      }
-
-      // 1. Registrar movimiento en movimientos_inventario
-      const { error: movError } = await supabase
-        .from('movimientos_inventario')
-        .insert({
-          fecha_movimiento: obtenerFechaHoy(),
-          producto_id: selectedProduct.id,
-          tipo_movimiento: tipoMovimiento,
-          cantidad: cantidadMovimiento,
-          unidad: selectedProduct.unidad_medida,
-          saldo_anterior: saldoAnterior,
-          saldo_nuevo: nuevoSaldo,
-          // `movimientos_inventario` no tiene trigger de atribución: si el escritor no
-          // estampa el responsable, la fila queda sin autor para siempre. Email, igual
-          // que NewPurchase y que `fn_cerrar_aplicacion` (auth.jwt() ->> 'email').
-          responsable: user?.email || null,
-          observaciones: observaciones || null,
-          provisional: false
-        } as any);
-
-      if (movError) throw movError;
-
-      // 2. Actualizar cantidad_actual en productos
-      const { error: prodError } = await supabase
-        .from('productos')
-        .update({ 
-          cantidad_actual: nuevoSaldo,
-          // REGLA DE NEGOCIO: Si después del movimiento la cantidad > 0, activar automáticamente
-          activo: nuevoSaldo > 0 ? true : selectedProduct.activo
-        })
-        .eq('id', selectedProduct.id);
-
-      if (prodError) throw prodError;
+      await guardado.guardar({
+        fecha: obtenerFechaHoy(),
+        producto_id: selectedProduct.id,
+        tipo_movimiento: tipoMovimiento,
+        cantidad: cantidadNum,
+        saldo_esperado: selectedProduct.cantidad_actual ?? 0,
+        observaciones,
+      });
 
       // Success
       draft.clearDraft();
@@ -208,7 +157,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
         type="submit"
         form="movimiento-form"
         className="flex-1 bg-primary hover:bg-primary-dark text-white"
-        disabled={loading || !selectedProduct || !cantidad}
+        disabled={loading || guardado.pendiente || !!guardado.errorLocal || !selectedProduct || !cantidad}
       >
         {loading ? (
           <>
@@ -238,6 +187,17 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
           <DialogDescription>Complete la información del movimiento de inventario</DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <GuardadoPendiente {...guardado} ocupado={loading} onVerificar={async () => {
+            setLoading(true);
+            try {
+              await guardado.reintentar();
+              draft.clearDraft();
+              onSuccess();
+              handleClose();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'No se pudo verificar el guardado.');
+            } finally { setLoading(false); }
+          }} />
           <FormDraftBanner
             variant="available"
             show={draft.hasDraft}
@@ -254,7 +214,8 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
           )}
 
           {/* Form */}
-          <form id="movimiento-form" onSubmit={handleSubmit} className="space-y-6">
+          <form id="movimiento-form" onSubmit={handleSubmit}>
+            <fieldset disabled={loading || guardado.pendiente || !!guardado.errorLocal} className="min-w-0 space-y-6">
               {/* Buscador de Producto */}
               <div className="relative">
                 <label className="block text-sm text-gray-700 mb-2">
@@ -447,6 +408,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                   <p className="text-red-800 text-sm">{error}</p>
                 </div>
               )}
+            </fieldset>
             </form>
         </DialogBody>
         <DialogFooter>

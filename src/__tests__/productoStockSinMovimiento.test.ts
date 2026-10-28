@@ -110,16 +110,13 @@ const ESCRITORES_AUTORIZADOS = [
   'src/components/inventory/PurchaseHistory.tsx',
 ];
 
-describe('guard: todo escritor de productos.cantidad_actual inserta su movimiento', () => {
-  it.each(ESCRITORES_AUTORIZADOS)('%s inserta en movimientos_inventario', (archivo) => {
+describe('guard: inventario web usa el guardado atómico', () => {
+  it.each(ESCRITORES_AUTORIZADOS)('%s no escribe el saldo ni el ledger directamente', (archivo) => {
     const fuente = readFileSync(join(process.cwd(), archivo), 'utf-8');
-
-    expect(/cantidad_actual\s*:/.test(fuente), `${archivo} ya no escribe el saldo`).toBe(true);
-    expect(
-      fuente.includes("from('movimientos_inventario')"),
-      `${archivo} escribe productos.cantidad_actual pero ya no toca movimientos_inventario. ` +
-        'Un saldo que cambia sin movimiento es stock sin trazabilidad.',
-    ).toBe(true);
+    expect(fuente).toContain('useGuardadoInventario');
+    expect(fuente).toContain('guardado.guardar(');
+    expect(fuente).not.toContain("from('movimientos_inventario')");
+    expect(/cantidad_actual\s*:\s*(nuevoSaldo|cantidadNueva|nuevaCantidad)/.test(fuente)).toBe(false);
   });
 
   it('el RPC fn_cerrar_aplicacion (migración 106) actualiza productos e inserta su movimiento en la misma transacción', () => {
