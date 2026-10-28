@@ -101,3 +101,17 @@ ni movimientos automáticamente. No borrar recibos ni aplicar un backfill como r
 
 Tras publicar, recargar las pestañas abiertas antes de capturar inventario. Las
 pestañas con el bundle anterior pueden conservar el escritor antiguo hasta la recarga.
+
+## Registro de publicación
+
+Migración 185 aplicada a `ywhtjwawnkeqlwxbvgup` el 2026-10-27
+(America/New_York), desde el contenido literal del PR #353, commit
+`8f85a445d917ef5ebbb175a548a758ccbe73f8ad`, blob
+`5b34669dad37a67662bb3890ec0d29da24ff72fc`. Ledger verificado:
+`20261028014545`, nombre `185_inventario_guardado_atomico`.
+El catálogo confirmó INVOKER, search_path fijo, EXECUTE authenticated y sin
+EXECUTE anon, recibos con RLS por usuario/rol activo y sin DELETE authenticated.
+Políticas, helpers y cuatro triggers existentes coinciden con el preestado.
+No se consultaron ni modificaron datos de negocio para validar.
+Frontend pendiente de merge y verificación del alias productivo al registrar
+esta entrada; la aplicación de la base no demuestra el despliegue del cliente.
