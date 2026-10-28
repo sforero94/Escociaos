@@ -38,6 +38,22 @@ One task is one intended session, not a promise that every task fits every conte
 **Verify:** zero-network replay with mocked model; unexpected tool request fails explicitly; two scenarios cannot leak state. Document a real-model frozen replay command separately from free tests.
 **Handoff:** fixture manifest, supported cases, gaps and repeatable baseline command. Do not claim real model improvement from mocked outputs.
 
+#### P0-03 session slices (2026-10-28)
+
+- **P0-03-a — closed HTTP transport foundation:** independent model/read adapters,
+  network-denial controls, sticky invalid-run diagnostics and production-loop
+  runtime verification. Complete locally; see PROGRESS.md for commit evidence.
+- **P0-03-b — tool fixture adapter and scenario pack:** next ready slice. First
+  inspect `executeTool` and `correrCaso` for a tool-boundary injection that keeps
+  production defaults intact. Add canonical argument/scenario/turn matching,
+  12–15 synthetic cases, version/hash/review manifests, controlled multi-turn
+  evidence, frozen result labeling, and a separate real-model command.
+
+Split because the transport safety boundary can be verified independently while
+fixture provenance and tool-boundary matching require a separate reviewable slice.
+All original P0-03 acceptance criteria remain required; P0-03 stays in progress.
+Disputed historical fixtures remain blocked on P0-02/D01.
+
 ## Phase 1 — evidence and execution controls
 
 ### P1-01 — Introduce typed evidence envelopes

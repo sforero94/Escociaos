@@ -37,14 +37,24 @@ interface ModuloEsco {
 const USUARIO_EVAL = '00000000-0000-0000-0000-00000000e5c0';
 
 export interface GuardasInstaladas {
+  erroresReplay?: string[];
   escrituras: string[];
   tokens: { entrada: number; salida: number };
   restaurar: () => void;
 }
 
-export function instalarGuardas(env: { supabaseUrl: string; verboso: boolean }): GuardasInstaladas {
+/** Closed replay: model transport is independent; all other reads require fixtures.
+ * A failed lookup is sticky because production tools can catch fetch exceptions.
+ */
+export interface TransporteCongelado {
+  modelo: typeof fetch;
+  lectura: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  errores: string[];
+}
+
+export function instalarGuardas(env: { supabaseUrl: string; verboso: boolean; replay?: TransporteCongelado }): GuardasInstaladas {
   const fetchReal = globalThis.fetch.bind(globalThis);
-  const estado: GuardasInstaladas = { escrituras: [], tokens: { entrada: 0, salida: 0 }, restaurar: () => undefined };
+  const estado: GuardasInstaladas = { erroresReplay: env.replay?.errores, escrituras: [], tokens: { entrada: 0, salida: 0 }, restaurar: () => undefined };
 
   const guardado: typeof fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -53,14 +63,35 @@ export function instalarGuardas(env: { supabaseUrl: string; verboso: boolean }):
     const destino = new URL(url);
     if (destino.origin === new URL(env.supabaseUrl).origin && metodo !== 'GET' && metodo !== 'HEAD') {
       estado.escrituras.push(`${metodo} ${destino.pathname}`);
+      env.replay?.errores.push('Replay blocked database write');
       return new Response(JSON.stringify({ message: 'bloqueado por el arnés de evaluación (solo lectura)' }), {
         status: 403,
         headers: { 'content-type': 'application/json' },
       });
     }
 
-    // Do not let an automatic redirect bypass the origin/method check.
-    const respuesta = await fetchReal(input, { ...init, redirect: 'error' });
+    // Replay never reaches the inherited network transport, including optional tools.
+    let respuesta: Response;
+    if (env.replay) {
+      try {
+        if (destino.href === 'https://openrouter.ai/api/v1/chat/completions' && metodo === 'POST') {
+          respuesta = await env.replay.modelo(input, { ...init, redirect: 'error' });
+        } else {
+          if (metodo !== 'GET' && metodo !== 'HEAD') throw new Error('Replay blocks side effects');
+          respuesta = await env.replay.lectura(input, { ...init, redirect: 'error' });
+        }
+        if (respuesta.redirected || (respuesta.status >= 300 && respuesta.status < 400)) {
+          throw new Error('Replay blocks redirects');
+        }
+      } catch {
+        const error = `Frozen transport rejected ${metodo} ${destino.origin}${destino.pathname}`;
+        env.replay.errores.push(error);
+        throw new Error(error);
+      }
+    } else {
+      // Do not let an automatic redirect bypass the origin/method check.
+      respuesta = await fetchReal(input, { ...init, redirect: 'error' });
+    }
     if (destino.origin === 'https://openrouter.ai' && respuesta.ok) {
       try {
         const cuerpo = await respuesta.clone().json() as { usage?: { prompt_tokens?: number; completion_tokens?: number } };
@@ -117,6 +148,7 @@ export async function correrCaso(
   const asOf = opciones.fijarHora ? asOfUtc(caso.as_of_bogota) : null;
   const turnos: TurnoEjecutado[] = [];
   const escriturasAntes = guardas.escrituras.length;
+  const erroresReplayAntes = guardas.erroresReplay?.length ?? 0;
   const tokensAntes = { ...guardas.tokens };
 
   if (asOf) {
@@ -144,6 +176,9 @@ export async function correrCaso(
         const inicio = e.index === undefined ? undefined : inicios.get(e.index);
         eventos.push(e.type === 'tool_done' && inicio !== undefined ? { ...e, ms: performance.now() - inicio } : e);
       });
+      if ((guardas.erroresReplay?.length ?? 0) > erroresReplayAntes) {
+        throw new Error('Frozen replay invalid: blocked or unmatched transport request');
+      }
       const herramientas = aHerramientas(toolInteractions, eventos);
       turnos.push({ pregunta: p, respuesta: text, herramientas, ms: performance.now() - t0 });
       anterior = { respuesta: text, herramientas };

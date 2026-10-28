@@ -157,3 +157,26 @@ Reports preserve legacy verdicts and add `medicion` v1. See
 [METRICS.md](../../docs/esco/faithfulness/METRICS.md) for denominators, missing-case
 coverage, and attributed human review. A deterministic-only pass is never verified
 service success. Absent human reviews remain explicit; no claim labels are inferred.
+
+### Frozen replay foundation (P0-03-a)
+
+`instalarGuardas({ supabaseUrl, verboso, replay })` accepts independent `modelo`
+and `lectura` fetch adapters plus an `errores` array owned by that installation.
+Only an exact POST to the OpenRouter completion endpoint reaches `modelo`.
+All other reads must resolve through `lectura`; it must reject unmatched fixtures.
+Neither path falls through to the inherited fetch. Database writes are blocked;
+other writes and redirects fail. Rejected requests remain in `errores`, and
+`correrCaso` invalidates the run even if a tool catches a transport error.
+Create a new installation for each scenario; do not run global guards concurrently.
+These adapters are trusted harness code, not a sandbox for untrusted callbacks.
+
+Free verification: `npm run eval:esco:check` (includes `escoEvalsReplay.test.ts`).
+The controls are synthetic and do not measure real model quality or retrieval
+correctness. No production source or model behavior changes in this slice.
+
+P0-03-b remains required: tool/canonical-argument/scenario/turn matching, fixture
+hashes and provenance/review manifests, 12–15 synthetic scenarios, full multi-turn
+isolation, a runner mode labeled frozen rather than live, and a separately
+budgeted real-model replay command. There is no real-model frozen CLI yet;
+`EVAL_MODO=live` still reads current data and must not be described as frozen.
+Disputed historical values await P0-02. This foundation does not complete P0-03.

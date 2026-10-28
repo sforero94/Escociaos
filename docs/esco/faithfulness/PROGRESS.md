@@ -5,9 +5,9 @@
 - Integration branch: `codex/esco-faithfulness-plan`.
 - Original code base: `14271f1`. Evaluation prerequisite commit: `027a162`.
 - Plan bootstrap: complete. Product implementation: **1/25 tasks complete**.
-- Active implementation task: none.
-- **Next task: P0-02 — prepare the calibration adjudication ledger; P0-03 is also ready.**
-- First action: inspect the five disagreement records named in BASELINE.md and locate approved private evidence. If unavailable, record that gate and start P0-03 by inspecting `correrCaso` and transport guards.
+- Active implementation task: P0-03 parent in progress; P0-03-a complete locally.
+- **Next task: P0-03-b — tool fixture adapter and scenario pack. P0-02 is blocked.**
+- First action: `rg -n "executeTool|correrCaso|instalarGuardas" src/supabase/functions/server/chat.tsx evals/esco/lib/ejecutor.ts`; design tool-boundary injection and scenario/turn matching.
 - Next useful milestone: checkpoint A, then complete animal-sales evidence and deterministic totals before building online infrastructure.
 - Production state: no deployment, migration, telemetry activation, worker, schedule, feedback UI, or canary performed by this plan bootstrap.
 - Private data: absent from this independent checkout. It is present only in the originating workspace; see BASELINE.md. Two private-dataset tests skip here.
@@ -21,8 +21,8 @@ Update this table and the current-state block in the same session. Add implement
 |---|---|---|---|
 | S00 | done | Existing evaluation work | `027a162`: preserved prior judge safeguards; 91 passed, 2 private-dataset tests skipped; lint 0 errors |
 | P0-01 | done | S00 | METRICS.md; typed review and measurement/report tests; implementation commit recorded below |
-| P0-02 | ready | P0-01, D01 | Prepare disputed-case adjudication; do not rewrite original labels |
-| P0-03 | ready | P0-01; P0-02 for disputed seeds | Frozen replay adapter and 12–15 reviewed scenarios |
+| P0-02 | blocked | P0-01, D01 | ADJUDICATION.md v1 prepared; private records/labels absent; D01 unresolved |
+| P0-03 | in_progress | P0-01; P0-02 for disputed seeds | P0-03-a closed HTTP foundation complete; P0-03-b ready: tool matching, 12–15 scenarios, manifests and frozen CLI remain |
 | P1-01 | todo | P0-03 | Evidence envelopes and compatible adapters |
 | P1-02 | todo | P0-03, P1-01 | Bounded execution, duplicate reuse, command routing |
 | P1-03 | todo | P1-01, P1-02 | Structured facts and prepublication checks |
@@ -81,3 +81,15 @@ Update this table and the current-state block in the same session. Add implement
 - Remaining: none for P0-01. Real dataset coverage verification is unavailable without the private JSONL; the runner derives the actual included IDs when supplied.
 - Next: P0-02; inspect the disagreement records and approved private labels named in BASELINE.md. If absent, record the evidence block and continue ready P0-03 with `rg -n 'correrCaso|fetch|transport' evals/esco/lib/ejecutor.ts`.
 - Production state: local evaluation tooling only; no paid calls, deployment, migration or schedule.
+
+### Session: adjudication preparation and replay foundation, 2026-10-28 UTC
+
+- Task: P0-02 preparation blocked; P0-03-a implemented. P0-03 parent remains in progress.
+- Branch: `codex/esco-faithfulness-plan`; implementation commit: pending (recorded in following handoff commit).
+- Start: requested base `7771185`, clean checkout; original `work` branch preserved. Fetched requested branch using configured proxy outside the filesystem sandbox.
+- Changed: ADJUDICATION.md v1 records all five disputes plus 054/056, unavailable originals, proposed review questions, temporary gate exclusions and historical-drift rules. Added independent replay model/read transports in `ejecutor.ts`, sticky invalid-run errors, synthetic runtime/safety tests, README usage and P0-03 slice definitions in PLAN.md.
+- Verification: `npm run eval:esco:check` passed: 100 passed / 2 private-data skips. Initial sandbox run failed four existing CLI subprocess tests; the authorized outside-sandbox rerun passed all four. `npm run lint` passed with 0 errors / 910 existing warnings; `npm run typecheck` passed. `git diff --check` passed. Judge prompt/parser tests passed; paid original-answer calibration unavailable. Documentation references and task status consistency checked. Logs: `/tmp/esco-{check,lint,types}.log` (temporary). Mobile smoke not applicable: no UI/edge source changed.
+- Decisions: D01 remains unresolved; no owner decision inferred. Private directories named in BASELINE.md are absent; bounded workspace/tmp artifact search found no approved JSONL/reports. No private label or historical value invented. The ledger is prepared, not adjudicated.
+- Remaining: P0-02 requires authorized private evidence and attributed D01 decisions; paid calibration also requires budget. P0-03-b retains all unmet parent criteria: tool/argument/scenario/turn keys, fixture pack/manifests, multi-turn isolation and real-model frozen command. Current runtime results still use legacy `live` labeling; no CLI exposes this foundation yet. Mocked outputs establish transport behavior only.
+- Next: P0-03-b; first run `rg -n "executeTool|correrCaso|instalarGuardas" src/supabase/functions/server/chat.tsx evals/esco/lib/ejecutor.ts`. Continue synthetic controls while private adjudication remains blocked.
+- Production state: local harness/documentation only; no provider calls, production reads/writes, deployments, migrations, telemetry, schedules or rollout. All approval gates retained.
