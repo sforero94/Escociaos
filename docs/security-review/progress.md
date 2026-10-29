@@ -4,6 +4,15 @@ Updated: 2026-10-28 (America/New_York). This is the session queue and handoff
 record, not a claim of current production state. Read [the plan](plan.md) and
 [the session guide](session-guide.md) before changing a status.
 
+## Current release status — 2026-10-29
+
+PR360 is merged; exact187 applied and metadata-verified in production at ledger
+`20261029183837`. Empty local real Auth/PostgREST validation is complete. PR362
+remains a draft: operator Chrome/Safari native Web Locks capability and specific
+frontend ready/merge/deployment authorization remain pending. Do not reapply187.
+The chronology below preserves earlier instructions and evidence as historical
+records; this status supersedes older pending DB gates and mock-only limitations.
+
 ## Queue
 
 | Scope | Status | Recorded result / required next action | Evidence and gap |
@@ -14,7 +23,8 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
 | S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
 | S5 — ranked report and remediation scopes | Closed with gaps — read-only consolidation | Seven medium source findings retained; no new verified critical/high candidate. Proposed next backlog decision: expense-batch retry only; no implementation. | [S5 consolidation](s5-consolidation.md). Documentation-only merge recommendation is conditional on reviewer acceptance, stale PR metadata refresh and final-head checks. Local full-lint/evidence gaps remain. |
-| Expense-batch retry — DB prerequisite | Draft PR360, revised after parent blockers; not applied | Migration187 + PostgreSQL tests/docs only; frontend matches main. Review before dependent activation. | [DB runbook](expense-batch-retry.md); development Supabase and authorized DB application gates remain. |
+| Expense-batch retry — DB prerequisite | PR360 merged; production187 applied | Live ledger20261029183837; exact SQL and metadata postconditions verified. | [Release receipt](expense-release-readiness.md); preserve RPC/receipts. |
+| Expense-batch retry — frontend activation | Draft PR362; operator capability/release approval pending | Native per-user Web Lock across pending read/write/send/cleanup; exact-payload cleanup and adversarial concurrency regressions. | [Frontend runbook](expense-batch-frontend.md); DB prerequisite applied (ledger20261029183837); local real-stack validation complete; operator Web Locks and specific frontend release approval pending. |
 
 The bounded S1–S5 review closed with gaps. The later overnight instruction
 authorized expense-only implementation; the morning-review instruction requires
@@ -569,3 +579,54 @@ Next-session prompt: review the updated draft PR360 against main6345804 and its
 exact-head checks. Parent handles any next action confirmation. Do not mark ready,
 approve, merge or release from this preparation; leave PR362 held and migration187
 unapplied. Preserve all prior release gates and do not start another scope.
+
+
+## Dependent frontend correction
+
+Branch `codex/security-expense-batch-frontend` starts at DB prerequisite
+`29a4a757c6a34ddb27d08e02ff2ab68f434b96dc`. It restores only the scoped browser
+activation with native exclusive per-user Web Locks before any pending read or
+write, across RPC/error/confirmed cleanup. It has no unlocked UUID-only deletion;
+cleanup matches UUID+payload and first-call PGB01/legacy22023 or any uncertain
+replay error retains recovery. Unsupported locking fails before mutation/upload/RPC.
+
+Deterministic tests cover the parent's lost-response/conflicting-payload schedule
+in both orders. Actual Chromium native two-page locks enforce a controlled
+same-origin contention barrier, preserve the original invoice/edit payload and
+recover it after reload. Browser auth/RPC remain simulated; this is not browser/
+PostgREST coverage. PostgreSQL fixture and required development Supabase gate
+remain separate. Final review/checks/CI and concrete draft URL belong in handoff.
+No new migration, merge, deployment setting, production operation or remediation.
+
+Dependent frontend local close-out: 4,786 tests/219 files, including29 focused;
+ten PostgreSQL groups; expanded native-browser concurrency/component checks;
+types/build pass; lint0 errors/907 existing warnings. Independent re-review
+reran29 focused tests and found no remaining blocker. This is draft readiness
+only; final-head CI and release gates remain separate.
+
+
+## Local release-readiness preparation after PR360 merge
+
+PR360 merged at c68c37e642ba118675326283f24b6e1d7b4b7dc2. Only the isolated
+local candidate incorporates that main into PR362 source e7a1e861; the original
+source branches and external PR metadata stay unchanged. The sole conflict was
+this additive tracker; both DB integration history and frontend records survive.
+No application code or SQL conflict occurred. Release remains held pending an
+authorized development target, actual Supabase/PostgREST validation, exact reviewed
+migration application/postconditions and operator browser support confirmation.
+Parent owns release serialization and Bot Log. No SQL or deployment is authorized
+by this readiness preparation.
+
+## Empty local Auth/PostgREST release validation
+
+The parent selected the isolated local stack. Existing Docker capability sufficed
+without host settings, a privileged runtime or hosted resources. New local-only
+test scripts validate exact187 with official GoTrue2.197.0/PostgREST14.18/PG17,
+synthetic users/roles and actual AuthProvider/SupabaseJS/browser HTTP.
+Nine real API groups and five browser scenarios pass; prior mock-only transport
+limitation is closed locally, not as a production-parity claim.
+Application source and migration hash stay unchanged; original branches preserved.
+All local containers/users/envfiles are discarded; cleanup is self-verifying.
+No remote push/PR, prod SQL, deployment or Bot Log action. Operator-device support
+and exact production migration authorization/postconditions remain separate.
+See expense-release-readiness.md and the new local-stack scripts for evidence.

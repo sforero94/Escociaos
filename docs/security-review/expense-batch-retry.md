@@ -1,5 +1,13 @@
 # Expense-batch retry — database prerequisite (PR360)
 
+Current status (2026-10-29): PR360 merged; exact187 is applied in Escocia OS
+production, live ledger `20261029183837`. Metadata postconditions passed.
+See [the production receipt](expense-release-readiness.md). Do not reapply.
+Earlier unapplied/development instructions below are historical. PR362 still
+requires actual operator Web Locks confirmation and specific frontend release
+approval. Preserve RPC and receipts on rollback.
+
+
 Status: additive candidate, **not applied and not released**. Integration base `main` after PR367 is
 `634580480c72b27c7ccd2d8c006af520d0ca1058`, verified through Composio account
 `github_lysis-talion` / `thinksid` on 2026-10-29 UTC. Migration187 is the next
