@@ -2454,3 +2454,4 @@ La auto-poda no aplica.
 |---|---|---|---|
 | **2026-10-29-jueves** | 1 (ESCO-165) | pendiente (sábado 10-31) | 0 (sin respuesta aún) |
 Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strategy y usage-analytics al primer jueves del mes. La sonda P0 nunca entra.
+- **Hecho de campo (Santiago, 2026-10-29):** en las aplicaciones, los correctores de pH (Acidurez, Acondicionador sys, Potenzol ph-D) son intercambiables. El plan repite la cantidad total bajo cada uno; David completa la necesidad combinando lo que hay en bodega. Un faltante "planeado vs saldo" por producto no es un faltante real. Vale para Monday (data-integrity) y para la advertencia de inventario de la corrida 2026-10-26-lunes, que era falsa por la misma razón. [corrida: 2026-10-29-jueves]
