@@ -33,6 +33,10 @@ Initial implementation:4931 tests across224 files, zero skips; evaluator check16
 
 Migration188 rerun in the isolated networkless synthetic PostgreSQL17 container:11 checks passed. Initial repeated setup refused an already existing synthetic table; recreating only that fixture table produced the clean final run. No production SQL ran. This is not full closure/RLS integration or live model evidence. Local logs: /tmp/application-candidate-{full,eval,lint,build}.log; /tmp/application-final-focused-v2.log. Exact commit and remote CI follow in the PR/handoff; these local counts must not be confused with historical implementation commits.
 
+## Current control-only continuation
+
+Parent conditionally accepted runtimee7a5545 after bounded re-review and authorized preparation of one-time371 controls/tests/docs in the same draft. Runtime, mirrors, SQL188 and RPC106 remain unchanged. New workflow/controller require manual main first attempt, observed reviewed v281 diagnostic from identical controls, two fresh release captures, stable baseline and fixed CLI source/rollback. Existing367 helpers remain unchanged. No management secret, external diagnostic, deployment or migration is invoked during preparation. RELEASE_PR371.md records exact identities, approvals, uncertainty and source-only rollback limits. Final checks/review/CI are reported separately from runtimee7a5545 evidence. Preparation passed114 Node guards and4994 full tests/226 files, zero skips; types/evaluator168/focused lint, full lint (907 warnings/zero errors), build26.03s and whitespace/source identity passed. Independent control reviews added12 and17 mocked assertions and found no remaining blocker after first-attempt/body-uncertainty safeguards. Exact control-head CI follows publication.
+
 ## Prior CI receipts
 
 I01 CI40759015461 and I02 CI40765357918 passed before their merges.

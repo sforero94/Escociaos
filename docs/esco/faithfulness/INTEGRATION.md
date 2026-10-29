@@ -3,7 +3,7 @@
 ## Current baseline and scope
 
 Baseline main `f175c78a1bc65955f34247589698958565ab20b6`, root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`, includes merged359 and361. Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-The current application-domain correction changes runtime source, UI date validation and a draft database trigger. It is not deployed. Security, accepted runtime367/release controls and PO changes remain intact.
+The current application-domain correction changes runtime source, UI date validation and a draft database trigger. It is not deployed. One-time371 controls/tests/docs are now prepared in the same draft, fixed to unchanged e7a5545 runtime. No dispatch or management-secret access occurred; RELEASE_PR371.md defines separate diagnostic/release gates. Security, accepted runtime367/release controls and PO changes remain intact.
 
 The owner explicitly selected actual execution dates by default, planned dates only on explicit intent, and independent start/end validation for both pairs. Direct execution-tool routing, normalized name matching, ambiguity and incomplete-evidence safeguards address application lookup. See [APPLICATION_CORRECTION.md](APPLICATION_CORRECTION.md) for inventory, write boundaries, tests and activation limits. No business records are rewritten; migration188 is draft only.
 
