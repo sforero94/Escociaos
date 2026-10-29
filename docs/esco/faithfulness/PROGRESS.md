@@ -1,18 +1,21 @@
 # Progress and handoff
 
-## Current state — I03-b, 2026-10-29 UTC
+## Current state — I03-b revalidation, 2026-10-29 UTC
 
-- I01/I02 are merged through PRs #357/#358. Main remains `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`; source `codex/esco-faithfulness-plan` remains `3d3e65454d8d2f78971593f1fe90a0514ce22301` (remote refs verified).
-- I03-a is queued as [draft #359](https://github.com/sforero94/Escociaos/pull/359), head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`; exact-head CI passed lint/types/tests (receipt below); Vercel checks passed. It is unmerged with auto-merge disabled. Its code is not included on this branch.
-- **Active scope: I03-b only**, pure Web/Telegram evaluation-message builders and synthetic history/parity tests, fresh `codex/esco-faithfulness-eval-messages` from main. No code dependency on #359: dates stay there; only I02 types are required. Target main, no stacking or retarget needed.
-- Review reproduced three source failures (missing args/summary in both channels and unknown channel fallback). A separate QA/code-quality reviewer found uncapped history; fixed with explicit raw rows and current channel windows before expanding evidence. Reviewer rechecked 23 focused tests: pass, no new defects. Static parity is not live handler verification.
-- Queue order: #359 first, then this slice. Shared tracker documents overlap: after #359 merges, reconcile those docs on this branch and rerun final-head checks/CI before merge; do not force-push or silently retarget. Security draft #360 belongs to the parent and is untouched.
-- Next action: final gates and small draft publication under overnight queue authorization, then exact-head CI to terminal. No merges tonight; morning review only. Stop after this slice.
-- No runner, CLI, provider, env/credential access, private fixture, runtime/edge edit, production traffic, bot/Notion write, migration or deployment. Measurement v1.1 and guarded adjudication remain unchanged. Source task table and old entries below remain historical.
+- Baseline main `50d377641dfbb2f98864f4be68f1f3275263efd2`; local root tree matches `fa2a66683292632c2b7298d4caa8d32f1e495dc1`. Preserve merged input adapter359, security360/362, runtime367, release controls and PO documents. Source branch remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+- I01/#357, I02/#358 and I03-a/#359 are merged. PR359's reviewed head3ec077f merged as50d3776; postmerge CI passed4864 tests/221 files, types and lint (907 warnings, no errors). Vercel reported deployment completed through GitHub. Direct Vercel metadata was denied403; no retry/account/access change is authorized here.
+- Active scope is existing draft361 only, `codex/esco-faithfulness-eval-messages`, reviewed implementation `917f9ad42b8b491f97f277254af9a97f892210b7`. Integrate main and reconcile three shared trackers; retain both source/test blobs unchanged. No runner, fixture, provider or runtime implementation is added.
+- Builders preserve channel-specific20-row windows, raw-history isolation and opaque absent/error/truncated tool summaries. Static parity tests inspect both source mirrors without executing handlers. Telegram earliest20 behavior is intentionally reproduced, not repaired. Measurementv1.1 and immutable labels/adjudication remain intact.
+- Runtime367 remains separately released as v281 through370; the reviewed release passed once without rollback. Metadata/JWT/health gates passed. Parent accepted read-only session/dashboard/expense-history/Registrar smoke20:50–20:53UTC, no app-console errors. No births query, real model calibration or business write was tested. Source recovery does not promise identical ESZIP/dependencies/runtime/secrets. Temporary release controls remain pending separate cleanup.
+- Final candidate checks and independent review must be recorded separately from original23 message tests and prior branch CI. Remaining order:361 →363 →364 →366. Reconcile trackers/retest each, never merge the offline integration-base branch. Keep361 draft until specific ready/merge approval. Stop after terminal CI for parent review; do not start363.
+- No private fixtures, providers, production writes, backend deploy, migration, credentials/access changes or P1-02 work. Parent owns Bot Log. Historical preserved-source statuses below do not claim full source milestones are integrated or activated on main.
 
-## Prior CI receipt
+## Prior CI receipts
 
-[Successful run 40798708653](https://github.com/sforero94/Escociaos/actions/runs/40798708653) verifies queued input-adapter head `9de2be2`. This public build identifier is separate from channel-history notes.
+I01 CI40759015461 and I02 CI40765357918 passed before their merges.
+Merged359 postmerge CI40956872042 passed; its local145 evaluator tests and4864 full tests do not validate this changed candidate.
+Queued actual-loop CI40811688057 remains prior-slice evidence only.
+Backend postmerge CI40951382054 and release40951834611 passed separately; they do not establish live faithfulness.
 
 ## Task tracker — preserved source-branch status
 
@@ -199,11 +202,8 @@ Update this table and the current-state block in the same session. Add implement
 - Verification before commit: 92 focused evaluator tests passed, zero skips. Final-head types/lint/build/full-suite checks run after commit and are reported with the exact handoff SHA. Temporary logs `/tmp/esco-i02-{envelope-count-repro,applicability-drift-repro,corrections-focused}.log` retain reproduction evidence.
 - Remaining: parent review and explicit I02 draft-publication approval, then PR CI. No publication attempt. No other scope, runtime, provider call, private JSONL, migration, deployment or next slice.
 
+## Session — I04-a persisted-summary safety, 2026-10-29 UTC
 
-### Session: I03-b pure message builders, 2026-10-29 UTC
+Branch `codex/esco-faithfulness-summary-safety`; baseline current main47d1386, PO files preserved. Reproduced6 failures in current-main focused controls, fixed canonical `escoConsultas.ts` and synchronized its two generated copies with the existing script. Added synthetic tests to existing main query/loop suites:76 focused passed, independent26 assertions passed. Immediate raw tool data stays complete; persisted truncation/failure cannot pass the births evidence gate. No new business rule, typed-envelope migration, hard context cap, tool injection or Telegram rewrite. Final-head test/type/lint/build/CI receipts belong in PR/handoff. Rollback is source revert and mirror synchronization; deployed rollback would separately require an authorized edge deployment. No deployment or production/private/provider action occurred. Next: parent review and morning queue integration, no further slice.
 
-- Branch/base: `codex/esco-faithfulness-eval-messages` from main `6a2dd50`; independent of queued #359. The original work/I01/I02/I03-a branches and security #360 are preserved.
-- Changed: source message-format adapter only, with explicit raw persisted rows. Web uses latest 20 rows; Telegram faithfully uses earliest 20, including its current omission of newer questions on long histories. Window first, evidence expansion second. Source date conversion, producer/typed-evidence tests and forced-loop assertions are excluded with their separate scopes, not imported to force runtime dependencies.
-- Verification before commit: three source defects reproduced, then corrected. QA/code-quality reviewer independently found/reproduced 21/23-row histories beyond production's 20-row window; corrected and independently re-reviewed with all 23 tests passing. Error/truncated/missing summaries remain opaque; no success/completeness inferred. Final head gets types/lint/build/full-suite gates after commit.
-- API: follow-ups now require raw history plus caller-supplied base prompt, never expanded model messages. Future runner must adapt to this explicit API. No existing app/runner imports it. History queries, timestamp tie ordering and memory lookup are not executed by this pure adapter.
-- Remaining: draft CI, queued morning review and later docs reconciliation/retest after #359 merges. No merges, next slice or Bot Log write. Rollback is a normal revert without schema/data/traffic changes.
+Initial I04-a implementation `b162e37` full suite:4781 passed,1 failed; the existing documentation guard flagged placement of the public prior-CI receipt near channel-history text. Moved the unchanged receipt into its own section. No guard, allow-list or source/test assertion was relaxed. Functional source/tests remain as independently reviewed; final handoff is the later documentation commit and must pass all final-head gates.

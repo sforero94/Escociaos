@@ -383,3 +383,12 @@ estado de producción es una hipótesis, no un hecho. Esta se refutó con un sol
 - Novedades: revisión 2026-10-29 (ESCO-162). Después, dejar de seguir novedades_uso salvo que la decisión sea 'seguir'. Totales: 27 eventos humanos en 6 semanas, 1 cuenta. [corrida: 2026-10-26-lunes]
 - Pulso 10-19..10-25: rt 67 · Esco 20 · gastos 16 · ingresos 9 (bot) · mov_inv 6 · compras 3 (primeras desde 08-05) · pesajes 0 (última sesión 10-14) · monitoreos 0 (cadencia). 5 cuentas humanas + bot; Martha 0. ESCO-164 filado (doble conteo de saldo de apertura). [corrida: 2026-10-26-lunes]
 - DECISIÓN de Santiago: Novedades SE MANTIENE (ESCO-162 cerrado, Aceptado). No refilar el uso bajo de Novedades como hallazgo; seguir novedades_uso solo como tendencia. [sesion en vivo 2026-10-26]
+
+## Corrida 2026-10-29-jueves
+- Pulso 10-22→10-28 (w0/w1/prom4s): registros_trabajo 47/117/72,5 (lotes: 3 días de captura) · fin_gastos 23/15/18,5 · chat_messages 18/10/6,3 (1 usuario, 0 errores) · telegram_mensajes 12/15/7,3 · gan_movimientos 7/4/1,5 · hato_alertas 6/8/3,3 · mov_inventario 6/16/5,3 · fin_ingresos 5/11/3,0 · compras 3/0/0 · CEROS: hato_pesajes_leche (51 prev), monitoreos (cadencia, R32 cerró 10-21), capturas_foto, chequeos, tratamientos, informes_visita, rondas_inventario, inventario_operaciones. [corrida: 2026-10-29-jueves]
+- Quién escribe (7 d): 5 humanas + bot 0. David 53 · Santiago 19 · Efrain 15 (vuelve a escribir gastos) · Consuelito 8 · Fernando 2. [corrida: 2026-10-29-jueves]
+- Cadencia del pesaje por foto: una foto Telegram cada 11-12 días que escribe 2 sesiones (09-19, 10-01, 10-12). Última sesión 10-14. Si no hay foto nueva para el 2026-11-02, ES señal. [corrida: 2026-10-29-jueves]
+- inventario_operaciones (mig 185) en 0 filas NO es defecto: ninguna escritura de inventario después de la migración. Re-medir el 11-02: cada movimiento nuevo debe tener su recibo. [corrida: 2026-10-29-jueves]
+- ESCO-164 en uso real: el 10-24 Acidurez y Focus muestran que el usuario corrige el doble conteo a mano. Evidencia para ESCO-164; no refilar. [corrida: 2026-10-29-jueves]
+- Secado por alerta: 3 secado_due 10-25/26, 2 confirmadas (Fernando, Santiago), RICARENA #88 escalada sin respuesta. El secado_real usa la fecha de la respuesta con fecha_confianza='aproximada' (contrato): no leer ese rezago como error. Si RICARENA sigue sin secado el 11-02, mirar. [corrida: 2026-10-29-jueves]
+- Navegación: hato_alertas.respondida_por guarda texto (nombre) tras #356. hato_alertas_envios se une a telegram_usuarios por telegram_id::text. [corrida: 2026-10-29-jueves]

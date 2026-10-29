@@ -1,60 +1,74 @@
-# Faithfulness integration — current scope I03-b
+# Faithfulness integration — I03-b current-main refresh
 
-## Current baseline and scope — I03-b
+## Current baseline and scope
 
-Main is `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` (I01/I02 merged).
-Source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`; refs verified.
-I03-a [draft #359](https://github.com/sforero94/Escociaos/pull/359) is queued at
-`9de2be29a90a37760d0ce81ed8052eda38ad1bed`, exact-head CI
-[40798708653](https://github.com/sforero94/Escociaos/actions/runs/40798708653) success.
-No PR is merged tonight. Security draft #360 is separate and untouched.
+Current main is `50d377641dfbb2f98864f4be68f1f3275263efd2`, reverified 2026-10-29 UTC.
+Its complete root tree is `fa2a66683292632c2b7298d4caa8d32f1e495dc1`; the local test snapshot matches exactly.
+Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+I01/#357, I02/#358 and I03-a/#359 are merged. Existing PR361 is the next draft.
+Its reviewed implementation head is `917f9ad42b8b491f97f277254af9a97f892210b7`.
+This refresh integrates main and reconciles trackers; both message-builder/test blobs remain unchanged.
+All input-adapter, security, runtime, release-control and PO changes remain intact.
 
-Fresh branch `codex/esco-faithfulness-eval-messages` contains **I03-b only**:
-pure message builders and synthetic history/parity tests. It requires only merged
-I02 types; no #359 input/date import, so target **main**, not a stacked branch.
-No whole-source merge/cherry-pick; no date helper, runner, CLI, provider, env/credential
-access, private fixture, runtime import/edit, database call or deployment.
+I03-b contains pure Web/Telegram message builders and synthetic history/parity tests.
+It imports only merged evaluator types; no input/date, runner or transport dependency is needed.
+Callers supply chronological persisted rows and an authorized base prompt; expanded LLM protocol is rejected.
+Window selection counts persisted rows before metadata expansion: Web latest20, Telegram earliest20.
+This intentionally reproduces Telegram's current omission of newer questions beyond20 rows; it does not fix production.
+Only assistant rows expand tool metadata. Opaque summaries retain absent, error, partial, stale, long and malformed values.
+Missing args/summary render as undefined, matching existing channels; no missing evidence becomes invented success.
+Raw histories clone independently. Literal instruction-like text cannot create new structural roles, but real-model resistance is unmeasured.
+Static tests read both Web and Telegram source mirrors locally; they do not execute deployed handlers or database queries.
+No runtime import/edit, environment/credential access, provider, private fixture, CLI or deployment is included.
+Measurementv1.1, immutable labels and adjudication safeguards remain unchanged.
 
-## Message contract and review evidence
+## Integration order and accepted release
 
-- Callers supply chronological persisted user/assistant rows and a base prompt (including any authorized memories). Expanded LLM messages/protocol are rejected instead of guessed back into rows. The future runner must adapt to this explicit API; no current app imports it.
-- Window applies to persisted rows **before** evidence expansion: Web latest 20, Telegram earliest 20. This intentionally reproduces current Telegram omission of newer questions beyond the window; it does not repair production. Caller supplies database ordering/ties; no query is executed.
-- Tool summaries are opaque and unchanged, including long, error, stale, partial and malformed/truncated JSON. Missing args/summary render as `undefined`, matching both current channels. Tool `error` flags remain in the evaluation trace; the runtime history format does not independently serialize them. No unknown state becomes an invented success or empty object.
-- Metadata expands only for assistant rows. Prompt adjustment applies once from the supplied base, rather than recycling an already adjusted system prompt. Raw histories clone independently; no input or original answer is changed. Literal instruction-like text stays within its existing message; no real-model injection-resistance claim.
-- Static tests inspect format/window fragments in both Web and both Telegram edge copies. They do not import/execute handlers or verify database ordering, delivery, permissions or persistence. No hard byte-bound or freshness/fact validator is claimed.
+| Slice | Current state | Dependency / next action |
+| --- | --- | --- |
+| I01 | PR357 merged | 15 corrected synthetic anchor tests; prior evidence retained below |
+| I02 | PR358 merged | Pure scoring/reporting and measurementv1.1; prior CI40765357918 passed |
+| I03-a | PR359 merged | Merge50d3776; postmerge CI40956872042 passed |
+| I03-b | PR361 draft, current refresh | Message builders only; review after fresh checks |
+| I03-c | PR363 draft | Reconcile after361; closed fixture transports |
+| I03-d | PR364 draft | Reconcile after363; offline runner composition |
+| I03-e | PR366 draft | Reconcile after364; synthetic actual-loop integration |
+| I04-a | PR367 merged and backend released | Accepted corrective summary-safety portion only; broader runtime work remains separate |
+| P1-02 | Not started in this continuation | No authorization to advance here |
 
-Initial controls reproduced three failures: absent-value formatting in both
-channels and unknown-channel fallback. A separate QA/code-quality role found
-unbounded 21/23-row histories against production's 20-row limit. That finding was
-fixed with the explicit raw-history API. Independent re-review: 23 focused tests
-passed, no new defects. Tests cover 19/20/21 rows, excluded evidence, >20 expanded
-messages, repeated-turn isolation, error/truncation, invalid protocol and cyclic
-args. Only factory-created synthetic histories; no source private fixtures.
+Do not merge `codex/esco-faithfulness-offline-base`. Reconcile tracker conflicts and retest each later candidate.
+Security #360/#362, migration files, release controls and all PO changes remain part of the base.
+No subsequent slice is included to satisfy imports.
 
-## Queue order and later integration
+PR367 fixed source `634580480c72b27c7ccd2d8c006af520d0ca1058` deployed as v281.
+PR370 merged at `9a447d9e1a9202b07dee7e555435443b47892f4a`.
+[Release40951834611](https://github.com/sforero94/Escociaos/actions/runs/40951834611) passed once, with no rollback.
+Both native80-file captures passed exact source/cache/type checks; reconstructed82-file comparisons matched pinned rollback Git.
+This proves source/configuration recovery, not bit-identical ESZIP, dependencies, runtime or secrets.
+Metadata confirmed ACTIVE, verify_jwt=false and updated2026-10-29T20:45:46.924Z; anonymous health passed.
+Parent accepted read-only browser smoke at20:50–20:53UTC: session, dashboard, expense history and Registrar; no application console errors.
+No functional births query, real model calibration or business write was tested.
+Temporary release controls remain pending a separately reviewed cleanup after acceptance; this refresh does not remove them.
+The historical drift Actions failure was not rerun; read-only source/tree/metadata checks subsequently aligned.
 
-Review #359 first, then I03-b. The code is independent and requires **no retarget**.
-The three tracker docs overlap: after #359 merges, reconcile them on this branch,
-retain both histories/current facts, and rerun final-head checks/CI before merging
-I03-b. Do not force-push or mark old checks as verification of a changed head.
-No merge is authorized tonight; no further slice begins without parent dispatch.
+## I04-a behavior retained from main
 
-## Integration sequence
+Saved summaries preserve own error markers and downgrade completeness after context truncation.
+The births gate rejects error/context-loss summaries. Short results, complete-empty and valid paginated aggregates remain compatible.
+Immediate full tool payloads remain unchanged. This is not a hard size cap or general semantic fact checker.
+The completed correction reproduced six failures, then passed76 focused and26 independent synthetic assertions.
+Those historical counts are not PR361 validation and are not live faithfulness measurements.
 
-| Slice | Contents | Dependencies / review boundary |
-|---|---|---|
-| I01 (merged) | Numeric/date helper, 15 synthetic tests, check command, tracker | PR #357; two reviewed parser corrections retained |
-| I02 (merged) | Pure scoring/measurement v1.1/report/adjudication | PR #358; main 6a2dd50 |
-| I03-a (queued) | Pure input validation/selection and explicit dates | Draft #359, CI green; no merge tonight |
-| I03-b (this candidate) | Pure Web/Telegram history/message builders | Independent main base; review after #359 and reconcile overlapping docs/retest |
-| I03 remainder (deferred) | File/config, runner and provider/replay transports | Explicit raw-history API, source-hash gates; replay still needs I04 injection; no private fixtures implied |
-| I04 (deferred runtime) | Canonical consultation/evidence/chat changes, sync script and both edge copies | Reconcile on then-current main; preserve alert #356 and inventory F1. Independently test transport injection and evidence changes. Synchronize trees; deployment separately gated |
-| P1-02 (not started here) | Bounded loop and command routing | Requires reviewed evidence/runtime prerequisites; not authorized in this continuation |
+## Validation for this refresh
 
-No date converter or date-guard allow-list change is needed for this slice. Source plans and D01
-owner decisions remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+All message source/test blobs retain their reviewed917f9ad identities; the existing main input adapter remains unchanged.
+Original23 focused message tests covered19/20/21 rows, repeated turns, excluded evidence, absent values and malformed protocol.
+Earlier findings corrected missing-value formatting, unknown-channel fallback and unbounded21/23-row histories before that reviewed head.
+Those are historical implementation receipts, not validation of this refreshed candidate.
+Final-head full suite, evaluator check, types, lint, build, independent review and exact-head CI are required for this refresh.
+No unrun check is marked passed here. No private JSONL, paid provider, live calibration or production write is exercised.
 
-## Historical I02 contract and review
+## Review corrections and measurement semantics
 
 - Strict judge verdict types: an array such as `["cumple"]` is rejected, not string-coerced. Duplicate/unknown/missing criterion checks and typed flags remain required.
 - Verdict combination validates an `ok` judge against the case criteria. Missing/malformed judges become unavailable/inconclusive; a missing or inconsistent deterministic layer cannot pass. Hard deterministic failures remain conclusive without a judge. Infrastructure failures retain the source legacy `inconcluso` behavior.
@@ -69,7 +83,7 @@ now uses the existing ES2020-compatible API. No test or compiler setting relaxed
 Final-candidate checks are reported with the exact handoff SHA after commit.
 
 These are typed pure APIs, not a general decoder of arbitrary run/review JSON.
-Golden input validation remains I03. Prompt separation is tested synthetically;
+I03-a adds case-shape/calendar validation; semantic input truth remains unverified. Prompt separation is tested synthetically;
 no real model injection-resistance claim follows. Anchors only check token presence:
 `1.234` retains both numeric candidates, small integers remain soft, and a strong
 anchor may occur in any evaluated turn. This does not prove entity/period support,
@@ -100,7 +114,7 @@ Final-candidate checks are reported in the correction handoff; `115db6e`'s
 - Initial candidate: 13 tests, zero skips; types/focused lint passed. Repository lint passed with 907 warnings; build passed in 17.97s; alert/F1/edge parity regression 232 tests across 6 files passed. Source code/test byte equality and whitespace check passed then.
 - Initial implementation `16e95e342620b7412d6614493c9e66ddc00c8f6a` and documentation handoff `f7ad0dae0df236771ddd7e18767f0e5343e0f8c5`: 13 focused / 4678 full tests, zero skips, types/lint/build passed. Logs `/tmp/esco-i01-final-*` and `/tmp/esco-i01-handoff-*`.
 - Independent I01 review: sign/year regressions reproduced 2 failures / 13 passes; fixes in `abb0ec5`. Reviewed final head `b6470a4`: 15 focused / 4680 full tests, zero skips; types/lint/build/whitespace passed. Corrected build 30.29s; 907 existing lint warnings. Logs `/tmp/esco-i01-corrected-*`.
-- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication and merge later completed as PR #358; current queued work is recorded above.
+- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication was later approved; PR #358 passed CI and merged.
 
 ## Gates, QA and rollback
 
@@ -109,11 +123,9 @@ calls. D01 remains resolved; P0-02 private disclosure to OpenRouter remains bloc
 The $1 cap does not authorize disclosure. Security PR #324, medium security fixes,
 credentials and access remain outside scope.
 
-PR #356 described migration 186 unapplied and edge deployment pending. No live
-ledger or deployment state is queried here; that owner remains responsible.
-No migration, deployment, telemetry, recurring spend, pilot or canary.
+PR367 and the reviewed release controls completed the separate backend release below.
+This I03-b refresh makes no migration, deployment, telemetry, pilot or canary change.
 
-Keep I03-b queued as a draft after CI; merge requires morning review and the later docs reconciliation/retest described above. Rollback is a normal revert; no schema, history or traffic
-rollback. Desktop/mobile/live Web/Telegram QA is not exercised by these pure
-modules. A future runtime release requires authorized checks in both channels and
-preservation of alert/F1 behavior; these synthetic tests do not establish live QA.
+PR361 remains draft pending final checks, parent review and specific merge approval.
+Revert its offline message builders/tests to roll back; no schema or traffic rollback is required.
+Existing desktop/browser acceptance does not validate these pure modules or live model faithfulness.
