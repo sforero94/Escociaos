@@ -1,20 +1,21 @@
 # Progress and handoff
 
-## Current state — I03-a revalidation, 2026-10-29 UTC
+## Current state — I03-b revalidation, 2026-10-29 UTC
 
-- Baseline main `2a8671a1af027815cadac5d6f39009558fc0a6cc`; exact root tree reconstructed locally as `8e803295709422d5bd86285dba5637ea9386f73d`. Preserve security #360/#362, release controls and PO documents. Source branch remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-- I01/#357 and I02/#358 are merged. I04-a/#367 is merged and its fixed backend source deployed as v281 through reviewed #370. [Release40951834611](https://github.com/sforero94/Escociaos/actions/runs/40951834611) passed once, no rollback; metadata/JWT/health gates passed. Source recovery is not bit-identical bundle recovery.
-- Parent accepted browser read-only smoke at20:50–20:53UTC: session, dashboard, expense history/Registrar, no app-console errors. No births query, real model call, calibration or business write was tested. Temporary release controls remain unchanged pending separate cleanup.
-- Active scope is existing draft359 only, `codex/esco-faithfulness-eval-input`, original reviewed head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`. Integrate current main and reconcile overlapping trackers without changing the four adapter/test blobs. No new implementation, runner, fixture or runtime scope.
-- Adapter rejects malformed case/date/selection inputs; unknown/null historical evidence and empty answers stay explicit. Measurementv1.1 and immutable adjudication/label safeguards remain intact. Original53 input/145 evaluator tests and111 independent assertions are historical; refreshed candidate checks must be recorded separately.
-- Remaining queue:359 →361 →363 →364 →366. Retest and reconcile shared docs after each integration. Never merge the offline integration-base branch. No ready/merge action until specific user approval; stop after this candidate reaches terminal CI and parent review.
-- No providers/private fixtures, production writes, deployment, migration, credentials/access changes or P1-02 work. Parent owns Bot Log. Historical preserved-source statuses and run evidence below do not claim those entire source milestones are integrated or activated on main.
+- Baseline main `50d377641dfbb2f98864f4be68f1f3275263efd2`; local root tree matches `fa2a66683292632c2b7298d4caa8d32f1e495dc1`. Preserve merged input adapter359, security360/362, runtime367, release controls and PO documents. Source branch remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+- I01/#357, I02/#358 and I03-a/#359 are merged. PR359's reviewed head3ec077f merged as50d3776; postmerge CI passed4864 tests/221 files, types and lint (907 warnings, no errors). Vercel reported deployment completed through GitHub. Direct Vercel metadata was denied403; no retry/account/access change is authorized here.
+- Active scope is existing draft361 only, `codex/esco-faithfulness-eval-messages`, reviewed implementation `917f9ad42b8b491f97f277254af9a97f892210b7`. Integrate main and reconcile three shared trackers; retain both source/test blobs unchanged. No runner, fixture, provider or runtime implementation is added.
+- Builders preserve channel-specific20-row windows, raw-history isolation and opaque absent/error/truncated tool summaries. Static parity tests inspect both source mirrors without executing handlers. Telegram earliest20 behavior is intentionally reproduced, not repaired. Measurementv1.1 and immutable labels/adjudication remain intact.
+- Runtime367 remains separately released as v281 through370; the reviewed release passed once without rollback. Metadata/JWT/health gates passed. Parent accepted read-only session/dashboard/expense-history/Registrar smoke20:50–20:53UTC, no app-console errors. No births query, real model calibration or business write was tested. Source recovery does not promise identical ESZIP/dependencies/runtime/secrets. Temporary release controls remain pending separate cleanup.
+- Final candidate checks and independent review must be recorded separately from original23 message tests and prior branch CI. Remaining order:361 →363 →364 →366. Reconcile trackers/retest each, never merge the offline integration-base branch. Keep361 draft until specific ready/merge approval. Stop after terminal CI for parent review; do not start363.
+- No private fixtures, providers, production writes, backend deploy, migration, credentials/access changes or P1-02 work. Parent owns Bot Log. Historical preserved-source statuses below do not claim full source milestones are integrated or activated on main.
 
 ## Prior CI receipts
 
 I01 CI40759015461 and I02 CI40765357918 passed before their merges.
-The queued actual-loop candidate's CI40811688057 and prior PR359 checks do not validate this refreshed head.
-Backend release control postmerge CI40951382054 and release40951834611 passed separately; they do not establish live faithfulness.
+Merged359 postmerge CI40956872042 passed; its local145 evaluator tests and4864 full tests do not validate this changed candidate.
+Queued actual-loop CI40811688057 remains prior-slice evidence only.
+Backend postmerge CI40951382054 and release40951834611 passed separately; they do not establish live faithfulness.
 
 ## Task tracker — preserved source-branch status
 

@@ -1,23 +1,26 @@
-# Faithfulness integration — I03-a current-main refresh
+# Faithfulness integration — I03-b current-main refresh
 
 ## Current baseline and scope
 
-Current main is `2a8671a1af027815cadac5d6f39009558fc0a6cc`, reverified 2026-10-29 UTC.
+Current main is `50d377641dfbb2f98864f4be68f1f3275263efd2`, reverified 2026-10-29 UTC.
+Its complete root tree is `fa2a66683292632c2b7298d4caa8d32f1e495dc1`; the local test snapshot matches exactly.
 Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-I01/#357 and I02/#358 are merged. PR359 is the next offline slice; it remains draft.
-The reviewed input head was `9de2be29a90a37760d0ce81ed8052eda38ad1bed`.
-This refresh reconciles shared trackers and integrates main without changing its four adapter/test blobs.
-No source branch, security change, release control or PO document is overwritten.
+I01/#357, I02/#358 and I03-a/#359 are merged. Existing PR361 is the next draft.
+Its reviewed implementation head is `917f9ad42b8b491f97f277254af9a97f892210b7`.
+This refresh integrates main and reconciles trackers; both message-builder/test blobs remain unchanged.
+All input-adapter, security, runtime, release-control and PO changes remain intact.
 
-I03-a is a pure input adapter, independent of the remaining queued runners and transports.
-`golden.ts` validates declared JSONL case shape, selection controls and text variants.
-`fechas.ts` converts explicit evidence timestamps under the fixed Bogotá UTC-5 contract.
-Malformed rows, dates, nested fields and selection controls fail closed.
-Unknown historical tool status, null snapshots and empty original answers remain explicit.
-Unmatched valid selections return an empty array; future runners must expose empty coverage.
-No clock-based today, filesystem/environment access, provider, private fixture, runtime import or CLI is included.
-Only synthetic factories are used. Shape validation does not establish business truth or provenance authenticity.
-Immutable labels, adjudication safeguards and measurementv1.1 remain unchanged.
+I03-b contains pure Web/Telegram message builders and synthetic history/parity tests.
+It imports only merged evaluator types; no input/date, runner or transport dependency is needed.
+Callers supply chronological persisted rows and an authorized base prompt; expanded LLM protocol is rejected.
+Window selection counts persisted rows before metadata expansion: Web latest20, Telegram earliest20.
+This intentionally reproduces Telegram's current omission of newer questions beyond20 rows; it does not fix production.
+Only assistant rows expand tool metadata. Opaque summaries retain absent, error, partial, stale, long and malformed values.
+Missing args/summary render as undefined, matching existing channels; no missing evidence becomes invented success.
+Raw histories clone independently. Literal instruction-like text cannot create new structural roles, but real-model resistance is unmeasured.
+Static tests read both Web and Telegram source mirrors locally; they do not execute deployed handlers or database queries.
+No runtime import/edit, environment/credential access, provider, private fixture, CLI or deployment is included.
+Measurementv1.1, immutable labels and adjudication safeguards remain unchanged.
 
 ## Integration order and accepted release
 
@@ -25,8 +28,8 @@ Immutable labels, adjudication safeguards and measurementv1.1 remain unchanged.
 | --- | --- | --- |
 | I01 | PR357 merged | 15 corrected synthetic anchor tests; prior evidence retained below |
 | I02 | PR358 merged | Pure scoring/reporting and measurementv1.1; prior CI40765357918 passed |
-| I03-a | PR359 draft, current refresh | Input adapter only; independently review before merge |
-| I03-b | PR361 draft | Reconcile after359; message builders only |
+| I03-a | PR359 merged | Merge50d3776; postmerge CI40956872042 passed |
+| I03-b | PR361 draft, current refresh | Message builders only; review after fresh checks |
 | I03-c | PR363 draft | Reconcile after361; closed fixture transports |
 | I03-d | PR364 draft | Reconcile after363; offline runner composition |
 | I03-e | PR366 draft | Reconcile after364; synthetic actual-loop integration |
@@ -54,16 +57,16 @@ Saved summaries preserve own error markers and downgrade completeness after cont
 The births gate rejects error/context-loss summaries. Short results, complete-empty and valid paginated aggregates remain compatible.
 Immediate full tool payloads remain unchanged. This is not a hard size cap or general semantic fact checker.
 The completed correction reproduced six failures, then passed76 focused and26 independent synthetic assertions.
-Those historical counts are not PR359 validation and are not live faithfulness measurements.
+Those historical counts are not PR361 validation and are not live faithfulness measurements.
 
 ## Validation for this refresh
 
-The local current-main snapshot matched root tree `8e803295709422d5bd86285dba5637ea9386f73d` before applying PR359.
-All four input source/test files retain their reviewed9de2be2 blob identities.
-Final-head checks and CI belong in the handoff and PR receipt; no unrun check is marked passed here.
-Original input evidence:22 source failures reproduced before correction;53 input/145 combined evaluator tests passed.
-Independent prior review passed111 additional assertions. This refresh requires its own independent review and complete local checks.
-No private JSONL, paid provider, deployed runtime, production business query or disclosure gate is exercised.
+All message source/test blobs retain their reviewed917f9ad identities; the existing main input adapter remains unchanged.
+Original23 focused message tests covered19/20/21 rows, repeated turns, excluded evidence, absent values and malformed protocol.
+Earlier findings corrected missing-value formatting, unknown-channel fallback and unbounded21/23-row histories before that reviewed head.
+Those are historical implementation receipts, not validation of this refreshed candidate.
+Final-head full suite, evaluator check, types, lint, build, independent review and exact-head CI are required for this refresh.
+No unrun check is marked passed here. No private JSONL, paid provider, live calibration or production write is exercised.
 
 ## Review corrections and measurement semantics
 
@@ -121,8 +124,8 @@ The $1 cap does not authorize disclosure. Security PR #324, medium security fixe
 credentials and access remain outside scope.
 
 PR367 and the reviewed release controls completed the separate backend release below.
-This I03-a refresh makes no migration, deployment, telemetry, pilot or canary change.
+This I03-b refresh makes no migration, deployment, telemetry, pilot or canary change.
 
-PR359 remains draft pending final checks, parent review and specific merge approval.
-Revert its offline adapter/tests to roll back; no schema or traffic rollback is required.
+PR361 remains draft pending final checks, parent review and specific merge approval.
+Revert its offline message builders/tests to roll back; no schema or traffic rollback is required.
 Existing desktop/browser acceptance does not validate these pure modules or live model faithfulness.
