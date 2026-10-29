@@ -14,8 +14,11 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
 | S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
 | S5 — ranked report and remediation scopes | Closed with gaps — read-only consolidation | Seven medium source findings retained; no new verified critical/high candidate. Proposed next backlog decision: expense-batch retry only; no implementation. | [S5 consolidation](s5-consolidation.md). Documentation-only merge recommendation is conditional on reviewer acceptance, stale PR metadata refresh and final-head checks. Local full-lint/evidence gaps remain. |
+| Expense-batch retry — DB prerequisite | Draft PR360, revised after parent blockers; not applied | Migration187 + PostgreSQL tests/docs only; frontend matches main. Review before dependent activation. | [DB runbook](expense-batch-retry.md); development Supabase and authorized DB application gates remain. |
 
-The bounded S1–S5 review is closed with gaps. No remediation or S6 started.
+The bounded S1–S5 review closed with gaps. The later overnight instruction
+authorized expense-only implementation; the morning-review instruction requires
+queued drafts without merge. The historical S5 close-out below remains unchanged.
 The current decision and merge/test qualifications are in
 [S5](s5-consolidation.md); the PR title/body still describe S1 and are stale.
 Existing CI success is recorded separately from historical local lint counts.
@@ -479,3 +482,90 @@ The documentation-only merge recommendation does not authorize any of those
 actions. Refresh the stale PR description and verify final-head checks before
 a separately authorized merge.
 ```
+
+
+## Expense-batch implementation close-out — 2026-10-29 UTC
+
+Main/base verified at `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` through
+Composio account `github_lysis-talion` / `thinksid`; clean local branch
+`codex/security-expense-batch-retry`. This commit records the implementation;
+its exact published head and CI outcome belong in the PR/handoff.
+
+Implemented only GastosBatchTable retry identity and its additive migration187,
+with types, helper, synthetic tests and [runbook](expense-batch-retry.md).
+Local validation: 4,772 Vitest tests / 219 files, 10 PostgreSQL groups, 15 focused
+helper tests (included in suite), desktop/mobile recovery + stale-tab replay,
+typecheck/build pass; lint zero errors / 907 existing warnings, no skipped tests.
+Independent reviewer reran the helper and PostgreSQL checks and found no blocker.
+Full current local lint is now measured; historical S3/S4 counts retain their
+original limits and do not imply production parity.
+
+Not applied/deployed. No merge or production data access. Retain the INVOKER
+own-receipt insertion trust limit and existing shared/unowned drafts. The new
+request checks do not establish a general audit trail or a redesign of ownership.
+Preserve F1 receipts/operator gap, edge HTTP413, separate denied DB export,
+PR324, PR359, PR356 and migration186. Parent owns the Bot Log/periódico.
+
+Next scope: review this queued expense-only draft and its release gates, not
+another remediation. Copy the concrete next-session prompt from
+[the runbook](expense-batch-retry.md#next-session-prompt).
+
+
+## Parent-review correction — split prerequisite and activation
+
+Parent review supersedes the combined-head “ready” conclusion for PR360 at
+`6e4a882`. It found a cross-tab pending-payload race and unsafe activation of an
+unapplied RPC in the auto-deployed main frontend. These were source blockers,
+not red CI or production incidents. No release occurred.
+
+The revised PR360 is DB-only: unapplied migration187, PostgreSQL fixture/runner
+and docs. Its frontend matches main. Review it before the dependent draft branch
+`codex/security-expense-batch-frontend`, which owns Web Locks serialization,
+full-payload cleanup, adversarial concurrent-browser regressions and activation.
+The database uses dedicated conflict SQLSTATE PGB01. Baseline rechecked through
+Composio: main `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`; next source number187.
+
+Mandatory gates: development Supabase validation; separately authorized database
+application/postconditions; only then frontend merge/automatic main deployment.
+Neither draft applies a migration or changes deployment settings. Final heads,
+new check counts and independent re-review belong in the PR/handoff. Earlier
+combined-head results above remain historical, not acceptance of these fixes.
+Parent owns Bot Log and the morning queue. No further remediation starts here.
+
+DB-only close-out: 4,757 tests/218 files, ten PostgreSQL groups including explicit
+PGB01 assertion, types/build pass, lint0 errors/907 existing warnings. Independent
+review found no remaining DB-only blocker and verified frontend equality to main.
+
+Follow-up review separated all explicit SQL validation into23514 while retaining
+PGB01 for committed-payload conflicts. A whitespace-only name now has a distinct
+rollback result; legacy22023 remains conservatively preserved by activation.
+
+
+## PR360 integration preparation after PR367 — 2026-10-29
+
+Preparation only, as authorized by the parent after PR367 merge. Current main
+634580480c72b27c7ccd2d8c006af520d0ca1058 is merged into the preserved PR360
+branch from29a4a757c6a34ddb27d08e02ff2ab68f434b96dc; no force push or conflict
+resolution was needed. The scope against main remains exactly the five DB/test/doc
+files. All frontend, unit-test and edge source files equal current main. No
+migration-number collision: main still ends at186;187 is candidate-only. No live
+DB query/application or production/private-data action establishes this check.
+
+Do not mark ready, approve, merge, deploy or apply187 during this preparation.
+PR362 is not started or changed; its original development-Supabase, authorized DB
+application/postconditions and operator-browser gates remain. Parent owns Bot Log
+and next action confirmation. Final local and exact-head checks belong below and
+in the PR handoff; all earlier session results remain historical evidence.
+
+
+Integrated-tree validation: 4,782 Vitest tests/218 files, no skipped tests; ten
+isolated PostgreSQL17 groups pass; typecheck/build pass; lint0 errors/907 existing
+warnings (local Node24). Independent read-only integration review found no blocker,
+verified the five-file diff and frontend/edge equality to current main, and
+confirmed SQL/test bytes unchanged from29a4a757. Exact published-head CI/Vercel
+results belong in the PR/handoff; no production or Supabase validation is claimed.
+
+Next-session prompt: review the updated draft PR360 against main6345804 and its
+exact-head checks. Parent handles any next action confirmation. Do not mark ready,
+approve, merge or release from this preparation; leave PR362 held and migration187
+unapplied. Preserve all prior release gates and do not start another scope.
