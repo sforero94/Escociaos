@@ -41,7 +41,7 @@ describe('application date basis and evidence', () => {
     expect(() => baseFechaAplicacion({ date_basis: 'other' })).toThrow();
   });
   it.each(['Cómo va la aplicación', 'No uses fechas planeadas', 'Aplicaciones sin fechas planeadas'])('does not infer planned dates from %s', q => expect(pideFechasPlaneadas(q)).toBe(false));
-  it.each(['Aplicaciones por fechas planeadas', 'Aplicaciones planificadas', 'Muéstrame la aplicación planeada X', 'La fecha real estaba mal; usa la fecha planeada'])('recognizes explicit planned intent in %s', q => expect(pideFechasPlaneadas(q)).toBe(true));
+  it.each(['Aplicaciones por fechas planeadas', 'Muéstrame las fechas planificadas', '¿Cuál es la fecha planeada de la aplicación X?', 'La fecha real estaba mal; usa la fecha planeada'])('recognizes explicit planned intent in %s', q => expect(pideFechasPlaneadas(q)).toBe(true));
   it.each(['¿Cuál es el estado actual de la aplicación X?', '¿En qué estado está la aplicación X?'])('routes ordinary state questions: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(true));
   it.each([
     '¿Cómo va la aplicación del producto Z? La fecha planeada estaba mal, usa la real.',
@@ -49,9 +49,27 @@ describe('application date basis and evidence', () => {
     'No uses la fecha planeada; consulta por fecha real.',
     'Muéstrame fechas planeadas y reales de la aplicación', 'Muéstrame las fechas planificadas y reales de la aplicación X',
     '¿Cómo va la aplicación? Antes se usaban fechas planeadas.',
+    'Dame el estado de la aplicación cuya fecha planeada estaba mal',
+    'Muestra el estado de la aplicación cuya fecha planificada se corrigió',
+    'Aplicaciones planificadas', 'Muéstrame la aplicación planeada X',
   ])('a planned mention or contrasting actual instruction is not consent: %s', q => expect(pideFechasPlaneadas(q)).toBe(false));
-  it.each(['¿Hay alguna aplicación de acaricida?', '¿Cómo va la fumigación de plaga Z?', '¿Cómo va la fumigación que registramos en la app?', '¿Existe una aplicación de fertilizante?', 'Avance de la fertilización del lote Z'])('routes farm existence/progress: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(true));
+  it.each(['¿Hay alguna aplicación de acaricida?', '¿Cómo va la fumigación de plaga Z?', '¿Cómo va la fumigación que registramos en la app?', 'En la app, ¿cómo va la aplicación de acaricida?', '¿Existe una aplicación de fertilizante?', 'Avance de la fertilización del lote Z'])('routes farm existence/progress: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(true));
   it.each(['¿Cómo va la aplicación móvil?', '¿Hay alguna aplicación para editar fotos?', 'Estado de la aplicación de empleo', '¿Cómo va mi solicitud?'])('does not route unrelated application meanings: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(false));
+  it.each([
+    ['No uses fechas reales; usa las planeadas', true],
+    ['No uses fechas planeadas; usa las reales', false],
+    ['Usa las fechas planeadas; pero usa las reales', false],
+    ['Usa fechas planeadas; consulta fechas de ejecución', false],
+    ['No uses fechas de ejecución; usa fechas planeadas', true],
+    ['Usa las fechas reales; en cambio usa las planeadas', true],
+    ['Usa fechas planeadas; no uses las planeadas', false],
+    ['Usa fechas planeadas; por favor no uses fechas planeadas', false],
+    ['Usa fechas planeadas; no consultes fechas planeadas', false],
+    ['No consultes fechas reales; por favor usa fechas planificadas', true],
+    ['No uses las fechas reales, utiliza las fechas planificadas', true],
+    ['Muéstrame las fechas planeadas y reales', false],
+    ['Dame el estado de la aplicación. La fecha planeada estaba mal', false],
+  ])('resolves direct clause-local intent %s', (q, planned) => expect(pideFechasPlaneadas(q as string)).toBe(planned));
   const run = (data: unknown) => [{ tool: 'get_aplicaciones_ejecucion', result_summary: JSON.stringify(data) }];
   const complete = { _evidencia: { herramienta: 'get_aplicaciones_ejecucion', consulta_completa: true, detalle_completo: true }, resumen: {}, detalle: [{ id: 'fixture', nombre_aplicacion: 'Fixture' }] };
   it('accepts complete unique evidence but rejects malformed, incomplete and context-lost results', () => {

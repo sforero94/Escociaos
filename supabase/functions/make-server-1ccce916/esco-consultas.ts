@@ -122,19 +122,38 @@ export function baseFechaAplicacion(args: FilaEsco): 'actual' | 'planned' {
 export function requiereConsultaAplicaciones(pregunta: string): boolean {
   const q = normalizarTextoAplicacion(pregunta);
   // Exclude common non-farm meanings without routing every use of "application".
-  if (!/\b(?:fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q) && /\b(?:aplicacion(?:es)? (?:movil|web|de empleo|para editar|de software)|app|software)\b/.test(q)) return false;
+  if (!/\b(?:fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q) && /\b(?:aplicacion(?:es)? (?:movil|web|de empleo|para editar|de software))\b/.test(q)) return false;
   const farm = /\b(?:aplicaci(?:on|ones)|fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q);
   return farm && /\b(?:como va|avance|progreso|estado|actual|en ejecucion|en curso|activas?|hay|existe(?:n)?|tenemos)\b/.test(q);
 }
 export function pideFechasPlaneadas(pregunta: string): boolean {
-  const q = normalizarTextoAplicacion(pregunta);
-  // Actual-date instructions, negation and mixed requests take precedence.
-  // A historical mention of planning is never permission to switch date basis.
-  if (/\b(?:por|segun|con|sobre|usando|usa|usar|utiliza|utilizar|consulta|consultar) (?:la |las )?fechas? (?:reales?|de ejecucion)\b|\b(?:usa|usar|utiliza|utilizar|consulta|consultar|prefiero) (?:la |las |lo )?real(?:es)?\b|\b(?:cual(?:es)?|que|muestra(?:me)?|dame)\b[^.;!?]{0,60}\bfechas? reales?\b|\b(?:planeadas?|planificadas?) y reales?\b/.test(q)) return false;
-  if (/\b(?:no|sin|ignora|ignorar|excluye|excluir)\b.{0,40}(?:planead|planificad)/.test(q)) return false;
-  return /\b(?:por|segun|con|sobre|usando|usa|usar|utiliza|utilizar) (?:la |las )?fechas? (?:planeadas?|planificadas?)\b|\b(?:usa|utiliza|consulta|prefiero) (?:la |las )?(?:planeadas?|planificadas?)\b/.test(q) ||
-    /\b(?:cual(?:es)?|que|cuando|muestra(?:me)?|dame|consulta|consultar|busca|buscar)\b[^.;!?]{0,70}\b(?:fecha(?:s)? (?:planeadas?|planificadas?)|aplicaci(?:on|ones) (?:planeada(?:s)?|planificada(?:s)?))\b/.test(q) ||
-    /^aplicaci(?:on|ones) (?:planeada(?:s)?|planificada(?:s)?)[?!.]?$/.test(q);
+  const clauses = normalizarTextoAplicacion(pregunta).split(/[.;,!?]+|\b(?:pero|sino|en cambio)\b/);
+  let requested: 'actual' | 'planned' | null = null;
+  for (const part of clauses) {
+    const clause = part.replace(/^[¿¡\s]+/, '').trim().replace(/^por favor\s+/, '');
+    const negated = /^(?:no|nunca|sin|ignora|ignorar|excluye|excluir)\b/.test(clause);
+    if (negated) {
+      // Revocation need not authorize a new basis or guess verb conjugation.
+      // A conservative explicit denial removes prior consent in this clause.
+      if ((requested === 'planned' && /\b(?:planeadas?|planificadas?)\b/.test(clause)) ||
+          (requested === 'actual' && /\b(?:reales?|de ejecucion)\b/.test(clause))) requested = null;
+      continue;
+    }
+    const body = clause;
+    // Only a direct date-basis request is actionable. "Dame el estado de la
+    // aplicación cuya fecha planeada..." describes a record, not a date basis.
+    const direct = body.match(/^(?:por favor )?(?:us[ae]s?|usar|utiliza(?:r)?|consulta(?:r)?|prefiero|quiero|necesito|muestra(?:me)?|dame|busca(?:r)?|filtra(?:r)?|ignora(?:r)?|exclu(?:ye|ir))\s+(?:(?:por|segun|con) )?(?:(?:la|las) )?((?:fechas?(?: de (?:inicio|fin))? )?(?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const question = body.match(/^(?:cual(?:es)?|que) (?:es |son )?(?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1];
+    if (!basis) continue;
+    const planned = /\b(?:planeadas?|planificadas?)\b/.test(basis);
+    const actual = /\b(?:reales?|de ejecucion)\b/.test(basis);
+    // A mixed clause is ambiguous: keep actual default. A later explicit
+    // positive clause can resolve a preceding negation or contrast.
+    requested = planned && !actual ? 'planned' : 'actual';
+  }
+  return requested === 'planned';
 }
 /** Domain guard: a partial/other-domain query never proves application absence. */
 export function respuestaSeguraAplicaciones(interacciones: Array<{ tool: string; result_summary: string }>, pregunta = ''): string | null {
