@@ -36,7 +36,8 @@ commit and return its exact row IDs. A different user cannot read the receipt.
 
 A changed payload for an existing UUID raises dedicated SQLSTATE **PGB01**;
 it must never be treated as proof that an earlier request did not commit.
-Other validation errors retain their standard SQLSTATEs. No receipt UPDATE or
+New explicit input/row validation uses23514 so first-attempt correction cannot
+be confused with legacy22023 payload conflicts; casts/FKs keep standard codes. No receipt UPDATE or
 DELETE grant is added. The frontend must preserve an ambiguous request, own it
 across tabs before reading/writing/sending, and compare its complete identity
 (UUID + exact payload) before cleanup. SQL alone cannot serialize browser storage.
@@ -53,7 +54,7 @@ blocker or expense-record deletion. This trust limit has a synthetic test.
 `python scripts/tests/gastos-lote-postgres.py` runs the exact migration against
 PostgreSQL17 in a disposable container with `--network=none`, tmpfs, no ports,
 secrets or farm data. Ten groups cover compilation, lost response/reload,
-concurrent repeats, PGB01 conflicts, cross-user isolation, inactive/downgraded/
+concurrent repeats, PGB01 conflicts, explicit23514 validation, cross-user isolation, inactive/downgraded/
 anonymous/switched actors, validation/FK/injected-row rollback, immutable grants
 and the own-INSERT/account-deletion trust limits. This minimal synthetic schema
 is **not** a complete Supabase/PostgREST stack or live catalog reproduction.

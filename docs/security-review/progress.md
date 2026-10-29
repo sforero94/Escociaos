@@ -535,3 +535,7 @@ Parent owns Bot Log and the morning queue. No further remediation starts here.
 DB-only close-out: 4,757 tests/218 files, ten PostgreSQL groups including explicit
 PGB01 assertion, types/build pass, lint0 errors/907 existing warnings. Independent
 review found no remaining DB-only blocker and verified frontend equality to main.
+
+Follow-up review separated all explicit SQL validation into23514 while retaining
+PGB01 for committed-payload conflicts. A whitespace-only name now has a distinct
+rollback result; legacy22023 remains conservatively preserved by activation.

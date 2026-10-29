@@ -47,10 +47,10 @@ BEGIN
     RAISE EXCEPTION 'Solo Gerencia activa puede guardar gastos.' USING ERRCODE='42501';
   END IF;
   IF p_solicitud_id IS NULL OR p_datos IS NULL OR jsonb_typeof(p_datos)<>'array' THEN
-    RAISE EXCEPTION 'Lote de gastos inválido.' USING ERRCODE='22023';
+    RAISE EXCEPTION 'Lote de gastos inválido.' USING ERRCODE='23514';
   END IF;
   IF jsonb_array_length(p_datos)=0 THEN
-    RAISE EXCEPTION 'El lote requiere gastos.' USING ERRCODE='22023';
+    RAISE EXCEPTION 'El lote requiere gastos.' USING ERRCODE='23514';
   END IF;
   SELECT jsonb_agg(gen_random_uuid() ORDER BY i) INTO v_ids
     FROM generate_series(1,jsonb_array_length(p_datos)) AS i;
@@ -72,7 +72,7 @@ BEGIN
     IF jsonb_typeof(v_item)<>'object' OR NULLIF(btrim(v_item->>'nombre'),'') IS NULL OR
        (v_item->>'valor')::numeric IS NULL OR (v_item->>'valor')::numeric<=0 OR
        v_item->>'estado' IS DISTINCT FROM 'Confirmado' THEN
-      RAISE EXCEPTION 'Gasto inválido en fila %.',v_indice USING ERRCODE='22023';
+      RAISE EXCEPTION 'Gasto inválido en fila %.',v_indice USING ERRCODE='23514';
     END IF;
     INSERT INTO public.fin_gastos(id,fecha,nombre,valor,negocio_id,region_id,categoria_id,
       concepto_id,proveedor_id,medio_pago_id,observaciones,url_factura,estado,created_by)

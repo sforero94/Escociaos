@@ -91,7 +91,9 @@ def run_cases():
                     [expense(),dict(expense(),fecha=None)],[expense(),dict(expense(),nombre='  ')]]:
         call(invalid,success=False)
         assert snapshot()==state
-    check('validation, FK and NOT NULL failures roll back all rows and receipt')
+    call([expense(name='   ')],success=False,error_code='23514')
+    assert snapshot()==state
+    check('validation23514, FK and NOT NULL failures roll back all rows and receipt')
     req2 = str(uuid.uuid4())
     with concurrent.futures.ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _:call(data,req2),range(4)))
