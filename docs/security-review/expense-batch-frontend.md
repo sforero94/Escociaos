@@ -1,13 +1,12 @@
 # Expense-batch retry — dependent frontend activation
 
-Status: draft candidate only. Base is DB-only PR360, branch
-`codex/security-expense-batch-retry`, head `29a4a757c6a34ddb27d08e02ff2ab68f434b96dc`.
-Main remains `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` at this scope's baseline.
-The [database runbook](expense-batch-retry.md) owns migration187, its trust limits,
-release/postcondition gates and all original exclusions. This frontend PR must
-**not** merge before development Supabase validation and separately authorized
-DB application/postconditions. Main auto-deploys; a draft dependency alone is
-not an enforcement mechanism or permission to merge early.
+Status: draft preparation against main. Source and local synthetic validation are
+complete; production migration187 is applied and verified in live ledger
+`20261029183837` (2026-10-29). See [release evidence](expense-release-readiness.md).
+Actual operator Chrome/Safari Web Locks capability remains unverified. Main
+auto-deploys: do not mark ready or merge before operator verification and specific
+frontend release authorization. The database runbook retains all trust limits and
+rollback constraints. Earlier assessment records below are historical.
 
 ## Parent-review blockers and correction
 
@@ -92,10 +91,11 @@ denied DB export and F1 genuine-operator gaps. No production parity is asserted.
   exact original payload. It also checks actual component recovery at1280×900/
   390×844, stale-tab replay, newer-draft retention after autosave and unsupported
   locking. All external browser requests are blocked.
-- **Browser RPC/auth are simulated. There is no browser-to-PostgREST integration
-  coverage.** The separate ten-group PostgreSQL fixture exercises real SQL under
-  synthetic roles/RLS with no network. Neither substitutes for the development
-  Supabase/PostgREST release gate or genuine operator/browser confirmation.
+- **The original browser script simulates RPC/auth.** Later
+  `gastos-lote-local-stack.py` and its browser companion close the local transport
+  gap: nine real Auth/PostgREST groups and five real Chromium browser scenarios
+  pass against an empty synthetic stack. This does not establish production
+  schema/policy/trigger parity or genuine operator Chrome/Safari compatibility.
 - Final local tree: 4,786 tests/219 files (29 focused helper tests included),
   no skips; typecheck/build pass; lint0 errors/907 existing warnings. The exact
   SQL dependency passed all ten PostgreSQL groups. Independent re-review reran
@@ -106,13 +106,10 @@ denied DB export and F1 genuine-operator gaps. No production parity is asserted.
 
 ## Activation and rollback order
 
-Review PR360 first. Validate/apply its exact reviewed SQL only in separately
-authorized development/release steps and verify postconditions. After its source
-merge, retarget/rebase this dependent draft to main and rerun exact-head CI.
-Confirm operator Web Locks support, then consider a separately authorized merge
-that triggers frontend deployment. If RPC is missing, this client fails closed;
-that is a release blocker, not a safe rollout order. Never merge it early on the
-assumption that someone will apply the migration later.
+PR360 is merged and exact187 is applied in production, ledger20261029183837.
+Retarget the existing draft to current main and verify exact-head CI. Confirm
+operator Web Locks support before specific frontend merge/deployment approval.
+Do not reapply187 or use production expense transactions as validation.
 
 After exposure, keep RPC/receipts and all browser pending entries on rollback.
 Pause affected capture before reverting to the old direct writer. Resolve the
@@ -122,11 +119,10 @@ steal locks or recapture an uncertain batch as a workaround.
 ## Next-session prompt
 
 ```text
-Review DB-only PR360, then its dependent expense frontend draft.
-Read CLAUDE.md, security-review progress and both expense-batch runbooks.
-Reproduce the deterministic and native two-page adversarial schedules; verify
-exact heads and CI. Keep migration187 unapplied until development validation
-and separate release authorization. Do not merge frontend activation before
-DB postconditions and operator Web Locks confirmation. Preserve frozen payloads,
+Review the existing PR362 draft against current main and its exact-head checks.
+Read current production receipt and local real-stack evidence in
+expense-release-readiness.md. Do not reapply187: ledger20261029183837 is verified.
+Confirm native Web Locks in each actual Chrome/Safari operator profile over HTTPS,
+then obtain specific frontend ready/merge authorization. Preserve frozen payloads,
 PGB01/legacy22023 conflicts and prior exclusions. No other remediation.
 ```

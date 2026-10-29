@@ -98,8 +98,13 @@ export async function leerCompleto(q: ConsultaPagina, tabla: string, query: stri
 export function resumirContexto(resultado: string, max = 24000): string {
   if (resultado.length <= max) return resultado;
   try {
-    const r = JSON.parse(resultado);
-    return JSON.stringify({ _evidencia: r._evidencia ?? null, resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
+    const parsed: unknown = JSON.parse(resultado);
+    const r = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as FilaEsco : {};
+    const legacy = r._evidencia !== null && typeof r._evidencia === 'object' && !Array.isArray(r._evidencia) ? r._evidencia as FilaEsco : null;
+    return JSON.stringify({
+      ...(Object.prototype.hasOwnProperty.call(r, 'error') ? { error: 'La consulta anterior falló; vuelve a consultar.' } : {}),
+      _evidencia: legacy ? { ...legacy, consulta_completa: false, detalle_completo: false } : null,
+      resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
   } catch {
     return JSON.stringify({ contexto_recortado: true, instruccion: 'Resultado anterior no preservado; vuelve a consultar antes de concluir.' });
   }
@@ -387,6 +392,15 @@ export function requiereConsultaPartos(pregunta: string): boolean {
 export function evidenciaPartosSuficiente(interacciones: Array<{ tool: string; result_summary: string }>): boolean {
   return interacciones.some(t => {
     if (t.tool !== 'get_hato_partos') return false;
-    try { const r = JSON.parse(t.result_summary); return !r.error && r._evidencia?.consulta_completa === true && !!r._evidencia?.rango?.desde && !!r._evidencia?.rango?.hasta; } catch { return false; }
+    try {
+      const r: unknown = JSON.parse(t.result_summary);
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+      const result = r as FilaEsco;
+      if (Object.prototype.hasOwnProperty.call(result, 'error')
+        || (Object.prototype.hasOwnProperty.call(result, 'contexto_recortado') && result.contexto_recortado !== false)) return false;
+      const evidence = result._evidencia as FilaEsco | undefined;
+      const range = evidence?.rango as FilaEsco | undefined;
+      return evidence?.consulta_completa === true && !!range?.desde && !!range?.hasta;
+    } catch { return false; }
   });
 }

@@ -65,7 +65,8 @@ time (rubric R5):
   or `no` on Saturday.
 - **Minor items** the rubric lets Friday do alone → `Ruta = VIERNES`.
 
-**Phase 5–6** — identical: file + memory commit, notify with the §10 summary.
+**Phase 5–6** — identical: file + memory commit, then the Bot Log row
+(constitution §4 Phase 5b) as the last write, then notify with the §10 summary.
 
 ---
 

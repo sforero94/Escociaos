@@ -1,7 +1,15 @@
 # Expense-batch retry — database prerequisite (PR360)
 
-Status: additive candidate, **not applied and not released**. Base `main` remains
-`6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`, verified through Composio account
+Current status (2026-10-29): PR360 merged; exact187 is applied in Escocia OS
+production, live ledger `20261029183837`. Metadata postconditions passed.
+See [the production receipt](expense-release-readiness.md). Do not reapply.
+Earlier unapplied/development instructions below are historical. PR362 still
+requires actual operator Web Locks confirmation and specific frontend release
+approval. Preserve RPC and receipts on rollback.
+
+
+Status: additive candidate, **not applied and not released**. Integration base `main` after PR367 is
+`634580480c72b27c7ccd2d8c006af520d0ca1058`, verified through Composio account
 `github_lysis-talion` / `thinksid` on 2026-10-29 UTC. Migration187 is the next
 source filename after186; the live ledger is not reasserted by this code check.
 
@@ -58,7 +66,7 @@ concurrent repeats, PGB01 conflicts, explicit23514 validation, cross-user isolat
 anonymous/switched actors, validation/FK/injected-row rollback, immutable grants
 and the own-INSERT/account-deletion trust limits. This minimal synthetic schema
 is **not** a complete Supabase/PostgREST stack or live catalog reproduction.
-DB-only final-tree local checks: 4,757 Vitest tests across218 files, no skips;
+Historical DB-only head29a4a75 local checks: 4,757 Vitest tests across218 files, no skips;
 typecheck/build pass; lint0 errors/907 existing warnings. Independent re-review
 confirmed the five-file scope and preserved SQL guarantees. Exact-head CI is
 recorded in the PR/handoff; earlier combined-head counts are historical only.
@@ -122,3 +130,40 @@ ownership, exact frozen-payload recovery, PGB01 conflict retention and all prior
 scope exclusions. No merge, migration or deployment under the overnight queue
 instruction. Do not start another remediation. Update the tracker at close-out.
 ```
+
+
+## Integration preparation after PR367 — 2026-10-29
+
+Main634580480c72b27c7ccd2d8c006af520d0ca1058 includes PR367 and the intervening
+PO source changes. The prior PR360 head29a4a757c6a34ddb27d08e02ff2ab68f434b96dc
+is retained as the first parent; current main is incorporated by an ordinary
+merge commit, without force push. No integration conflict occurred. All current
+main changes are preserved as-is; no Faithfulness implementation is modified.
+
+The final diff against that exact main remains five files: this runbook, progress,
+PostgreSQL fixture/runner and unapplied migration187. Components, utilities, types,
+unit tests and both edge source trees match current main byte-for-byte. Main's
+migration directory has no new file or changed migration since6a2dd50; its highest
+number remains186, and187 occurs only in this candidate. This is a source-number
+check, not a live ledger/application assertion.
+
+Preparation authorization covers integration, local synthetic checks and pushing
+PR360 only. It does not mark the PR ready, approve, merge or release it. PR362's
+branch/head remain untouched and held behind the original DB validation/application
+and operator-browser decisions. The parent owns Bot Log and the next action.
+Final integrated-tree local results and exact-head CI are recorded at close-out;
+historical counts above do not substitute for them. All release/rollback gates,
+PGB01/23514 semantics and prior evidence gaps remain in effect.
+
+
+Integrated-tree validation: 4,782 Vitest tests/218 files, no skipped tests; ten
+isolated PostgreSQL17 groups pass; typecheck/build pass; lint0 errors/907 existing
+warnings (local Node24). Independent read-only integration review found no blocker,
+verified the five-file diff and frontend/edge equality to current main, and
+confirmed SQL/test bytes unchanged from29a4a757. Exact published-head CI/Vercel
+results belong in the PR/handoff; no production or Supabase validation is claimed.
+
+Next-session prompt: review the updated draft PR360 against main6345804 and its
+exact-head checks. Parent handles any next action confirmation. Do not mark ready,
+approve, merge or release from this preparation; leave PR362 held and migration187
+unapplied. Preserve all prior release gates and do not start another scope.

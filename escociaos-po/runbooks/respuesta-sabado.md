@@ -77,7 +77,15 @@ confirmation before acting on anything.**
 what was done, pre- and post-states, merges, deploys still pending, and what
 was refused and why. Commit it with the memory-ledger lines, under the
 memory-commit rules (constitution §4 Phase 5: pre-commit check, allowed paths
-only). Then update the Saturday Notion page with a `Respuesta` section.
+only). Then update the Saturday Notion page with a `Respuesta` section
+(official Notion connector, `notion-update-page`, `insert_content` at the end).
+
+**3b — Bot Log.** This session continues the Saturday run's task, so it does
+not open a new row: it updates the `YYYY-MM-DD-sabado` row (constitution §4
+Phase 5b) in one write — `Estado` (`Hecha`, or `Espera a Santiago` if a deploy
+or a merge is still his), `Siguiente paso`, `Necesito de Santiago`, `Enlaces`
+(add the reply report and the merged PRs), `Actualizado por = Claude` — and
+appends one Progreso line at the end. Never rewrite the earlier lines.
 
 **4 — Close.** End with a short summary in Spanish: hecho, no hecho y por qué,
 deploy pendiente.
