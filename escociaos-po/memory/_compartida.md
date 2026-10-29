@@ -381,9 +381,14 @@ es exactamente el caso de uso que justifica la corrida del jueves.**
 (`mcp__Notion__notion-*`), no por los slugs `NOTION_*` de Composio. Motivo: el
 MCP oficial mejoro y un solo conector es mas simple.
 
-- Tools esperados, todos `always_allow`: `notion-search` · `notion-fetch` ·
+- Tools que usa una corrida: `notion-search` · `notion-fetch` ·
   `notion-query-data-sources` · `notion-create-pages` · `notion-update-page`.
-  Ninguno mas (nada de borrar, mover, duplicar, compartir ni comentar).
+  Ninguno mas (nada de borrar, mover, duplicar, compartir ni comentar). Es
+  regla, no mecanismo: la UI de Routines adjunta el conector entero, sin
+  allowlist por tool.
+- **Trampa (2026-10-29):** guardar el dialogo Edit de una Routine borro
+  Composio de las cuatro. Despues de editar una Routine, revisar
+  `mcp_connections` con `list_triggers`.
 - Ids: Mantenimiento `collection://b22d2385-a812-4d4a-8094-cefa9d080f60`;
   Bot Log `collection://40767755-ed68-801e-8339-000bd8a8a652`; pagina
   "Reportes del sabado" `40667755-ed68-814f-b676-f9e28be7d2f3`.
