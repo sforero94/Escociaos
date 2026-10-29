@@ -2443,3 +2443,14 @@ La auto-poda no aplica.
 | 2026-10-15-jueves | 1 |
 | **2026-10-22-jueves** | **1 (ESCO-160, P2). Racha de ceros: 0** |
 La auto-poda no aplica.
+
+## Corrida 2026-10-29-jueves — hechos transversales
+- Primer jueves con el rol nuevo (features + sonda P0). Roster 4: usage-analytics, feature-strategy, infra-perf (sonda), data-integrity (sonda). Preflight verde: Composio supabase/vercel/github `active`, Notion oficial responde, `query_logs` sobre edge_logs responde (357 filas/h). `ATTENDED=0`. Cero denegaciones. [corrida: 2026-10-29-jueves]
+- Migración 186 (`hato_alertas_respuesta_trazas`, ledger 20261028193716) aplicada antes del deploy edge v280; falta su entrada en el CLAUDE.md raíz (para el lunes). [corrida: 2026-10-29-jueves]
+- Aplicación «Fumigación control acaro octubre» tiene `fecha_inicio_planeada = 2027-10-22` (ejecución 2026-10-22): probable error de año, para el lunes. [corrida: 2026-10-29-jueves]
+
+## Racha del jueves (regla de auto-poda v2, desde 2026-10-26: propuestas con `si`)
+| Corrida | Propuestas filadas | Respondidas `si` | Racha sin `si` |
+|---|---|---|---|
+| **2026-10-29-jueves** | 1 (ESCO-165) | pendiente (sábado 10-31) | 0 (sin respuesta aún) |
+Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strategy y usage-analytics al primer jueves del mes. La sonda P0 nunca entra.

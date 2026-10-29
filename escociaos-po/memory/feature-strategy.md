@@ -76,3 +76,11 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 - REFUTADO: «compras en cero = captura perdida». Gastos Aguacate de insumos desde 08-06 = 1 fila (MELAZA $110.000). No proponer gasto→compra. [corrida: 2026-10-05-lunes]
 - Esco: facelift completo y aun así el uso cae 171 (mar) → 82 (ago) → 21 (sep) → 0 en 2 semanas. No proponer más inversión en Esco sin que el uso vuelva. [corrida: 2026-10-05-lunes]
 - Columnas: compras no tiene `fecha` (fecha_compra/created_at); produccion usa `ano`. [corrida: 2026-10-05-lunes]
+
+## Corrida 2026-10-29-jueves (primer jueves con el rol nuevo)
+- 1 propuesta filada: ESCO-165, aviso de stock vivo en aplicaciones En ejecución (Movimientos + Cierre). El único chequeo de stock es al iniciar (IniciarEjecucionModal.tsx:112-140); el cierre depende del RAISE del RPC 106. Ácaro octubre: Acondicionador 0,76 / Acidurez 1,00 / Potenzol 2,00 contra 3,13 planeado c/u. Respuesta de Santiago: pendiente (sábado 10-31). [corrida: 2026-10-29-jueves]
+- DESCARTADO (no proponer): «servicio_sin_confirmacion no se responde por Telegram». Martha y Santiago YA tienen `recibe=false` en esa clave (apagado desde la pantalla después de la 172). `secado_due` volvió a `recibe=true` para ellos (la 152 lo había apagado): la matriz se gestiona desde `/hato-lechero/alertas`. Mirar `telegram_alertas_suscripciones` antes de proponer algo de alertas. [corrida: 2026-10-29-jueves]
+- DESCARTADO: «pesaje atrasado 17 días». El pesaje es semanal y se sube en PARES cada ~2 semanas; lag de carga 2-9 días por diseño. [corrida: 2026-10-29-jueves]
+- DESCARTADO: lag de captura de labores (0,9-3,4 días por sesión en octubre). Sano. [corrida: 2026-10-29-jueves]
+- No propuesto a propósito: Esco (18 mensajes/sem, 1 usuario), Novedades (revisión keep/retire es decisión de Santiago, ESCO-162). [corrida: 2026-10-29-jueves]
+- Columnas: `aplicaciones_productos` no tiene aplicacion_id (va por `aplicaciones_mezclas.aplicacion_id`, `mezcla_id`); `movimientos_diarios_productos.movimiento_diario_id`; `telegram_alertas_suscripciones.alerta_clave` + `telegram_usuario_id`. [corrida: 2026-10-29-jueves]
