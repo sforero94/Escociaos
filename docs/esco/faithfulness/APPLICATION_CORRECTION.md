@@ -49,3 +49,16 @@ Parent independently ran15 persistence acceptance groups against initial493d587 
 ## Clause-local date-basis correction after2987e62
 
 Parent re-review found remaining unauthorized planned selection from a descriptive relative clause, broad incidental-app exclusion, and cross-clause negation. Date-basis recognition now accepts bounded direct date-object/basis requests per clause. Mere state adjectives ("aplicaciones planificadas") do not request a planned date basis; those earlier synthetic assumptions were corrected to preserve the owner's actual-date default. Negation can revoke prior consent within its own clause, including courtesy prefixes and verb variants, without granting another basis. A later positive explicit request resolves a preceding contrast; mixed direct requests retain the safe actual default. Incidental "app" text no longer overrides the agricultural application question. This finite grammar is conservative, not universal natural-language understanding. The explicit typed argument and runtime denial remain enforced.
+
+## Supported adjacent intent matrix
+
+| Request pattern | Planned basis |
+| --- | --- |
+| Usa fechas planeadas, pero no las uses | No: unresolved revocation withdraws consent |
+| Usa fechas planeadas y no las reales | Yes: the negative clause explicitly excludes actual dates |
+| No uses fechas reales; usa las planeadas | Yes: the later positive clause is explicit |
+| Dame las aplicaciones planeadas para mayo | Yes: direct requested planned collection |
+| Dame el estado de la aplicación cuya fecha planeada estaba mal | No: descriptive relative clause only |
+| Mixed positive planned and actual dates | No: safe actual default |
+
+A negative clause without an explicit date basis conservatively withdraws prior planned consent without guessing its referent or verb form. This can also withdraw consent for an unrelated negative instruction; it does not claim complete language understanding. Bare planned-state adjectives remain insufficient, while a direct requested planned collection is supported explicitly. Adjacent regression failures were reproduced before fixes; independent bounded matrix/revocation review passed. No release controls were implemented.

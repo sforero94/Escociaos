@@ -127,7 +127,7 @@ export function requiereConsultaAplicaciones(pregunta: string): boolean {
   return farm && /\b(?:como va|avance|progreso|estado|actual|en ejecucion|en curso|activas?|hay|existe(?:n)?|tenemos)\b/.test(q);
 }
 export function pideFechasPlaneadas(pregunta: string): boolean {
-  const clauses = normalizarTextoAplicacion(pregunta).split(/[.;,!?]+|\b(?:pero|sino|en cambio)\b/);
+  const clauses = normalizarTextoAplicacion(pregunta).split(/[.;,!?]+|\b(?:pero|sino|en cambio)\b|\by (?=no\b)/);
   let requested: 'actual' | 'planned' | null = null;
   for (const part of clauses) {
     const clause = part.replace(/^[¿¡\s]+/, '').trim().replace(/^por favor\s+/, '');
@@ -135,8 +135,10 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
     if (negated) {
       // Revocation need not authorize a new basis or guess verb conjugation.
       // A conservative explicit denial removes prior consent in this clause.
+      // Without a named basis, do not guess the referent: withdraw planned consent.
       if ((requested === 'planned' && /\b(?:planeadas?|planificadas?)\b/.test(clause)) ||
-          (requested === 'actual' && /\b(?:reales?|de ejecucion)\b/.test(clause))) requested = null;
+          (requested === 'actual' && /\b(?:reales?|de ejecucion)\b/.test(clause)) ||
+          (requested === 'planned' && !/\b(?:planeadas?|planificadas?|reales?|de ejecucion)\b/.test(clause))) requested = null;
       continue;
     }
     const body = clause;
@@ -145,7 +147,10 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
     const direct = body.match(/^(?:por favor )?(?:us[ae]s?|usar|utiliza(?:r)?|consulta(?:r)?|prefiero|quiero|necesito|muestra(?:me)?|dame|busca(?:r)?|filtra(?:r)?|ignora(?:r)?|exclu(?:ye|ir))\s+(?:(?:por|segun|con) )?(?:(?:la|las) )?((?:fechas?(?: de (?:inicio|fin))? )?(?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
     const question = body.match(/^(?:cual(?:es)?|que) (?:es |son )?(?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
     const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
-    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1];
+    // A direct plural planned-application request is explicit planned intent;
+    // a relative clause merely describing one record is not.
+    const plannedCollection = body.match(/^(?:dame|muestra(?:me)?|consulta|busca) (?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) ((?:planeadas?|planificadas?)\b.*)$/);
+    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1] ?? plannedCollection?.[1];
     if (!basis) continue;
     const planned = /\b(?:planeadas?|planificadas?)\b/.test(basis);
     const actual = /\b(?:reales?|de ejecucion)\b/.test(basis);
