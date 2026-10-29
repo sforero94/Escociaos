@@ -16,6 +16,9 @@ import {
 } from '@/utils/fechas';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
+import { useAuth } from '@/contexts/AuthContext';
+import { guardarGastosLote, leerIntentoGastosLote, comprobarSoporteGastosLote, type IntentoGastosLote } from '@/utils/guardadoGastosLote';
+
 const DRAFT_KEY = 'gastos_batch_draft';
 
 interface GastosBatchTableProps {
@@ -44,12 +47,14 @@ function createEmptyRow(): BatchRowData {
 interface DraftData {
   rows: Omit<BatchRowData, 'factura_file'>[];
   savedAt: string;
+  solicitudId?: string;
 }
 
-function serializeRows(rows: BatchRowData[]): DraftData {
+function serializeRows(rows: BatchRowData[], solicitudId: string): DraftData {
   return {
     rows: rows.map(({ factura_file: _file, ...rest }) => rest),
     savedAt: new Date().toISOString(),
+    solicitudId,
   };
 }
 
@@ -65,7 +70,14 @@ const COLUMN_HEADERS = [
 ];
 
 export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
+  const { user } = useAuth();
+  const usuarioActual = useRef(user?.id);
+  usuarioActual.current = user?.id;
+  const [pendiente, setPendiente] = useState(false);
+  const [bloqueoRecuperacion, setBloqueoRecuperacion] = useState(false);
+  const enviando = useRef(false);
   const [rows, setRows] = useState<BatchRowData[]>([createEmptyRow()]);
+  const solicitudId = useRef(rows[0].id);
   const [errors, setErrors] = useState<Record<number, Record<string, string>>>({});
   const [saving, setSaving] = useState(false);
   const [draftBanner, setDraftBanner] = useState<number | null>(null);
@@ -73,6 +85,21 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   const [mostrarConfirmacionFechaFutura, setMostrarConfirmacionFechaFutura] = useState(false);
   const [fechasFuturasPendientes, setFechasFuturasPendientes] = useState<string[]>([]);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const actualizarPendiente = useCallback(() => {
+    try {
+      setPendiente(!!user?.id && !!leerIntentoGastosLote(user.id));
+      setBloqueoRecuperacion(false);
+    } catch {
+      setBloqueoRecuperacion(true);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    actualizarPendiente();
+    window.addEventListener('storage', actualizarPendiente);
+    return () => window.removeEventListener('storage', actualizarPendiente);
+  }, [actualizarPendiente]);
 
   // Restore draft on mount
   useEffect(() => {
@@ -95,26 +122,29 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   const saveDraft = useCallback(() => {
     const nonEmpty = rows.filter((r) => r.nombre || r.valor || r.negocio_id);
     if (nonEmpty.length > 0) {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(serializeRows(nonEmpty)));
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(serializeRows(nonEmpty, solicitudId.current)));
     } else {
-      localStorage.removeItem(DRAFT_KEY);
+      const raw = localStorage.getItem(DRAFT_KEY);
+      const draft: DraftData | null = raw ? JSON.parse(raw) : null;
+      if (draft && (draft.solicitudId ?? draft.rows?.[0]?.id) === solicitudId.current) localStorage.removeItem(DRAFT_KEY);
     }
   }, [rows]);
 
   useEffect(() => {
-    if (draftBanner !== null) return;
+    if (draftBanner !== null || pendiente || bloqueoRecuperacion || saving) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(saveDraft, 5000);
     return () => {
       if (draftTimer.current) clearTimeout(draftTimer.current);
     };
-  }, [saveDraft, draftBanner]);
+  }, [saveDraft, draftBanner, pendiente, bloqueoRecuperacion, saving]);
 
   const handleRestoreDraft = () => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const draft: DraftData = JSON.parse(raw);
+        solicitudId.current = draft.solicitudId ?? draft.rows[0].id;
         setRows(deserializeRows(draft));
       }
     } catch {
@@ -177,7 +207,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
             rowErrors.valor = 'Requerido';
             valid = false;
           }
-        } else if (!row[field]) {
+        } else if (!row[field] || (field === 'nombre' && !row.nombre.trim())) {
           rowErrors[field] = 'Requerido';
           valid = false;
         }
@@ -192,11 +222,24 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   };
 
   const persistirGastos = async () => {
+    if (enviando.current || !user?.id || bloqueoRecuperacion) return;
+    enviando.current = true;
+    const usuarioId = user.id;
     try {
+      comprobarSoporteGastosLote();
       setSaving(true);
       const supabase = getSupabase();
 
+      const intentoPrevio = leerIntentoGastosLote(usuarioId);
+      if (intentoPrevio) {
+        await guardarGastosLote(supabase, usuarioId, undefined, undefined,
+          intento => completarGuardado(usuarioId, intento));
+        return;
+      }
       const rowsToSave = rows.filter(isRowTouched);
+      // Preserve the input before uploads; no database request exists yet.
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      saveDraft();
 
       const facturaUrls: Record<number, string> = {};
       for (let i = 0; i < rowsToSave.length; i++) {
@@ -228,23 +271,39 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         estado: 'Confirmado' as const,
       }));
 
-      const { error } = await supabase.from('fin_gastos').insert(payload);
-      if (error) throw error;
-
-      toast.success(`${rowsToSave.length} gasto${rowsToSave.length > 1 ? 's' : ''} guardado${rowsToSave.length > 1 ? 's' : ''} exitosamente`);
-      localStorage.removeItem(DRAFT_KEY);
-      setRows([createEmptyRow()]);
-      setErrors({});
-      onSaved();
+      if (usuarioActual.current !== usuarioId) throw new Error('La sesión cambió. Vuelve a la cuenta original para guardar.');
+      await guardarGastosLote(supabase, usuarioId, payload, solicitudId.current,
+        intento => completarGuardado(usuarioId, intento));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('Error al guardar: ' + message);
     } finally {
+      enviando.current = false;
       setSaving(false);
+      actualizarPendiente();
     }
   };
 
+  const completarGuardado = (usuarioId: string, intento: IntentoGastosLote) => {
+    const intentoId = intento.id;
+    const cantidad = intento.datos.length;
+    if (usuarioActual.current !== usuarioId) return false; // Keep the original account's recovery state.
+    const raw = localStorage.getItem(DRAFT_KEY);
+    const draft: DraftData | null = raw ? JSON.parse(raw) : null;
+    if (draft && (draft.solicitudId ?? draft.rows?.[0]?.id) === intentoId) localStorage.removeItem(DRAFT_KEY);
+    solicitudId.current = crypto.randomUUID();
+    setRows([createEmptyRow()]);
+    setErrors({});
+    setDraftBanner(null);
+    toast.success(`${cantidad} gasto${cantidad > 1 ? 's' : ''} guardado${cantidad > 1 ? 's' : ''} exitosamente`);
+    onSaved();
+  };
+
   const handleSave = async () => {
+    if (!user?.id || enviando.current || bloqueoRecuperacion) return;
+    try {
+      if (leerIntentoGastosLote(user.id)) { await persistirGastos(); return; }
+    } catch { actualizarPendiente(); return; }
     const touchedRows = rows.filter(isRowTouched);
     if (touchedRows.length === 0) {
       toast.error('No hay gastos para guardar');
@@ -270,8 +329,15 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   return (
     <>
     <div className="space-y-4">
+      {(pendiente || bloqueoRecuperacion) && (
+        <div role="status" className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
+          {bloqueoRecuperacion
+            ? 'No se puede leer el lote pendiente. Conserva los datos y avisa a Gerencia.'
+            : 'Hay un lote sin confirmar. Verifica su guardado antes de capturar otros gastos. No borres los datos del navegador.'}
+        </div>
+      )}
       {/* Draft restoration banner */}
-      {draftBanner !== null && (
+      {draftBanner !== null && !pendiente && !bloqueoRecuperacion && (
         <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
           <span className="text-sm text-amber-800 flex-1">
@@ -286,6 +352,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         </div>
       )}
 
+      <fieldset className="min-w-0" style={{ minWidth: 0 }} disabled={saving || pendiente || bloqueoRecuperacion}>
       {/* Table */}
       <div className="bg-white rounded-xl border border-primary/10 overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
@@ -315,11 +382,13 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         </table>
       </div>
 
+      </fieldset>
       {/* Actions */}
       <div className="flex items-center gap-3">
         <Button
           type="button"
           variant="outline"
+          disabled={saving || pendiente || bloqueoRecuperacion}
           onClick={handleAddRow}
           className="border-dashed border-primary/30 text-primary hover:bg-primary/5"
         >
@@ -332,7 +401,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         <Button
           type="button"
           onClick={handleSave}
-          disabled={saving || catalogs.loading}
+          disabled={saving || catalogs.loading || !user || bloqueoRecuperacion}
           className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark shadow-sm"
         >
           {saving ? (
@@ -340,7 +409,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
           ) : (
             <Save className="w-4 h-4 mr-2" />
           )}
-          {saving ? 'Guardando...' : `Guardar ${filledCount} gasto${filledCount !== 1 ? 's' : ''}`}
+          {saving ? 'Guardando...' : pendiente ? 'Verificar lote pendiente' : `Guardar ${filledCount} gasto${filledCount !== 1 ? 's' : ''}`}
         </Button>
       </div>
 

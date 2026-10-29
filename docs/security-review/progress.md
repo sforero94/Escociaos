@@ -15,6 +15,7 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
 | S5 — ranked report and remediation scopes | Closed with gaps — read-only consolidation | Seven medium source findings retained; no new verified critical/high candidate. Proposed next backlog decision: expense-batch retry only; no implementation. | [S5 consolidation](s5-consolidation.md). Documentation-only merge recommendation is conditional on reviewer acceptance, stale PR metadata refresh and final-head checks. Local full-lint/evidence gaps remain. |
 | Expense-batch retry — DB prerequisite | Draft PR360, revised after parent blockers; not applied | Migration187 + PostgreSQL tests/docs only; frontend matches main. Review before dependent activation. | [DB runbook](expense-batch-retry.md); development Supabase and authorized DB application gates remain. |
+| Expense-batch retry — frontend activation | Dependent draft candidate; blocked from release until DB gates | Native per-user Web Lock across pending read/write/send/cleanup; exact-payload cleanup and adversarial concurrency regressions. | [Frontend runbook](expense-batch-frontend.md); depends on PR360, development Supabase, authorized DB postconditions and operator browser support. |
 
 The bounded S1–S5 review closed with gaps. The later overnight instruction
 authorized expense-only implementation; the morning-review instruction requires
@@ -539,3 +540,27 @@ review found no remaining DB-only blocker and verified frontend equality to main
 Follow-up review separated all explicit SQL validation into23514 while retaining
 PGB01 for committed-payload conflicts. A whitespace-only name now has a distinct
 rollback result; legacy22023 remains conservatively preserved by activation.
+
+
+## Dependent frontend correction
+
+Branch `codex/security-expense-batch-frontend` starts at DB prerequisite
+`29a4a757c6a34ddb27d08e02ff2ab68f434b96dc`. It restores only the scoped browser
+activation with native exclusive per-user Web Locks before any pending read or
+write, across RPC/error/confirmed cleanup. It has no unlocked UUID-only deletion;
+cleanup matches UUID+payload and first-call PGB01/legacy22023 or any uncertain
+replay error retains recovery. Unsupported locking fails before mutation/upload/RPC.
+
+Deterministic tests cover the parent's lost-response/conflicting-payload schedule
+in both orders. Actual Chromium native two-page locks enforce a controlled
+same-origin contention barrier, preserve the original invoice/edit payload and
+recover it after reload. Browser auth/RPC remain simulated; this is not browser/
+PostgREST coverage. PostgreSQL fixture and required development Supabase gate
+remain separate. Final review/checks/CI and concrete draft URL belong in handoff.
+No new migration, merge, deployment setting, production operation or remediation.
+
+Dependent frontend local close-out: 4,786 tests/219 files, including29 focused;
+ten PostgreSQL groups; expanded native-browser concurrency/component checks;
+types/build pass; lint0 errors/907 existing warnings. Independent re-review
+reran29 focused tests and found no remaining blocker. This is draft readiness
+only; final-head CI and release gates remain separate.
