@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, symlink, rm, mkdir, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { release, TARGET, BASELINE, fingerprint } from './release-pr367.mjs';
-const meta = (version = 280, overrides = {}) => ({ slug: TARGET, import_map: false, entrypoint_path: `/source/supabase/functions/${TARGET}/index.ts`, version, status: 'ACTIVE', verify_jwt: false, ezbr_sha256: version === 280 ? BASELINE.hash : 'a'.repeat(64), ...overrides });
+import { release, TARGET, BASELINE, fingerprint, downloadedFingerprint } from './release-pr367.mjs';
+const meta = (version = 280, overrides = {}) => ({ slug: TARGET, name: TARGET, id: '9defb252-5ea2-463b-b91b-497e0a7fe582', import_map: false, entrypoint_path: `file:///tmp/user_fn_ywhtjwawnkeqlwxbvgup_9defb252-5ea2-463b-b91b-497e0a7fe582_${version}/source/supabase/functions/${TARGET}/index.ts`, version, status: 'ACTIVE', verify_jwt: false, ezbr_sha256: version === 280 ? BASELINE.hash : 'a'.repeat(64), ...overrides });
 function harness({ metadata = [meta(), meta(), meta(), meta(281), meta(281)], health = [true], capture, deploy } = {}) {
   const calls = []; let reads = 0; let checks = 0;
   return { calls, ops: {
     metadata: async () => { calls.push('metadata'); assert.ok(reads < metadata.length); return metadata[reads++]; },
-    capture: async (name) => { calls.push(`capture:${name}`); return capture ? capture(name) : { count: 2, hash: 'safe-fingerprint' }; },
-    verifySource: async () => { calls.push('source'); },
+    capture: async (name) => { calls.push(`capture:${name}`); return capture ? capture(name) : { count: 2, hash: 'b'.repeat(64) }; },
+    verifySource: async () => { calls.push('source'); return { count: 2, hash: 'b'.repeat(64) }; },
     deploy: async (kind) => { calls.push(`deploy:${kind}`); if (deploy) await deploy(kind); },
     health: async () => { calls.push('health'); assert.ok(checks < health.length); return health[checks++]; },
   } };
@@ -52,7 +52,7 @@ test('concurrent deployment prevents restoring over another owner', async () => 
   const {calls,ops}=harness({metadata:[meta(),meta(),meta(),meta(281),meta(282)],health:[false]}); await assert.rejects(release(ops), /before rollback/); assert.ok(!calls.includes('deploy:rollback'));
 });
 test('restored source mismatch remains a failure', async () => {
-  const {ops}=harness({metadata:[meta(),meta(),meta(),meta(281),meta(281),meta(282)],health:[false,true],capture:name=>({count:2,hash:name==='restored'?'wrong':'same'})}); await assert.rejects(release(ops),/Restored source differs/);
+  const {ops}=harness({metadata:[meta(),meta(),meta(),meta(281),meta(281),meta(282)],health:[false,true],capture:name=>({count:2,hash:name==='restored'?'wrong':'b'.repeat(64)})}); await assert.rejects(release(ops),/Restored source differs/);
 });
 test('fingerprints ignore filesystem creation order and reject missing entrypoint/symlinks', async () => {
   const dir=await mkdtemp(join(tmpdir(),'release367-test-'));
@@ -73,4 +73,32 @@ test('deployment changed during a healthy smoke cannot be reported successful', 
 
 test('deployment changing during source verification aborts before mutation', async () => {
   const {calls,ops}=harness({metadata:[meta(),meta(),meta(281)]}); await assert.rejects(release(ops),/before release/); assert.ok(!calls.includes('deploy:release'));
+});
+
+for (const proof of [undefined, { count: 2, hash: 'c'.repeat(64) }, { count: 3, hash: 'b'.repeat(64) }, { count: 0, hash: 'b'.repeat(64) }]) {
+  test(`matching captures without exact pinned Git proof cannot deploy ${JSON.stringify(proof)}`, async () => {
+    const {calls,ops}=harness(); ops.verifySource=async()=>proof; await assert.rejects(release(ops), /pinned Git/); assert.ok(!calls.includes('deploy:release'));
+  });
+}
+for (const overrides of [{name:'wrong-name'}, {id:'wrong-id'}, {entrypoint_path:'file:///other/supabase/functions/make-server-1ccce916/index.ts'}, {entrypoint_path:'file:///tmp/user_fn_ywhtjwawnkeqlwxbvgup_9defb252-5ea2-463b-b91b-497e0a7fe582_279/source/supabase/functions/make-server-1ccce916/index.ts'}]) {
+  test(`metadata normalization rejects changed config/prefix ${JSON.stringify(overrides)}`, async () => {
+    const {calls,ops}=harness({metadata:[meta(280,overrides)]}); await assert.rejects(release(ops)); assert.deepEqual(calls,['metadata']);
+  });
+}
+test('complete source manifest rejects extra/missing/renamed/byte-changed entries and config/wrapper drift', async () => {
+  const root=await mkdtemp(join(tmpdir(),'release367-manifest-'));
+  const fn=join(root,'supabase/functions',TARGET);
+  try {
+    await mkdir(fn,{recursive:true}); await writeFile(join(fn,'index.ts'),'synthetic\n'); await writeFile(join(root,'supabase/config.toml'),'# Minimal config for Edge Function deployment\n\n[functions.make-server-1ccce916]\nverify_jwt = false\n');
+    const baseline=await downloadedFingerprint(root); assert.equal(baseline.count,1);
+    await writeFile(join(fn,'extra.ts'),'extra'); assert.notEqual((await downloadedFingerprint(root)).hash,baseline.hash); await rm(join(fn,'extra.ts'));
+    await writeFile(join(fn,'index.ts'),'synthetic\r\n'); assert.notEqual((await downloadedFingerprint(root)).hash,baseline.hash); await writeFile(join(fn,'index.ts'),'synthetic\n');
+    await writeFile(join(root,'supabase/config.toml'),'verify_jwt = true\n'); await assert.rejects(downloadedFingerprint(root),/config changed/); await writeFile(join(root,'supabase/config.toml'),'# Minimal config for Edge Function deployment\n\n[functions.make-server-1ccce916]\nverify_jwt = false\n');
+    await mkdir(join(fn,'extra-empty')); assert.notEqual((await downloadedFingerprint(root)).hash,baseline.hash); await rm(join(fn,'extra-empty'),{recursive:true});
+    await rename(join(fn,'index.ts'),join(fn,'Index.ts')); await assert.rejects(downloadedFingerprint(root),/entrypoint/); await rename(join(fn,'Index.ts'),join(fn,'index.ts'));
+    await writeFile(join(fn,'ambiguous\npath.ts'),'x'); await assert.rejects(downloadedFingerprint(root),/Ambiguous/); await rm(join(fn,'ambiguous\npath.ts'));
+    assert.deepEqual(await downloadedFingerprint(root),baseline);
+    await writeFile(join(root,'outside.txt'),'unexpected'); await assert.rejects(downloadedFingerprint(root),/wrapper/); await rm(join(root,'outside.txt'));
+    await mkdir(join(root,'other-wrapper')); await assert.rejects(downloadedFingerprint(root),/wrapper/);
+  } finally { await rm(root,{recursive:true,force:true}); }
 });
