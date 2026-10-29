@@ -1,13 +1,20 @@
-# Draft: preserve failure and truncation in saved tool summaries
+# Draft359: validate offline evaluation inputs
 
-Head branch `codex/esco-faithfulness-summary-safety`; independent main baseline `47d138633f03bb75deececb50516e4a17a2fd9ff`, all PO #365 changes retained.
+Existing branch `codex/esco-faithfulness-eval-input`, integrated with main `2a8671a1af027815cadac5d6f39009558fc0a6cc`.
+Original reviewed implementation head: `9de2be29a90a37760d0ce81ed8052eda38ad1bed`.
+The four adapter/test blobs remain identical; only integration and shared tracker state change in this refresh.
 
-A truncated births result could retain complete metadata and authorize an answer after losing detail; truncating a long error discarded its error key. Preserve own errors with a fixed safe marker, downgrade truncated legacy completeness, and reject context loss/errors in the births gate. Short results, complete-empty results and valid paginated aggregates without context loss remain compatible. Immediate full tool responses remain intact.
+Validate JSONL case shape, explicit evidence dates, selection controls and synthetic text variants before future evaluation.
+Malformed inputs fail closed; empty selections, unknown tool status and unavailable historical evidence remain explicit.
+No filesystem, environment, provider, private fixture or deployed-runtime access. Labels/adjudication and measurementv1.1 remain intact.
 
-Canonical source and both generated copies synchronized. Existing main tests cover the actual loop; no dependency on #366/queued offline code or new harness. Six regressions reproduced first;76 focused and26 independent synthetic assertions passed. Final committed-head full checks and CI belong in the publication handoff. No model calibration/live QA claim.
+Scope stays seven files: two adapter modules, two synthetic test files and three tracker documents.
+Preserve all security362, release-control and PO changes from main. No dependency on queued runner/transports.
+Complete local tests/types/lint/build, independent review and exact-head CI are required for this refreshed candidate.
+Actual head and final check receipts are recorded in the PR/handoff after commit, not inferred from historical counts.
 
-Runtime source change, draft only. No deployment, schema/credentials/access/security settings, typed-envelope/Telegram rewrite, injection, hard-size policy, private/provider/production call or history rewrite. A retained large summary can still exceed the threshold. Merge/deployment/live-QA remain separate; coordinate alert owner readiness before any future edge release.
+Remain draft. Specific approval is required before ready/merge. No deployment, production write or provider calibration.
+Next integration order:359 →361 →363 →364 →366; reconcile/retest each, never merge the offline integration-base branch.
+Rollback is a normal source revert with no schema or traffic change.
 
-Independently reviewable corrective fix; offline chain #359 → #361 → #363 → #364 → #366 remains separate. Reconcile overlapping tracker docs and retest later changed heads. Do not merge the offline integration-base branch. Rollback: source revert plus synchronized mirrors; any deployed revert needs a separately authorized deployment.
-
-Morning-paper one-liner: Prevents trimmed or failed tool evidence from appearing complete when the agent answers births questions.
+Business one-liner: Rejects malformed evaluation cases before offline scoring can produce misleading results.

@@ -1,18 +1,20 @@
 # Progress and handoff
 
-## Current state — I04-a, 2026-10-29 UTC
+## Current state — I03-a revalidation, 2026-10-29 UTC
 
-- Baseline is current main `47d138633f03bb75deececb50516e4a17a2fd9ff`, including all PO #365 changes; remote ref verified. Exact signed commit/tree and its eight PO blobs were reconstructed locally from Composio read-only commit/patch data, matching GitHub hashes. No prior branch was overwritten. Preserved source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-- I01/#357 and I02/#358 are merged. Offline drafts #359/#361/#363/#364/#366 remain queued/unmerged. Its prior CI receipt is recorded separately below and does not validate this runtime correction. Security #360/#362 are separate and untouched. No merges tonight.
-- Active I04-a only: `codex/esco-faithfulness-summary-safety`, independently based on main47d1386. Correct saved-summary error/truncation semantics and births guard; canonical source synchronized to both edge copies. Existing main tests suffice: no dependency on #366 or other queued code, no new harness/injection/typed-envelope/Telegram rewrite.
-- Current-main regressions reproduced six failures: truncated births context accepted, long error key lost, four falsy error values accepted. All corrected. Focused tests76 passed; independent QA26 additional synthetic assertions passed, no blocker, parity and unchanged PO verified. Final committed-head full tests/types/lint/build and CI will be recorded in PR/handoff; do not reuse source/other-PR receipts.
-- Short results remain byte-identical. Complete-empty and valid paginated aggregates without context loss stay accepted. Truncated legacy completeness flags become false, errors retain a fixed safe marker, and context-truncated/error summaries cannot authorize a births answer. Immediate full tool payload is preserved. Threshold remains a trigger, not a hard output bound; this does not prove calendar/entity/narrative correctness or cross-period matching.
-- Next: final gates, small unmerged draft, terminal CI, parent re-review. This correction can be reviewed independently; queued offline chain keeps #359 → #361 → #363 → #364 → #366 order. Reconcile shared tracker docs and rerun checks after each later integration; do not merge the offline integration-base branch. Stop after this slice.
-- No provider/private/source-pack input, real credential/production query, Storage/bot/Notion write, schema/access/security-setting change, merge, auto-merge or deployment. Deployment/live Web/channel QA is separately gated, including coordination with the alert owner about PR356's described migration186/deployment readiness; no live ledger queried. No quality/calibration claim or P1-02 start. Historical tracker evidence follows.
+- Baseline main `2a8671a1af027815cadac5d6f39009558fc0a6cc`; exact root tree reconstructed locally as `8e803295709422d5bd86285dba5637ea9386f73d`. Preserve security #360/#362, release controls and PO documents. Source branch remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+- I01/#357 and I02/#358 are merged. I04-a/#367 is merged and its fixed backend source deployed as v281 through reviewed #370. [Release40951834611](https://github.com/sforero94/Escociaos/actions/runs/40951834611) passed once, no rollback; metadata/JWT/health gates passed. Source recovery is not bit-identical bundle recovery.
+- Parent accepted browser read-only smoke at20:50–20:53UTC: session, dashboard, expense history/Registrar, no app-console errors. No births query, real model call, calibration or business write was tested. Temporary release controls remain unchanged pending separate cleanup.
+- Active scope is existing draft359 only, `codex/esco-faithfulness-eval-input`, original reviewed head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`. Integrate current main and reconcile overlapping trackers without changing the four adapter/test blobs. No new implementation, runner, fixture or runtime scope.
+- Adapter rejects malformed case/date/selection inputs; unknown/null historical evidence and empty answers stay explicit. Measurementv1.1 and immutable adjudication/label safeguards remain intact. Original53 input/145 evaluator tests and111 independent assertions are historical; refreshed candidate checks must be recorded separately.
+- Remaining queue:359 →361 →363 →364 →366. Retest and reconcile shared docs after each integration. Never merge the offline integration-base branch. No ready/merge action until specific user approval; stop after this candidate reaches terminal CI and parent review.
+- No providers/private fixtures, production writes, deployment, migration, credentials/access changes or P1-02 work. Parent owns Bot Log. Historical preserved-source statuses and run evidence below do not claim those entire source milestones are integrated or activated on main.
 
-## Prior CI receipt
+## Prior CI receipts
 
-Offline head `2d504e1`: [successful run40811688057](https://github.com/sforero94/Escociaos/actions/runs/40811688057). This is prior-slice evidence only.
+I01 CI40759015461 and I02 CI40765357918 passed before their merges.
+The queued actual-loop candidate's CI40811688057 and prior PR359 checks do not validate this refreshed head.
+Backend release control postmerge CI40951382054 and release40951834611 passed separately; they do not establish live faithfulness.
 
 ## Task tracker — preserved source-branch status
 
