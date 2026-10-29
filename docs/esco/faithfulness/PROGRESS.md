@@ -3,12 +3,16 @@
 ## Current state — I04-a, 2026-10-29 UTC
 
 - Baseline is current main `47d138633f03bb75deececb50516e4a17a2fd9ff`, including all PO #365 changes; remote ref verified. Exact signed commit/tree and its eight PO blobs were reconstructed locally from Composio read-only commit/patch data, matching GitHub hashes. No prior branch was overwritten. Preserved source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-- I01/#357 and I02/#358 are merged. Offline drafts #359/#361/#363/#364/#366 remain queued/unmerged; #366 at `2d504e1` has green associated CI [40811688057](https://github.com/sforero94/Escociaos/actions/runs/40811688057). Those checks do not validate this runtime correction. Security #360/#362 are separate and untouched. No merges tonight.
+- I01/#357 and I02/#358 are merged. Offline drafts #359/#361/#363/#364/#366 remain queued/unmerged. Its prior CI receipt is recorded separately below and does not validate this runtime correction. Security #360/#362 are separate and untouched. No merges tonight.
 - Active I04-a only: `codex/esco-faithfulness-summary-safety`, independently based on main47d1386. Correct saved-summary error/truncation semantics and births guard; canonical source synchronized to both edge copies. Existing main tests suffice: no dependency on #366 or other queued code, no new harness/injection/typed-envelope/Telegram rewrite.
 - Current-main regressions reproduced six failures: truncated births context accepted, long error key lost, four falsy error values accepted. All corrected. Focused tests76 passed; independent QA26 additional synthetic assertions passed, no blocker, parity and unchanged PO verified. Final committed-head full tests/types/lint/build and CI will be recorded in PR/handoff; do not reuse source/other-PR receipts.
 - Short results remain byte-identical. Complete-empty and valid paginated aggregates without context loss stay accepted. Truncated legacy completeness flags become false, errors retain a fixed safe marker, and context-truncated/error summaries cannot authorize a births answer. Immediate full tool payload is preserved. Threshold remains a trigger, not a hard output bound; this does not prove calendar/entity/narrative correctness or cross-period matching.
 - Next: final gates, small unmerged draft, terminal CI, parent re-review. This correction can be reviewed independently; queued offline chain keeps #359 → #361 → #363 → #364 → #366 order. Reconcile shared tracker docs and rerun checks after each later integration; do not merge the offline integration-base branch. Stop after this slice.
 - No provider/private/source-pack input, real credential/production query, Storage/bot/Notion write, schema/access/security-setting change, merge, auto-merge or deployment. Deployment/live Web/channel QA is separately gated, including coordination with the alert owner about PR356's described migration186/deployment readiness; no live ledger queried. No quality/calibration claim or P1-02 start. Historical tracker evidence follows.
+
+## Prior CI receipt
+
+Offline head `2d504e1`: [successful run40811688057](https://github.com/sforero94/Escociaos/actions/runs/40811688057). This is prior-slice evidence only.
 
 ## Task tracker — preserved source-branch status
 
@@ -198,3 +202,5 @@ Update this table and the current-state block in the same session. Add implement
 ## Session — I04-a persisted-summary safety, 2026-10-29 UTC
 
 Branch `codex/esco-faithfulness-summary-safety`; baseline current main47d1386, PO files preserved. Reproduced6 failures in current-main focused controls, fixed canonical `escoConsultas.ts` and synchronized its two generated copies with the existing script. Added synthetic tests to existing main query/loop suites:76 focused passed, independent26 assertions passed. Immediate raw tool data stays complete; persisted truncation/failure cannot pass the births evidence gate. No new business rule, typed-envelope migration, hard context cap, tool injection or Telegram rewrite. Final-head test/type/lint/build/CI receipts belong in PR/handoff. Rollback is source revert and mirror synchronization; deployed rollback would separately require an authorized edge deployment. No deployment or production/private/provider action occurred. Next: parent review and morning queue integration, no further slice.
+
+Initial I04-a implementation `b162e37` full suite:4781 passed,1 failed; the existing documentation guard flagged placement of the public prior-CI receipt near channel-history text. Moved the unchanged receipt into its own section. No guard, allow-list or source/test assertion was relaxed. Functional source/tests remain as independently reviewed; final handoff is the later documentation commit and must pass all final-head gates.
