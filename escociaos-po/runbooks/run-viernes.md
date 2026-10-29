@@ -258,6 +258,12 @@ finding that gets re-found next month means the ledger step was skipped.
 **Phase 5 — Memory commit** — as Monday. Report to
 `escociaos-po/reports/YYYY-MM-DD-viernes.md`.
 
+**Phase 5b — Bot Log** — the last write of the run, after the memory commit is
+pushed: one new Bot Log row for `YYYY-MM-DD-viernes`, with every PR opened
+and any migration applied in `Enlaces`, through the official Notion
+connector (constitution §4 Phase 5b). If it fails, its text goes in the final
+message under `NO CORRIÓ` as `Bot Log — sin guardar`.
+
 **Phase 6 — Notify** — the §10 summary, with these Friday-specific lines:
 
 ```

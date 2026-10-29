@@ -186,12 +186,18 @@ Every run follows this. Do not skip phases; do not reorder them.
      `COMPOSIO_MULTI_EXECUTE_TOOL` — invisible to the Routine's own
      `permitted_tools`/`tool_policy_overrides`, which only sees the bare tool
      name. Before any real work: call `COMPOSIO_MANAGE_CONNECTIONS`
-     (`action: list`) for `supabase`, `notion`, `vercel`, `github` and confirm
+     (`action: list`) for `supabase`, `vercel`, `github` and confirm
      every toolkit shows `status: active`; then call `COMPOSIO_GET_TOOL_SCHEMAS`
      on the pinned slugs in §6 and confirm they still resolve. **Do not skip the
      account check** — `supabase` alone resolves to three different connected
      accounts, and calling without `account` silently uses whichever one is
      `is_default`, which is **not** the Escocia OS one (§6, `memory/_compartida.md`).
+
+  2b. **The official Notion connector answers** (since 2026-10-29 every Notion
+     read and write goes through it, not through Composio). Call
+     `notion-fetch` on `collection://b22d2385-a812-4d4a-8094-cefa9d080f60`
+     (Mantenimiento) and confirm it returns the schema. A missing `notion-*`
+     tool or a permission prompt is the P1 against the operation below.
 
   3. **The log lane actually answers** (ESCO-131). Run one trivial
      `mcp__Supabase_Escritura__query_logs` query over the last hour and confirm
@@ -220,15 +226,18 @@ Every run follows this. Do not skip phases; do not reorder them.
   > "las Routines no dispararon" and filed a P1 pointing at the scheduler. They
   > fired. **An allowlist rots silently, and a rotted entry does not fail loudly
   > — it converts an unattended run into a run waiting for a human who is not
-  > there.** Moving Supabase reads and Notion onto Composio (2026-09-14) does
+  > there.** Moving Supabase reads and Notion onto Composio (2026-09-14), and
+  > moving Notion back to its official connector (2026-10-29), do
   > not retire this lesson — it moves where the rot can hide, from a bare tool
   > name one level down to a `tool_slug`/`account` pair the Routine's own
   > allowlist cannot see at all. Verify explicitly; never assume.
 
 - **Resolve the connectors** (§6): confirm which are enabled in this session and
-  which accounts they resolve to. Diagnosis (Supabase reads, Notion, Vercel)
-  goes through **Composio**, pinned to the `escocia-os` / `thinksid` / `escocia`
-  accounts respectively. **Since 2026-09-21 Supabase writes go through Composio
+  which accounts they resolve to. Diagnosis (Supabase reads, Vercel) goes
+  through **Composio**, pinned to the `escocia-os` / `escocia` accounts
+  respectively. **Notion (findings, Saturday page, Bot Log) goes through the
+  official Notion connector since 2026-10-29** — never through Composio's
+  `NOTION_*` slugs. **Since 2026-09-21 Supabase writes go through Composio
   too** (`SUPABASE_APPLY_A_MIGRATION`, same `escocia-os` account), so the read
   and the write path are now the same connector and the same bare tool name —
   which is exactly why §6 says the separation between them is now a prompt rule
@@ -299,6 +308,53 @@ Every run follows this. Do not skip phases; do not reorder them.
   direct write to `main` the operation is ever allowed.
 - Write the run report to `escociaos-po/reports/YYYY-MM-DD-<dia>.md` in the same
   memory commit.
+
+**Phase 5b — Bot Log (the last write of every run)**
+
+Decision of Santiago, 2026-10-29 (Notion → Bot Vault → *Agent Operating Guide*
+v0.1). After the memory commit is pushed and before the final message, **every
+run** — Monday, Thursday, Friday, Saturday, and a run that could not boot —
+records itself in the Bot Log. **One new row per run, never a fixed row per
+Routine**: Santiago wants one row per week per Routine, so that the weeks stay
+traceable.
+
+- **Tool**: the official Notion connector, `notion-create-pages`, parent
+  `{"type": "data_source_id", "data_source_id": "40767755-ed68-801e-8339-000bd8a8a652"}`.
+  Properties and body go in the same call.
+- **Rerun check first**: `notion-search` with the run id, restricted to that
+  data source (`data_source_url: collection://40767755-ed68-801e-8339-000bd8a8a652`).
+  If a row for this run id already exists, do not create a second one: update it
+  with `notion-update-page` (`update_properties`, then `insert_content` at the end
+  for one more Progreso line). Never rewrite Progreso.
+- **Properties** (exact names; the guide defines each one):
+  - `Tarea`: `Corrida <día> <run id> — Escocia OS`, e.g.
+    `Corrida lunes 2026-11-02-lunes — Escocia OS`.
+  - `Frente`: `Escocia OS` (exactly; the guard hook checks it).
+  - `Estado`: `Espera a Santiago` if `Necesito de Santiago` is not empty;
+    `Bloqueada` if the run could not boot or ended Notion-degraded or Minimal
+    (§7); else `Hecha`.
+  - `Agente creador`, `Agente actual`, `Actualizado por`: `Claude`.
+    `Superficie`: `Claude Code`.
+  - `Prioridad`: `P0` if the run filed a P0, else leave it empty.
+  - `Siguiente paso`: one line that the next run (or Santiago) can act on
+    without reading anything else, e.g. `Viernes drena 3 fichas Ruta = VIERNES`.
+  - `Necesito de Santiago`: one concrete decision or input (merge #N, answer the
+    Saturday report, attach a connector), or empty.
+  - `Enlaces`: the report on GitHub
+    (`https://github.com/sforero94/Escociaos/blob/main/escociaos-po/reports/<run id>.md`),
+    the PRs opened or applied, and Saturday's Notion page. Never a credential.
+- **Body**, in Spanish (§9), these three sections only:
+  `## Contexto` (max. 5 lines: run type, write mode, counts of findings, PRs,
+  migration), `## Tareas` (checkboxes: what was done, what is left), and
+  `## Progreso` with one line,
+  `- YYYY-MM-DD · Claude (Claude Code): <qué se hizo>. <resultado o enlace>.`
+- **Cost**: one search and one write. Nothing else.
+- **The Bot Log is not the findings database and not Memories.** Findings stay in
+  Mantenimiento; durable facts stay in `memory/` (§8). The row only says what this
+  run did and where its work lives.
+- **If the write is denied or fails**: put the row's text in the final message
+  under `NO CORRIÓ` as `Bot Log — sin guardar`, and send the final message
+  anyway. The Bot Log never blocks the notification.
 
 **Phase 6 — Notify**
 - The run summary (§9) is the final message of the session — the Routine's
@@ -521,6 +577,27 @@ never by convenience.
   2. **Saturday's report page**, `NOTION_CREATE_NOTION_PAGE` under the "Escocia OS —
      Reportes del sábado" page and nowhere else.
 
+  **Notion moved to the official connector on 2026-10-29** (decision of Santiago).
+  The Composio `NOTION_*` rules above stay in the hook but no Routine uses them.
+  The official connector is bounded in two layers:
+  1. **The Routine's connector list.** The Routine UI attaches the whole Notion
+     connector: it has no per-tool allowlist (verified 2026-10-29, `permitted_tools`
+     is empty on all four). So this layer only says *which* connectors exist, not
+     which Notion tools may run. **Saving the Routine edit dialog also drops
+     connectors that the dialog does not list** — on 2026-10-29 it removed Composio
+     from all four Routines. After any edit, re-check `mcp_connections`.
+  2. **The guard hook, when unattended** (proposed in `docs/propuestas/hook-notion-oficial.md`,
+     not yet active: changing the hook and `.claude/settings.json` needs Santiago's
+     own approval). It allows reads; `notion-create-pages` only under Mantenimiento,
+     the Bot Log (with `Frente = Escocia OS`) or the "Reportes del sábado" page;
+     `notion-update-page` only with `update_properties` or `insert_content` at the
+     end; and denies everything else (delete, move, duplicate, share, rewrite).
+     Until it is active, these limits are a prompt rule and nothing more.
+  Writes a run may make in Notion: rows in Mantenimiento (create, update
+  properties, append evidence), Saturday's report page, Saturday-reply's
+  `Respuesta` section (append), and its own Bot Log row (§4 Phase 5b). Never
+  delete, move, share or rewrite a Notion page.
+
   Everything else stays as it was, and an attended session still asks.
 
   **Since 2026-10-26 the hook also covers every `mcp__Composio__*` tool.**
@@ -678,7 +755,8 @@ mode at Phase 0 and degrade in this order:
    applies them. Say so at the top of the report.
 3. **Notion-degraded** — Notion MCP unavailable. Write the full run report
    (including every finding) into the run summary, and flag that findings still
-   need filing.
+   need filing. The Bot Log row (§4 Phase 5b) goes into the summary too, marked
+   `sin guardar`.
 4. **Minimal** — Supabase/Vercel MCPs unavailable. Do the code-only half of the
    sweep, and report explicitly which specialties could not run. Never present a
    partial sweep as a complete one. **Two consecutive runs at this level is
@@ -803,12 +881,12 @@ honestly is what makes the loud weeks credible.
 | Cloud Routine — Monday | `trig_01QusLNQd3snSbrn9UwBuqmQ` · `0 12 * * 1` UTC · **salud**, reads `runbooks/run-lunes.md` |
 | Cloud Routine — Thursday | `trig_01BnbYqstYhc1SjTfyrizYUB` · `0 12 * * 4` UTC · **features y sonda P0**, reads `runbooks/run-jueves.md` |
 | Cloud Routine — Friday | `trig_01AbCfQPNmRh7Jq8fX8yktSe` · `0 12 * * 5` UTC · **ejecuta**, reads `runbooks/run-viernes.md` (created 2026-08-21, first fire 2026-08-28) |
-| Cloud Routine — Saturday | `trig_01G7S43qgN2uiCKDEp1LZfKg` · `0 13 * * 6` UTC · **reporte de decisiones**, reads `runbooks/run-sabado.md` (created 2026-10-27, first fire 2026-10-31). Only the Composio connector. Santiago replies from a new cloud session that follows `runbooks/respuesta-sabado.md` |
+| Cloud Routine — Saturday | `trig_01G7S43qgN2uiCKDEp1LZfKg` · `0 13 * * 6` UTC · **reporte de decisiones**, reads `runbooks/run-sabado.md` (created 2026-10-27, first fire 2026-10-31). Composio connector plus the official Notion connector (2026-10-29). Santiago replies from a new cloud session that follows `runbooks/respuesta-sabado.md` |
 | Routine prompts | Rewritten for the weekly cycle on 2026-10-27. Monday, Thursday and Friday kept their crons and `mcp_connections` untouched: only the bootstrapper text changed |
 | Notifications | Routine push + email, one per run |
 | Runtime decision | Cloud Routines (2026-07-31): always fire, MCPs authenticated account-level, clean clone of `main` by construction — never sees Santiago's local worktrees/WIP |
 | DB connectors | **One, since 2026-09-21.** Everything — diagnosis reads AND remediation writes — goes through **Composio** (`2982c4d2-…`) on `account: supabase_bitis-coward` (alias `escocia-os`). Reads: `SUPABASE_RUN_READ_ONLY_QUERY`, which connects as `supabase_read_only_user` and has write statements rejected server-side, so that half is still mechanically enforced. Writes: `SUPABASE_APPLY_A_MIGRATION` (`ref`, `query`, `name`, `rollback`). **The dedicated `Supabase_Escritura` connector (`1eeabe38-…`) is retired from this operation** — Santiago reversed the 2026-09-14 decision on 2026-09-21 after `apply_migration` went missing from it for four consecutive sessions (ESCO-114). **What the reversal cost**: that connector permitted one tool, so freehand SQL was mechanically impossible; Composio's write tool shares `COMPOSIO_MULTI_EXECUTE_TOOL` with the reads, which `always_ask`/`always_allow` cannot gate per `tool_slug`. Monday and Thursday are therefore now *able* to write and are trusted not to. See §6. **Updated 2026-10-27:** `Supabase_Escritura` (`1eeabe38-…`) is not retired. It stays attached to Monday, Thursday and Friday with `permitted_tools: ["apply_migration"]`, set to `always_ask` on Monday and Thursday and `always_allow` on Friday. It is the preferred write tool for Friday's one gated `ddl_aditivo` apply, and its `query_logs` is the log lane (§6). The guard hook, not this allowlist, is what bounds the apply mechanically |
-| Notion | Since 2026-09-14, through **Composio**, `account: notion_awork-knit` (alias `thinksid`), slugs `NOTION_SEARCH_NOTION_PAGE` / `NOTION_FETCH_DATABASE` / `NOTION_QUERY_DATABASE_WITH_FILTER` / `NOTION_INSERT_ROW_DATABASE` / `NOTION_UPDATE_ROW_DATABASE`, plus `NOTION_CREATE_NOTION_PAGE` for Saturday only, under the "Escocia OS — Reportes del sábado" page (`40667755-ed68-814f-b676-f9e28be7d2f3`), which the guard hook enforces (2026-10-27). Mantenimiento database id (plain UUID Composio wants, **not** the `collection://…` data-source id the old direct connector used): `c52d9258-fed7-466d-8e70-0fa92980d3df`. `Estado` is a Notion `status`-type property — pass `type: "status"` on writes, never `"select"`. The dedicated `Notion` connector (`af1e5776-…`) is detached from all three Routines. There is a second, redundant Notion account (`notion_triact-lord`, same workspace/integration) — pin the alias, don't rely on default |
+| Notion | **Since 2026-10-29, the official Notion connector** (`mcp__Notion__notion-*`), decision of Santiago: the official MCP improved, and one connector is simpler than Composio's slugs. Attached to all four Routines on 2026-10-29 (Routine UI → Edit → Advanced settings → Connectors; the scheduled-task API cannot change connectors). The UI attaches the whole connector, with no per-tool allowlist, so the tools a run uses are `notion-search`, `notion-fetch`, `notion-query-data-sources`, `notion-create-pages`, `notion-update-page` by rule, not by mechanism. Use the `collection://` data-source ids: Mantenimiento `collection://b22d2385-a812-4d4a-8094-cefa9d080f60`, Bot Log `collection://40767755-ed68-801e-8339-000bd8a8a652`; Saturday's page parent is the page `40667755-ed68-814f-b676-f9e28be7d2f3` ("Escocia OS — Reportes del sábado"). `Estado` in Mantenimiento is a `status` property. Bounds: §6. **History**: 2026-09-14 → 2026-10-28 Notion went through Composio (`account: notion_awork-knit`, alias `thinksid`; slugs `NOTION_*`); that path is retired for the Routines, and the Composio Notion integration was never shared with the Bot Log (404, verified 2026-10-29) |
 | Tool allowlists | `permitted_tools` + `tool_policy_overrides` per connector, **hand-maintained and therefore rot-prone** — this got worse, not better, after 2026-09-14: a Composio `tool_slug`/`account` pair now rots one layer below where this allowlist can even see it (§4 Phase 0). Corrected 2026-08-21: `get_logs` → `query_logs` on all three (see the Phase 0 preflight note in §4 for what the stale entry cost). Also dropped the deprecated `notion-query-database-view`. **The preflight is the durable fix, not the rename** — the next rot will happen too, and now at the Composio layer as easily as the connector layer |
 | Vercel | Read through **Composio** (`2982c4d2-…`), slugs `VERCEL_GET_*`, account `vercel_tetric-hash`. The direct Vercel connector is retired. **The six runs that filed "Vercel connector broken, re-authenticate" were chasing the wrong thing**: both connectors were healthy and both were OAuth'd as `thinksid`, who is not a member of the team owning the project — a 403 says *this user cannot*, not *this connector is broken*. Fixed 2026-08-21 by reconnecting as the owning account. **`COMPOSIO_MULTI_EXECUTE_TOOL` is a generic executor across every connected toolkit, so it bounds no blast radius at all.** That was already the accepted tradeoff for Vercel (2026-08-21) and for Supabase reads and Notion (2026-09-14). Since **2026-09-21 it also carries the Supabase write** (`SUPABASE_APPLY_A_MIGRATION`), so the old rule "never for a Supabase write" is retired and replaced by a narrower one: **`SUPABASE_BETA_RUN_SQL_QUERY` is forbidden in every phase, and a write only ever executes a reviewed migration file verbatim.** Slugs, the accounts and their traps: `memory/_compartida.md` |
 
