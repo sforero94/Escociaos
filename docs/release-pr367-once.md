@@ -1,12 +1,14 @@
-# Temporary PR367 release job — draft, not dispatched
+# PR367 release blocked — read-only diagnostic pending review
 
 Deploy only source `634580480c72b27c7ccd2d8c006af520d0ca1058` to project
 `ywhtjwawnkeqlwxbvgup`, function `make-server-1ccce916`. No migration187, PR362
 activation, new credentials/access, provider/business reads, bot messages or other
 function deployment. Repository CLAUDE.md requires the Supabase CLI; no connector
 publish path. Parent reviews the final candidate and separately authorizes
-merge/dispatch. Manual main-only trigger, confirmation
-`DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK`, contents:read, no persisted checkout
+merge/dispatch. Manual main-only trigger; mode defaults to `diagnose`. Diagnostic confirmation
+is `DIAGNOSE_PR367_LAYOUT_ONLY`. An independently approved deployment must select
+`release` and `DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK`. Permissions remain
+contents:read, no persisted checkout
 credentials, no schedule/push/PR release triggers. Existing management secret is
 scoped to one step. Official CLI2.122.0 installs before that step; no login or
 secret export. Checkout action is pinned to verified v4.2.2 SHA
@@ -73,8 +75,8 @@ versions; transitive registry dependencies, runtime image and live secrets are
 not snapshotted by Git. No dependency-resolution or runtime-binary reproducibility
 claim is made. No broad dependency-pinning change is included. Parent must assess
 this source-redeployment limit before release; exact old-bundle recovery would
-require a separately verified bundle/lock artifact. Actual download/equality,
-rebuild and live checks are still unrun, so readiness remains conditional.
+require a separately verified bundle/lock artifact. The first live download failed wrapper validation. Source equality, rebuild and
+release health remain unproven/unrun, so readiness remains conditional.
 
 Coordinate the deployment owner: workflow concurrency serializes this workflow,
 not other deployment tools. Metadata checks are not an atomic lock. Migration186
@@ -93,3 +95,48 @@ calibration claim. Logs contain safe phases/status/fingerprints only, never raw
 source/API/subprocess output. Captures are removed at exit; Git is the durable
 reference only after proof. After release acceptance, remove these four temporary
 files through a small cleanup PR. Parent alone records the actual Bot Log result.
+
+## Read-only layout diagnostic — preparation only
+
+PR368 merged at `5e344fd73d2dd925fd49530b885dd2bf364875e0`. Verification run
+[40931410656](https://github.com/sforero94/Escociaos/actions/runs/40931410656) passed.
+Release run [40931922567](https://github.com/sforero94/Escociaos/actions/runs/40931922567)
+stopped at `capture-first` / `Unexpected download wrapper`, before deployment or
+rollback. Captures were deleted, so actual unexpected paths remain unknown.
+The subsequent drift job
+[40932344531](https://github.com/sforero94/Escociaos/actions/runs/40932344531) failed:
+its log explicitly says clock/source drift (main source not deployed), while
+anonymous health was200 and verify_jwt=false. Therefore postmerge checks are
+**not all green**. Commit1460b034 records drift state only; it does not release367.
+
+Official CLI2.122.0 research identifies a plausible wrapper addition, not a
+confirmed diagnosis of this runner:
+- [download.handler.ts](https://github.com/supabase/cli/blob/v2.122.0/apps/cli/src/commands/functions/download/download.handler.ts)
+  calls linked-project caching after the download operation. Blob f6251fee.
+- [linked-project-cache.service.ts](https://github.com/supabase/cli/blob/v2.122.0/apps/cli/src/telemetry/linked-project-cache.service.ts)
+  documents legacy `supabase/.temp/linked-project.json` writes. Blob f5365ae6.
+- [shared/functions/download.ts](https://github.com/supabase/cli/blob/v2.122.0/apps/cli/src/shared/functions/download.ts)
+  controls source extraction and containment. Blob c91cebd5.
+The release gate intentionally does not allow this cache path. No path is
+normalized away on this evidence alone.
+
+The proposed diagnostic uses the same fixed target, CLI arguments and seeded Git
+config. It checks baseline and pinned checkout, downloads once, reports a bounded
+JSON inventory of relative paths/types/file sizes/SHA256s, runs the existing
+strict layout check, then verifies unchanged metadata. The separate gitEquivalent
+field is null when layout validation fails, false for differing source and true
+only for a complete matching fingerprint; none of these values enables release. A layout rejection appears
+in the diagnostic report; it never enables deployment. Output state is always
+`diagnostic-only`, with deploymentAttempted=false. No deploy/rollback/health
+capability is supplied to the diagnostic runner. Symlinks are not followed,
+special files are not opened, token-like names are redacted, and no raw API body,
+CLI output or source body appears. No source/artifact upload or new permission.
+The CLI may perform its existing same-project metadata cache read; no business
+records are requested. Temporary downloaded files are deleted at exit.
+
+After parent review and specific merge/dispatch approval, run only
+`release-pr367-once.yml` on the reviewed main with mode=`diagnose` and confirmation
+`DIAGNOSE_PR367_LAYOUT_ONLY`. Do not dispatch `release`. Retain the resulting safe
+JSON log receipt for comparison with official source and expected Git inventory.
+Any repair or canonicalization requires actual layout evidence and a separate
+review. No diagnostic has run from this candidate yet.
