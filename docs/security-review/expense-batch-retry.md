@@ -87,7 +87,8 @@ credentials, grants on existing tables or persistent access changes were used.
   node scripts/tests/gastos-lote-browser.mjs`: actual component, mocked local
   auth/RPC, all external browser requests blocked. Passes lost response, locked
   inputs, reload recovery, stale second-tab replay and viewport overflow at
-  1280×900 and 390×844. Browser checks do not reproduce PostgREST transport or
+  1280×900 and 390×844, including retention of a different newer draft after
+  the empty-grid autosave timer fires. Browser checks do not reproduce PostgREST transport or
   genuine operator behavior. `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH` select installed
   tools; the script installs nothing.
 - `npm run typecheck` and `npm run build`: passed. `npm run lint`: zero errors,

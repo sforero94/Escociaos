@@ -124,7 +124,9 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
     if (nonEmpty.length > 0) {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(serializeRows(nonEmpty, solicitudId.current)));
     } else {
-      localStorage.removeItem(DRAFT_KEY);
+      const raw = localStorage.getItem(DRAFT_KEY);
+      const draft: DraftData | null = raw ? JSON.parse(raw) : null;
+      if (draft && (draft.solicitudId ?? draft.rows?.[0]?.id) === solicitudId.current) localStorage.removeItem(DRAFT_KEY);
     }
   }, [rows]);
 

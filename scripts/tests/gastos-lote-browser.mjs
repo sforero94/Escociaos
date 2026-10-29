@@ -82,11 +82,14 @@ createRoot(document.getElementById('root')!).render(<GastosBatchTable catalogs={
     assert.equal(await a.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('synthetic_receipts'))).length),1);
     assert.equal(await a.evaluate(user=>localStorage.getItem('gastos_lote_pendiente_v1_'+user),user),null);
     assert.equal(await a.evaluate(()=>localStorage.getItem('gastos_batch_draft')),null);
+    await a.evaluate(()=>localStorage.setItem('gastos_batch_draft',JSON.stringify({solicitudId:'different-newer-draft',rows:[{id:'newer-row',nombre:'Otro borrador'}]})));
+    await a.waitForTimeout(5500); // Both empty grids still have their autosave timers.
+    assert.equal(await a.evaluate(()=>JSON.parse(localStorage.getItem('gastos_batch_draft')).solicitudId),'different-newer-draft');
     const sizes=await a.evaluate(()=>({body:document.documentElement.scrollWidth,width:innerWidth,fieldset:getComputedStyle(document.querySelector('fieldset')).minWidth,overflow:getComputedStyle(document.querySelector('table').parentElement).overflowX}));
     console.log(sizes);
     assert(sizes.body<=sizes.width,`Page overflow: ${JSON.stringify(sizes)}`);
     await a.screenshot({path:`/tmp/gastos-lote-${viewport.width}.png`,fullPage:true});
-    console.log(`PASS ${viewport.width}px: lost response, locked input, reload, receipt recovery, stale second-tab replay, page width`);
+    console.log(`PASS ${viewport.width}px: lost response, locked input, reload, receipt recovery, stale second-tab replay, preserve newer draft after autosave, page width`);
     await context.close();
   }
 } finally {
