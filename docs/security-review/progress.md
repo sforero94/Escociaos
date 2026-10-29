@@ -539,3 +539,33 @@ review found no remaining DB-only blocker and verified frontend equality to main
 Follow-up review separated all explicit SQL validation into23514 while retaining
 PGB01 for committed-payload conflicts. A whitespace-only name now has a distinct
 rollback result; legacy22023 remains conservatively preserved by activation.
+
+
+## PR360 integration preparation after PR367 — 2026-10-29
+
+Preparation only, as authorized by the parent after PR367 merge. Current main
+634580480c72b27c7ccd2d8c006af520d0ca1058 is merged into the preserved PR360
+branch from29a4a757c6a34ddb27d08e02ff2ab68f434b96dc; no force push or conflict
+resolution was needed. The scope against main remains exactly the five DB/test/doc
+files. All frontend, unit-test and edge source files equal current main. No
+migration-number collision: main still ends at186;187 is candidate-only. No live
+DB query/application or production/private-data action establishes this check.
+
+Do not mark ready, approve, merge, deploy or apply187 during this preparation.
+PR362 is not started or changed; its original development-Supabase, authorized DB
+application/postconditions and operator-browser gates remain. Parent owns Bot Log
+and next action confirmation. Final local and exact-head checks belong below and
+in the PR handoff; all earlier session results remain historical evidence.
+
+
+Integrated-tree validation: 4,782 Vitest tests/218 files, no skipped tests; ten
+isolated PostgreSQL17 groups pass; typecheck/build pass; lint0 errors/907 existing
+warnings (local Node24). Independent read-only integration review found no blocker,
+verified the five-file diff and frontend/edge equality to current main, and
+confirmed SQL/test bytes unchanged from29a4a757. Exact published-head CI/Vercel
+results belong in the PR/handoff; no production or Supabase validation is claimed.
+
+Next-session prompt: review the updated draft PR360 against main6345804 and its
+exact-head checks. Parent handles any next action confirmation. Do not mark ready,
+approve, merge or release from this preparation; leave PR362 held and migration187
+unapplied. Preserve all prior release gates and do not start another scope.

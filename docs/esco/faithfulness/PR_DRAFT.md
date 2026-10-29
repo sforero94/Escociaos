@@ -1,38 +1,13 @@
-# Proposed I02 draft — publication not yet authorized
+# Draft: preserve failure and truncation in saved tool summaries
 
-Title: test(esco): aislar puntaje, medición e informes offline
-Base: main
-Head: codex/esco-faithfulness-eval-scoring
-Requested state: draft, only after explicit publication approval
+Head branch `codex/esco-faithfulness-summary-safety`; independent main baseline `47d138633f03bb75deececb50516e4a17a2fd9ff`, all PO #365 changes retained.
 
-El evaluador acumulado mezcla lógica de puntaje con transportes y runtime.
-Este alcance integra solo contratos tipados, puntaje determinista, prompt/parser
-puro del juez, combinación de veredictos, medición/informes y adjudicación inmutable.
-No importa runner, proveedor, fixtures de replay, runtime ni datos privados.
+A truncated births result could retain complete metadata and authorize an answer after losing detail; truncating a long error discarded its error key. Preserve own errors with a fixed safe marker, downgrade truncated legacy completeness, and reject context loss/errors in the births gate. Short results, complete-empty results and valid paginated aggregates without context loss remain compatible. Immediate full tool responses remain intact.
 
-Base: merge I01 `23d607648c35e0848c138efec6f976ad7e1dfdad` (PR #357).
-Fuente preservada: `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-Candidato: consultar HEAD de esta rama; el handoff registra el SHA exacto y los
-checks finales. Los resultados históricos de I01 no son validación de I02.
+Canonical source and both generated copies synchronized. Existing main tests cover the actual loop; no dependency on #366/queued offline code or new harness. Six regressions reproduced first;76 focused and26 independent synthetic assertions passed. Final committed-head full checks and CI belong in the publication handoff. No model calibration/live QA claim.
 
-La revisión reprodujo y corrigió veredictos coercibles, capas ausentes/malformadas,
-revisión sin atribución, afirmaciones sin soporte que podían contar como éxito,
-y adjudicación sin hash, con evidencia mutable compartida o sin snapshot esperado.
-Los grupos del informe también cuentan correctamente etiquetas con nombres heredados de Object.
-Medición v1.1 conserva denominadores y distingue los nuevos controles de v1.
-No cambia etiquetas originales ni decisiones D01. La extracción numérica/de fechas
-conserva las correcciones I01; presencia de un token no demuestra soporte factual.
+Runtime source change, draft only. No deployment, schema/credentials/access/security settings, typed-envelope/Telegram rewrite, injection, hard-size policy, private/provider/production call or history rewrite. A retained large summary can still exceed the threshold. Merge/deployment/live-QA remain separate; coordinate alert owner readiness before any future edge release.
 
-Validación enfocada del candidato corregido antes del commit: 92 pruebas sintéticas pasan, cero skips. El head anterior `115db6e` pasó 77 pruebas enfocadas / 4742 completas; esos resultados son históricos.
-Checks del head final: ver respuesta de handoff; no se presume un check no ejecutado.
-Los dos tests HTTP de `llamarJuez` permanecen fuera del alcance junto con esa función.
-No se leyó JSONL privado ni se llamó a proveedores. CI requiere publicar el PR.
+Independently reviewable corrective fix; offline chain #359 → #361 → #363 → #364 → #366 remains separate. Reconcile overlapping tracker docs and retest later changed heads. Do not merge the offline integration-base branch. Rollback: source revert plus synchronized mirrors; any deployed revert needs a separately authorized deployment.
 
-Recomendación: revisar I02 por separado; publicar solo con autorización explícita,
-y considerar merge después de CI y revisión. Rollback: revert normal, sin datos,
-esquema ni tráfico afectados. No despliegue, migración 186, activación ni QA vivo;
-los cambios futuros del runtime requieren QA autorizado Web/Telegram y alertas/F1.
-P1-02 y el siguiente alcance permanecen fuera de este trabajo.
-
-
-Correcciones de revisión independiente: el parser rechaza envelopes malformados sin rescatar objetos interiores; el informe cuenta cada motivo una vez por corrida y conserva las anclas detalladas; un error real de herramienta exige evaluación booleana del juez (null es no disponible); el prompt limita tolerancias a las explícitamente aprobadas, sin tolerancia automática por deriva histórica. No cambian etiquetas originales. No comparar tasas v1 con v1.1 sin recalcular bajo el mismo contrato de puntaje, prompt, evidencia y revisión.
+Morning-paper one-liner: Prevents trimmed or failed tool evidence from appearing complete when the agent answers births questions.
