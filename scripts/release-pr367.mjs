@@ -177,7 +177,17 @@ async function main() {
   try {
     const ops = {
       metadata,
-      capture: async (name) => downloadedFingerprint(await downloadCapture(name)),
+      capture: async (name) => {
+        await ops.verifySource(); // Verify pinned clean Git before reconstruction.
+        const { reconstructCapture } = await import('./release-pr367-capture.mjs');
+        const ts = (await import(pathToFileURL(resolve(process.env.PROOF_TYPESCRIPT)).href)).default;
+        const raw = await downloadCapture(name);
+        const clean = join(root, `${name}-reconstructed`);
+        const proof = await reconstructCapture(raw, rollback, clean, ts);
+        dirs.set(name, clean); // Rollback uses the verified clean capture, never raw cache.
+        console.log(JSON.stringify({ phase: 'capture-proof', capture: name, ...proof.evidence }));
+        return proof.fingerprint;
+      },
       verifySource: async () => {
         console.log('phase: source-verification');
         requireThat(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim() === SOURCE, 'Wrong source commit');

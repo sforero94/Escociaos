@@ -1,142 +1,102 @@
-# PR367 release blocked — read-only diagnostic pending review
+# PR367 release repair — review and execution approval required
 
 Deploy only source `634580480c72b27c7ccd2d8c006af520d0ca1058` to project
-`ywhtjwawnkeqlwxbvgup`, function `make-server-1ccce916`. No migration187, PR362
-activation, new credentials/access, provider/business reads, bot messages or other
-function deployment. Repository CLAUDE.md requires the Supabase CLI; no connector
-publish path. Parent reviews the final candidate and separately authorizes
-merge/dispatch. Manual main-only trigger; mode defaults to `diagnose`. Diagnostic confirmation
-is `DIAGNOSE_PR367_LAYOUT_ONLY`. An independently approved deployment must select
-`release` and `DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK`. Permissions remain
-contents:read, no persisted checkout
-credentials, no schedule/push/PR release triggers. Existing management secret is
-scoped to one step. Official CLI2.122.0 installs before that step; no login or
-secret export. Checkout action is pinned to verified v4.2.2 SHA
-`11bd71901bbe5b1630ceea73d27597364c9af683`.
+`ywhtjwawnkeqlwxbvgup`, function `make-server-1ccce916`. This change prepares release controls only.
+It does not deploy, change database state, activate other work, or alter production access.
+Parent review and specific merge/dispatch approval remain required.
 
-## Durable source gate replaces ephemeral-only acceptance
+## Confirmed diagnostic evidence
 
-The durable rollback reference is existing public Git commit
-`e5d2291202901848c45e42a2ffddae1a4cdf249e`, function tree
-`0336fa13a040a48178a7d73beb6c8a1709e9a6a7`. A separate clean, exact checkout is
-mandatory. This is a **candidate rollback reference, not already verified v280**.
-Actual downloaded bytes must prove equivalence before any deployment:
+PR369 merged at `ecfdb028229c5c803a4a78177e6861fa19cbba4c`.
+[Diagnostic40938972828](https://github.com/sforero94/Escociaos/actions/runs/40938972828)
+completed once with deploymentAttempted=false. Strict layout validation failed; gitEquivalent was null.
+Backend metadata remained v280, ACTIVE, verify_jwt=false, import_map=false.
+Bundle SHA256 was `dc67ed8b9f26f47b3d4184446ddaf67055b7832dc33f39fdb874b06268c7ff00`.
+PR367 remains undeployed at this preparation stage.
 
-1. Require remote v280, ACTIVE, verify_jwt=false, no import map, fixed function
-   ID/name/slug and exact known version-bound Supabase entrypoint. The recorded
-   ESZIP hash is `dc67ed8b9f26f47b3d4184446ddaf67055b7832dc33f39fdb874b06268c7ff00`.
-2. Download twice into separate runner-temporary roots. Only one top-level
-   `supabase` directory is allowed. Its complete directory/file inventory,
-   relative paths and file bytes must exactly match the pinned Git function
-   tree (all82 source files). This includes hidden/extra files and empty
-   directories. Wrapper directories allow only this function and the seeded CLI
-   config; all other files/directories abort. Reject symlinks, special files and ambiguous
-   paths. The two downloads must also match each other.
-3. Check the release and rollback checkout commit/tree/cleanliness and exact
-   deployment config. Git config contains only verify_jwt=false; remote metadata
-   must independently agree, along with no import map and the fixed entrypoint.
-   The CLI needs a TOML file, so the capture workspace seeds the exact minimal
-   Git config. This copied file is not counted as downloaded source and does not
-   prove historical remote TOML bytes. Configuration equality is a canonical
-   settings comparison against metadata; source equality is actual byte equality.
-   Any change to the seeded config also aborts. No unknown config reconstruction.
-4. Recheck stable metadata immediately before the CLI deploy. No metadata hash,
-   double-download consistency or historical report substitutes for Git equality.
+The CLI produced these two cache files, separate from function source:
 
-Only normalization: compare a download's explicit `supabase` wrapper to the Git
-`supabase` directory; validate the exact known Supabase build prefix/version for entrypoint
-comparison; reconstruct the minimal TOML from settings independently proven by
-metadata. The Management API does not export a historical TOML file. No CRLF, whitespace, source-map, extension, transpilation, package,
-path, import rewrite or generated-file exclusions. Different CLI output layout,
-missing files, extra files or changed bytes abort. Do not relax this gate merely
-to make a real download pass; return the discrepancy for review.
+| Relative path | Bytes | SHA256 |
+| --- | ---: | --- |
+| supabase/.temp/cli-latest | 8 | e259ceef24c76934bc3c6884c465e636c7f058e1b275e46de8d1e51a5dc8c4c4 |
+| supabase/.temp/linked-project.json | 134 | 5afb37cef5be9eb93a709f9a1769352d325098f5dc58bdf706563d6a6110a302 |
 
-If the gate passes, Git durably retains the proven source and canonically equivalent config when runner
-capture is deleted. Same-job capture remains the immediate rollback input.
-If the gate fails, no deployment occurs, so deleting the unverified temporary
-capture does not strand a mutated deployment. No keypair, private Space, new
-backup destination or artifact upload is needed. No ephemeral-only override.
+Native function source contained80 files. Every downloaded file matched pinned Git bytes; no source file changed or appeared unexpectedly.
+The native fingerprint was `f2a7edba76fcccaa37807b6096fdad5357bfdbf26641a2e30d4052593f36d053`.
+Only these two Git modules were absent:
 
-## Recovery behavior and evidence limits
+| Git path | SHA256 | Incoming explicit type-only references |
+| --- | --- | ---: |
+| importHato/tipos.ts | a737ed522a05bbe61dcafe5404cf2bbb6fb54356fe891617fa9c0d744b562ff1 | 10 |
+| telegram/types.ts | 60cf9a3e52182f34d2411694c0cfd702f8fe17efe7cc7c1f0a64db78af534ed5 | 8 |
 
-After a successful CLI deployment, require the next version and changed bundle
-hash; configuration/status/anonymous health must pass. Re-read metadata after
-successful smoke. On a known smoke/config failure, require unchanged deployment
-metadata before restoring the verified capture. Check restored version/config,
-health, re-downloaded full source manifest and metadata-backed config and stable metadata. Rollback
-still fails the release job. CLI failures or unexpected/concurrent metadata stop
-without blind mutation/retry. After runner loss or uncertain outcome, inspect
-remote state first; a separately reviewed CLI recovery can use the proven Git
-reference. Do not auto-run another deployment from an uncertain result.
+These are observations from one read-only diagnostic, not proof that future downloads retain this shape.
+The earlier [release40931922567](https://github.com/sforero94/Escociaos/actions/runs/40931922567)
+stopped before deployment. [Drift40932344531](https://github.com/sforero94/Escociaos/actions/runs/40932344531)
+reported undeployed main source while health returned200. Verification CI success does not resolve production drift.
 
-Exact first-party source equality and metadata-backed config equivalence is not bit-identical ESZIP reproduction.
-Existing external imports include unversioned `npm:hono` and major-only package
-versions; transitive registry dependencies, runtime image and live secrets are
-not snapshotted by Git. No dependency-resolution or runtime-binary reproducibility
-claim is made. No broad dependency-pinning change is included. Parent must assess
-this source-redeployment limit before release; exact old-bundle recovery would
-require a separately verified bundle/lock artifact. The first live download failed wrapper validation. Source equality, rebuild and
-release health remain unproven/unrun, so readiness remains conditional.
+## Narrow reconstruction gate
 
-Coordinate the deployment owner: workflow concurrency serializes this workflow,
-not other deployment tools. Metadata checks are not an atomic lock. Migration186
-was independently found as `20261028193716`, with the required trace table/view
-catalog. Its alert handlers remain in both pinned source trees. PR360 does not
-change edge source; migration187/activation362 stay separate.
+The durable rollback source is Git commit `e5d2291202901848c45e42a2ffddae1a4cdf249e`.
+Its function tree is `0336fa13a040a48178a7d73beb6c8a1709e9a6a7`.
+The complete82-file fingerprint is `5fd66ee8d485aefd7809c18dbdb6be5db114e46cae0b43690bad9160a5c260ad`.
 
-## Validation and cleanup
+For each first, second, and restored capture:
 
-Run `node --test scripts/release-pr367.checks.mjs`; parse/review YAML. Standard PR
-CI does not execute these separately named Node checks; the manual job does so
-before credential access. Smoke is bounded anonymous GET /health only; no chat,
-model, business route or alert-tick call. The entire shared edge service is
-replaced, including Web/Telegram, alert and cron routes. No live faithfulness or
-calibration claim. Logs contain safe phases/status/fingerprints only, never raw
-source/API/subprocess output. Captures are removed at exit; Git is the durable
-reference only after proof. After release acceptance, remove these four temporary
-files through a small cleanup PR. Parent alone records the actual Bot Log result.
+1. Verify both fixed Git commits, tree hashes, cleanliness, and minimal deployment config.
+2. Download once into a private temporary directory using official CLI2.122.0.
+3. Inventory every raw file and directory. Reject symlinks, special files, extra paths, changed bytes, or changed cache hashes/sizes.
+4. Require exact equality with pinned Git minus precisely the two listed modules, plus precisely the observed cache entries.
+5. Verify the omitted Git module hashes. Parse the complete Git function tree with TypeScript5.9.3.
+6. Require only interfaces, type aliases, imports, and type exports in the omitted modules; reject side-effect imports.
+7. Require each omitted module to emit only `export {};`. Require all18 observed incoming references to be explicitly type-only.
+8. Copy raw source/config into a new clean directory. Restore only those two modules from verified pinned Git.
+9. Run the original complete-source/config comparator unchanged. Require all82 reconstructed files to match pinned Git.
+10. Preserve separate native80-file and reconstructed82-file fingerprints in safe logs. Never describe reconstructed modules as downloaded.
 
-## Read-only layout diagnostic — preparation only
+Unknown layouts remain rejected. Cache entries are validated, never broadly ignored.
+Raw captures remain untouched. Rollback uses the first clean verified capture, including restored types and minimal config.
+The diagnostic mode retains its original strict raw-layout check; it does not reconstruct or enable deployment.
+A changing cache digest may therefore require another diagnosis and review before release.
 
-PR368 merged at `5e344fd73d2dd925fd49530b885dd2bf364875e0`. Verification run
-[40931410656](https://github.com/sforero94/Escociaos/actions/runs/40931410656) passed.
-Release run [40931922567](https://github.com/sforero94/Escociaos/actions/runs/40931922567)
-stopped at `capture-first` / `Unexpected download wrapper`, before deployment or
-rollback. Captures were deleted, so actual unexpected paths remain unknown.
-The subsequent drift job
-[40932344531](https://github.com/sforero94/Escociaos/actions/runs/40932344531) failed:
-its log explicitly says clock/source drift (main source not deployed), while
-anonymous health was200 and verify_jwt=false. Therefore postmerge checks are
-**not all green**. Commit1460b034 records drift state only; it does not release367.
+## Deployment and recovery gates
 
-Official CLI2.122.0 research identifies a plausible wrapper addition, not a
-confirmed diagnosis of this runner:
-- [download.handler.ts](https://github.com/supabase/cli/blob/v2.122.0/apps/cli/src/commands/functions/download/download.handler.ts)
-  calls linked-project caching after the download operation. Blob f6251fee.
-- [linked-project-cache.service.ts](https://github.com/supabase/cli/blob/v2.122.0/apps/cli/src/telemetry/linked-project-cache.service.ts)
-  documents legacy `supabase/.temp/linked-project.json` writes. Blob f5365ae6.
-- [shared/functions/download.ts](https://github.com/supabase/cli/blob/v2.122.0/apps/cli/src/shared/functions/download.ts)
-  controls source extraction and containment. Blob c91cebd5.
-The release gate intentionally does not allow this cache path. No path is
-normalized away on this evidence alone.
+Require exact v280 baseline metadata, including function identity, version-bound entrypoint, JWT setting, and bundle hash.
+Recheck metadata after captures and immediately before deployment. Two reconstructed captures must equal each other and pinned Git.
+Only then deploy the fixed release source with the Supabase CLI.
+Require the next version, changed bundle hash, ACTIVE status, verify_jwt=false, and anonymous health200 with status=ok.
+Recheck metadata after health. On confirmed smoke/config failure, require unchanged deployment metadata before rollback.
+Verify restored version/config/health, capture its source through the same reconstruction gate, and recheck metadata.
+Rollback still fails the release job. CLI failure or unexpected/concurrent metadata stops without blind retry or rollback.
+Workflow concurrency does not lock other deployment tools; an exclusive deployment window remains necessary.
 
-The proposed diagnostic uses the same fixed target, CLI arguments and seeded Git
-config. It checks baseline and pinned checkout, downloads once, reports a bounded
-JSON inventory of relative paths/types/file sizes/SHA256s, runs the existing
-strict layout check, then verifies unchanged metadata. The separate gitEquivalent
-field is null when layout validation fails, false for differing source and true
-only for a complete matching fingerprint; none of these values enables release. A layout rejection appears
-in the diagnostic report; it never enables deployment. Output state is always
-`diagnostic-only`, with deploymentAttempted=false. No deploy/rollback/health
-capability is supplied to the diagnostic runner. Symlinks are not followed,
-special files are not opened, token-like names are redacted, and no raw API body,
-CLI output or source body appears. No source/artifact upload or new permission.
-The CLI may perform its existing same-project metadata cache read; no business
-records are requested. Temporary downloaded files are deleted at exit.
+The seeded minimal TOML is not downloaded historical configuration.
+Its settings are checked against remote metadata: fixed entrypoint, no import map, and verify_jwt=false.
+No source rewriting, package/import rewriting, whitespace normalization, or additional file omission is allowed.
+Migration186 and alert source compatibility were checked separately. This job does not apply migrations187 or activate PR362.
 
-After parent review and specific merge/dispatch approval, run only
-`release-pr367-once.yml` on the reviewed main with mode=`diagnose` and confirmation
-`DIAGNOSE_PR367_LAYOUT_ONLY`. Do not dispatch `release`. Retain the resulting safe
-JSON log receipt for comparison with official source and expected Git inventory.
-Any repair or canonicalization requires actual layout evidence and a separate
-review. No diagnostic has run from this candidate yet.
+Git retains the verified first-party source and canonical settings after temporary capture deletion.
+This is not bit-identical ESZIP recovery. External imports include unversioned `npm:hono` and major-only packages.
+Registry resolution, runtime image, and live secrets are not snapshotted. TypeScript emission is not a Deno bundle-reproduction proof.
+The fixed-tree AST/reference check is not a general module-resolution analysis.
+After runner loss or uncertain outcome, inspect remote state before considering separately reviewed recovery.
+
+## Validation, permissions, and cleanup
+
+Run `node --test scripts/release-pr367.checks.mjs scripts/release-pr367-capture.checks.mjs` after installing repository dependencies.
+Local checks pass66 tests with no skips. This includes real pinned Git syntax analysis and synthetic disk reconstruction/rollback.
+The positive disk regression substitutes only a synthetic cache digest in a private temporary implementation copy.
+It never reads the remote cache body or changes production cache constants.
+Standard PR CI does not run these separately named Node checks; manual execution runs them before management credentials are available.
+Pinned TypeScript5.9.3 installs without scripts or management credentials. CLI installation also precedes credential access.
+
+The workflow remains manual/main-only, contents:read, without persisted checkout credentials or artifact uploads.
+Mode defaults to diagnose. Confirmations must match the selected mode; release requires `DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK`.
+The existing management secret is available only in the selected-mode step. No credential creation or permission change occurs.
+Logs contain relative paths, types, counts, hashes, and proof status; no raw source/API/CLI bodies are printed.
+Diagnostic filename redaction replaces only the exact supplied current access-token string, not arbitrary credential-like names.
+Temporary captures are deleted at exit. No private key, backup service, provider call, or business probe is introduced.
+
+A release replaces the entire shared edge service, including Web/Telegram, alert, and cron routes.
+Health alone does not validate business routes, live faithfulness, or calibration. Parent coordinates browser QA and Bot Log.
+After release acceptance, remove the six temporary control, proof, test, workflow, and guide files in a cleanup PR.
