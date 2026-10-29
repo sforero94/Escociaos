@@ -1,3 +1,4 @@
+import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
 import { useState } from 'react';
 import { Play, Calendar, AlertCircle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -158,6 +159,7 @@ export function IniciarEjecucionModal({
       setLoading(true);
       setError(null);
 
+      validarFechasAplicacion({ fecha_inicio_ejecucion: fechaInicio, fecha_fin_ejecucion: aplicacion.fecha_fin_ejecucion });
       // Actualizar aplicación a estado "En ejecución"
       const { error: updateError } = await supabase
         .from('aplicaciones')

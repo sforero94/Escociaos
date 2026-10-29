@@ -1,26 +1,13 @@
-# Faithfulness integration — I03-b current-main refresh
+# Faithfulness integration — application correction
 
 ## Current baseline and scope
 
-Current main is `50d377641dfbb2f98864f4be68f1f3275263efd2`, reverified 2026-10-29 UTC.
-Its complete root tree is `fa2a66683292632c2b7298d4caa8d32f1e495dc1`; the local test snapshot matches exactly.
-Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-I01/#357, I02/#358 and I03-a/#359 are merged. Existing PR361 is the next draft.
-Its reviewed implementation head is `917f9ad42b8b491f97f277254af9a97f892210b7`.
-This refresh integrates main and reconciles trackers; both message-builder/test blobs remain unchanged.
-All input-adapter, security, runtime, release-control and PO changes remain intact.
+Baseline main `f175c78a1bc65955f34247589698958565ab20b6`, root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`, includes merged359 and361. Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+The current application-domain correction changes runtime source, UI date validation and a draft database trigger. It is not deployed. Security, accepted runtime367/release controls and PO changes remain intact.
 
-I03-b contains pure Web/Telegram message builders and synthetic history/parity tests.
-It imports only merged evaluator types; no input/date, runner or transport dependency is needed.
-Callers supply chronological persisted rows and an authorized base prompt; expanded LLM protocol is rejected.
-Window selection counts persisted rows before metadata expansion: Web latest20, Telegram earliest20.
-This intentionally reproduces Telegram's current omission of newer questions beyond20 rows; it does not fix production.
-Only assistant rows expand tool metadata. Opaque summaries retain absent, error, partial, stale, long and malformed values.
-Missing args/summary render as undefined, matching existing channels; no missing evidence becomes invented success.
-Raw histories clone independently. Literal instruction-like text cannot create new structural roles, but real-model resistance is unmeasured.
-Static tests read both Web and Telegram source mirrors locally; they do not execute deployed handlers or database queries.
-No runtime import/edit, environment/credential access, provider, private fixture, CLI or deployment is included.
-Measurementv1.1, immutable labels and adjudication safeguards remain unchanged.
+The owner explicitly selected actual execution dates by default, planned dates only on explicit intent, and independent start/end validation for both pairs. Direct execution-tool routing, normalized name matching, ambiguity and incomplete-evidence safeguards address application lookup. See [APPLICATION_CORRECTION.md](APPLICATION_CORRECTION.md) for inventory, write boundaries, tests and activation limits. No business records are rewritten; migration188 is draft only.
+
+Measurementv1.1, immutable labels and adjudication safeguards remain unchanged. No private fixture or provider call is included. Offline363→364→366 stays queued while this correction is reviewed.
 
 ## Integration order and accepted release
 
@@ -29,8 +16,8 @@ Measurementv1.1, immutable labels and adjudication safeguards remain unchanged.
 | I01 | PR357 merged | 15 corrected synthetic anchor tests; prior evidence retained below |
 | I02 | PR358 merged | Pure scoring/reporting and measurementv1.1; prior CI40765357918 passed |
 | I03-a | PR359 merged | Merge50d3776; postmerge CI40956872042 passed |
-| I03-b | PR361 draft, current refresh | Message builders only; review after fresh checks |
-| I03-c | PR363 draft | Reconcile after361; closed fixture transports |
+| I03-b | PR361 merged | Mergef175c78; postmerge CI passed |
+| I03-c | PR363 draft | Reconcile against current main; closed fixture transports |
 | I03-d | PR364 draft | Reconcile after363; offline runner composition |
 | I03-e | PR366 draft | Reconcile after364; synthetic actual-loop integration |
 | I04-a | PR367 merged and backend released | Accepted corrective summary-safety portion only; broader runtime work remains separate |
@@ -124,8 +111,8 @@ The $1 cap does not authorize disclosure. Security PR #324, medium security fixe
 credentials and access remain outside scope.
 
 PR367 and the reviewed release controls completed the separate backend release below.
-This I03-b refresh makes no migration, deployment, telemetry, pilot or canary change.
+This application correction prepares migration188 without applying it; no deployment, telemetry, pilot or canary change.
 
-PR361 remains draft pending final checks, parent review and specific merge approval.
-Revert its offline message builders/tests to roll back; no schema or traffic rollback is required.
+PR361 is merged. The application correction remains draft pending review and separate activation approval.
+Application rollback requires coordinated UI/backend source revert and removal of its date-order trigger if separately applied; no data restoration is supplied.
 Existing desktop/browser acceptance does not validate these pure modules or live model faithfulness.

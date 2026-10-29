@@ -1,19 +1,27 @@
 # Progress and handoff
 
-## Current state — I03-b revalidation, 2026-10-29 UTC
+## Current state — application correction, 2026-10-29 UTC
 
-- Baseline main `50d377641dfbb2f98864f4be68f1f3275263efd2`; local root tree matches `fa2a66683292632c2b7298d4caa8d32f1e495dc1`. Preserve merged input adapter359, security360/362, runtime367, release controls and PO documents. Source branch remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-- I01/#357, I02/#358 and I03-a/#359 are merged. PR359's reviewed head3ec077f merged as50d3776; postmerge CI passed4864 tests/221 files, types and lint (907 warnings, no errors). Vercel reported deployment completed through GitHub. Direct Vercel metadata was denied403; no retry/account/access change is authorized here.
-- Active scope is existing draft361 only, `codex/esco-faithfulness-eval-messages`, reviewed implementation `917f9ad42b8b491f97f277254af9a97f892210b7`. Integrate main and reconcile three shared trackers; retain both source/test blobs unchanged. No runner, fixture, provider or runtime implementation is added.
-- Builders preserve channel-specific20-row windows, raw-history isolation and opaque absent/error/truncated tool summaries. Static parity tests inspect both source mirrors without executing handlers. Telegram earliest20 behavior is intentionally reproduced, not repaired. Measurementv1.1 and immutable labels/adjudication remain intact.
-- Runtime367 remains separately released as v281 through370; the reviewed release passed once without rollback. Metadata/JWT/health gates passed. Parent accepted read-only session/dashboard/expense-history/Registrar smoke20:50–20:53UTC, no app-console errors. No births query, real model calibration or business write was tested. Source recovery does not promise identical ESZIP/dependencies/runtime/secrets. Temporary release controls remain pending separate cleanup.
-- Final candidate checks and independent review must be recorded separately from original23 message tests and prior branch CI. Remaining order:361 →363 →364 →366. Reconcile trackers/retest each, never merge the offline integration-base branch. Keep361 draft until specific ready/merge approval. Stop after terminal CI for parent review; do not start363.
-- No private fixtures, providers, production writes, backend deploy, migration, credentials/access changes or P1-02 work. Parent owns Bot Log. Historical preserved-source statuses below do not claim full source milestones are integrated or activated on main.
+- Baseline main `f175c78a1bc65955f34247589698958565ab20b6`; exact local baseline root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`. Preserve security360/362, runtime367, release controls and PO documents. Original source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+- I01/#357, I02/#358, I03-a/#359 and I03-b/#361 are merged. The current scope is the owner's application lookup/evidence and deterministic date-order correction. Planned-date default is superseded by explicit actual-date default; planned basis requires explicit intent. See APPLICATION_CORRECTION.md.
+- UI create/edit/start/closure boundaries validate planned and actual pairs independently. Draft migration188 guards direct writes without rewriting legacy rows; it has only run against an isolated synthetic PostgreSQL table. No production migration or deployment is authorized by this draft.
+- Direct execution-tool routing, accent/space normalization, candidate ambiguity, actual/planned arguments and incomplete evidence are covered with synthetic closed-loop fixtures. No production trace content is copied into Git. Measurementv1.1 and immutable labels remain intact; this is not live calibration.
+- Runtime367 remains separately released as v281 through370. Parent accepted read-only session/dashboard/expense-history/Registrar smoke20:50–20:53UTC. No application query, births query, real-model calibration or business write was validated there. Temporary release controls remain pending separate cleanup.
+- Remaining offline order:363→364→366; reconcile/retest each later. Never merge the offline integration-base branch. Stop after this correction draft and terminal CI; no merge/deploy or next slice.
+- Parent owns Bot Log. No private fixtures, providers, production writes, credential/access changes or P1-02 work. Historical preserved-source milestones below do not claim activation on main.
+
+
+## Application candidate local receipt (before publication)
+
+Final unchanged implementation:4931 tests across224 files, zero skips; evaluator check168 tests across10 files plus TypeScript/focused lint; repository lint0 errors/907 existing warnings; production build passed in23.09s. Focused application/date/query suites:116 passed. Both generated query mirrors and chat mirror are byte-identical; whitespace checks passed. Independent retrieval re-review96 tests passed; UI/database re-review found no remaining blocker. Review exposed ordinary-state routing, explicit planned lookup, missing-date handling and real-plan lot-filter defects; each was corrected and covered. One full run caught the intentionally added failing lot regression before its fix; the final full rerun is green, not a relaxation.
+
+Migration188 rerun in the isolated networkless synthetic PostgreSQL17 container:11 checks passed. Initial repeated setup refused an already existing synthetic table; recreating only that fixture table produced the clean final run. No production SQL ran. This is not full closure/RLS integration or live model evidence. Local logs: /tmp/application-candidate-{full,eval,lint,build}.log; /tmp/application-final-focused-v2.log. Exact commit and remote CI follow in the PR/handoff; these local counts must not be confused with historical implementation commits.
 
 ## Prior CI receipts
 
 I01 CI40759015461 and I02 CI40765357918 passed before their merges.
 Merged359 postmerge CI40956872042 passed; its local145 evaluator tests and4864 full tests do not validate this changed candidate.
+Merged361 postmerge CI40959220757 passed4887 tests/222 files, types and lint (907 warnings, zero errors); GitHub provider status reported Vercel complete. Direct Vercel metadata403 was not retried.
 Queued actual-loop CI40811688057 remains prior-slice evidence only.
 Backend postmerge CI40951382054 and release40951834611 passed separately; they do not establish live faithfulness.
 

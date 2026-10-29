@@ -171,7 +171,7 @@ describe('Conciliaciones operativas: FK y datos ausentes', () => {
 });
 describe('Contrato y enrutamiento', () => {
   for (const tool of HERRAMIENTAS_CONSULTA) it(`${tool.name}: consulta ejecutable con evidencia`, async () => {
-    const r = await ejecutarConsultaEsco(tool.name, { ...rango, fecha_cosecha: '2026-10-07' }, consulta({ fin_negocios: [{ id: 'n', nombre: 'Aguacate Hass' }] }));
+    const r = await ejecutarConsultaEsco(tool.name, tool.name === 'get_aplicaciones_ejecucion' ? rango : { ...rango, fecha_cosecha: '2026-10-07' }, consulta({ fin_negocios: [{ id: 'n', nombre: 'Aguacate Hass' }] }));
     expect(evidencia(r).consulta_completa).toBe(true);
   });
   it('sin evidencia exitosa del historial no permite respuesta global de partos', () => {
