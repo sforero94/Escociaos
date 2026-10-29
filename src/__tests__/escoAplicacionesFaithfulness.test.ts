@@ -163,3 +163,30 @@ describe('review regressions: explicit plans and authoritative plan source', () 
   });
 
 });
+
+
+describe('review regressions: identity and collections retain their scope', () => {
+  it.each([{ application_id: 'fixture-closed' }, { application_name: 'plaga z' }])('does not inject an active filter for identity lookup %j', async args => {
+    const closed = { ...A, id: 'fixture-closed', estado: 'Cerrada', fecha_fin_ejecucion: '2031-05-08' };
+    const result = await ejecutarConsultaEsco('get_aplicaciones_ejecucion', args, database({ aplicaciones: [closed] }), '2031-05-10');
+    expect(details(result).map(a => a.id)).toEqual(['fixture-closed']);
+  });
+  it('filters an explicitly requested in-progress list while unfiltered lookup retains closed rows', async () => {
+    const db = database({ aplicaciones: [A, { ...B, estado: 'Cerrada' }] });
+    const active = await ejecutarConsultaEsco('get_aplicaciones_ejecucion', { estado: 'En ejecución' }, db, '2031-05-10');
+    expect(details(active).map(a => a.id)).toEqual([A.id]);
+    const all = await ejecutarConsultaEsco('get_aplicaciones_ejecucion', {}, db, '2031-05-10');
+    expect(details(all)).toHaveLength(2);
+  });
+  it('preserves a legitimate plural historical answer instead of singular disambiguation', async () => {
+    let round = 0;
+    install(() => round++ === 0 ? call('get_aplicaciones_ejecucion', PERIOD) : { role: 'assistant', content: 'Synthetic two-application state summary' }, url => {
+      const table = url.pathname.split('/').pop()!;
+      if (!tables.has(table)) { unexpected.push(table); throw Error('Unexpected fixture table'); }
+      return table === 'aplicaciones' ? [A, B] : [];
+    });
+    const result = await llmToolLoop([{ role: 'user', content: 'Dame el estado de las aplicaciones de mayo de 2031' }]);
+    expect(result.text).toBe('Synthetic two-application state summary');
+    expect(JSON.parse(result.toolInteractions[0].result_summary).detalle).toHaveLength(2);
+  });
+});

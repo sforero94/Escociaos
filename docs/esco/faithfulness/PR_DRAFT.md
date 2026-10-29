@@ -12,4 +12,6 @@ Rollback: revert UI/backend source together; if the trigger is later applied, se
 
 Business one-liner: Finds the intended application using real execution dates and prevents new reversed date ranges without guessing missing evidence.
 
-Validation:4931 full tests/224 files,168 evaluator tests,116 focused application/date/query tests,11 synthetic PostgreSQL checks; zero skips. Types, lint (907 existing warnings/zero errors), build and source parity passed. Independent UI/database and retrieval reviews passed after focused corrections. CI is pending publication.
+Corrected candidate validation:4965 tests/225 files,168 evaluator tests,150 focused application/date/query/handler tests; zero skips. Types, lint (907 existing warnings/zero errors), build24.75s and source parity passed. Independent retrieval review passed; ten actual-handler negative cases show error text with zero database calls. Hook/effect mocks are not DOM/browser acceptance. Corrected head and fresh CI belong to the PR/handoff.
+
+Parent review supersedes initial green493d587: planned mentions no longer authorize planned basis; existence/fumigation synonyms route; local today is date-only; plural historical collections are not singular ambiguity; named/exact-ID discovery has no implicit active-state filter. Explicit active filters still work. Migration188 remains byte-identical, non-idempotent, unapplied and separately gated. Parent real Auth/PostgREST/fullRPC receipt is attributed to493d587 and unchanged persistence artifacts, not relabeled final-head/live coverage.

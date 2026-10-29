@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { validarFechasAplicacion, validarInicioEjecucion } from '@/utils/fechasAplicacion';
 import { baseFechaAplicacion, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones } from '@/utils/escoConsultas';
 
 describe('application date-only pairs', () => {
@@ -22,6 +22,18 @@ describe('application date-only pairs', () => {
     expect(() => validarFechasAplicacion(value)).toThrow();
   });
 });
+describe('local date-only execution start', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
+  it.each(['America/New_York', 'Asia/Kolkata', 'Pacific/Kiritimati'])('accepts local today and rejects tomorrow in %s', timezone => {
+    vi.stubEnv('TZ', timezone); vi.useFakeTimers();
+    vi.setSystemTime(new Date('2031-05-01T10:00:00Z'));
+    const today = timezone === 'Pacific/Kiritimati' ? '2031-05-02' : '2031-05-01';
+    const tomorrow = timezone === 'Pacific/Kiritimati' ? '2031-05-03' : '2031-05-02';
+    expect(() => validarInicioEjecucion(today)).not.toThrow();
+    expect(() => validarInicioEjecucion(tomorrow)).toThrow('futura');
+    expect(() => validarInicioEjecucion('2031-04-30')).not.toThrow();
+  });
+});
 describe('application date basis and evidence', () => {
   it('defaults to actual; planned requires an explicit valid argument', () => {
     expect(baseFechaAplicacion({})).toBe('actual');
@@ -29,8 +41,17 @@ describe('application date basis and evidence', () => {
     expect(() => baseFechaAplicacion({ date_basis: 'other' })).toThrow();
   });
   it.each(['Cómo va la aplicación', 'No uses fechas planeadas', 'Aplicaciones sin fechas planeadas'])('does not infer planned dates from %s', q => expect(pideFechasPlaneadas(q)).toBe(false));
-  it.each(['Aplicaciones por fechas planeadas', 'Aplicaciones planificadas', 'Muéstrame la aplicación planeada X'])('recognizes explicit planned intent in %s', q => expect(pideFechasPlaneadas(q)).toBe(true));
+  it.each(['Aplicaciones por fechas planeadas', 'Aplicaciones planificadas', 'Muéstrame la aplicación planeada X', 'La fecha real estaba mal; usa la fecha planeada'])('recognizes explicit planned intent in %s', q => expect(pideFechasPlaneadas(q)).toBe(true));
   it.each(['¿Cuál es el estado actual de la aplicación X?', '¿En qué estado está la aplicación X?'])('routes ordinary state questions: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(true));
+  it.each([
+    '¿Cómo va la aplicación del producto Z? La fecha planeada estaba mal, usa la real.',
+    'La fecha planeada estaba equivocada. ¿Cómo va la aplicación?',
+    'No uses la fecha planeada; consulta por fecha real.',
+    'Muéstrame fechas planeadas y reales de la aplicación', 'Muéstrame las fechas planificadas y reales de la aplicación X',
+    '¿Cómo va la aplicación? Antes se usaban fechas planeadas.',
+  ])('a planned mention or contrasting actual instruction is not consent: %s', q => expect(pideFechasPlaneadas(q)).toBe(false));
+  it.each(['¿Hay alguna aplicación de acaricida?', '¿Cómo va la fumigación de plaga Z?', '¿Cómo va la fumigación que registramos en la app?', '¿Existe una aplicación de fertilizante?', 'Avance de la fertilización del lote Z'])('routes farm existence/progress: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(true));
+  it.each(['¿Cómo va la aplicación móvil?', '¿Hay alguna aplicación para editar fotos?', 'Estado de la aplicación de empleo', '¿Cómo va mi solicitud?'])('does not route unrelated application meanings: %s', q => expect(requiereConsultaAplicaciones(q)).toBe(false));
   const run = (data: unknown) => [{ tool: 'get_aplicaciones_ejecucion', result_summary: JSON.stringify(data) }];
   const complete = { _evidencia: { herramienta: 'get_aplicaciones_ejecucion', consulta_completa: true, detalle_completo: true }, resumen: {}, detalle: [{ id: 'fixture', nombre_aplicacion: 'Fixture' }] };
   it('accepts complete unique evidence but rejects malformed, incomplete and context-lost results', () => {
@@ -42,6 +63,13 @@ describe('application date basis and evidence', () => {
   });
   it('preserves explicitly requested planned evidence when actual date is absent', () => {
     expect(respuestaSeguraAplicaciones(run({ ...complete, detalle: [{ ...complete.detalle[0], base_fecha_consultada: 'planned', fecha_real_ausente: true, fecha_inicio_planeada: '2031-05-04' }] }))).toBeNull();
+  });
+  it('retains collection evidence but still refuses malformed or date-limited collections', () => {
+    const detail = [...complete.detalle, { id: 'other', nombre_aplicacion: 'Other' }];
+    const q = 'Dame el estado de las aplicaciones de mayo de 2031';
+    expect(respuestaSeguraAplicaciones(run({ ...complete, detalle: detail }), q)).toBeNull();
+    expect(respuestaSeguraAplicaciones(run({ ...complete, detalle: [...detail, null] }), q)).toContain('No pude verificar');
+    expect(respuestaSeguraAplicaciones(run({ ...complete, detalle: [detail[0], { ...detail[1], fecha_real_ausente: true }] }), q)).toContain('fechas reales ausentes');
   });
   it('keeps empty scope, unknown dates, conflicts and ambiguity explicit', () => {
     expect(respuestaSeguraAplicaciones(run({ ...complete, detalle: [{ ...complete.detalle[0], fecha_real_ausente: true }] }))).toContain('No tiene fecha de inicio real');

@@ -1,4 +1,4 @@
-import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
+import { validarFechasAplicacion, validarInicioEjecucion } from '@/utils/fechasAplicacion';
 import { useState } from 'react';
 import { Play, Calendar, AlertCircle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -159,6 +159,7 @@ export function IniciarEjecucionModal({
       setLoading(true);
       setError(null);
 
+      validarInicioEjecucion(fechaInicio);
       validarFechasAplicacion({ fecha_inicio_ejecucion: fechaInicio, fecha_fin_ejecucion: aplicacion.fecha_fin_ejecucion });
       // Actualizar aplicación a estado "En ejecución"
       const { error: updateError } = await supabase
@@ -189,14 +190,8 @@ export function IniciarEjecucionModal({
       return;
     }
 
-    const fechaInicioDate = new Date(fechaInicio);
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-
-    if (fechaInicioDate > hoy) {
-      setError('La fecha de inicio no puede ser futura');
-      return;
-    }
+    try { validarInicioEjecucion(fechaInicio); }
+    catch (error) { setError((error as Error).message); return; }
 
     // Validar stock si no se ha validado aún
     if (!stockValidado) {

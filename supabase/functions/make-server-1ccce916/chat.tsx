@@ -3979,7 +3979,7 @@ export async function llmToolLoop(
 
     // No tool calls — return the final text
     if (consultaAplicacionesObligatoria) {
-      const segura = respuestaSeguraAplicaciones(toolInteractions);
+      const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
       if (segura) return { text: segura, toolInteractions };
     }
     if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
@@ -3989,7 +3989,7 @@ export async function llmToolLoop(
   }
 
   if (consultaAplicacionesObligatoria) {
-    const segura = respuestaSeguraAplicaciones(toolInteractions);
+    const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
     if (segura) return { text: segura, toolInteractions };
   }
 

@@ -1,3 +1,5 @@
+import { obtenerFechaHoy } from './fechas';
+
 /** Application date-only pairs. Null ends are valid for ongoing execution. */
 export interface FechasAplicacion {
   fecha_inicio_planeada?: string | null;
@@ -20,4 +22,10 @@ export function validarFechasAplicacion(value: FechasAplicacion): void {
     if ((start && !fechaValida(start)) || (end && !fechaValida(end))) throw new Error(`Fechas ${label}: usa fechas de calendario YYYY-MM-DD.`);
     if (start && end && start > end) throw new Error(`Fechas ${label}: el inicio no puede ser posterior al final.`);
   }
+}
+
+/** Compare calendar dates in the browser local day, never UTC-parsed midnights. */
+export function validarInicioEjecucion(fecha: string, hoy = obtenerFechaHoy()): void {
+  if (!fechaValida(fecha) || !fechaValida(hoy)) throw new Error('Usa fechas de calendario YYYY-MM-DD.');
+  if (fecha > hoy) throw new Error('La fecha de inicio no puede ser futura');
 }
