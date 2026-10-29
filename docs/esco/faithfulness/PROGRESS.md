@@ -3,12 +3,16 @@
 ## Current state — I03-b, 2026-10-29 UTC
 
 - I01/I02 are merged through PRs #357/#358. Main remains `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`; source `codex/esco-faithfulness-plan` remains `3d3e65454d8d2f78971593f1fe90a0514ce22301` (remote refs verified).
-- I03-a is queued as [draft #359](https://github.com/sforero94/Escociaos/pull/359), head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`; exact-head [CI 40798708653](https://github.com/sforero94/Escociaos/actions/runs/40798708653) passed lint/types/tests; Vercel checks passed. It is unmerged with auto-merge disabled. Its code is not included on this branch.
+- I03-a is queued as [draft #359](https://github.com/sforero94/Escociaos/pull/359), head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`; exact-head CI passed lint/types/tests (receipt below); Vercel checks passed. It is unmerged with auto-merge disabled. Its code is not included on this branch.
 - **Active scope: I03-b only**, pure Web/Telegram evaluation-message builders and synthetic history/parity tests, fresh `codex/esco-faithfulness-eval-messages` from main. No code dependency on #359: dates stay there; only I02 types are required. Target main, no stacking or retarget needed.
 - Review reproduced three source failures (missing args/summary in both channels and unknown channel fallback). A separate QA/code-quality reviewer found uncapped history; fixed with explicit raw rows and current channel windows before expanding evidence. Reviewer rechecked 23 focused tests: pass, no new defects. Static parity is not live handler verification.
 - Queue order: #359 first, then this slice. Shared tracker documents overlap: after #359 merges, reconcile those docs on this branch and rerun final-head checks/CI before merge; do not force-push or silently retarget. Security draft #360 belongs to the parent and is untouched.
 - Next action: final gates and small draft publication under overnight queue authorization, then exact-head CI to terminal. No merges tonight; morning review only. Stop after this slice.
 - No runner, CLI, provider, env/credential access, private fixture, runtime/edge edit, production traffic, bot/Notion write, migration or deployment. Measurement v1.1 and guarded adjudication remain unchanged. Source task table and old entries below remain historical.
+
+## Prior CI receipt
+
+[Successful run 40798708653](https://github.com/sforero94/Escociaos/actions/runs/40798708653) verifies queued input-adapter head `9de2be2`. This public build identifier is separate from channel-history notes.
 
 ## Task tracker — preserved source-branch status
 
