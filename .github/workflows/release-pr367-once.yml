@@ -2,8 +2,14 @@ name: Temporary PR367 edge release
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Diagnose downloads read-only, or run the separately approved release
+        type: choice
+        options: [diagnose, release]
+        default: diagnose
+        required: true
       confirmation:
-        description: Type DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK after release review
+        description: DIAGNOSE_PR367_LAYOUT_ONLY or DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK; must match mode
         type: string
         required: true
 permissions:
@@ -40,9 +46,10 @@ jobs:
         env:
           CLI_CACHE: ${{ runner.temp }}/pr367-npm-cache
         run: npx --cache "$CLI_CACHE" --yes --package supabase@2.122.0 -- supabase --version
-      - name: Capture, deploy and verify; restore captured source on smoke failure
+      - name: Run selected diagnostic or separately approved release
         env:
           CLI_CACHE: ${{ runner.temp }}/pr367-npm-cache
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
         run: node scripts/release-pr367.mjs

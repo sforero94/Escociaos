@@ -1,7 +1,8 @@
 // Temporary, single-target release. Never log subprocess output or API bodies.
 import { execFileSync } from 'node:child_process';
+import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, readdir, readFile, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readdir, readFile, mkdir, rm, open } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -58,6 +59,59 @@ export async function downloadedFingerprint(directory) {
   return fingerprint(join(directory, 'supabase/functions', TARGET));
 }
 
+// Diagnostic output contains relative paths/types/sizes/hashes only. Never follow
+// symlinks or read special files, and never include subprocess/source/API bodies.
+export async function diagnosticInventory(directory, secrets = []) {
+  const entries = [];
+  let bytes = 0;
+  const safePath = (path) => secrets.filter(Boolean).reduce((value, secret) => value.split(secret).join('[redacted]'), path);
+  async function walk(dir, prefix = '') {
+    for (const item of (await readdir(dir, { withFileTypes: true })).sort((a, b) => Buffer.compare(Buffer.from(a.name), Buffer.from(b.name)))) {
+      requireThat(entries.length < 512, 'Diagnostic inventory exceeds entry bound');
+      const path = prefix + item.name;
+      const entry = { path: safePath(path), type: item.isSymbolicLink() ? 'symlink' : item.isDirectory() ? 'directory' : item.isFile() ? 'file' : 'special' };
+      if (entry.type === 'file') {
+        const file = await open(join(dir, item.name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        try {
+          const info = await file.stat();
+          requireThat(info.isFile() && bytes + info.size <= 32 * 1024 * 1024, 'Diagnostic inventory exceeds file/byte bound');
+          const content = await file.readFile();
+          bytes += content.length;
+          requireThat(bytes <= 32 * 1024 * 1024, 'Diagnostic inventory exceeds byte bound');
+          entry.bytes = content.length;
+          entry.sha256 = sha(content);
+        } finally { await file.close(); }
+      }
+      entries.push(entry);
+      if (entry.type === 'directory') await walk(join(dir, item.name), path + '/');
+    }
+  }
+  await walk(directory);
+  return { fileCount: entries.filter((entry) => entry.type === 'file').length, entryCount: entries.length, bytes, entries };
+}
+
+export function executionMode(mode, confirmation) {
+  requireThat((mode === 'diagnose' && confirmation === 'DIAGNOSE_PR367_LAYOUT_ONLY') ||
+    (mode === 'release' && confirmation === 'DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK'), 'Explicit matching mode/confirmation required');
+  return mode;
+}
+
+// Deliberately has no deployment/rollback/health capability. A layout rejection
+// is evidence in the report, never permission to bypass the release gate.
+export async function diagnose(ops) {
+  const before = normalized(await ops.metadata());
+  requireThat(same(before, BASELINE), 'Baseline changed; stop for review');
+  const git = await ops.verifySource();
+  const capture = await ops.download();
+  const inventory = await ops.inventory(capture);
+  let layout;
+  try { layout = { passed: true, fingerprint: await ops.strictFingerprint(capture) }; }
+  catch (error) { layout = { passed: false, reason: error instanceof ReleaseError ? error.message : 'Inventory validation unavailable' }; }
+  requireThat(same(normalized(await ops.metadata()), before), 'Deployment changed during diagnostic; stop');
+  const gitEquivalent = layout.passed ? layout.fingerprint.count === git?.count && layout.fingerprint.hash === git?.hash : null;
+  return { state: 'diagnostic-only', deploymentAttempted: false, layout, gitEquivalent, git, inventory };
+}
+
 // Injected operations allow all failure paths to be tested without credentials/network.
 export async function release(ops) {
   const before = normalized(await ops.metadata());
@@ -93,7 +147,7 @@ export async function release(ops) {
 async function main() {
   requireThat(process.env.GITHUB_REPOSITORY === 'sforero94/Escociaos' && process.env.GITHUB_REF === 'refs/heads/main' &&
     process.env.GITHUB_EVENT_NAME === 'workflow_dispatch', 'Manual main-only invocation required');
-  requireThat(process.env.RELEASE_CONFIRMATION === 'DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK', 'Explicit Git-verified release confirmation required');
+  const mode = executionMode(process.env.RELEASE_MODE, process.env.RELEASE_CONFIRMATION);
   requireThat(Boolean(process.env.SUPABASE_ACCESS_TOKEN), 'Management identity missing');
   const source = resolve('release-source');
   const rollback = resolve('rollback-source');
@@ -111,18 +165,19 @@ async function main() {
     requireThat(response.ok, 'Metadata request failed');
     return response.json();
   };
+  const downloadCapture = async (name) => {
+    console.log(`phase: capture-${name}`);
+    const dir = join(root, name);
+    await mkdir(join(dir, 'supabase'), { recursive: true });
+    await cp(join(rollback, 'supabase/config.toml'), join(dir, 'supabase/config.toml'));
+    cli(dir, ['functions', 'download', TARGET, '--project-ref', PROJECT, '--use-api']);
+    dirs.set(name, dir);
+    return dir;
+  };
   try {
-    const result = await release({
+    const ops = {
       metadata,
-      capture: async (name) => {
-        console.log(`phase: capture-${name}`);
-        const dir = join(root, name);
-        await mkdir(join(dir, 'supabase'), { recursive: true });
-        await cp(join(rollback, 'supabase/config.toml'), join(dir, 'supabase/config.toml'));
-        cli(dir, ['functions', 'download', TARGET, '--project-ref', PROJECT, '--use-api']);
-        dirs.set(name, dir);
-        return downloadedFingerprint(dir);
-      },
+      capture: async (name) => downloadedFingerprint(await downloadCapture(name)),
       verifySource: async () => {
         console.log('phase: source-verification');
         requireThat(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim() === SOURCE, 'Wrong source commit');
@@ -149,7 +204,17 @@ async function main() {
         }
         return false;
       },
-    });
+    };
+    if (mode === 'diagnose') {
+      const report = await diagnose({
+        metadata, verifySource: ops.verifySource, download: () => downloadCapture('diagnostic'),
+        inventory: (dir) => diagnosticInventory(dir, [process.env.SUPABASE_ACCESS_TOKEN]),
+        strictFingerprint: downloadedFingerprint,
+      });
+      console.log(JSON.stringify(report));
+      return;
+    }
+    const result = await release(ops);
     console.log(JSON.stringify(result)); // State, version and fingerprint only.
     requireThat(result.state === 'released', 'Release failed; captured source restored');
   } finally {

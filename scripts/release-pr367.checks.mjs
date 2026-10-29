@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, symlink, rm, mkdir, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { release, TARGET, BASELINE, fingerprint, downloadedFingerprint } from './release-pr367.mjs';
+import { release, TARGET, BASELINE, fingerprint, downloadedFingerprint, diagnosticInventory, executionMode, diagnose } from './release-pr367.mjs';
 const meta = (version = 280, overrides = {}) => ({ slug: TARGET, name: TARGET, id: '9defb252-5ea2-463b-b91b-497e0a7fe582', import_map: false, entrypoint_path: `file:///tmp/user_fn_ywhtjwawnkeqlwxbvgup_9defb252-5ea2-463b-b91b-497e0a7fe582_${version}/source/supabase/functions/${TARGET}/index.ts`, version, status: 'ACTIVE', verify_jwt: false, ezbr_sha256: version === 280 ? BASELINE.hash : 'a'.repeat(64), ...overrides });
 function harness({ metadata = [meta(), meta(), meta(), meta(281), meta(281)], health = [true], capture, deploy } = {}) {
   const calls = []; let reads = 0; let checks = 0;
@@ -101,4 +101,48 @@ test('complete source manifest rejects extra/missing/renamed/byte-changed entrie
     await writeFile(join(root,'outside.txt'),'unexpected'); await assert.rejects(downloadedFingerprint(root),/wrapper/); await rm(join(root,'outside.txt'));
     await mkdir(join(root,'other-wrapper')); await assert.rejects(downloadedFingerprint(root),/wrapper/);
   } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test('diagnostic and release require distinct explicit mode confirmations', () => {
+  assert.equal(executionMode('diagnose','DIAGNOSE_PR367_LAYOUT_ONLY'),'diagnose');
+  assert.equal(executionMode('release','DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK'),'release');
+  for (const [mode,confirmation] of [[undefined,undefined],['diagnose','DEPLOY_PR367_WITH_VERIFIED_GIT_ROLLBACK'],['release','DIAGNOSE_PR367_LAYOUT_ONLY'],['unknown','DIAGNOSE_PR367_LAYOUT_ONLY']]) assert.throws(()=>executionMode(mode,confirmation));
+});
+function diagnosticHarness({changed=false,layoutError=false}={}) {
+  const calls=[]; let reads=0;
+  return {calls,ops:{
+    metadata:async()=>{calls.push('metadata');return meta(changed && reads++>0?281:280);},
+    verifySource:async()=>{calls.push('git');return {count:82,hash:'b'.repeat(64)};},
+    download:async()=>{calls.push('download');return 'isolated-capture';},
+    inventory:async()=>{calls.push('inventory');return {fileCount:1,entries:[{path:'supabase/.temp/linked-project.json',type:'file',sha256:'a'.repeat(64)}]};},
+    strictFingerprint:async()=>{calls.push('strict');if(layoutError)throw Error('UNSAFE BODY SENTINEL');return {count:82,hash:'b'.repeat(64)};},
+    deploy:async()=>{throw Error('FORBIDDEN DEPLOY');},health:async()=>{throw Error('FORBIDDEN HEALTH');},
+  }};
+}
+test('diagnostic reports layout failure without calling deploy, rollback or health', async () => {
+  const {calls,ops}=diagnosticHarness({layoutError:true});const result=await diagnose(ops);assert.equal(result.state,'diagnostic-only');assert.equal(result.deploymentAttempted,false);assert.equal(result.layout.passed,false);assert.equal(result.gitEquivalent,null);assert.ok(!JSON.stringify(result).includes('UNSAFE BODY SENTINEL'));
+  assert.deepEqual(calls,['metadata','git','download','inventory','strict','metadata']);
+});
+test('successful diagnostic is still diagnostic-only and uses the strict gate', async () => {
+  const {ops}=diagnosticHarness();const result=await diagnose(ops);assert.equal(result.state,'diagnostic-only');assert.equal(result.layout.passed,true);assert.equal(result.gitEquivalent,true);assert.equal(result.deploymentAttempted,false);
+});
+test('diagnostic rejects concurrent baseline changes and initial wrong baseline', async () => {
+  const changed=diagnosticHarness({changed:true});await assert.rejects(diagnose(changed.ops),/during diagnostic/);
+  const initial=diagnosticHarness();initial.ops.metadata=async()=>meta(281);await assert.rejects(diagnose(initial.ops),/Baseline changed/);assert.deepEqual(initial.calls,[]);
+});
+test('download errors stop diagnostic without a deployment fallback', async () => {
+  const {ops}=diagnosticHarness();ops.download=async()=>{throw Error('download failed');};await assert.rejects(diagnose(ops),/download failed/);
+});
+test('inventory exposes only relative metadata, redacts token-like names and never follows symlinks', async () => {
+  const root=await mkdtemp(join(tmpdir(),'release367-inventory-'));
+  try {
+    await mkdir(join(root,'supabase/.temp'),{recursive:true});await writeFile(join(root,'supabase/.temp/linked-project.json'),'PRIVATE CONTENT SENTINEL');await writeFile(join(root,'FAKE-TOKEN-SENTINEL'),'PRIVATE BODY SENTINEL');await symlink('/unread-private-target',join(root,'link'));
+    const report=await diagnosticInventory(root,['FAKE-TOKEN-SENTINEL']);const text=JSON.stringify(report);assert.equal(report.fileCount,2);assert.ok(text.includes('supabase/.temp/linked-project.json'));assert.ok(text.includes('[redacted]'));assert.ok(!text.includes('PRIVATE CONTENT SENTINEL'));assert.ok(!text.includes('PRIVATE BODY SENTINEL'));assert.ok(!text.includes('FAKE-TOKEN-SENTINEL'));assert.ok(!text.includes('/unread-private-target'));assert.equal(report.entries.find(e=>e.path==='link').type,'symlink');
+    for(const entry of report.entries)assert.ok(Object.keys(entry).every(k=>['path','type','bytes','sha256'].includes(k)));
+    await assert.rejects(downloadedFingerprint(root),/wrapper/);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('diagnostic never labels a different downloaded source as Git-equivalent', async () => {
+  const {ops}=diagnosticHarness();ops.strictFingerprint=async()=>({count:82,hash:'c'.repeat(64)});const result=await diagnose(ops);assert.equal(result.gitEquivalent,false);assert.equal(result.state,'diagnostic-only');assert.equal(result.deploymentAttempted,false);
 });
