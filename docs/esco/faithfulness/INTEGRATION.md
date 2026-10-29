@@ -1,40 +1,29 @@
-# Faithfulness integration — current scope I02
+# Faithfulness integration — I04-a summary safety
 
-## Current baseline and scope
+## Baseline and scope
 
-I01 is **merged** through [PR #357](https://github.com/sforero94/Escociaos/pull/357),
-reviewed head `b6470a496b72e98d0db7fde7e93a2d520a0426a9`, merge/current main
-`23d607648c35e0848c138efec6f976ad7e1dfdad`. Source branch
-`codex/esco-faithfulness-plan` remains at
-`3d3e65454d8d2f78971593f1fe90a0514ce22301`; both remote heads were reverified.
-I02 uses fresh branch `codex/esco-faithfulness-eval-scoring` from current main.
-The original `work` and I01 worktrees remain unchanged. No applicable checkout
-`AGENTS.md`/`.agents/skills` exists; root `CLAUDE.md` and source session protocol
-apply. This explicit extraction supersedes the source README's accumulated-branch
-default. No source-branch merge or whole-commit cherry-pick.
+Independent branch `codex/esco-faithfulness-summary-safety` from current main `47d138633f03bb75deececb50516e4a17a2fd9ff` (I01/I02 and PO #365 retained). Source `3d3e65454d8d2f78971593f1fe90a0514ce22301` preserved. This is the narrow P1-01-a truncation/error corrective portion of I04; not the whole preserved evidence/runtime branch. No dependency on queued #359/#361/#363/#364/#366: existing main tests execute the actual loop with synthetic HTTP. No helper/runner copy or stack needed.
 
-I02 imports only `tipos`, `deterministico`, the **pure** `juez` prompt/parser,
-`veredicto`, `medicion`, `reporte` and `adjudicacion` from `src/utils/escoEvals/`,
-plus matching synthetic tests and test factories. `juez.ts` deliberately excludes
-`ConfigJuez` and `llamarJuez`; the two source mock-HTTP tests remain deferred with
-that provider transport, not removed to hide a failing implemented feature.
-No runner, transport, golden loader, replay fixture pack or channel-message
-constructor is included. All imports resolve locally; no app module imports these
-scorers. The existing `eval:esco:check` command now covers them automatically.
+## Exact runtime behavior if separately deployed
 
-## Integration sequence
+- `resumirContexto` keeps results at/below the existing threshold byte-identical. Above it, removing detail also downgrades legacy `consulta_completa` and `detalle_completo` to false. Retain the summary, other legacy fields and re-query instruction. Own `error` presence survives via a fixed message, including falsy values, instead of losing the failure or copying a long raw error.
+- The births gate rejects any own error key, context loss or malformed present context-loss marker; only absent/explicitfalse can represent untruncated legacy context. Complete-empty and complete aggregate retrieval with paginated detail still pass when no context loss/error is recorded. Existing date/period/entity/claim policy is unchanged.
+- Full immediate tool response remains untouched. Only the persisted tool summary and the decision based on that summary change. Actual-loop synthetic regression proves a complete long tool result still reaches the immediate model, while the saved summary loses detail and the current births safeguard replaces an unsupported absence claim with inability to verify.
+- This is not a hard context-size policy, secret redactor, semantic fact checker, calendar/range-binding fix or general evidence-envelope migration. A large retained `resumen` may still exceed24000 characters. Short malformed JSON and primitives stay byte-identical but cannot pass the births gate. No old history is rewritten.
 
-| Slice | Contents | Dependencies / review boundary |
-|---|---|---|
-| I01 (merged) | Numeric/date helper, 15 synthetic tests, check command, tracker | PR #357; two reviewed parser corrections retained |
-| I02 (this candidate) | Pure scoring, judge prompt/parser, measurement/report, immutable adjudication and synthetic tests | Based on merged I01; parent acceptance and explicit draft publication approval pending |
-| I03 (deferred) | Golden input validation, channel messages, provider/runner/transports and fixture pack/config | Consume I02 pure API; move provider call into its own transport module. Compute source hash before adjudication. Replay CLI tests also need I04 transport injection; split rather than importing a broken runner |
-| I04 (deferred runtime) | Canonical consultation/evidence/chat changes, sync script and both edge copies | Reconcile on then-current main; preserve alert #356 and inventory F1. Independently test transport injection and evidence changes. Synchronize trees; deployment separately gated |
-| P1-02 (not started here) | Bounded loop and command routing | Requires reviewed evidence/runtime prerequisites; not authorized in this continuation |
+## Evidence and queue
 
-The source `hatoFechaLocalGuard.test.ts` allow-list change belongs with its future
-channel-message constructor, not a general relaxation now. Source plans and D01
-owner decisions remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+Six regressions failed before correction;76 focused tests pass after synchronization, plus26 independent synthetic assertions. Test exact boundaries, long/short/malformed/falsy errors, complete-empty/paginated aggregates, context-loss refusal, raw payload preservation and parity. Final committed-head full suite/types/lint/build/whitespace and associated CI receipts must be checked in the handoff/PR. No real model or database queried; no model-quality/calibration claim.
+
+I04-a is independently reviewable and can be considered first as the small corrective fix. No merge tonight. Offline chain order remains #359 → #361 → #363 → #364 → #366; shared tracker docs and final-head tests/CI need reconciliation after each integration. Do not merge `codex/esco-faithfulness-offline-base` itself. All PO #365 files are unchanged relative to baseline.
+
+## Release/rollback limits
+
+Only canonical source, its two synchronized generated copies, existing focused tests and tracker docs. No mirrored chat.tsx, Telegram, injection, schema/credentials/access/security-setting edit. Existing sync script run; no deployment command. A future authorized edge release must coordinate existing alert/F1 changes and owner readiness around PR356's described migration186/deployment gap; no current live-state assertion is made here.
+
+Local synthetic/full checks prove this deterministic source behavior. Actual PostgREST/RLS/persistence round trips require a separately authorized development Supabase environment; live Web/channel delivery and release smoke need separate rollout authorization. Neither is necessary to reproduce/fix the pure defect. Rollback before deployment: revert source/test changes and synchronize mirrors. If deployed later, deploying the reviewed revert is a separate action.
+
+No business-definition decision is needed for this fix (PLAN P1-01-a; DECISIONS A01/A02). Private disclosure/provider approval and future D03–D07 storage/budget/pilot/enforcement decisions remain gated; D02 applies only to an actual domain-rule conflict. No private fixtures/provider calls, telemetry/schedules, production queries, Bot Log/Notion, migrations, merge or auto-merge. Stop for parent review after this slice.
 
 ## Review corrections and measurement semantics
 
