@@ -1,68 +1,71 @@
-# Faithfulness integration — current scope I03-a
+# Faithfulness integration — I03-a current-main refresh
 
 ## Current baseline and scope
 
-I01 [PR #357](https://github.com/sforero94/Escociaos/pull/357) and I02
-[PR #358](https://github.com/sforero94/Escociaos/pull/358) are **merged**.
-Current main/I02 merge is `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`;
-reviewed I02 head was `344db9ec0dc8a1654718720c1b8109a01a1192f6`.
-Source `codex/esco-faithfulness-plan` remains
-`3d3e65454d8d2f78971593f1fe90a0514ce22301`; remote heads were reverified.
-Fresh branch `codex/esco-faithfulness-eval-input` contains **I03-a only**.
+Current main is `2a8671a1af027815cadac5d6f39009558fc0a6cc`, reverified 2026-10-29 UTC.
+Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+I01/#357 and I02/#358 are merged. PR359 is the next offline slice; it remains draft.
+The reviewed input head was `9de2be29a90a37760d0ce81ed8052eda38ad1bed`.
+This refresh reconciles shared trackers and integrates main without changing its four adapter/test blobs.
+No source branch, security change, release control or PO document is overwritten.
 
-Exact-head prior CI reverified: I01 [40759015461](https://github.com/sforero94/Escociaos/actions/runs/40759015461)
-and I02 [40765357918](https://github.com/sforero94/Escociaos/actions/runs/40765357918)
-both completed successfully. I02 logs previously inspected showed 218 files /
-4757 tests, lint and types passed. These are prior-slice evidence, not I03-a checks.
-The original `work`, I01 and I02 worktrees remain unchanged. Root `CLAUDE.md` and
-the source session protocol apply; no applicable checkout `AGENTS.md`/`.agents/skills`
-exists. No whole-source merge or cherry-pick.
+I03-a is a pure input adapter, independent of the remaining queued runners and transports.
+`golden.ts` validates declared JSONL case shape, selection controls and text variants.
+`fechas.ts` converts explicit evidence timestamps under the fixed Bogotá UTC-5 contract.
+Malformed rows, dates, nested fields and selection controls fail closed.
+Unknown historical tool status, null snapshots and empty original answers remain explicit.
+Unmatched valid selections return an empty array; future runners must expose empty coverage.
+No clock-based today, filesystem/environment access, provider, private fixture, runtime import or CLI is included.
+Only synthetic factories are used. Shape validation does not establish business truth or provenance authenticity.
+Immutable labels, adjudication safeguards and measurementv1.1 remain unchanged.
 
-I03-a is a pure **input adapter**, not a runner: `golden.ts` decodes JSONL,
-validates the declared case shape, selects cases and constructs text variants;
-`fechas.ts` converts an explicit evidence timestamp under the existing fixed
-Bogotá UTC-5 contract. No clock-based “today”, file/env/credential access, provider,
-transport, channel constructor, replay fixture, runtime import or CLI is included.
-The source adapter's `mensajes.ts` date dependency is extracted rather than pulling
-in the future channel/runner path. The static date guard and package scripts stay
-unchanged. All imports resolve to the merged pure evaluator contracts.
+## Integration order and accepted release
 
-The adapter rejects malformed rows/dates/nested fields and invalid selection controls
-instead of dropping them, inferring defaults or running an unfiltered fallback.
-Explicit null snapshots, unknown historical tool status and empty original answers
-are preserved; they are not proof of success. No automatic adjudication, label
-mutation, approval promotion or source-hash assertion. Future authorized loaders
-must compute source hashes before calling I02 adjudication.
+| Slice | Current state | Dependency / next action |
+| --- | --- | --- |
+| I01 | PR357 merged | 15 corrected synthetic anchor tests; prior evidence retained below |
+| I02 | PR358 merged | Pure scoring/reporting and measurementv1.1; prior CI40765357918 passed |
+| I03-a | PR359 draft, current refresh | Input adapter only; independently review before merge |
+| I03-b | PR361 draft | Reconcile after359; message builders only |
+| I03-c | PR363 draft | Reconcile after361; closed fixture transports |
+| I03-d | PR364 draft | Reconcile after363; offline runner composition |
+| I03-e | PR366 draft | Reconcile after364; synthetic actual-loop integration |
+| I04-a | PR367 merged and backend released | Accepted corrective summary-safety portion only; broader runtime work remains separate |
+| P1-02 | Not started in this continuation | No authorization to advance here |
 
-Provenance: only source `golden.ts` logic and six synthetic factory tests are
-ported. The source tests that read a private JSONL, their I/O imports, and the
-scenario pack are excluded. New tests use the existing synthetic factory only;
-no tracked historical questions/answers/criteria are treated as authorized fixtures.
-Input validation establishes shape/calendar/control behavior, not business truth,
-provenance authenticity, model quality or permission to load a real dataset.
+Do not merge `codex/esco-faithfulness-offline-base`. Reconcile tracker conflicts and retest each later candidate.
+Security #360/#362, migration files, release controls and all PO changes remain part of the base.
+No subsequent slice is included to satisfy imports.
 
-Input regressions reproduced 22 source failures before correction; 53 input tests
-and 145 combined evaluator tests pass before commit, zero skips. Final-head gates
-are reported with the candidate handoff. Malformed input throws with a physical
-line number; no partial dataset is returned. A valid unmatched selection is `[]`,
-which future runners must expose as empty/unavailable rather than a successful run.
+PR367 fixed source `634580480c72b27c7ccd2d8c006af520d0ca1058` deployed as v281.
+PR370 merged at `9a447d9e1a9202b07dee7e555435443b47892f4a`.
+[Release40951834611](https://github.com/sforero94/Escociaos/actions/runs/40951834611) passed once, with no rollback.
+Both native80-file captures passed exact source/cache/type checks; reconstructed82-file comparisons matched pinned rollback Git.
+This proves source/configuration recovery, not bit-identical ESZIP, dependencies, runtime or secrets.
+Metadata confirmed ACTIVE, verify_jwt=false and updated2026-10-29T20:45:46.924Z; anonymous health passed.
+Parent accepted read-only browser smoke at20:50–20:53UTC: session, dashboard, expense history and Registrar; no application console errors.
+No functional births query, real model calibration or business write was tested.
+Temporary release controls remain pending a separately reviewed cleanup after acceptance; this refresh does not remove them.
+The historical drift Actions failure was not rerun; read-only source/tree/metadata checks subsequently aligned.
 
-## Integration sequence
+## I04-a behavior retained from main
 
-| Slice | Contents | Dependencies / review boundary |
-|---|---|---|
-| I01 (merged) | Numeric/date helper, 15 synthetic tests, check command, tracker | PR #357; two reviewed parser corrections retained |
-| I02 (merged) | Pure scoring, judge prompt/parser, measurement v1.1/report, guarded immutable adjudication | PR #358; exact-head CI success |
-| I03-a (this candidate) | Pure JSONL validation, selection/variants and evidence dates; synthetic tests | Independent of runners/providers/runtime; parent review and publication approval pending |
-| I03 remainder (deferred) | Channel messages, file/config adapters, offline runner and provider/replay transports | Scope separately. Preserve pure provider boundary and source hash checks; replay CLI needs I04 injection. Do not import a broken runner or private fixtures |
-| I04 (deferred runtime) | Canonical consultation/evidence/chat changes, sync script and both edge copies | Reconcile on then-current main; preserve alert #356 and inventory F1. Independently test transport injection and evidence changes. Synchronize trees; deployment separately gated |
-| P1-02 (not started here) | Bounded loop and command routing | Requires reviewed evidence/runtime prerequisites; not authorized in this continuation |
+Saved summaries preserve own error markers and downgrade completeness after context truncation.
+The births gate rejects error/context-loss summaries. Short results, complete-empty and valid paginated aggregates remain compatible.
+Immediate full tool payloads remain unchanged. This is not a hard size cap or general semantic fact checker.
+The completed correction reproduced six failures, then passed76 focused and26 independent synthetic assertions.
+Those historical counts are not PR359 validation and are not live faithfulness measurements.
 
-The source `hatoFechaLocalGuard.test.ts` allow-list change belongs with its future
-channel-message constructor, not a general relaxation now. Source plans and D01
-owner decisions remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+## Validation for this refresh
 
-## Merged I02 contract and historical validation
+The local current-main snapshot matched root tree `8e803295709422d5bd86285dba5637ea9386f73d` before applying PR359.
+All four input source/test files retain their reviewed9de2be2 blob identities.
+Final-head checks and CI belong in the handoff and PR receipt; no unrun check is marked passed here.
+Original input evidence:22 source failures reproduced before correction;53 input/145 combined evaluator tests passed.
+Independent prior review passed111 additional assertions. This refresh requires its own independent review and complete local checks.
+No private JSONL, paid provider, deployed runtime, production business query or disclosure gate is exercised.
+
+## Review corrections and measurement semantics
 
 - Strict judge verdict types: an array such as `["cumple"]` is rejected, not string-coerced. Duplicate/unknown/missing criterion checks and typed flags remain required.
 - Verdict combination validates an `ok` judge against the case criteria. Missing/malformed judges become unavailable/inconclusive; a missing or inconsistent deterministic layer cannot pass. Hard deterministic failures remain conclusive without a judge. Infrastructure failures retain the source legacy `inconcluso` behavior.
@@ -100,7 +103,7 @@ headline version alone is insufficient. No quality-improvement claim is measured
 Regressions initially failed 9 cases for the first pair, then 2 cases for the
 second pair; after fixes all 92 evaluator tests pass before commit, zero skips.
 Final-candidate checks are reported in the correction handoff; `115db6e`'s
-77 evaluator / 4742 full tests remain historical. Later corrected head `344db9e` passed 92 evaluator / 4757 full tests and PR CI before merge.
+77 evaluator / 4742 full tests remain historical. No new scope or publication.
 
 ## Historical I01 evidence — not I02 validation
 
@@ -108,7 +111,7 @@ Final-candidate checks are reported in the correction handoff; `115db6e`'s
 - Initial candidate: 13 tests, zero skips; types/focused lint passed. Repository lint passed with 907 warnings; build passed in 17.97s; alert/F1/edge parity regression 232 tests across 6 files passed. Source code/test byte equality and whitespace check passed then.
 - Initial implementation `16e95e342620b7412d6614493c9e66ddc00c8f6a` and documentation handoff `f7ad0dae0df236771ddd7e18767f0e5343e0f8c5`: 13 focused / 4678 full tests, zero skips, types/lint/build passed. Logs `/tmp/esco-i01-final-*` and `/tmp/esco-i01-handoff-*`.
 - Independent I01 review: sign/year regressions reproduced 2 failures / 13 passes; fixes in `abb0ec5`. Reviewed final head `b6470a4`: 15 focused / 4680 full tests, zero skips; types/lint/build/whitespace passed. Corrected build 30.29s; 907 existing lint warnings. Logs `/tmp/esco-i01-corrected-*`.
-- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication was separately approved; PR #358 then passed CI and merged. I03-a approval is still pending.
+- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication was later approved; PR #358 passed CI and merged.
 
 ## Gates, QA and rollback
 
@@ -117,12 +120,9 @@ calls. D01 remains resolved; P0-02 private disclosure to OpenRouter remains bloc
 The $1 cap does not authorize disclosure. Security PR #324, medium security fixes,
 credentials and access remain outside scope.
 
-PR #356 described migration 186 unapplied and edge deployment pending. No live
-ledger or deployment state is queried here; that owner remains responsible.
-No migration, deployment, telemetry, recurring spend, pilot or canary.
+PR367 and the reviewed release controls completed the separate backend release below.
+This I03-a refresh makes no migration, deployment, telemetry, pilot or canary change.
 
-Recommend publishing/merging I03-a only after parent review, explicit draft-publication
-authorization and PR CI. Rollback is a normal revert; no schema, history or traffic
-rollback. Desktop/mobile/live Web/Telegram QA is not exercised by these pure
-modules. A future runtime release requires authorized checks in both channels and
-preservation of alert/F1 behavior; these synthetic tests do not establish live QA.
+PR359 remains draft pending final checks, parent review and specific merge approval.
+Revert its offline adapter/tests to roll back; no schema or traffic rollback is required.
+Existing desktop/browser acceptance does not validate these pure modules or live model faithfulness.

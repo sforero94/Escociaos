@@ -1,40 +1,20 @@
-# Proposed I03-a draft — publication approval pending
+# Draft359: validate offline evaluation inputs
 
-Title: test(esco): aislar validación y selección de entradas offline
-Base: main
-Head: codex/esco-faithfulness-eval-input
-Requested state: draft only after explicit publication approval
+Existing branch `codex/esco-faithfulness-eval-input`, integrated with main `2a8671a1af027815cadac5d6f39009558fc0a6cc`.
+Original reviewed implementation head: `9de2be29a90a37760d0ce81ed8052eda38ad1bed`.
+The four adapter/test blobs remain identical; only integration and shared tracker state change in this refresh.
 
-I03 requiere separar el input puro del runner y sus dependencias de runtime.
-Este alcance integra solo el adaptador JSONL: validación de forma/campos anidados,
-selección y variantes; y conversión de fecha explícita de evidencia en Bogotá.
-No incorpora CLI, lectura de archivos/entorno/credenciales, runner, proveedor,
-mensajes de canal, fixture pack ni runtime. El adaptador recibe texto del llamador.
+Validate JSONL case shape, explicit evidence dates, selection controls and synthetic text variants before future evaluation.
+Malformed inputs fail closed; empty selections, unknown tool status and unavailable historical evidence remain explicit.
+No filesystem, environment, provider, private fixture or deployed-runtime access. Labels/adjudication and measurementv1.1 remain intact.
 
-Base: merge I02 `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` (PR #358).
-Fuente preservada: `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-Head candidato y checks finales: ver handoff exacto; no se presume un check pendiente.
-I01/I02 están merged: CI exactos 40759015461 y 40765357918 en success.
-Esos resultados son históricos, no validación de I03-a.
+Scope stays seven files: two adapter modules, two synthetic test files and three tracker documents.
+Preserve all security362, release-control and PO changes from main. No dependency on queued runner/transports.
+Complete local tests/types/lint/build, independent review and exact-head CI are required for this refreshed candidate.
+Actual head and final check receipts are recorded in the PR/handoff after commit, not inferred from historical counts.
 
-La validación no omite filas defectuosas ni corrige/promueve etiquetas. Rechaza
-fechas imposibles, campos anidados incompletos, flags coercibles y filtros inválidos;
-conserva null explícito, respuestas originales vacías y estado histórico desconocido.
-Una selección sin coincidencias queda vacía: no hay fallback al conjunto completo.
-La forma válida no demuestra verdad, autenticidad ni autorización de datos.
+Remain draft. Specific approval is required before ready/merge. No deployment, production write or provider calibration.
+Next integration order:359 →361 →363 →364 →366; reconcile/retest each, never merge the offline integration-base branch.
+Rollback is a normal source revert with no schema or traffic change.
 
-Proveniencia: lógica del adaptador fuente y seis tests de fábrica sintética;
-se excluyen tests que leen JSONL privado, sus imports I/O y el scenario pack.
-Los nuevos controles usan solo `casoBase` sintético. No lectura de archivos privados.
-Las regresiones reprodujeron 22 fallos antes de corregirlos. Antes del commit:
-53 tests de input / 145 tests conjuntos del evaluador pasan, cero skips.
-El check existente `eval:esco:check` cubre estos módulos; no cambia el guard de fechas.
-
-Puntaje v1.1 y adjudicación hash-gated permanecen intactos; no comparar v1/v1.1
-sin recomputar bajo el mismo contrato. El runner y el cálculo de hash de entrada
-se diseñarán en otro alcance; este PR no afirma tener un runner funcional.
-
-Recomendación: revisión independiente y autorización explícita antes de publicar,
-CI antes de considerar merge. Rollback: revert normal, sin esquema/datos/tráfico.
-No producción, QA vivo, proveedores, gasto, telemetría, migración 186 ni despliegue.
-I03 restante, I04 y P1-02 permanecen fuera de este trabajo.
+Business one-liner: Rejects malformed evaluation cases before offline scoring can produce misleading results.

@@ -1,16 +1,20 @@
 # Progress and handoff
 
-## Current state — I03-a, 2026-10-28 UTC
+## Current state — I03-a revalidation, 2026-10-29 UTC
 
-- **I01 merged:** [PR #357](https://github.com/sforero94/Escociaos/pull/357), reviewed `b6470a496b72e98d0db7fde7e93a2d520a0426a9`, merge `23d607648c35e0848c138efec6f976ad7e1dfdad`. Exact-head [CI 40759015461](https://github.com/sforero94/Escociaos/actions/runs/40759015461) reverified `completed/success`.
-- **I02 merged:** [PR #358](https://github.com/sforero94/Escociaos/pull/358), reviewed `344db9ec0dc8a1654718720c1b8109a01a1192f6`, merge/current main `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`. Exact-head [CI 40765357918](https://github.com/sforero94/Escociaos/actions/runs/40765357918) reverified `completed/success`; its inspected logs showed 218 files / 4757 tests, lint and types passed. Earlier publication denials/pending approvals below are historical and superseded for I01/I02.
-- **Active scope: I03-a only**, pure JSONL input validation/selection/variants and explicit evidence-date conversion, on fresh `codex/esco-faithfulness-eval-input` from that main. I03 is split because its runner/replay imports depend on deferred runtime transport injection. See [INTEGRATION.md](INTEGRATION.md) and [proposed draft](PR_DRAFT.md).
-- Preserved source: `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`; remote heads verified. Original `work`, I01 and I02 worktrees preserved.
-- Input controls reproduced 22 source-adapter failures before tightening. After correction, 53 input tests / 145 combined evaluator tests pass before commit; final-head gates are reported in the handoff. No private-file tests were imported, invoked or silently skipped.
-- No runner/CLI, provider/config/env access, channel-message constructor, replay fixture pack, file loader or I04/runtime changes. Existing measurement v1.1 and guarded adjudication are unchanged; the adapter never adjudicates or promotes labels. Null evidence and empty answers remain explicit unknown/missing states.
-- Next: parent reviews I03-a and obtains explicit publication approval before any draft PR. Stop after this slice; no I03 remainder, I04 or P1-02 implementation authorized here.
-- The task table and old session entries describe accumulated **source-branch** implementation, not all code integrated or deployed. Remaining source plans/decisions: [pinned directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
-- D01 remains resolved; private-payload disclosure for P0-02 is still blocked. No private JSONL access, paid/provider calls, telemetry, migrations, deployment or activation. Alert migration 186/deployment remain the other owner's scope; no live state is claimed here.
+- Baseline main `2a8671a1af027815cadac5d6f39009558fc0a6cc`; exact root tree reconstructed locally as `8e803295709422d5bd86285dba5637ea9386f73d`. Preserve security #360/#362, release controls and PO documents. Source branch remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+- I01/#357 and I02/#358 are merged. I04-a/#367 is merged and its fixed backend source deployed as v281 through reviewed #370. [Release40951834611](https://github.com/sforero94/Escociaos/actions/runs/40951834611) passed once, no rollback; metadata/JWT/health gates passed. Source recovery is not bit-identical bundle recovery.
+- Parent accepted browser read-only smoke at20:50–20:53UTC: session, dashboard, expense history/Registrar, no app-console errors. No births query, real model call, calibration or business write was tested. Temporary release controls remain unchanged pending separate cleanup.
+- Active scope is existing draft359 only, `codex/esco-faithfulness-eval-input`, original reviewed head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`. Integrate current main and reconcile overlapping trackers without changing the four adapter/test blobs. No new implementation, runner, fixture or runtime scope.
+- Adapter rejects malformed case/date/selection inputs; unknown/null historical evidence and empty answers stay explicit. Measurementv1.1 and immutable adjudication/label safeguards remain intact. Original53 input/145 evaluator tests and111 independent assertions are historical; refreshed candidate checks must be recorded separately.
+- Remaining queue:359 →361 →363 →364 →366. Retest and reconcile shared docs after each integration. Never merge the offline integration-base branch. No ready/merge action until specific user approval; stop after this candidate reaches terminal CI and parent review.
+- No providers/private fixtures, production writes, deployment, migration, credentials/access changes or P1-02 work. Parent owns Bot Log. Historical preserved-source statuses and run evidence below do not claim those entire source milestones are integrated or activated on main.
+
+## Prior CI receipts
+
+I01 CI40759015461 and I02 CI40765357918 passed before their merges.
+The queued actual-loop candidate's CI40811688057 and prior PR359 checks do not validate this refreshed head.
+Backend release control postmerge CI40951382054 and release40951834611 passed separately; they do not establish live faithfulness.
 
 ## Task tracker — preserved source-branch status
 
@@ -197,12 +201,8 @@ Update this table and the current-state block in the same session. Add implement
 - Verification before commit: 92 focused evaluator tests passed, zero skips. Final-head types/lint/build/full-suite checks run after commit and are reported with the exact handoff SHA. Temporary logs `/tmp/esco-i02-{envelope-count-repro,applicability-drift-repro,corrections-focused}.log` retain reproduction evidence.
 - Remaining: parent review and explicit I02 draft-publication approval, then PR CI. No publication attempt. No other scope, runtime, provider call, private JSONL, migration, deployment or next slice.
 
+## Session — I04-a persisted-summary safety, 2026-10-29 UTC
 
-### Session: I03-a pure input adapter, 2026-10-28 UTC
+Branch `codex/esco-faithfulness-summary-safety`; baseline current main47d1386, PO files preserved. Reproduced6 failures in current-main focused controls, fixed canonical `escoConsultas.ts` and synchronized its two generated copies with the existing script. Added synthetic tests to existing main query/loop suites:76 focused passed, independent26 assertions passed. Immediate raw tool data stays complete; persisted truncation/failure cannot pass the births evidence gate. No new business rule, typed-envelope migration, hard context cap, tool injection or Telegram rewrite. Final-head test/type/lint/build/CI receipts belong in PR/handoff. Rollback is source revert and mirror synchronization; deployed rollback would separately require an authorized edge deployment. No deployment or production/private/provider action occurred. Next: parent review and morning queue integration, no further slice.
 
-- Scope/branch: first independently coherent I03 portion, `codex/esco-faithfulness-eval-input`, base main `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`; source `3d3e654` unchanged. I01/I02 publication and merges are recorded in current state, not left as current blockers.
-- Changed: JSONL decode/shape validation, selection and variants from the source `golden.ts` API; pure explicit Bogotá date conversion extracted from `mensajes.ts` without importing channel construction or changing the date guard. Validate nested inputs, approval flags, raw labels, dates and selection controls before scoring. Fail on any malformed row; unmatched selection remains empty. No automatic adjudication or label correction.
-- Provenance: six source factory-only tests imported; both private-file-reading tests and their I/O imports excluded. New adversarial examples derive only from the existing synthetic `casoBase` factory. No source scenario pack, historical question/answer fixture or private JSONL file copied/read.
-- Verification before commit: input regressions first reproduced 22 failures / 24 passes; corrected input suite 53 passed and combined evaluator suite 145 passed, zero skips. Final-head types/lint/build/full-suite gates run after commit and are reported with the exact candidate SHA. Temporary logs `/tmp/esco-i03a-*.log`.
-- Remaining: parent review, explicit I03-a publication approval and PR CI. I03 runner/config/transports/messages remain deferred; there is no functional runner claim. No PR attempt or next slice.
-- Production/rollback: no runtime, provider call, private data, migration, deployment, telemetry or live QA. A normal revert removes the adapter; no schema/data/traffic rollback. Existing v1/v1.1 non-comparability caveat remains in force.
+Initial I04-a implementation `b162e37` full suite:4781 passed,1 failed; the existing documentation guard flagged placement of the public prior-CI receipt near channel-history text. Moved the unchanged receipt into its own section. No guard, allow-list or source/test assertion was relaxed. Functional source/tests remain as independently reviewed; final handoff is the later documentation commit and must pass all final-head gates.
