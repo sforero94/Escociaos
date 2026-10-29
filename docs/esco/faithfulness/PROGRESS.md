@@ -1,16 +1,14 @@
 # Progress and handoff
 
-## Current state — I02, 2026-10-28 UTC
+## Current state — I03-b, 2026-10-29 UTC
 
-- **I01 merged:** [PR #357](https://github.com/sforero94/Escociaos/pull/357), reviewed head `b6470a496b72e98d0db7fde7e93a2d520a0426a9`, merge/main `23d607648c35e0848c138efec6f976ad7e1dfdad`. The two I01 review corrections and 15 numeric/date tests are included. Historical publication denials below were superseded by the user's explicit approval and completed merge.
-- **Active scope: I02 only**, pure scoring/measurement/report/adjudication on fresh `codex/esco-faithfulness-eval-scoring`, based on that main. Candidate review and draft publication are pending; I01 publication approval does not cover I02. No I02 PR creation attempt.
-- Preserved source: `codex/esco-faithfulness-plan` at `3d3e65454d8d2f78971593f1fe90a0514ce22301`; remote heads reverified. I01 worktree and original `work` checkout preserved.
-- I02 includes typed contracts, deterministic scoring, pure judge prompt/parser, verdict combination, measurement/report and immutable owner adjudication. Provider call/config, runner/transports/replay fixtures, golden loader and channel-message construction remain deferred. See [INTEGRATION.md](INTEGRATION.md) and [proposed I02 draft](PR_DRAFT.md).
-- Independent correction pass: four findings resolved after reproduction—malformed judge envelopes, report reason counts per run, missing required tool-error assessment, and historical-drift tolerance wording. All 92 evaluator tests pass before commit; final-head checks are reported with this correction handoff. Earlier `115db6e` passed 77 evaluator / 4742 full tests; those are historical, not final-correction results.
-- Next: parent independently reviews this candidate and obtains explicit I02 draft-publication approval. Stop after I02; no I03, I04 or P1-02 implementation authorized here.
-- The task table and historical entries below describe accumulated **source-branch** implementation, not code deployed or all integrated into main. The remaining plan/decisions/contracts stay at the [pinned source directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
-- D01 remains resolved. P0-02 paid calibration remains blocked by private-payload disclosure authorization; a $1 cap does not authorize disclosure. No private JSONL access or provider calls.
-- Production: no migration, deployment, telemetry, schedule, pilot or activation. PR #356 described migration 186 and edge deployment as pending; their owner remains responsible. No live-ledger or deployment verification attempted here.
+- I01/I02 are merged through PRs #357/#358. Main remains `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`; source `codex/esco-faithfulness-plan` remains `3d3e65454d8d2f78971593f1fe90a0514ce22301` (remote refs verified).
+- I03-a is queued as [draft #359](https://github.com/sforero94/Escociaos/pull/359), head `9de2be29a90a37760d0ce81ed8052eda38ad1bed`; exact-head [CI 40798708653](https://github.com/sforero94/Escociaos/actions/runs/40798708653) passed lint/types/tests; Vercel checks passed. It is unmerged with auto-merge disabled. Its code is not included on this branch.
+- **Active scope: I03-b only**, pure Web/Telegram evaluation-message builders and synthetic history/parity tests, fresh `codex/esco-faithfulness-eval-messages` from main. No code dependency on #359: dates stay there; only I02 types are required. Target main, no stacking or retarget needed.
+- Review reproduced three source failures (missing args/summary in both channels and unknown channel fallback). A separate QA/code-quality reviewer found uncapped history; fixed with explicit raw rows and current channel windows before expanding evidence. Reviewer rechecked 23 focused tests: pass, no new defects. Static parity is not live handler verification.
+- Queue order: #359 first, then this slice. Shared tracker documents overlap: after #359 merges, reconcile those docs on this branch and rerun final-head checks/CI before merge; do not force-push or silently retarget. Security draft #360 belongs to the parent and is untouched.
+- Next action: final gates and small draft publication under overnight queue authorization, then exact-head CI to terminal. No merges tonight; morning review only. Stop after this slice.
+- No runner, CLI, provider, env/credential access, private fixture, runtime/edge edit, production traffic, bot/Notion write, migration or deployment. Measurement v1.1 and guarded adjudication remain unchanged. Source task table and old entries below remain historical.
 
 ## Task tracker — preserved source-branch status
 
@@ -196,3 +194,12 @@ Update this table and the current-state block in the same session. Add implement
 - Changed: accept only clean JSON or a complete fenced response and reject invalid envelopes; deduplicate report reason categories per failed run while retaining detailed checks/reasons; require a boolean assessment for an actual tool error, otherwise mark judge unavailable/inconclusive; align historical-drift wording with owner v2 without relabeling. Measurement v1/v1.1 rates are not directly comparable without recomputation under the same contract.
 - Verification before commit: 92 focused evaluator tests passed, zero skips. Final-head types/lint/build/full-suite checks run after commit and are reported with the exact handoff SHA. Temporary logs `/tmp/esco-i02-{envelope-count-repro,applicability-drift-repro,corrections-focused}.log` retain reproduction evidence.
 - Remaining: parent review and explicit I02 draft-publication approval, then PR CI. No publication attempt. No other scope, runtime, provider call, private JSONL, migration, deployment or next slice.
+
+
+### Session: I03-b pure message builders, 2026-10-29 UTC
+
+- Branch/base: `codex/esco-faithfulness-eval-messages` from main `6a2dd50`; independent of queued #359. The original work/I01/I02/I03-a branches and security #360 are preserved.
+- Changed: source message-format adapter only, with explicit raw persisted rows. Web uses latest 20 rows; Telegram faithfully uses earliest 20, including its current omission of newer questions on long histories. Window first, evidence expansion second. Source date conversion, producer/typed-evidence tests and forced-loop assertions are excluded with their separate scopes, not imported to force runtime dependencies.
+- Verification before commit: three source defects reproduced, then corrected. QA/code-quality reviewer independently found/reproduced 21/23-row histories beyond production's 20-row window; corrected and independently re-reviewed with all 23 tests passing. Error/truncated/missing summaries remain opaque; no success/completeness inferred. Final head gets types/lint/build/full-suite gates after commit.
+- API: follow-ups now require raw history plus caller-supplied base prompt, never expanded model messages. Future runner must adapt to this explicit API. No existing app/runner imports it. History queries, timestamp tie ordering and memory lookup are not executed by this pure adapter.
+- Remaining: draft CI, queued morning review and later docs reconciliation/retest after #359 merges. No merges, next slice or Bot Log write. Rollback is a normal revert without schema/data/traffic changes.
