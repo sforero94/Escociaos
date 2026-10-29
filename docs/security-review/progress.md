@@ -14,7 +14,7 @@ record, not a claim of current production state. Read [the plan](plan.md) and
 | S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
 | S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
 | S5 — ranked report and remediation scopes | Closed with gaps — read-only consolidation | Seven medium source findings retained; no new verified critical/high candidate. Proposed next backlog decision: expense-batch retry only; no implementation. | [S5 consolidation](s5-consolidation.md). Documentation-only merge recommendation is conditional on reviewer acceptance, stale PR metadata refresh and final-head checks. Local full-lint/evidence gaps remain. |
-| Expense-batch retry — authorized implementation only | Queued for draft review; not deployed | Stable draft/user request, atomic INVOKER batch/receipt, same-request recovery and focused regressions. Income and all other scopes excluded. | [Implementation/runbook](expense-batch-retry.md). Migration187 prepared but unapplied; development Supabase/release gates remain. |
+| Expense-batch retry — DB prerequisite | Draft PR360, revised after parent blockers; not applied | Migration187 + PostgreSQL tests/docs only; frontend matches main. Review before dependent activation. | [DB runbook](expense-batch-retry.md); development Supabase and authorized DB application gates remain. |
 
 The bounded S1–S5 review closed with gaps. The later overnight instruction
 authorized expense-only implementation; the morning-review instruction requires
@@ -509,3 +509,29 @@ PR324, PR359, PR356 and migration186. Parent owns the Bot Log/periódico.
 Next scope: review this queued expense-only draft and its release gates, not
 another remediation. Copy the concrete next-session prompt from
 [the runbook](expense-batch-retry.md#next-session-prompt).
+
+
+## Parent-review correction — split prerequisite and activation
+
+Parent review supersedes the combined-head “ready” conclusion for PR360 at
+`6e4a882`. It found a cross-tab pending-payload race and unsafe activation of an
+unapplied RPC in the auto-deployed main frontend. These were source blockers,
+not red CI or production incidents. No release occurred.
+
+The revised PR360 is DB-only: unapplied migration187, PostgreSQL fixture/runner
+and docs. Its frontend matches main. Review it before the dependent draft branch
+`codex/security-expense-batch-frontend`, which owns Web Locks serialization,
+full-payload cleanup, adversarial concurrent-browser regressions and activation.
+The database uses dedicated conflict SQLSTATE PGB01. Baseline rechecked through
+Composio: main `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`; next source number187.
+
+Mandatory gates: development Supabase validation; separately authorized database
+application/postconditions; only then frontend merge/automatic main deployment.
+Neither draft applies a migration or changes deployment settings. Final heads,
+new check counts and independent re-review belong in the PR/handoff. Earlier
+combined-head results above remain historical, not acceptance of these fixes.
+Parent owns Bot Log and the morning queue. No further remediation starts here.
+
+DB-only close-out: 4,757 tests/218 files, ten PostgreSQL groups including explicit
+PGB01 assertion, types/build pass, lint0 errors/907 existing warnings. Independent
+review found no remaining DB-only blocker and verified frontend equality to main.

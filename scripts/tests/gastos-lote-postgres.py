@@ -20,25 +20,27 @@ Q = '10000000-0000-4000-8000-000000000002'
 passed = 0
 
 
-def sql(query, success=True):
+def sql(query, success=True, error_code=None):
     result = subprocess.run(
-        ['docker', 'exec', '-i', CONTAINER, 'psql', '-U', 'postgres', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1'],
+        ['docker', 'exec', '-i', CONTAINER, 'psql', '-U', 'postgres', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose'],
         input=query, text=True, capture_output=True, timeout=30,
     )
     if success and result.returncode:
         raise AssertionError(result.stderr)
     if not success:
         assert result.returncode != 0, 'Se esperaba rechazo/rollback'
+        if error_code is not None:
+            assert error_code in result.stderr, result.stderr
     value = result.stdout.strip()
     if re.fullmatch(r'-?\d+\.\d+', value):
         value = value.rstrip('0').rstrip('.')
     return value
 
 
-def call(data, request=None, actor=G, success=True, expected=None):
+def call(data, request=None, actor=G, success=True, expected=None, error_code=None):
     payload = json.dumps(data).replace("'", "''")
     return sql(f"SET ROLE authenticated; SET request.jwt.claim.sub='{actor}'; "
-               f"SELECT fn_fin_gastos_guardar_lote('{request or uuid.uuid4()}', '{expected or actor}', '{payload}'::jsonb);", success)
+               f"SELECT fn_fin_gastos_guardar_lote('{request or uuid.uuid4()}', '{expected or actor}', '{payload}'::jsonb);", success, error_code)
 
 
 def expense(name='Local', value=10):
@@ -68,7 +70,7 @@ def run_cases():
     assert len(json.loads(result)['ids']) == 2
     check('lost response/reload returns original IDs, counts and authorship')
     state = snapshot()
-    call([expense(value=12)],req,success=False)
+    call([expense(value=12)],req,success=False,error_code='PGB01')
     call(data,req,actor='00000000-0000-4000-8000-000000000006',success=False)
     assert snapshot() == state
     assert sql("SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-4000-8000-000000000006'; SELECT count(*) FROM fin_gastos_lotes;") == '0'

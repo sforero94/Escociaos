@@ -1,156 +1,123 @@
-# Expense-batch retry — bounded remediation
+# Expense-batch retry — database prerequisite (PR360)
 
-Status: implemented locally and queued for draft review; **not deployed**.
-Base: `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` (`main`), verified through
-Composio account `github_lysis-talion` / `thinksid` on 2026-10-29 UTC.
-The checkout was clean before this branch. PR354 / `c0163c6` contains the
-completed S1–S5 assessment. This scope implements only its expense-batch slice,
-under Santiago's subsequent overnight-work instruction and morning-review gate.
-No merge, approval, auto-merge, migration application or deployment is authorized
-by this draft. PR359 Faithfulness, PR356 alert work, migration186 and PR324 stay
-outside the change.
+Status: additive candidate, **not applied and not released**. Base `main` remains
+`6a2dd50bea966f733d6ef42b15bf1346ca77d6dc`, verified through Composio account
+`github_lysis-talion` / `thinksid` on 2026-10-29 UTC. Migration187 is the next
+source filename after186; the live ledger is not reasserted by this code check.
 
-## Behavior and boundaries
+## Split after independent review
 
-`GastosBatchTable` now calls `fn_fin_gastos_guardar_lote` without an individual
-INSERT fallback. A draft UUID survives edits, draft restore and validation
-errors; legacy drafts use their first row UUID. Two tabs holding the same draft
-therefore cannot create two batches after one has confirmed. A changed payload
-under an already committed UUID fails instead of creating another batch.
+The earlier combined PR360 head `6e4a882` is superseded. Parent review found:
 
-Before the first RPC, the browser preserves the exact request and its completed
-invoice paths in a per-user localStorage entry. An uncertain response locks the
-grid and exposes **Verificar lote pendiente**. Reload/retry reuses that payload,
-not current blank/edited rows or another upload. The browser removes the matching
-draft before removing the pending request. A late response cannot remove another
-request or a different draft. Double clicks use a synchronous in-flight guard.
+1. Browser tabs could race between pending reads/writes and a UUID-only cleanup
+   could erase another tab's exact frozen recovery payload after a conflict.
+2. A combined merge would activate an unapplied RPC in the auto-deployed main
+   frontend, causing an expense-capture outage before migration187 was applied.
 
-The RPC requires the expected browser user to equal `auth.uid()` and current
-`get_user_role()` to be Gerencia. It runs as INVOKER under existing expense RLS.
-One transaction inserts an immutable complete receipt and all expense rows,
-including `created_by=auth.uid()`. A row validation/FK/trigger failure rolls back
-the receipt and all rows. Concurrent identical requests wait on the unique UUID
-and return the same committed row IDs. Another user's UUID cannot expose a receipt
-or write expenses. Role loss also denies replay.
+PR360 now contains **database migration, synthetic PostgreSQL tests and docs
+only**. Its final diff leaves all files under `src/components`, `src/utils`,
+`src/types` and browser/unit tests identical to current main. No UI calls the new
+RPC from this PR, and merging its source does not apply the SQL. The existing
+expense frontend remains unchanged, including its original retry defect until
+separate activation. The dependent draft on `codex/security-expense-batch-frontend`
+contains the corrected browser serialization/activation; review it only after
+this prerequisite. This is a source split, not a default-off activation switch.
 
-Definitive SQL rollback classes 22/23/40/P0001 release the pending entry while
-retaining the draft UUID for correction. A first-call missing-RPC PGRST202 also
-releases it. Network errors, malformed confirmations, auth failures and ambiguous
-replays preserve it. A corrupt/full/unavailable local store prevents a new RPC.
-For a conflict with an existing receipt, preserve the draft and reconcile the
-original request; do not assign a fresh UUID to bypass the conflict.
+## Database contract
 
-Invoice upload remains outside the database transaction and otherwise unchanged.
-A failure before the RPC can leave an orphan upload, as before. No real Storage
-operations occurred during development or tests. Only the `GastosBatchTable`
-flow has these guarantees; income, expense import/editor, Telegram, historical
-records and F1 are unchanged. Old open tabs with the old direct writer remain a
-rollout hazard and must be refreshed before capture.
+Migration187 creates `fin_gastos_lotes` and INVOKER
+`fn_fin_gastos_guardar_lote(uuid,uuid,jsonb)`. The expected browser actor must
+match `auth.uid()`, and current `get_user_role()` must be active Gerencia **before
+any receipt replay**. Existing expense RLS and grants stay unchanged. One
+transaction inserts the immutable complete receipt and all expense rows,
+including `created_by=auth.uid()`. A row validation, FK or trigger failure rolls
+back both. Concurrent identical UUID/payload requests wait for the original
+commit and return its exact row IDs. A different user cannot read the receipt.
 
-### Deliberate trust and coverage limits
+A changed payload for an existing UUID raises dedicated SQLSTATE **PGB01**;
+it must never be treated as proof that an earlier request did not commit.
+Other validation errors retain their standard SQLSTATEs. No receipt UPDATE or
+DELETE grant is added. The frontend must preserve an ambiguous request, own it
+across tabs before reading/writing/sending, and compare its complete identity
+(UUID + exact payload) before cleanup. SQL alone cannot serialize browser storage.
 
-The receipt is an accidental-retry mechanism, not an unforgeable audit log.
-INVOKER needs own-Gerencia INSERT on the new receipt table. A deliberately
-malicious Gerencia can insert its own forged receipt directly, just as that role
-already controls expense writes. It cannot insert another user's receipt,
-UPDATE/DELETE a receipt, or bypass expense RLS through this RPC. The synthetic
-SQL test explicitly records this limitation. No persistent access on existing
-tables was changed, and no SECURITY DEFINER helper was introduced.
+The INVOKER receipt is an accidental-retry mechanism, not an unforgeable audit
+log: Gerencia can deliberately INSERT its own forged receipt through the table
+API, as that role already controls expense writes. It cannot forge another
+user's receipt, UPDATE/DELETE a receipt, or use this RPC to bypass expense RLS.
+Deleting an Auth account cascades only its new receipts, adding no new deletion
+blocker or expense-record deletion. This trust limit has a synthetic test.
 
-The existing `gastos_batch_draft` key remains shared/unowned. This scope does not
-resolve the S4 shared-profile draft policy decision. Pending attempts are per-user,
-and the server rejects a changed authenticated actor. Draft contents on a shared
-browser retain their prior privacy limitation; do not treat UUIDs as ownership.
-Deleting an Auth account cascades only its new receipts; it adds no new account
-deletion blocker and does not delete expense records.
+## Tests and evidence limits
 
-No production frontend, edge bundle or live catalog parity was reasserted.
-The approved edge-source export HTTP413 gap, separately denied database-source
-export, F1 genuine-operator confirmation gaps, and PR324 parked status remain.
-This is code-only remediation plus isolated synthetic PostgreSQL/browser evidence.
-No private calibration data, providers, production rows, probes, bot messages,
-credentials, grants on existing tables or persistent access changes were used.
+`python scripts/tests/gastos-lote-postgres.py` runs the exact migration against
+PostgreSQL17 in a disposable container with `--network=none`, tmpfs, no ports,
+secrets or farm data. Ten groups cover compilation, lost response/reload,
+concurrent repeats, PGB01 conflicts, cross-user isolation, inactive/downgraded/
+anonymous/switched actors, validation/FK/injected-row rollback, immutable grants
+and the own-INSERT/account-deletion trust limits. This minimal synthetic schema
+is **not** a complete Supabase/PostgREST stack or live catalog reproduction.
+DB-only final-tree local checks: 4,757 Vitest tests across218 files, no skips;
+typecheck/build pass; lint0 errors/907 existing warnings. Independent re-review
+confirmed the five-file scope and preserved SQL guarantees. Exact-head CI is
+recorded in the PR/handoff; earlier combined-head counts are historical only.
 
-## Validation
+No production records, Storage, provider calls, calibration data, probes, bot
+messages, credentials or deployment commands were used. Existing repository
+integrations may create PR previews; no production release is performed.
 
-- `npm test`: 4,772 passed across 219 files; no skips reported, local Node24.
-  Includes 15 new helper tests for persistence ordering, user identity, lost
-  response/reload, rollback correction, changed payload, unavailable/corrupt
-  storage, account isolation and malformed confirmations.
-- `python scripts/tests/gastos-lote-postgres.py`: 10 groups passed on disposable
-  PostgreSQL17, `--network=none`, tmpfs, no ports or farm data. Tests compile the
-  exact migration and exercise four concurrent sessions, authorization/actor
-  changes, receipt visibility, full rollback and its explicit trust limits.
-  The minimal synthetic schema models relevant finance columns/FKs/RLS; it is
-  not a complete development Supabase stack or a live catalog reproduction.
-- `PLAYWRIGHT_MODULE=/opt/codex/cua_node/lib/node_modules/playwright-core/index.mjs
-  node scripts/tests/gastos-lote-browser.mjs`: actual component, mocked local
-  auth/RPC, all external browser requests blocked. Passes lost response, locked
-  inputs, reload recovery, stale second-tab replay and viewport overflow at
-  1280×900 and 390×844, including retention of a different newer draft after
-  the empty-grid autosave timer fires. Browser checks do not reproduce PostgREST transport or
-  genuine operator behavior. `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH` select installed
-  tools; the script installs nothing.
-- `npm run typecheck` and `npm run build`: passed. `npm run lint`: zero errors,
-  907 pre-existing warnings; Node reports existing package-module metadata warning.
-- Independent read-only reviewer reran 15/15 helper tests and 10/10 PostgreSQL
-  groups, reviewed source and browser scenario, and found no remaining blocker.
-  It did not rerun the browser. Main agent owns all changes and commits.
+## Review and release order
 
-The PostgreSQL image was obtained for this isolated local test. No production
-connection, secrets or setup scripts were used. Required PR CI is checked on the
-published exact head and recorded in the PR/handoff; local results are separate.
+1. Review this DB-only draft first. Check current main for a migration-number
+   collision before release. Reconfirm the final diff contains no frontend
+   activation. PR359/361 Faithfulness, PR356/migration186 and PR324 remain outside
+   scope;187 has no code dependency on their work.
+2. Validate the exact reviewed migration in an **authorized development Supabase**
+   environment with actual expense columns, triggers, RLS, PostgREST roles and
+   RPC error transport. The isolated fixture does not satisfy this release gate.
+3. A separately authorized database release must capture the live ledger,
+   existing expense grants/RLS, activity-aware role helper and attribution
+   baseline. Confirm new objects absent, apply only reviewed187 through the
+   authorized migration workflow, then verify the ledger, INVOKER/search_path,
+   authenticated execution, own active-Gerencia SELECT/INSERT, anonymous denial,
+   no receipt UPDATE/DELETE and unchanged expense policies. Do not reapply186.
+4. **Only after development validation and authorized DB application plus
+   postconditions**, review/merge the dependent frontend activation. An ordinary
+   main merge auto-deploys that frontend, so “merge now, migrate later” is unsafe.
+   Retarget/rebase its draft after this prerequisite merges; verify CI again.
+   Do not change provider deployment settings as a shortcut.
+5. Verify exact frontend alias/SHA and refresh old tabs. Genuine operator
+   confirmation remains separate from synthetic test results.
 
-## Forward sequencing — separately authorized release only
+This scope prepares drafts only: no merge, approval, auto-merge, migration
+application or production deployment. No essential business-semantic decision
+blocks preparation; development validation and release authorization stay pending.
 
-1. Review the exact draft head. This PR has no code dependency on PR359 or PR356.
-   Migration187 follows the existing source filename186 only; this does not
-   apply186 or authorize its release. Recheck sequential-number collisions before
-   release, and renumber this **unapplied** candidate if a new migration takes187.
-2. Test the reviewed additive migration against an authorized development
-   Supabase environment, including its actual expense types/triggers/RLS and
-   PostgREST roles. Local fixture success does not replace this release gate.
-3. At an authorized release, capture the live ledger, existing expense grants,
-   RLS, `get_user_role` activity behavior and attribution/expense trigger baseline.
-   Verify the new objects are absent. Do not reapply historical migrations.
-   Existing187 objects cause an explicit precondition abort, not overwrite.
-4. Apply only reviewed187 through the authorized migration workflow. Verify
-   INVOKER/search_path, authenticated EXECUTE and own active-Gerencia SELECT/INSERT;
-   verify no anonymous access, no receipt UPDATE/DELETE and unchanged expense
-   grants/policies. Record the ledger and deployment evidence in the release.
-5. Publish the frontend only after that database boundary exists. Refresh old
-   tabs. If the database dependency is absent the new UI fails closed; it never
-   falls back to direct INSERT. Verify the exact frontend alias/SHA separately.
-   Genuine operator confirmation remains separate from synthetic test results.
+## Rollback and retained boundaries
 
-## Rollback and recovery
+Before any receipt exists and before exposing the new client, development cleanup
+can remove only the new function and table transactionally. After exposure,
+retain RPC, receipts and every pending browser attempt. Pause expense-batch
+capture before restoring the old writer; an uncertain request must not be
+recaptured under a fresh UUID. Do not delete receipts, clear browser storage or
+erase accounts as a retry workaround. F1 receipt/pending state is untouched.
 
-Before any receipt exists and before exposing this client, a development rollback
-can remove only the new function and table in one transaction. Never apply that
-destructive cleanup once requests may have committed.
-
-After exposure, keep the RPC, receipts and every browser pending attempt. Pause
-batch capture if the client must be rolled back: restoring the old direct writer
-can duplicate an uncertain request. Resolve the original UUID with its original
-payload and account before recapturing anything. Do not delete receipt history,
-clear browser storage, change a pending UUID, erase an account as a retry workaround,
-or repair historical expense records under this scope. F1 receipts stay untouched.
-
-If an explicit validation error persists, correct the original draft and reuse
-its UUID; if it conflicts with an existing receipt or the account loses access,
-Gerencia must reconcile that specific request. No generic “discard pending”
-action converts uncertainty into permission to create another batch.
+Income, individual expense editors/imports, invoices/Storage semantics, Telegram,
+historical duplicates and ownership redesign stay excluded. The legacy shared
+unowned draft remains the S4 privacy risk. Preserve approved edge export HTTP413,
+separately denied database-source export, F1 genuine-operator confirmation gaps,
+PR324 parked status and all original review qualifications. No new live parity
+claim follows from these source changes.
 
 ## Next-session prompt
 
 ```text
-Review the queued draft on codex/security-expense-batch-retry, not another fix.
+Review DB-only PR360 and its dependent frontend draft, in that order.
 Read CLAUDE.md, docs/security-review/{session-guide,plan,progress}.md and
-expense-batch-retry.md. Verify exact head CI and independently review the
-expense-only recovery contract and unapplied migration187. Keep PR359,
-PR356/migration186 and PR324 outside scope. Release requires development Supabase
-validation and separate migration/frontend authorization; no merge or deploy
-under the overnight queue instruction. Preserve receipts/pending attempts,
-edge HTTP413, separate denied DB export and F1 operator-confirmation gaps.
-Update the tracker after review. Do not automatically start another remediation.
+expense-batch-retry.md. Verify both exact heads, independent review and CI.
+Do not merge activation until development Supabase validation and separately
+authorized migration187 application/postconditions complete. Preserve Web Locks
+ownership, exact frozen-payload recovery, PGB01 conflict retention and all prior
+scope exclusions. No merge, migration or deployment under the overnight queue
+instruction. Do not start another remediation. Update the tracker at close-out.
 ```

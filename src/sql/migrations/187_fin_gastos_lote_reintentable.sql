@@ -65,7 +65,7 @@ BEGIN
     RAISE EXCEPTION 'Solicitud de gastos no disponible.' USING ERRCODE='42501';
   END IF;
   IF v_recibo.datos IS DISTINCT FROM p_datos THEN
-    RAISE EXCEPTION 'La solicitud ya pertenece a otros datos.' USING ERRCODE='22023';
+    RAISE EXCEPTION 'La solicitud ya pertenece a otros datos.' USING ERRCODE='PGB01';
   END IF;
   IF v_insertado=0 THEN RETURN v_recibo.resultado; END IF;
   FOR v_item,v_indice IN SELECT value,ordinality FROM jsonb_array_elements(p_datos) WITH ORDINALITY LOOP
