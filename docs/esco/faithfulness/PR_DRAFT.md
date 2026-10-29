@@ -1,14 +1,15 @@
-# Draft: compose an offline synthetic evaluator
+# Draft: verify the unchanged actual loop with closed synthetic HTTP
 
-Target: `codex/esco-faithfulness-offline-base` at `158720fed6ceb461efd34746760db520c557d2a3`.
-Head: `codex/esco-faithfulness-eval-replay`.
+Head branch: `codex/esco-faithfulness-eval-loop`. Target #364 branch `codex/esco-faithfulness-eval-replay` at `19d16783e7af0dde3a95057dea45446ece76e4a5`.
 
-Connect reviewed date/history/fixture helpers to deterministic scoring and measurement v1.1 using declarative synthetic tool requests and answers. This makes a complete in-memory evaluation receipt without providers, credentials, private fixtures or production-loop imports. Both finalizers run; broken replay is inconclusive and missing scenarios remain explicit. Semantic judge/review and usage remain unavailable, quality_measured=false. Scripted plumbing is not calibration.
+Run actual llmToolLoop and a real read-only births tool against exact synthetic model/REST fixtures. Both finalizers and private sticky failures prevent swallowed/missing evidence from appearing valid. Preserve current follow-up history and failure/partial-evidence abstention. Add31 synthetic controls; no deployed source change.
 
-The base integrates exact #359/#361/#363 heads solely to expose a bounded incremental diff. No code conflict/edit, only tracker-doc conflicts. Review/merge order: #359 → #361 → #363 → this PR. Do not merge the integration branch itself. After dependencies land, reconcile docs, integrate current main without force push, retarget and rerun all gates/CI.
+Fixed synthetic Deno bindings only, no environment passthrough/live fallback. Fresh fetch installation restores exact descriptors and inherited mock history/behavior; tests prove zero inherited-network calls. Full request signatures reject mismatched methods/URLs/queries/bodies/headers and redirects. Trusted test execution is not an arbitrary-JavaScript/process sandbox. Model request hashes were captured under denial and pinned; consistency is not provenance/quality.
 
-Hashes establish canonical manifest/script/prompt consistency only. Network proof is limited to the offline import graph and synthetic fetch-denial controls, not a sandbox/general HTTP or actual-loop guarantee. Unknown/error/truncated evidence stays opaque. Measurement v1.1/labels/adjudication preserved.
+Measurement v1.1, unadjudicated labels and unavailable judge/review/real usage retained. No calibration, source-pack/private fixture read, actual credential/provider/production call, runtime/edge edit or deployment. Final committed-head tests/types/lint/build, harness-file lint, independent review and CI receipts belong in the publication handoff.
 
-Final SHA, tests, independent findings and CI will be in the publication handoff. Rollback: revert incremental offline files. Remaining: actual-loop/closed-transport integration, scenario review, authorized calibration/live QA. No merges, providers, source-pack/private fixture reads, runtime/deployment/migration/production actions here.
+Queue: #359 → #361 → #363 → #364 → this PR. Do not merge the offline integration base. Reconcile/retarget/retest changed dependent heads after earlier merges. Draft only, no merges tonight. Rollback: test/docs revert.
 
-Morning-paper one-liner: Connects offline evaluation inputs, replay evidence and scoring into a repeatable synthetic test run without contacting the production agent.
+Remaining: queue integration, broader reviewed synthetic coverage, separate runtime evidence/injection decisions, explicit disclosure/provider approval for private calibration and separate live-QA/deployment activation. Stop after this milestone.
+
+Morning-paper one-liner: Tests the actual agent loop and births lookup against synthetic evidence while proving it cannot fall through to the network.
