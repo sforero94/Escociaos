@@ -56,13 +56,14 @@ test('fixed Git modules emit empty modules and have 18 explicit type-only incomi
   assert.equal(proof.references['telegram/types.ts'].length, 8);
   await assert.rejects(proveTypeOnly(pinned, {...ts, version:'wrong'}), /version/);
 });
-for (const kind of ['runtime-import','runtime-export','dynamic-import','require','changed-omission','missing-omission','symlink','malformed']) {
+for (const kind of ['tsx-runtime-import','runtime-import','runtime-export','dynamic-import','require','changed-omission','missing-omission','symlink','malformed']) {
   test(`type proof rejects ${kind}`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'pr367-type-'));
     try {
       await cp(pinned, root, {recursive:true});
-      const path = join(root,'index.ts');
+      const path = join(root,kind==='tsx-runtime-import'?'chat.tsx':'index.ts');
       const statements = {
+        'tsx-runtime-import': "import { BotContext } from './telegram/types.ts';",
         'runtime-import': "import { BotContext } from './telegram/types.ts';",
         'runtime-export': "export * from './telegram/types.ts';",
         'dynamic-import': "import('./telegram/types.ts');",

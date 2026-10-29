@@ -23,7 +23,7 @@ export async function proveTypeOnly(gitTree, ts) {
   insist(inventory.entries.every(e => e.type === 'file' || e.type === 'directory'), 'Unsafe Git source');
   const refs = Object.fromEntries(Object.keys(OMITTED).map(path => [path, []]));
   const statementKinds = {};
-  for (const entry of inventory.entries.filter(e => e.type === 'file' && e.path.endsWith('.ts'))) {
+  for (const entry of inventory.entries.filter(e => e.type === 'file' && /\.tsx?$/.test(e.path))) {
     const text = await readFile(join(gitTree, entry.path), 'utf8');
     const ast = ts.createSourceFile(entry.path, text, ts.ScriptTarget.ES2022, true);
     insist(ast.parseDiagnostics.length === 0, 'Unparseable Git source');
@@ -83,7 +83,6 @@ export async function reconstructCapture(raw, gitRoot, clean, ts) {
   const gitInventory = await diagnosticInventory(gitTree);
   const config = await readFile(join(gitRoot, 'supabase/config.toml'));
   validateRawInventory(rawInventory, gitInventory, config);
-  const prefix = `supabase/functions/${TARGET}/`;
   const typeProof = await proveTypeOnly(gitTree, ts);
   const reconstructed = await reconstructSource(raw, gitRoot, clean);
   const native = await fingerprint(join(raw, 'supabase/functions', TARGET));

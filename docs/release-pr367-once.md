@@ -47,7 +47,7 @@ For each first, second, and restored capture:
 2. Download once into a private temporary directory using official CLI2.122.0.
 3. Inventory every raw file and directory. Reject symlinks, special files, extra paths, changed bytes, or changed cache hashes/sizes.
 4. Require exact equality with pinned Git minus precisely the two listed modules, plus precisely the observed cache entries.
-5. Verify the omitted Git module hashes. Parse the complete Git function tree with TypeScript5.9.3.
+5. Verify the omitted Git module hashes. Parse all75 .ts and7 .tsx Git modules with TypeScript5.9.3.
 6. Require only interfaces, type aliases, imports, and type exports in the omitted modules; reject side-effect imports.
 7. Require each omitted module to emit only `export {};`. Require all18 observed incoming references to be explicitly type-only.
 8. Copy raw source/config into a new clean directory. Restore only those two modules from verified pinned Git.
@@ -84,7 +84,7 @@ After runner loss or uncertain outcome, inspect remote state before considering 
 ## Validation, permissions, and cleanup
 
 Run `node --test scripts/release-pr367.checks.mjs scripts/release-pr367-capture.checks.mjs` after installing repository dependencies.
-Local checks pass66 tests with no skips. This includes real pinned Git syntax analysis and synthetic disk reconstruction/rollback.
+Local checks pass67 tests with no skips. This includes real pinned Git syntax analysis and synthetic disk reconstruction/rollback.
 The positive disk regression substitutes only a synthetic cache digest in a private temporary implementation copy.
 It never reads the remote cache body or changes production cache constants.
 Standard PR CI does not run these separately named Node checks; manual execution runs them before management credentials are available.
