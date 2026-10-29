@@ -1,40 +1,37 @@
-# Faithfulness integration — current scope I02
+# Faithfulness integration — I03-c
 
-## Current baseline and scope
+## Baseline and queue
 
-I01 is **merged** through [PR #357](https://github.com/sforero94/Escociaos/pull/357),
-reviewed head `b6470a496b72e98d0db7fde7e93a2d520a0426a9`, merge/current main
-`23d607648c35e0848c138efec6f976ad7e1dfdad`. Source branch
-`codex/esco-faithfulness-plan` remains at
-`3d3e65454d8d2f78971593f1fe90a0514ce22301`; both remote heads were reverified.
-I02 uses fresh branch `codex/esco-faithfulness-eval-scoring` from current main.
-The original `work` and I01 worktrees remain unchanged. No applicable checkout
-`AGENTS.md`/`.agents/skills` exists; root `CLAUDE.md` and source session protocol
-apply. This explicit extraction supersedes the source README's accumulated-branch
-default. No source-branch merge or whole-commit cherry-pick.
+Main `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` includes I01/#357 and I02/#358. Preserved source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`. Both remote refs reverified. Draft #359 input and #361 messages are green and unmerged. Security #360/#362 are parent-owned and untouched. No merges tonight.
 
-I02 imports only `tipos`, `deterministico`, the **pure** `juez` prompt/parser,
-`veredicto`, `medicion`, `reporte` and `adjudicacion` from `src/utils/escoEvals/`,
-plus matching synthetic tests and test factories. `juez.ts` deliberately excludes
-`ConfigJuez` and `llamarJuez`; the two source mock-HTTP tests remain deferred with
-that provider transport, not removed to hide a failing implemented feature.
-No runner, transport, golden loader, replay fixture pack or channel-message
-constructor is included. All imports resolve locally; no app module imports these
-scorers. The existing `eval:esco:check` command now covers them automatically.
-
-## Integration sequence
-
-| Slice | Contents | Dependencies / review boundary |
+| Slice | Scope | Integration order |
 |---|---|---|
-| I01 (merged) | Numeric/date helper, 15 synthetic tests, check command, tracker | PR #357; two reviewed parser corrections retained |
-| I02 (this candidate) | Pure scoring, judge prompt/parser, measurement/report, immutable adjudication and synthetic tests | Based on merged I01; parent acceptance and explicit draft publication approval pending |
-| I03 (deferred) | Golden input validation, channel messages, provider/runner/transports and fixture pack/config | Consume I02 pure API; move provider call into its own transport module. Compute source hash before adjudication. Replay CLI tests also need I04 transport injection; split rather than importing a broken runner |
-| I04 (deferred runtime) | Canonical consultation/evidence/chat changes, sync script and both edge copies | Reconcile on then-current main; preserve alert #356 and inventory F1. Independently test transport injection and evidence changes. Synchronize trees; deployment separately gated |
-| P1-02 (not started here) | Bounded loop and command routing | Requires reviewed evidence/runtime prerequisites; not authorized in this continuation |
+| I01/I02 | Anchors, scoring, measurement v1.1/reports/adjudication | Merged #357/#358 |
+| I03-a | Input validation/selection and explicit dates | Draft #359, main base, review first |
+| I03-b | Pure channel history/message builders | Draft #361, independent main base, review second |
+| I03-c | Closed synthetic tool-fixture adapter | This branch `codex/esco-faithfulness-eval-fixtures`, independent main base, review third |
+| I03 remainder | Transport-independent runner composition, authorized loaders/config and closed HTTP/model guards | Adapt to #361 raw-history API, #359 input/date contract and this adapter's finalization; no runtime/provider/private data automatically authorized |
+| I04 | Runtime injection/evidence changes and both edge copies | Separate review; preserve alert/F1; deployments separately gated |
+| P1-02 | Execution/control changes | Not started; requires parent dispatch/prerequisites |
 
-The source `hatoFechaLocalGuard.test.ts` allow-list change belongs with its future
-channel-message constructor, not a general relaxation now. Source plans and D01
-owner decisions remain at the [pinned planning directory](https://github.com/sforero94/Escociaos/tree/3d3e65454d8d2f78971593f1fe90a0514ce22301/docs/esco/faithfulness).
+No code dependency among queued I03 slices: no stacking, duplicate module or retarget needed. Three tracker docs overlap. After each earlier merge, reconcile current state while preserving historical evidence and rerun checks/CI on the changed final head before the next merge. Do not reuse old CI receipts or force-push.
+
+## I03-c replay contract
+
+- Node-only offline helper uses `node:crypto` SHA-256; no app/runtime import, I/O, fetch, environment lookup or provider code. Caller supplies explicitly synthetic manifests, no bundled dataset. Tests construct synthetic controls. Source case/model conversion and scenario pack excluded pending separate provenance/runner review.
+- Canonicalization sorts object keys, preserves arrays and null vs absent keys. Rejects nonfinite numbers, undefined, functions, bigint, sparse/decorated arrays, symbols, accessors, hidden properties, exotic prototypes, cycles and depth above 100. JSON `-0` normalizes to `0`. This is not a general arbitrary JavaScript-object decoder.
+- Manifest validates schema/source/review declaration, nonblank versions, unique SYN IDs, exact channel, explicit valid local timestamp, criteria/turn/fixture shapes, exact scenario hash index and duplicate tool/argument keys per turn. Hashes prove integrity relative to the supplied manifest only: a self-declared flag/hash does not establish provenance, real-world truth, human adjudication or a source-byte authorization gate.
+- Each installation snapshots its manifest. Matching has no fallback. Each call consumes one fixture. Call `verificarFin()` before advancing and `verificarCasoFin()` after the last turn. Unconsumed fixtures, early finalization, skipped turns, unknown/duplicate calls and invalid arguments permanently invalidate the installation, even when exceptions are caught or diagnostics cleared. A separately valid run needs a new installation.
+- Empty/null/errors/partial/stale/missing evidence and long/truncated/instruction-like strings remain opaque JSON results. No approval, repair or success promotion. Truncated strings are JSON-encoded as strings (`JSON.stringify(result)`), matching the source API; not raw HTTP transcripts. Intentional duplicate metadata is preserved but no scripted model runs here.
+- Future orchestration must invoke both finalizers and propagate invalidity as unavailable/inconclusive. This adapter cannot intercept networking or prove production-loop isolation. Mocked answers cannot measure quality. Measurement v1.1, labels and adjudication remain unchanged; v1 comparisons require common-contract recomputation.
+
+## Review, remaining milestones and rollback
+
+Initial source controls: 10 failed, 1 passed. Independent QA found channel-array coercion and custom-array hash behavior; both fixed with regressions. Focused lint initially rejected a sparse literal; same invalid input now constructed using `Array(2)`, no lint relaxation. Final-head test/type/lint/build receipts are in the handoff/PR.
+
+Remaining useful work: transport-independent runner composition; closed transport/network-denial verification; separately reviewed runtime injection/evidence; synthetic scenario provenance/coverage review; then authorized calibration/live QA. No completed calibration or live-faithfulness claim.
+
+Rollback: revert offline files. No schema/history/traffic rollback, no mobile/live channel/provider QA exercised. Alert migration186/edge deployment belongs to the other owner; no live ledger/deployment state queried. Private disclosure, paid calls, telemetry, schedules, canaries and activation stay gated.
 
 ## Review corrections and measurement semantics
 
