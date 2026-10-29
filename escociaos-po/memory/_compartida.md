@@ -374,9 +374,32 @@ es exactamente el caso de uso que justifica la corrida del jueves.**
   caduco a las 24 h y volvio la migracion inaplicable (habria hecho todo el trabajo y abortado
   contra si misma). Se captura el conteo de partida y se coteja contra si mismo. [corrida: 2026-08-20-jueves]
 
+## Notion vuelve al conector oficial (2026-10-29, decision de Santiago)
+
+**Esta seccion manda sobre todo lo de Notion que viene abajo.** Desde el
+2026-10-29 todo Notion de las cuatro rutinas va por el conector oficial
+(`mcp__Notion__notion-*`), no por los slugs `NOTION_*` de Composio. Motivo: el
+MCP oficial mejoro y un solo conector es mas simple.
+
+- Tools esperados, todos `always_allow`: `notion-search` · `notion-fetch` ·
+  `notion-query-data-sources` · `notion-create-pages` · `notion-update-page`.
+  Ninguno mas (nada de borrar, mover, duplicar, compartir ni comentar).
+- Ids: Mantenimiento `collection://b22d2385-a812-4d4a-8094-cefa9d080f60`;
+  Bot Log `collection://40767755-ed68-801e-8339-000bd8a8a652`; pagina
+  "Reportes del sabado" `40667755-ed68-814f-b676-f9e28be7d2f3`.
+- `notion-update-page` toma `page_id`, `command` y `properties` **al nivel
+  superior** (trampa ya vista con el conector viejo, 2026-08).
+- **Bot Log: una fila nueva por corrida** (constitucion §4 Phase 5b), ultimo
+  paso de cada corrida. Santiago descarto una fila fija por rutina el
+  2026-10-29: quiere trazabilidad semana a semana. Las 4 filas fijas que se
+  crearon ese dia quedaron `Cancelada` con motivo (no se borran).
+- La integracion "Composio" de Notion **nunca tuvo acceso al Bot Log** (404
+  verificado 2026-10-29). Es una razon mas para no volver a ese camino.
+
 ## Preflight de tools — la lista esperada (constitucion §4 Phase 0)
 
-Esta es **la** lista. No duplicar en los briefs. Si un nombre no resuelve, es un P1
+Esta es **la** lista. No duplicar en los briefs. **Para Notion manda la seccion
+"Notion vuelve al conector oficial" de arriba (2026-10-29).** Si un nombre no resuelve, es un P1
 contra la operacion y la especialidad que dependia de el va bajo NO CORRIO.
 
 **OBSOLETA desde el 2026-09-14 — ver la seccion "Migracion a Composio..." mas

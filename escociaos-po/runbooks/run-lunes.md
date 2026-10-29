@@ -136,6 +136,14 @@ before 2026-10-26 the same way, and write `Ruta`/`Tipo FDS` back.
   report to `escociaos-po/reports/YYYY-MM-DD-lunes.md`; commit both together
   directly to `main` — **only** those paths (constitution §6/§8).
 
+## Phase 5b — Bot Log
+
+The last write of the run, after the memory commit is pushed: one new Bot Log
+row for `YYYY-MM-DD-lunes`, through the official Notion connector (constitution
+§4 Phase 5b). `Siguiente paso` names what Thursday or Friday picks up. If the
+write fails, its text goes in the final message under `NO CORRIÓ` as
+`Bot Log — sin guardar`.
+
 ## Phase 6 — Notify
 
 End the session with the §10 summary — the Routine's push + email carries the
