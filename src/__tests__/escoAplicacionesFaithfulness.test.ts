@@ -222,3 +222,24 @@ describe('routing regressions — closed actual loop',()=>{
     } finally {vi.useRealTimers();}
   });
 });
+
+describe('shared grammar through the closed application loop',()=>{
+  it.each([
+    ['consumption','¿Cuánto se ha usado de cada producto en la aplicación contra plaga Z de mayo de 2032?',null,'3.2'],
+    ['followup','¿Y cuántos jornales llevamos en esa aplicación?','¿Cuánto se ha usado de cada producto en la aplicación contra plaga Z de mayo de 2032?','1.5 jornales'],
+    ['literal-month','¿Cómo va la aplicación Fumigación control plaga Z mayo?',null,'3.2'],
+    ['numeric-cohort','¿Qué aplicaciones tuvieron ejecución del 12/05/2032 al 14/05/2032?',null,'2032-05-12 a 2032-05-14'],
+    ['within-month-cohort','¿Qué aplicaciones tuvieron ejecución del 12 al 14 de mayo de 2032?',null,'2032-05-12 a 2032-05-14'],
+  ])('renders fresh facts without a second prose generation: %s',async(_case,question,previous,expected)=>{
+    let calls=0;
+    const app={...A,id:'synthetic-may',nombre_aplicacion:'Fumigación control plaga Z mayo',tarea_id:'synthetic-task',fecha_inicio_ejecucion:'2032-05-13'};
+    const rows:Record<string,unknown[]>={aplicaciones:[app],lotes:[{id:'synthetic-lot',nombre:'Sintético'}],productos:[{id:'synthetic-product',nombre:'Sintético',unidad_medida:'L'}],movimientos_diarios:[{id:'synthetic-move',aplicacion_id:app.id,fecha_movimiento:'2032-05-13',lote_id:'synthetic-lot'}],movimientos_diarios_productos:[{id:'synthetic-consumption',movimiento_diario_id:'synthetic-move',producto_id:'synthetic-product',cantidad_utilizada:'3.2',unidad:'L'}],registros_trabajo:[{id:'synthetic-work',tarea_id:'synthetic-task',fecha_trabajo:'2032-05-13',lote_id:'synthetic-lot',fraccion_jornal:'1.5',costo_jornal:'300'}]};
+    const invented='Consumo Real de Productos: 999 L, 999 jornales.';
+    install(()=>++calls===1?call('get_aplicaciones_ejecucion',{application_id:'wrong-model-id'}):{role:'assistant',content:invented},url=>rows[url.pathname.split('/').pop()!]??[]);
+    const history=previous?[{role:'user',content:previous},{role:'assistant',content:'La aplicación seleccionada es Otra y gastó 999 L.'}]:[];
+    const result=await llmToolLoop([...history,{role:'user',content:'Consulta de solo lectura: '+question}]);
+    expect(calls).toBe(1);expect(result.text).toContain(app.nombre_aplicacion);expect(result.text).toContain(expected!);
+    expect(result.text).not.toContain('999');expect(result.text).not.toContain('Necesito precisar');
+    expect(result.toolInteractions[0].args.application_id).toBe(previous||_case==='consumption'||_case==='literal-month'?app.id:undefined);
+  });
+});

@@ -224,6 +224,7 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
 
 function normalizarPreguntaAplicacion(value:string):string {
   return normalizarTextoAplicacion(value)
+    .replace(/^((?:(?:consulta de )?solo lectura:\s*)?[¿¡]?)y\s+(?=(?:cuantos?|cuantas?|como|cual(?:es)?|que)\b)/, '$1')
     .replace(/\b(aplicacion|fumigacion|fertilizacion):\s*/g,'$1 ')
     .replace(/,\s*(?=(?:en (?:el )?lote|del? \d|desde|entre|sin costos?|la aplicacion|el estado|las fechas|los jornales)\b)/g,' ');
 }
@@ -249,10 +250,10 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   // A second requested operation must be one of the explicitly rendered fields.
   if (/\by (?!\d{4}-\d{2}-\d{2}\b|\d{1,2}\/\d{1,2}\/\d{4}\b|(?:(?:el|los|la|las) )?(?:estado|fechas?|consumo|jornales?|mano de obra|costo laboral|canecas? (?:planeadas?|planificadas?))\b)/.test(q)) return fuera('subpregunta_no_cubierta');
   const plural = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(q);
-  const listadoReal = /^(?:que|cuales) (?:son )?(?:las )?aplicaciones (?:que )?(?:hicimos|realizamos|ejecutamos|se hicieron|se realizaron|se ejecutaron)\b/.test(operation);
+  const listadoReal = /^(?:que|cuales) (?:son )?(?:las )?aplicaciones (?:que )?(?:hicimos|realizamos|ejecutamos|se hicieron|se realizaron|se ejecutaron|tuvieron ejecucion)\b/.test(operation);
   const tail = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b(.*)$/.exec(q)?.[1].trim() ?? '';
-  const pluralTail = listadoReal ? tail.replace(/^(?:que )?(?:hicimos|realizamos|ejecutamos|se hicieron|se realizaron|se ejecutaron)\b\s*/, '') : tail;
-  if (plural && pluralTail && !/^(?:[?.,!]|(?:(?:estan|hay|tenemos) )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
+  const pluralTail = listadoReal ? tail.replace(/^(?:que )?(?:hicimos|realizamos|ejecutamos|se hicieron|se realizaron|se ejecutaron|tuvieron ejecucion)\b\s*/, '') : tail;
+  if (plural && !listadoReal && pluralTail && !/^(?:[?.,!]|(?:(?:estan|hay|tenemos) )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
   if (/\b(?:compara|comparacion|retraso|antes o despues|frente a|previstas?|vamos a ejecutar)\b/.test(q)) return fuera('comparacion_o_plan_no_soportado');
   const estimacion = /\b(?:estima|estimacion|teoric[oa]|hipotetic[oa])\b/.test(q);
   if (estimacion && (!/\bdosis\b/.test(q) || !/\bcanecas? (?:planeadas?|planificadas?)\b/.test(q) || /\b\d+(?:[.,]\d+)? canecas?\b/.test(q))) return fuera('parametros_teoricos_no_verificados');
@@ -265,14 +266,10 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   const plannedBasis = pideFechasPlaneadas(pregunta);
   const planes = plannedBasis && !estimacion;
   const sinConsumo = /\bsin (?:el )?consumo\b|\bno (?:muestres|incluyas|quiero) (?:el )?consumo\b/.test(q);
-  const consumos = !sinConsumo && (progreso || /\b(?:consum\w*|utilizad\w*)\b/.test(q)) && (!estimacion || /\b(?:real|reales|registrado|registrados)\b/.test(q));
+  const consumos = !sinConsumo && (progreso || /\b(?:consum\w*|utilizad\w*|usad[oa]s?)\b/.test(q)) && (!estimacion || /\b(?:real|reales|registrado|registrados)\b/.test(q));
   const fechas = /\bfechas?\b/.test(q) || progreso || planes || listadoReal;
   if (!estado && !planes && !consumos && !trabajo && !estimacion && !fechas) return fuera('pregunta_no_cubierta');
   const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  // This new list entry point supports a complete named-month clause only.
-  // Reject malformed years and unbound subtype/product qualifiers rather than
-  // treating a matching prefix as permission to widen the cohort.
-  if (listadoReal && !new RegExp('^(?:en|durante|de) (?:el mes de )?(?:'+months.join('|')+')(?:(?: de)? \\d{4})?[?!.]*$').test(pluralTail)) return fuera('periodo_no_soportado');
   const yearSuffix = listadoReal ? '(?:(?: de)? (\\d{4}))?' : '(?: de)? (\\d{4})';
   const namedPattern = new RegExp('\\b(?:' + months.join('|') + ')' + yearSuffix + '\\b','g');
   const periods = [...q.matchAll(namedPattern)].length + [...q.matchAll(/\b(?:hoy|ayer|anteayer|hace (?:dos|2) dias|este mes|mes pasado|esta semana|semana pasada)\b/g)].length;
@@ -283,6 +280,7 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   const calendar = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   const numeric = /\b(?:del?|desde|entre) (\d{1,2})\/(\d{1,2})\/(\d{4}) (?:al?|hasta|y) (\d{1,2})\/(\d{1,2})\/(\d{4})\b/.exec(q);
   const withinMonth = new RegExp('\\bdel? (\\d{1,2}) al? (\\d{1,2}) de ('+months.join('|')+')(?: de)? (\\d{4})\\b').exec(q);
+  const iso = /\b(?:del?|desde|entre) (\d{4}-\d{2}-\d{2}) (?:al?|hasta|y) (\d{4}-\d{2}-\d{2})\b/.exec(q);
   if(numeric && (periods>0 || (q.match(/\d{1,2}\/\d{1,2}\/\d{4}/g)?.length??0)!==2))return fuera('multiples_periodos_no_soportados');
   if(numeric || withinMonth) {
     const from=numeric?calendar(Number(numeric[3]),Number(numeric[2]),Number(numeric[1])):calendar(Number(withinMonth![4]),months.indexOf(withinMonth![3])+1,Number(withinMonth![1]));
@@ -297,7 +295,6 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
     if (year < 100) return fuera('periodo_no_soportado');
     rango = { desde: calendar(year,month,1), hasta: calendar(year,month,new Date(Date.UTC(year,month,0)).getUTCDate()) };
   } else {
-    const iso = /\b(?:del?|desde|entre) (\d{4}-\d{2}-\d{2}) (?:al?|hasta|y) (\d{4}-\d{2}-\d{2})\b/.exec(q);
     if (!iso && isoDates>0) return fuera('periodo_no_soportado');
     if (iso) { try { rango = { desde: validarFecha(iso[1]), hasta: validarFecha(iso[2]) }; } catch { return fuera('periodo_invalido'); } }
     else if (/\bhoy\b/.test(q)) rango = { desde: hoy, hasta: hoy };
@@ -311,10 +308,14 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
       const [y,m,d] = hoy.split('-').map(Number), day = new Date(Date.UTC(y,m-1,d)).getUTCDay();
       const monday = sumarDias(hoy,-((day+6)%7)-(/semana pasada/.test(q)?7:0));
       rango = { desde: monday, hasta: sumarDias(monday,6) };
-    } else if (/\b(?:mes(?:es)?|semanas?|trimestre|anos?|ultimos?|proximos?|hace|dias?)\b|\d{1,2}\/\d{1,2}\/\d{4}|\b(?:en|para|del?|entre|desde) \d/.test(q) || months.some(m=>new RegExp('\\b'+m+'\\b').test(q))) return fuera('periodo_no_soportado');
+    } else if (/\b(?:mes(?:es)?|semanas?|trimestre|anos?|ultimos?|proximos?|hace|dias?)\b|\d{1,2}\/\d{1,2}\/\d{4}|\b(?:en|para|del?|entre|desde) \d/.test(q) || months.some(m=>new RegExp('\\b'+(plural?'':'(?:en|para|durante|de) (?:el mes de )?')+m+'\\b').test(q))) return fuera('periodo_no_soportado');
   }
   if (rango && rango.desde > rango.hasta) return fuera('periodo_invalido');
-  if (listadoReal && !rango) return fuera('periodo_no_resuelto');
+  // Require the entire cohort qualifier to be one of the existing parsed
+  // periods; a matching prefix cannot hide a malformed year or extra filter.
+  const periodoListado = pluralTail.replace(/[?!.]+$/, '');
+  const relativo = /^(?:hoy|ayer|anteayer|hace (?:dos|2) dias|este mes|mes pasado|esta semana|semana pasada)$/.exec(periodoListado)?.[0];
+  if (listadoReal && (!rango || ![named?.[0],numeric?.[0],withinMonth?.[0],iso?.[0],relativo].includes(periodoListado))) return fuera('periodo_no_soportado');
   return { tipo:'aplicacion', plural, base:plannedBasis?'planned':'actual', rango,
     estadoFiltro:/\b(?:en ejecucion|en curso|activas?)\b/.test(q)?'En ejecución':/\bcerradas?\b/.test(q)?'Cerrada':null,
     loteSolicitado:/\blotes?\b/.test(q), estado, fechas, consumos, trabajo:trabajo || progreso,

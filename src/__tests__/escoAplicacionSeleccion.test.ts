@@ -119,3 +119,22 @@ describe('application selection and scope contract',()=>{
  console.log('COVERAGE_AFTER',JSON.stringify(observed));
  });
 });
+
+
+describe('literal-month identity and follow-up safeguards',()=>{
+ it('binds the full literal month in a fresh name instead of selecting another month',async()=>{
+  const extra=[{...apps[0],id:'may',nombre_aplicacion:'Control Plaga Q mayo'},{...apps[0],id:'june',nombre_aplicacion:'Control Plaga Q junio'}];
+  const r=await answer('¿Cómo va la aplicación Control Plaga Q mayo?',{application_id:'june'},extra);
+  expect(r.bound.application_id).toBe('may');expect(r.text).toMatchObject({tipo:'texto',texto:expect.stringContaining('(ID may)')});
+ });
+ it('does not resolve a follow-up using assistant identity or a stale user reference',async()=>{
+  for(const previous of [undefined,'Dame la lluvia','¿Y cuántos jornales llevamos en esa aplicación?']) {
+   const r=await answer('¿Y cuántos jornales llevamos en esa aplicación?',{application_id:'app-b'},[],previous);
+   expect(r.text).toMatchObject({tipo:'texto',texto:expect.stringContaining('referencia anterior no es inequívoca')});
+  }
+ });
+ it('keeps ambiguous prior names unresolved rather than using the model-selected ID',async()=>{
+  const r=await answer('¿Y cuántos jornales llevamos en esa aplicación?',{application_id:'app-a'},[{...apps[0],id:'duplicate'}],'¿Cuánto se ha usado en la aplicación Ácaro Z?');
+  expect(r.text).toMatchObject({tipo:'texto',texto:expect.stringContaining('Precisa cuál aplicación')});
+ });
+});
