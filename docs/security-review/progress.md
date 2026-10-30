@@ -11,11 +11,12 @@ limits. PR360/187 and PR362 are released: frontend merge e3b4c40b, postmerge
 CI 40940596671 success, Vercel READY/production alias assigned. Web Locks availability
 limits were explicitly accepted; actual devices are not certified. F1/expense
 first legitimate use remains operational follow-up, not another implementation
-gate. Exact188 is separately applied at ledger20261030023201 for date-pair order;
+gate. Exact188 is separately applied at ledger 20261030023201 for date-pair order;
 it does not fix general application-plan atomicity. PR371 frontend is merged;
-backend v281 remains the reported baseline after its activation attempt failed
-before the Supabase-secret step. PR372 is draft, not activated. See
-[closeout](technical-closeout.md).
+backend v282 subsequently deployed through release 41000471057 after the earlier
+pre-secret failure and specifically reviewed PR372 repair. Offline 363/364/366 are
+integrated. The 30-question web evaluation is beginning, with no result claimed.
+See [closeout](technical-closeout.md) for terminal receipts and preserved history.
 Do not reapply187/188 or resume PR324. Chronology below is historical; release
 receipts and this accepted status supersede older pending gates.
 

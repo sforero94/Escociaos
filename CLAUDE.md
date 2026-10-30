@@ -920,10 +920,14 @@ Migration `188_aplicaciones_orden_fechas` was applied to Escocia OS production
 The new trigger is enabled and its function is INVOKER. Existing date columns,
 RLS/grants/policies/constraints, four triggers and closure RPC metadata match the
 fresh preflight. Historical rows were not repaired; no production test RPC ran.
-PR371 frontend is merged; backend v281 remains the parent-reported baseline.
-The backend371 activation run40992476137 failed before the Supabase-secret step;
-PR372 is a draft control repair, not activated. This migration receipt does not
-establish backend371 deployment or authorize the proposed permission change.
+PR371 frontend is merged. The earlier backend activation run40992476137 failed
+before the Supabase-secret step. After separately approved PR372 merged, release
+41000471057 succeeded: parent receipts confirm backend v282 at
+2026-10-30T04:01:08.200Z, fixed runtime e7a5545, bundle SHA256
+`d595fd7375726d36aadd90fe771b8782f55f9ae2b996fb0e45f79404cd69215a`,
+verified backups/source/health and no rollback. Offline 363/364/366 are integrated;
+the web evaluation of 30 questions is beginning, with no score or accuracy claim. See
+`docs/security-review/technical-closeout.md`; this receipt authorizes no action.
 
 ## Deployment
 

@@ -35,16 +35,38 @@ apply receipt log_PClidd0mquMw, postcheck log_7RPsYN4TkFPK at 02:32:12UTC.
 
 ## Release coordination snapshot — 2026-10-30
 
-Parent release receipts report backend v281 as the retained production baseline
-(runtime e7a5545 / edge6e9969d). PR371 frontend source is merged; its attempted
-backend activation [40992476137](https://github.com/sforero94/Escociaos/actions/runs/40992476137)
+### Earlier failed attempt and reviewed repair
+
+Before repair, parent release receipts reported backend v281 as the retained
+baseline (runtime e7a5545 / edge6e9969d). PR371 frontend source was merged; its
+attempted backend activation
+[40992476137](https://github.com/sforero94/Escociaos/actions/runs/40992476137)
 failed while retrieving a diagnostic receipt, before the Supabase-secret step or
-management access. That run did not deploy a backend. [PR372](https://github.com/sforero94/Escociaos/pull/372)
-is a draft control repair, not activated; its proposed actions:read permission
-and authenticated receipt path are not granted or executed by this closeout.
-This is parent/provider receipt evidence, not a new production query or a claim
-that backend371 is live. Its release process remains outside this technical
-security closeout and needs its own explicit gates.
+management access. That run did not deploy a backend. PR372 was a draft control
+repair at this document's initial preparation; it subsequently merged with
+specific approval. Its reviewed authenticated receipt path and actions:read
+permission were used by the successful run below, not activated by this closeout.
+The earlier failure remains part of the release history.
+
+### Current terminal release receipt
+
+Parent receipts confirm backend **v282**, deployed at
+`2026-10-30T04:01:08.200Z`, by
+[release 41000471057](https://github.com/sforero94/Escociaos/actions/runs/41000471057),
+job 123883440389, attempt 1, success, on reviewed control main
+`9a0ab0695c80ede3025a7e4c3bba303e6a4fc1a0`.
+Fixed runtime source: e7a5545. Reported deployed bundle SHA256:
+`d595fd7375726d36aadd90fe771b8782f55f9ae2b996fb0e45f79404cd69215a`.
+Authenticated diagnostic receipt verification, two v281 backup captures,
+postdeploy source verification (80 downloaded /82 reconstructed files) and health
+HTTP 200/status ok passed. No rollback occurred. Migration188 remains separately
+applied at ledger 20261030023201. These are parent/provider release receipts, not
+new production reads performed for this documentation.
+
+PR363/364/366 are integrated: the offline Faithfulness chain is complete, not a
+live accuracy certification. The separate 30-question Esco web evaluation is
+beginning on v282; no evaluation result, score, accuracy or completion is claimed.
+First legitimate F1/expense use and preserved security limits below remain intact.
 
 ## Acceptance limits and operational follow-up
 
