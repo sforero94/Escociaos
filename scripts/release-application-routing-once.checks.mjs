@@ -95,13 +95,45 @@ test('unknown raw wrapper/cache/symlink shape is rejected',()=>{
   for(const entry of [{path:'unknown',type:'file',bytes:0,sha256:'a'.repeat(64)},{path:'supabase/.temp/other',type:'symlink'}])
     assert.throws(()=>validateRawInventory({entries:[entry]},{fileCount:82,entries:[]},Buffer.from('config')));
 });
-test('workflow has manual trigger, read-only contents and one step-scoped management secret',async()=>{
-  const w=await readFile(new URL('../.github/workflows/release-application-facts-once.yml',import.meta.url),'utf8');
+function assertRoutingWorkflow(w) {
+  assert.ok(w.includes('name: One reviewed application routing backend release'));
   assert.equal((w.match(/secrets\.SUPABASE_ACCESS_TOKEN/g)||[]).length,1);
-  assert.ok(w.includes('workflow_dispatch:') && w.includes('contents: read'));
+  assert.ok(w.includes('workflow_dispatch:'));
+  const permissions=/^permissions:\n((?:[ \t].*\n)+)/m.exec(w)?.[1].trim();
+  assert.equal(permissions,'contents: read');
+  assert.equal((w.match(/^\s*permissions:\s*$/gm)||[]).length,1);
   for(const forbidden of ['actions: read','github.token','secrets.GITHUB_TOKEN','push:','schedule:','pull_request:']) assert.ok(!w.includes(forbidden));
-  assert.ok(w.indexOf('Reject unfrozen source')<w.indexOf('secrets.SUPABASE_ACCESS_TOKEN'));
-  assert.ok(w.includes('source_sha="$(node') && w.includes('set -euo pipefail'));
+  const marker='      - name: Capture, deploy once and verify; conditional owned rollback only\n';
+  const finalStep=w.indexOf(marker);assert.ok(finalStep>=0);
+  assert.ok(!w.slice(0,finalStep).includes('secrets.SUPABASE_ACCESS_TOKEN'));
+  assert.equal((w.slice(finalStep).match(/^      - /gm)||[]).length,1);
+  assert.ok(/^          SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}$/m.test(w.slice(finalStep)));
+  assert.deepEqual(w.match(/\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}/g),['${{ secrets.SUPABASE_ACCESS_TOKEN }}']);
+  assert.ok(w.includes('source_sha="$(node scripts/release-application-routing-once.mjs --source)"') && w.includes('set -euo pipefail'));
+  assert.ok(w.slice(finalStep).includes('run: node scripts/release-application-routing-once.mjs'));
+}
+const routingWorkflow=new URL('../.github/workflows/release-application-routing-once.yml',import.meta.url);
+test('actual routing workflow has manual trigger, read-only contents and one final-step management secret',async()=>{
+  assertRoutingWorkflow(await readFile(routingWorkflow,'utf8'));
+});
+test('routing workflow permission expansion and secret movement are rejected',async()=>{
+  const w=await readFile(routingWorkflow,'utf8');
+  const secret='          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}\n';
+  const early='      - name: Synthetic negative controls without management credentials\n        env:\n';
+  assert.ok(w.includes(secret) && w.includes(early));
+  for(const changed of [
+    w.replace('contents: read','contents: write'),
+    w.replace('contents: read','contents: read\n  actions: read'),
+    w.replace('  release:\n','  release:\n    permissions:\n      contents: write\n'),
+    w.replace(secret,'').replace(early,early+secret),
+    w.replace(secret,secret+secret),
+    w.replace(secret,secret+'          OTHER: ${{ secrets.OTHER }}\n'),
+  ]) assert.throws(()=>assertRoutingWorkflow(changed));
+});
+
+test('previous facts workflow cannot satisfy the routing workflow guard',async()=>{
+  const previous=await readFile(new URL('../.github/workflows/release-application-facts-once.yml',import.meta.url),'utf8');
+  assert.throws(()=>assertRoutingWorkflow(previous));
 });
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const config=Buffer.from('synthetic config');
