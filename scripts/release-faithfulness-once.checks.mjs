@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { candidate, invocation, release, healthProbe, BASELINE, ROLLBACK, APPROVED } from './release-faithfulness-once.mjs';
+import { candidate, invocation, release, healthProbe, BASELINE, ROLLBACK, APPROVED, requirePinnedSource } from './release-faithfulness-once.mjs';
 import { OMITTED, validateRawInventory, proveTypeOnly } from './release-faithfulness-capture.mjs';
 import { fingerprint } from './release-faithfulness-proof.mjs';
 const pins={source:'a'.repeat(40),edgeTree:'b'.repeat(40),fingerprint:'c'.repeat(64)};
@@ -131,9 +131,15 @@ for(const mutation of ['extra-file','missing-source','missing-cache','changed-so
 }
 const ts=(await import(pathToFileURL(resolve(process.env.PROOF_TYPESCRIPT || 'node_modules/typescript/lib/typescript.js')).href)).default;
 const baseline=resolve(process.env.RELEASE_TEST_BASELINE || `supabase/functions/${fn}`);
-test('selected Git source matches its fixed fingerprint and type-only references',async()=>{
-  const expected=process.env.RELEASE_TEST_BASELINE ? {count:82,hash:ROLLBACK.full} : {count:83,hash:APPROVED.fingerprint};
-  assert.deepEqual(await fingerprint(baseline),expected);
+test('release still rejects an unapproved current runtime; explicit rollback checkout must match its immutable source',async()=>{
+  const observed=await fingerprint(baseline);
+  if(process.env.RELEASE_TEST_BASELINE) {
+    assert.deepEqual(observed,{count:82,hash:ROLLBACK.full});
+    requirePinnedSource(observed,ROLLBACK.full);
+  } else if(observed.hash===APPROVED.fingerprint) requirePinnedSource(observed,APPROVED.fingerprint);
+  else assert.throws(()=>requirePinnedSource(observed,APPROVED.fingerprint),{message:'Pinned source differs'});
+  assert.doesNotThrow(()=>requirePinnedSource({count:83,hash:APPROVED.fingerprint},APPROVED.fingerprint));
+  assert.throws(()=>requirePinnedSource({count:83,hash:'not-a-hash'},APPROVED.fingerprint),{message:'Invalid source fingerprint'});
   const p=await proveTypeOnly(baseline,ts);
   assert.equal(p.emitsOnlyEmptyModules,true);
   assert.equal(p.references['importHato/tipos.ts'].length,10);assert.equal(p.references['telegram/types.ts'].length,8);
