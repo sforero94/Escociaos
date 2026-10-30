@@ -1,6 +1,6 @@
 # One-time PR371 backend controls
 
-Current status: diagnostic40988136741 passed; release40992476137 stopped before management access and did not deploy. This repair remains draft preparation, not approval to execute. Runtime remains fixed at e7a5545bc8d87ad0502caf009d0201cae67fc772; subsequent commits add controls/tests/docs only.
+Current status: diagnostic40988136741 passed; release40992476137 stopped before management access and did not deploy. Current refreshed candidate awaits parent review/go; explicit owner authorization and remaining execution gates are recorded below. Runtime remains fixed at e7a5545bc8d87ad0502caf009d0201cae67fc772; subsequent commits add controls/tests/docs only.
 
 ## Fixed identities
 
@@ -51,7 +51,7 @@ After separately accepted release/rollback evidence, propose cleanup of this wor
 
 114 synthetic Node guards passed, including reused capture controls; the new Vitest wrapper runs them without inherited credentials. Full suite4994 tests/226 files, zero skips; evaluator168 tests plus types/focused lint; repository lint0 errors/907 existing warnings; build26.03s and whitespace/source-parity passed. Independent ownership/capture review12 extra assertions and prior-evidence review17 extra assertions passed without external calls. Review corrected the GitHub rerun admission gap and confirmed that interrupted health bodies remain uncertainty. Those initial preparation checks did not exercise public APIs or current metadata/captures; the later authorized diagnostic evidence below supersedes that limitation. Authenticated GitHub receipt access remains untested until specific approval. Final control-head/CI receipt is recorded in PR371/handoff; runtimee7a5545 evidence is separate.
 
-## Observed execution and proposed receipt-access repair — 2026-10-30 UTC
+## Historical execution and receipt-access repair preparation — 2026-10-30 UTC
 
 PR371 merged as13ef1f4ded1d0505d8d9b5b823314a65c891f2fe. Postmerge CI40987891472 passed4994 tests; GitHub Vercel status succeeded. Diagnostic40988136741/job123843871660 succeeded once on that controller with actual native80 hash1a7e50e2d0b37c7aa0c014b564ee90312dfcdff971a49ebbc0215686342fa24f and reconstructed82 hash3010b467d3d259cf34cbce7875b393e67748a709a88413857199dd6b2282ce4e. Observed receipt SHA2567584390459c364b8866d3d837c93cf26f1ed17044348546e7e42b3d8db8d5e63. Metadata remained the pinned281 baseline.
 
@@ -62,3 +62,15 @@ This repair makes authenticated Actions-read verification an explicit proposed r
 Next gates: independent review and CI; owner-specific approval of actions:read and ready/merge; then one separately approved fresh diagnose on the resulting controls SHA. Review that new observed receipt. The old13ef diagnostic cannot authorize release under changed controls. Only after that review and specific activation/exclusive-window approval may one release dispatch occur. No merge, diagnostic, permission execution or deployment is included in preparing this draft. Migration188 is outside this workflow; parent reports its separate application ledger20261030023201 and postverification02:32:12UTC. No historical records were repaired.
 
 Repair-local receipt:117 Node controls,4994 tests/226 files,168 evaluator tests and12 independent adversarial assertions passed. Types and build passed; lint0 errors/907 existing warnings; YAML and whitespace passed. Exact candidate CI belongs to the published handoff. No real authenticated-route probe occurred.
+
+## Current372 refresh and approved execution sequence — 2026-10-30 UTC
+
+Current mainfece0e5448eb36ac0be8b29333da20691baf114b includes363/364/366; postmerge366 CI40998038342 passed5091 tests/229 files and GitHub Vercel status succeeded.372 implementation remains byte-identical reviewed36af47a: only tracker/release documentation reconciles. Runtime/source, rollback/source, CLI2.122.0, TypeScript5.9.3, configuration, baseline281 and all native80/reconstructed82 guards remain unchanged. SQL188/RPC106 are untouched; parent reports188 already applied separately.
+
+At03:30UTC the owner explicitly approved372 merge, job-wide Actions-read, a fresh diagnosis and conditional371 deployment if all checks pass. This is execution authority for the bounded sequence, not proof that it ran. Current scope stops at the reviewed final candidate and CI before parentgo for ready/merge. No additional owner question is required while source/permissions/target remain unchanged. Actual authenticated receipt access is still untested.373/security-closeout merge is excluded.
+
+After372 merge/postmerge checks, freeze main. Dispatch one diagnose with blank receipt inputs under the actual merged controls SHA, review actual baseline/config/native80/reconstructed82/type proof and receipt digest with parent, then one approved release referencing that exact successful run/digest only if all guards pass. No main changes between diagnosis and release. The old40988136741/13ef receipt must not be reused. Baseline metadata is a required future observation; old hashes are not fresh deployment evidence. Unknown outcomes/layout/configuration/status/auth failure stop without fallback or blind retry. Confirmed owned failure permits only the reviewed conditional verified rollback.
+
+No production/source download, management identity, Actions-read route or new permission is exercised during this refresh. No historical rows or business/model traffic are part of the release job. Public-source recovery does not guarantee identical ESZIP, dependencies, runtime or secrets.
+
+Refreshed local checks:117 Node guards;5091 full tests/229 files;265 evaluator tests/types/focused lint; zero skips. Full lint0 errors/907 existing warnings, build and YAML/whitespace passed. Independent review12 additional adversarial tests plus117 controls/wrapper passed; all3 implementation blobs are identical36af47a. No permission/secret/live operation occurred. Final head/CI belongs to the published handoff.

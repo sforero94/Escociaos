@@ -1,13 +1,12 @@
 # Progress and handoff
 
-## Current state — receipt-access repair, 2026-10-30 UTC
+## Current state —372 refresh, 2026-10-30 UTC
 
-- Current main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe includes merged371. Runtime source remains fixede7a5545/edge6e9969d; preserve all security/offline/PO work and original planning source3d3e654.
-- Postmerge CI40987891472 passed4994 tests and GitHub Vercel status succeeded. Diagnostic40988136741 passed once with observed native80/reconstructed82 source and unchangedv281 metadata.
-- Approved release40992476137 failed before management access: `Diagnostic log redirect unavailable`; secret-bearing step skipped, no source capture/deploy/rollback. No retry occurred.
-- Current task: separate bounded draft for explicit workflow GITHUB_TOKEN actions:read receipt retrieval. No new permission is exercised, no secret accessed and no merge/dispatch authorized by this preparation. Changed controls require a fresh approved diagnose and reviewed receipt before release. See RELEASE_PR371.md.
-- Parent reports migration188 applied and postverified02:32:12UTC, ledger20261030023201. No historical data repair. The backend remains unactivated by this workflow; production UI acceptance belongs to the parent and is not claimed here.
-- Measurementv1.1, immutable labels, disclosure denial and private-data/provider restrictions remain. Offline363→364→366 stays queued, one scope at a time;366 does not close live59-case evaluation or the original phases0–6.
+- Actual mainfece0e5448eb36ac0be8b29333da20691baf114b (treeb0672175) includes363/364/366.366 postmerge CI40998038342 passed5091 tests/229 files, types/lint and GitHub Vercel success. Offline integration is complete for that queue, not calibration or the full original plan.
+- Existing372 alone: merge current main without force-push, preserve reviewed36af47a workflow/controller/checks byte-identically, reconcile documentation only. Keep all runtime/security/PO/SQL/control fixes. No373 merge.
+- Owner03:30UTC explicitly approved372 merge/job-wideActions-read/fresh diagnose/conditional371 release. Current task stops at parentgo after independent review/exact-head CI. No secret use, permission execution, diagnostic or deployment during this refresh.
+- Source e7a5545/tree6e9969d, rollback6345804/tree99ba373, baseline281/config/raw80/reconstructed82/ownership/uncertainty guards unchanged. Old13ef receipt is historical and cannot authorize changed controls. After eventual372 merge, no main changes between fresh diagnosis and release; parent reviews the actual new receipt before release.
+-371 frontend and parent-reported188 are already applied separately; approved earlier backend run40992476137 stopped before management access. Last verified backendv281. No production/business/private/provider query or mutation here; do not label this preparation a live release.
 
 ## Historical application correction pass (merged371)
 
@@ -234,8 +233,38 @@ Branch `codex/esco-faithfulness-summary-safety`; baseline current main47d1386, P
 
 Initial I04-a implementation `b162e37` full suite:4781 passed,1 failed; the existing documentation guard flagged placement of the public prior-CI receipt near channel-history text. Moved the unchanged receipt into its own section. No guard, allow-list or source/test assertion was relaxed. Functional source/tests remain as independently reviewed; final handoff is the later documentation commit and must pass all final-head gates.
 
-## Session — PR371 receipt-access repair preparation, 2026-10-30 UTC
+## Historical session — I03-c closed fixture adapter, 2026-10-29 UTC
 
-Baseline13ef1f4 treecc3d233; branchcodex/esco-pr371-receipt-auth. Only workflow/controller/synthetic checks and current release tracker documentation change. Proposal: actions:read with explicit token only in receipt-verification environment; fixed GitHub routes receive it, Azure and management environment do not. Existing run/source/receipt bindings and fail-closed ownership/rollback controls remain. The old successful diagnostic remains historical evidence and cannot authorize release on changed controls. No external authenticated-route probe, merge, dispatch or production change occurred during preparation. Final tests/review/CI receipts belong to the final candidate handoff.
+Branch: `codex/esco-faithfulness-eval-fixtures`, base main `6a2dd50`. Source preserved. Changes: Node-only canonical/hash/manifest and closed tool replay in `src/utils/escoEvals/fixtures.ts`, synthetic `escoEvalsFixtures.test.ts`, three tracker docs. No other scope imported. Initial 10 failing controls fixed; independent reviewer found and rechecked two additional fixes. Precommit gates: `eval:esco:check` 132 tests, `npm test` 4797/219 files, zero skips; types/lint/build passed (907 prior warnings, build27.19s), whitespace clean. Logs `/tmp/esco-i03c-final-{check,suite,lint,build}.log`; initial failures `/tmp/esco-i03c-repro.log`. Final committed head must pass gates before publication; exact receipt belongs in PR/handoff. No mobile/live QA applicable to this offline helper. Remaining: final-head CI and morning review; next useful implementation is transport-independent replay composition after parent dispatch. Keep #359/#361 queued, no merges/production actions.
 
-Repair verification:117 synthetic Node controls;4994 full tests/226 files;168 evaluator tests; types/lint/build/YAML/whitespace passed (lint907 existing warnings). Independent review passed12 adversarial assertions plus117 controls and wrapper. No skips. Exact candidate SHA/CI belongs to the published handoff; these local tests exercised the same scoped code.
+## Session — refresh existing363 against merged371 main, 2026-10-30 UTC
+
+Original head2f996c7 and actual main13ef1f4 reverified. Prepare a merge integration preserving both remote parents without force-push; original fixtures.ts and escoEvalsFixtures.test.ts blobs are unchanged. Reconcile current trackers only, retaining prior historical evidence and all main security/runtime/PO source. Node-only synthetic adapter has no production capability; consumers must invoke both finalizers and propagate sticky failure. Hashes prove consistency only. Final verification/independent review/CI belongs to the candidate handoff; no unrun check is passed here. Next scope only after parent review and363 merge: refresh364 against actual main, not old integration-base.
+
+Local refreshed-candidate checks:40 fixture tests;208 evaluator tests/types/focused lint;5034 full tests/227 files, zero skips; full lint0 errors/907 existing warnings; build and whitespace passed. Independent review passed25 additional synthetic assertions and verified original blob parity. CI must validate the new remote merge head; historical2f996c7 results do not substitute.
+
+## Historical session — I03-d offline composition, 2026-10-29 UTC
+
+Branch `codex/esco-faithfulness-eval-replay`; target base `158720fed6ceb461efd34746760db520c557d2a3`. Local integration base combines exact reviewed #359/#361/#363; no GitHub merge or main mutation. Only tracker docs conflicted, resolved to later snapshot with original parent histories preserved. New code: replay.ts and synthetic replay tests; no dependency implementation edits. Both finalizers called, sticky fixture errors propagate as inconclusive. Initial 24 tests plus independent 12 assertions passed; added two channel-window controls. Precommit eval check and final-head full tests/types/lint/build must pass before publication; receipts are reported with exact candidate in PR/handoff, not inferred from source or prior PRs. Remaining: terminal CI, morning dependency merges/retarget/retest, then separately dispatched actual-loop isolation work. No runtime/provider/private-source/credential/production action. No calibration/live QA.
+
+## Session — existing364 refresh/retarget, 2026-10-30 UTC
+
+Reverified original19d1678 and actual main0e80cae; dependencies359/361/363 are merged. Retain original implementation/tests and nine dependency blobs; only tracker reconciliation. Preserve both remote parents with a non-forced update and retarget existing PR to main. No merge of old integration-base, runtime edit, production/provider/private-data access or372 dependency. Final candidate local/review/CI receipts belong to the handoff. Next only after parent review and364 merge: refresh366 on actual main.
+
+Refreshed local checks:26 replay tests;234 evaluator tests/types/focused lint;5060 full tests/228 files, zero skips; full lint0 errors/907 existing warnings; build12.73s and whitespace passed. Independent review passed29 additional synthetic assertions, verified original replay/test and all dependency blobs, and attempted no network. Final remote head/CI is recorded in the handoff.
+
+## Historical session — I03-e unchanged actual-loop verification, 2026-10-29 UTC
+
+Branch `codex/esco-faithfulness-eval-loop`; base #364 `19d16783e7af0dde3a95057dea45446ece76e4a5`. New `evals/esco/lib/ejecutorCongelado.ts` and `escoEvalsLoopCerrado.test.ts`, three tracker docs. Actual read-only births query executes with synthetic model/REST fixtures, forced-query and unavailable/partial-evidence behavior retained. Exact request signatures, no inherited-network fallback, private sticky invalidity and both finalizers. Fresh fetch and exact Deno descriptor restoration; date ownership and cleanup; request/tool-attempt diagnostics. Focused31 and independent7 controls passed. Initial type/sentinel/capture failures are recorded above; final committed-head gates and associated CI must be reported with exact SHA in PR/handoff. No runtime edits or live/provider/private-data actions. Remaining gates: dependency integration/retest, broader independently reviewed scenario coverage, runtime evidence/injection authorization where needed, explicit private disclosure/provider approval before calibration and separate deployment/live-QA authorization. No further stage starts here.
+
+## Session — existing366 refresh/retarget, 2026-10-30 UTC
+
+Reverified original2d504e1 and actual main61d2faf. Preserve original closed HTTP/clock/env helper and all main source. Six synthetic model-body hashes require protocol maintenance after reviewed371 tool definitions; no assertion/matcher relaxation. One initial launcher used the preceding worktree and found no matching test; corrected cwd before the genuine6fail/25pass reproduction. Controlled repinning produced5fail/26pass, then1fail/30pass and final31pass. Independent8-envelope comparison proves the exact bounded delta. Final full/adversarial/CI receipts belong to the handoff. No provider, real environment, private record, production request or deployment. Next: parent review only; no new stage.
+
+Refreshed local checks:31 closed-loop tests;265 evaluator tests/types/focused lint;5091 full tests/229 files, zero skips; lint0 errors/907 existing warnings; build and whitespace passed. Independent review:8 old/new envelopes across6 pins plus7 extra adversarial safety tests, inherited network calls0. Helper/dependency blobs remain unchanged; only6 test digest literals differ from original assertions. Final remote SHA/CI belongs to the handoff.
+
+## Session — refresh existing372 after offline queue integration, 2026-10-30 UTC
+
+Reverified original36af47a and actual mainfece0e5. Preserve all3 reviewed implementation files exactly; reconcile current trackers and release guide only. Both runtime trees, SQL188/RPC106, source/rollback SHA/tree/config/hash pins and original capture helpers remain unchanged. Existing372 fast-forward update preserves both parents; no force-push or new PR. Final local/independent/CI receipts belong to the candidate handoff. Stop before ready/merge for parentgo; no management secret, new diagnostic, deployment, provider, private data or373 merge. User's explicit03:30 permission covers the later bounded sequence, not guard bypass or a moving-main receipt.
+
+Refreshed local checks:117 Node guards;5091 full tests/229 files;265 evaluator tests/types/focused lint; zero skips. Full lint0 errors/907 existing warnings, build and YAML/whitespace passed. Independent review12 additional adversarial tests plus117 controls/wrapper passed; all3 implementation blobs are identical36af47a. No permission/secret/live operation occurred. Final head/CI belongs to the published handoff.
