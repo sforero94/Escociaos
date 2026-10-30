@@ -633,6 +633,7 @@ export function buildReproduccionSummary(
 // ============================================================================
 
 export interface HatoPesajeRow {
+  animal_id: string;
   fecha: string;
   litros_am: number | null;
   litros_pm: number | null;
@@ -706,14 +707,37 @@ export interface ProduccionQuincenalConProductividad extends HatoProduccionQuinc
 }
 
 export interface PesajePorVaca {
+  animal_id: string;
   numero: number | null;
   nombre: string | null;
-  registros: { fecha: string; litros_total: number }[];
+  registros: { fecha: string; litros_am: number | null; litros_pm: number | null; litros_total: number }[];
   promedio_litros: number;
   num_pesajes: number;
 }
 
+export interface ClasificacionPesaje {
+  primera_fecha: string;
+  ultima_fecha: string;
+  animal_id: string;
+  numero: number | null;
+  nombre: string | null;
+  promedio_litros: number;
+  num_pesajes: number;
+  puesto: number;
+}
+
 export interface ProduccionSummary {
+  resumen: {
+    periodo_pesajes: { desde: string; hasta: string };
+    unidad_pesajes: 'L/pesaje observado';
+    total_registros: number;
+    animales_con_pesaje: number;
+    promedio_litros_por_pesaje: number | null;
+    mayores_promedios: ClasificacionPesaje[];
+    menores_promedios: ClasificacionPesaje[];
+    clasificacion_completa_en_resumen: boolean;
+    limites: string[];
+  };
   periodo: { desde: string; hasta: string };
   pesajes_semanales: {
     total_registros: number;
@@ -748,13 +772,19 @@ export function buildProduccionSummary(params: {
 
   const porVacaMap = new Map<string, PesajePorVaca>();
   for (const p of pesajes) {
-    const clave = `${p.animal?.numero ?? 'sin-numero'}:${p.animal?.nombre ?? 'sin-nombre'}`;
+    if (typeof p.animal_id !== 'string' || !p.animal_id.trim()) {
+      throw new Error('Pesaje sin animal_id: no se puede atribuir la medición.');
+    }
+    if (typeof p.litros_total !== 'number' || !Number.isFinite(p.litros_total)) {
+      throw new Error('Pesaje sin litros_total numérico verificable: no equivale a cero.');
+    }
+    const clave = p.animal_id;
     let entry = porVacaMap.get(clave);
     if (!entry) {
-      entry = { numero: p.animal?.numero ?? null, nombre: p.animal?.nombre ?? null, registros: [], promedio_litros: 0, num_pesajes: 0 };
+      entry = { animal_id: p.animal_id, numero: p.animal?.numero ?? null, nombre: p.animal?.nombre ?? null, registros: [], promedio_litros: 0, num_pesajes: 0 };
       porVacaMap.set(clave, entry);
     }
-    entry.registros.push({ fecha: p.fecha, litros_total: p.litros_total });
+    entry.registros.push({ fecha: p.fecha, litros_am: p.litros_am, litros_pm: p.litros_pm, litros_total: p.litros_total });
   }
   const porVaca = Array.from(porVacaMap.values()).map((entry) => {
     const suma = entry.registros.reduce((s, r) => s + r.litros_total, 0);
@@ -794,8 +824,36 @@ export function buildProduccionSummary(params: {
     .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : a.mes !== b.mes ? b.mes - a.mes : b.quincena - a.quincena));
 
   const masReciente = quincenas[0] ?? null;
+  // Same existing rounded per-animal mean; ordering is computed, not guessed
+  // by the language model. Equal displayed means share a competition rank.
+  const clasificar = (descendente: boolean): ClasificacionPesaje[] => {
+    const ordenadas = [...porVaca].sort((a, b) =>
+      (descendente ? b.promedio_litros - a.promedio_litros : a.promedio_litros - b.promedio_litros)
+      || a.animal_id.localeCompare(b.animal_id));
+    let puesto = 0;
+    return ordenadas.map((v, i) => {
+      if (i === 0 || v.promedio_litros !== ordenadas[i - 1].promedio_litros) puesto = i + 1;
+      return { animal_id: v.animal_id, numero: v.numero, nombre: v.nombre,
+        primera_fecha: v.registros[0].fecha, ultima_fecha: v.registros[v.registros.length - 1].fecha,
+        promedio_litros: v.promedio_litros, num_pesajes: v.num_pesajes, puesto };
+    }).slice(0, 5);
+  };
 
   return {
+    resumen: {
+      periodo_pesajes: periodo, unidad_pesajes: 'L/pesaje observado',
+      total_registros: pesajes.length, animales_con_pesaje: porVaca.length,
+      promedio_litros_por_pesaje: promedioLitrosPorPesaje,
+      mayores_promedios: clasificar(true), menores_promedios: clasificar(false),
+      clasificacion_completa_en_resumen: porVaca.length <= 5,
+      limites: [
+        'Promedios de los pesajes observados, no litros producidos durante todos los días del rango ni volumen vendido.',
+        'Solo animales con pesajes en el rango; ausencia de pesaje no significa producción cero.',
+        'animal_id es la identidad permanente; número y nombre son etiquetas que pueden repetirse.',
+        'Cada extremo del resumen contiene como máximo 5 animales; pueden existir otros empatados fuera del recorte.',
+        'La serie quincenal es independiente: últimas quincenas solicitadas, no el rango de los pesajes.',
+      ],
+    },
     periodo,
     pesajes_semanales: {
       total_registros: pesajes.length,

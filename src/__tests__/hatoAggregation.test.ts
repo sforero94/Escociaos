@@ -494,8 +494,8 @@ describe('buildProduccionSummary', () => {
 
   it('agrupa pesajes por vaca; una vaca sin pesaje en el rango simplemente no aparece (nunca litros=0)', () => {
     const pesajes: HatoPesajeRow[] = [
-      { fecha: '2024-08-01', litros_am: 5, litros_pm: 4, litros_total: 9, animal: { numero: 47, nombre: 'MONA' } },
-      { fecha: '2024-08-08', litros_am: 6, litros_pm: 5, litros_total: 11, animal: { numero: 47, nombre: 'MONA' } },
+      { animal_id: 'fixture-mona', fecha: '2024-08-01', litros_am: 5, litros_pm: 4, litros_total: 9, animal: { numero: 47, nombre: 'MONA' } },
+      { animal_id: 'fixture-mona', fecha: '2024-08-08', litros_am: 6, litros_pm: 5, litros_total: 11, animal: { numero: 47, nombre: 'MONA' } },
     ];
     const summary = buildProduccionSummary({ periodo: { desde: '2024-08-01', hasta: '2024-08-08' }, pesajes, produccionQuincenal: [] });
     expect(summary.pesajes_semanales.total_registros).toBe(2);
