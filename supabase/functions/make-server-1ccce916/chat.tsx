@@ -1,4 +1,4 @@
-import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, type FilaEsco } from './esco-consultas.ts';
+import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, type FilaEsco } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
 
@@ -325,6 +325,9 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
+        application_name: { type: 'string', description: 'Nombre parcial, sin distinguir tildes/espacios' },
+        estado: { type: 'string', description: 'Estado de la aplicación, por ejemplo En ejecución' },
+        date_basis: { type: 'string', enum: ['actual', 'planned'], default: 'actual', description: 'Fechas reales por defecto; planned solo si el usuario pide fechas planeadas.' },
         application_id: { type: 'string', description: 'UUID de aplicacion especifica (opcional)' },
         date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional)' },
         date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional)' },
@@ -435,6 +438,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
+        date_basis: { type: 'string', enum: ['actual', 'planned'], default: 'actual', description: 'Fechas reales por defecto; planned solo si el usuario pide fechas planeadas.' },
         application_id: { type: 'string', description: 'UUID de la aplicacion (opcional si se pasa application_name)' },
         application_name: { type: 'string', description: 'Nombre parcial de la aplicacion (opcional si se pasa application_id)' },
       },
@@ -446,6 +450,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
+        date_basis: { type: 'string', enum: ['actual', 'planned'], default: 'actual', description: 'Fechas reales por defecto; planned solo si el usuario pide fechas planeadas.' },
         date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD' },
         date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD' },
       },
@@ -515,6 +520,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
+        date_basis: { type: 'string', enum: ['actual', 'planned'], default: 'actual', description: 'Fechas reales por defecto; planned solo si el usuario pide fechas planeadas.' },
         date_from: { type: 'string', description: 'Fecha inicio (lunes) YYYY-MM-DD. Default: lunes de esta semana.' },
         date_to: { type: 'string', description: 'Fecha fin (domingo) YYYY-MM-DD. Default: domingo de esta semana.' },
       },
@@ -1291,25 +1297,35 @@ async function execInformesVisita(args: Record<string, unknown>): Promise<string
   }
 }
 
+function rangoAplicaciones(args: Record<string, unknown>) {
+  const date_from = args.date_from == null ? undefined : validarFecha(args.date_from);
+  const date_to = args.date_to == null ? undefined : validarFecha(args.date_to);
+  if (date_from && date_to && date_from > date_to) throw new Error('La fecha inicial es posterior a la final.');
+  return { date_from, date_to };
+}
 async function execApplicationSummary(args: Record<string, unknown>): Promise<string> {
-  const validated = validateDates(args);
+  const validated = rangoAplicaciones(args);
   const { date_from, date_to } = validated;
   const { application_id, type } = args as { application_id?: string; type?: string };
 
-  let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre,blanco_biologico,costo_total,costo_total_insumos,costo_total_mano_obra,jornales_utilizados,valor_jornal,costo_por_arbol,arboles_jornal,observaciones_cierre&order=fecha_inicio_planeada.desc&limit=30`;
+  const dateColumn = baseFechaAplicacion(args) === 'planned' ? 'fecha_inicio_planeada' : 'fecha_inicio_ejecucion';
+  let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,fecha_cierre,blanco_biologico,costo_total,costo_total_insumos,costo_total_mano_obra,jornales_utilizados,valor_jornal,costo_por_arbol,arboles_jornal,observaciones_cierre&order=${dateColumn}.desc&limit=30`;
 
   if (application_id) query += `&id=eq.${e(application_id)}`;
-  if (date_from) query += `&fecha_inicio_planeada=gte.${e(date_from)}`;
-  if (date_to) query += `&fecha_inicio_planeada=lte.${e(date_to)}`;
+  if (date_from) query += `&${dateColumn}=gte.${e(date_from)}`;
+  if (date_to) query += `&${dateColumn}=lte.${e(date_to)}`;
   // tipo_aplicacion is an enum; PostgREST `ilike` has no operator overload
   // for enum vs text, so filter client-side after fetch.
 
   const apps = await supabaseQuery('aplicaciones', query);
   let appsList = apps as Array<Record<string, unknown>>;
   if (type) {
-    const t = type.toLowerCase();
-    appsList = appsList.filter((a) => ((a.tipo_aplicacion as string) || '').toLowerCase().includes(t));
+    const t = normalizarTextoAplicacion(type);
+    appsList = appsList.filter((a) => normalizarTextoAplicacion(a.tipo_aplicacion).includes(t));
   }
+
+  if (args.application_name) appsList = appsList.filter(a => normalizarTextoAplicacion(a.nombre_aplicacion).includes(normalizarTextoAplicacion(args.application_name)));
+  if (args.estado) appsList = appsList.filter(a => normalizarTextoAplicacion(a.estado) === normalizarTextoAplicacion(args.estado));
 
   // Batch all sub-queries to avoid N+1
   const enriched: Array<Record<string, unknown>> = [];
@@ -1352,6 +1368,7 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
   }
 
   return JSON.stringify({
+    date_basis: baseFechaAplicacion(args),
     total_aplicaciones: appsList.length,
     aplicaciones: enriched,
   });
@@ -1861,23 +1878,19 @@ interface AplicacionRow {
   tipo_aplicacion: string;
   estado: string;
   fecha_inicio_planeada: string;
+  fecha_fin_planeada: string | null;
+  fecha_inicio_ejecucion: string | null;
+  fecha_fin_ejecucion: string | null;
   fecha_cierre: string | null;
   tarea_id: string | null;
 }
 
-async function fetchAplicacionByIdOrName(
-  applicationId?: string,
-  applicationName?: string,
-): Promise<AplicacionRow | null> {
-  let q = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_cierre,tarea_id&order=fecha_inicio_planeada.desc&limit=1`;
-  if (applicationId) {
-    q += `&id=eq.${e(applicationId)}`;
-  } else if (applicationName) {
-    q += `&nombre_aplicacion=ilike.*${e(applicationName)}*`;
-  } else {
-    return null;
-  }
-  const rows = (await supabaseQuery('aplicaciones', q)) as AplicacionRow[];
+async function fetchAplicacionByIdOrName(applicationId?: string, applicationName?: string): Promise<AplicacionRow | null> {
+  if (!applicationId && !applicationName) return null;
+  const query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,fecha_cierre,tarea_id&order=id.asc${applicationId ? `&id=eq.${e(applicationId)}` : ''}`;
+  const all = await supabaseQueryAll('aplicaciones', query) as AplicacionRow[];
+  const rows = applicationId ? all : all.filter(a => normalizarTextoAplicacion(a.nombre_aplicacion).includes(normalizarTextoAplicacion(applicationName)));
+  if (rows.length > 1) throw new Error('Nombre ambiguo: usa application_id. Coincidencias: ' + rows.slice(0, 5).map(a => a.nombre_aplicacion).join('; '));
   return rows[0] ?? null;
 }
 
@@ -1979,7 +1992,8 @@ async function execApplicationCostByLote(args: Record<string, unknown>): Promise
       nombre: app.nombre_aplicacion,
       tipo: app.tipo_aplicacion,
       estado: app.estado,
-      fecha_inicio: app.fecha_inicio_planeada,
+      fecha_inicio: baseFechaAplicacion(args) === 'planned' ? app.fecha_inicio_planeada : app.fecha_inicio_ejecucion,
+      fecha_inicio_planeada: app.fecha_inicio_planeada, fecha_inicio_ejecucion: app.fecha_inicio_ejecucion,
       fecha_cierre: app.fecha_cierre,
     },
     por_lote: rows,
@@ -1988,15 +2002,16 @@ async function execApplicationCostByLote(args: Record<string, unknown>): Promise
 }
 
 async function execCostByLote(args: Record<string, unknown>): Promise<string> {
-  const validated = validateDates(args);
+  const validated = rangoAplicaciones(args);
   const { date_from, date_to } = validated;
   if (!date_from || !date_to) {
     return JSON.stringify({ error: 'date_from y date_to son requeridos (YYYY-MM-DD)' });
   }
 
+  const dateColumn = baseFechaAplicacion(args) === 'planned' ? 'fecha_inicio_planeada' : 'fecha_inicio_ejecucion';
   const apps = (await supabaseQuery(
     'aplicaciones',
-    `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_cierre,tarea_id&fecha_inicio_planeada=gte.${e(date_from)}&fecha_inicio_planeada=lte.${e(date_to)}&order=fecha_inicio_planeada.asc&limit=200`,
+    `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,fecha_cierre,tarea_id&${dateColumn}=gte.${e(date_from)}&${dateColumn}=lte.${e(date_to)}&order=${dateColumn}.asc&limit=200`,
   )) as AplicacionRow[];
 
   const aggregated = new Map<
@@ -2242,14 +2257,14 @@ async function execWeeklyOverview(args: Record<string, unknown>): Promise<string
   const defaultTo = new Date(defaultFrom);
   defaultTo.setDate(defaultFrom.getDate() + 6);
 
-  const validatedWeek = validateDates(args);
+  const validatedWeek = rangoAplicaciones(args);
   const dateFrom = validatedWeek.date_from || defaultFrom.toISOString().split('T')[0];
   const dateTo = validatedWeek.date_to || defaultTo.toISOString().split('T')[0];
 
   const [labor, monitoring, applications, harvest] = await Promise.all([
     execLaborSummary({ date_from: dateFrom, date_to: dateTo }),
     execMonitoringData({ date_from: dateFrom, date_to: dateTo }),
-    execApplicationSummary({ date_from: dateFrom, date_to: dateTo }),
+    execApplicationSummary({ date_from: dateFrom, date_to: dateTo, date_basis: baseFechaAplicacion(args) }),
     execHarvestShipments({ date_from: dateFrom, date_to: dateTo }),
   ]);
 
@@ -3742,6 +3757,8 @@ FORMATO DE RESPUESTA (prioridad):
 3. VIÑETAS — para alertas o hallazgos clave.
 4. TEXTO — solo para explicaciones y contexto narrativo.
 
+APLICACIONES: Para estado/avance actual usa get_aplicaciones_ejecucion por nombre y estado, sin inventar una semana. Fechas reales por defecto; planeadas solo si el usuario las pide. No niegues aplicaciones con herramientas de tareas, inventario o resultados incompletos. Si hay varias coincidencias, precisa el UUID. Muestra fechas desconocidas o contradictorias sin corregir registros.
+
 COMO CREAR GRAFICOS:
 Usa bloques de codigo con lenguaje "chart" y JSON valido:
 \`\`\`chart
@@ -3858,6 +3875,8 @@ export async function llmToolLoop(
   let toolIndex = 0;
   const ultimaPregunta = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
   const consultaPartosObligatoria = requiereConsultaPartos(ultimaPregunta);
+  const consultaAplicacionesObligatoria = requiereConsultaAplicaciones(ultimaPregunta);
+  const fechasPlaneadas = pideFechasPlaneadas(ultimaPregunta);
   const llamadas = new Set<string>();
 
   for (let round = 0; round < maxRounds; round++) {
@@ -3873,7 +3892,7 @@ export async function llmToolLoop(
           model: MODEL,
           messages,
           tools,
-          tool_choice: round === 0 ? (consultaPartosObligatoria ? { type: 'function', function: { name: 'get_hato_partos' } } : 'required') : 'auto',
+          tool_choice: round === 0 ? (consultaPartosObligatoria ? { type: 'function', function: { name: 'get_hato_partos' } } : consultaAplicacionesObligatoria ? { type: 'function', function: { name: 'get_aplicaciones_ejecucion' } } : 'required') : 'auto',
           temperature: 0.3,
           max_tokens: 10000,
         }),
@@ -3922,8 +3941,11 @@ export async function llmToolLoop(
         onEvent?.({ type: 'tool_start', tool: fnName, index, args: fnArgs });
         const iniciadaEn = Date.now();
 
+        const consultaAplicacion = ['get_aplicaciones_ejecucion', 'get_application_summary', 'get_application_details', 'get_application_cost_by_lote', 'get_cost_by_lote', 'get_weekly_overview'].includes(fnName);
+        const baseNoAutorizada = consultaAplicacion && fnArgs.date_basis === 'planned' && !fechasPlaneadas;
+        if (consultaAplicacion && fnArgs.date_basis == null) fnArgs.date_basis = fechasPlaneadas ? 'planned' : 'actual';
         const claveLlamada = `${fnName}:${JSON.stringify(fnArgs)}`;
-        const toolResult = llamadas.has(claveLlamada)
+        const toolResult = baseNoAutorizada ? JSON.stringify({ error: 'El usuario no pidió fechas planeadas. Consulta fechas reales.' }) : llamadas.has(claveLlamada)
           ? JSON.stringify({ error: 'Consulta idéntica ya realizada. Usa el resultado previo o cambia criterio con fundamento; no inventes variantes de nombres.' })
           : await executeTool(fnName, fnArgs, userId);
         llamadas.add(claveLlamada);
@@ -3956,10 +3978,19 @@ export async function llmToolLoop(
     }
 
     // No tool calls — return the final text
+    if (consultaAplicacionesObligatoria) {
+      const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
+      if (segura) return { text: segura, toolInteractions };
+    }
     if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
       return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos. Precisa el rango de fechas o vuelve a intentar la consulta.', toolInteractions };
     }
     return { text: msg.content || '', toolInteractions };
+  }
+
+  if (consultaAplicacionesObligatoria) {
+    const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
+    if (segura) return { text: segura, toolInteractions };
   }
 
   // Fallback: se agotaron las rondas y el modelo sigue pidiendo herramientas.

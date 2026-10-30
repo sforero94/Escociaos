@@ -1,3 +1,4 @@
+import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
 /**
  * Lógica pura del rediseño W03 v2 (Cierre de Aplicación) — `docs/…/W03-cierre-v2.md`.
  *
@@ -407,6 +408,8 @@ export function construirPayloadCierreAplicacion(params: {
   movimientos: MovimientoInsumoInput[];
 }): PayloadCierreAplicacion {
   const { aplicacionId, registrosEditados, datosFinales, lotes, movimientos } = params;
+  validarFechasAplicacion({ fecha_inicio_ejecucion: datosFinales.fechaInicioReal, fecha_fin_ejecucion: datosFinales.fechaFinReal });
+  if (!datosFinales.fechaInicioReal || !datosFinales.fechaFinReal) throw new Error('Inicio y fin reales son requeridos para cerrar.');
 
   const registrosActivos = registrosEditados.filter((r) => !r._deleted);
   const totalJornalesLabor = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);

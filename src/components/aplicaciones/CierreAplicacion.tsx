@@ -1,3 +1,4 @@
+import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Check, RefreshCw } from 'lucide-react';
@@ -128,7 +129,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
 
   // Datos finales del usuario
   const [datosFinales, setDatosFinales] = useState<DatosFinales>({
-    fechaInicioReal: aplicacion.fecha_inicio_ejecucion || aplicacion.fecha_inicio_planeada || '',
+    fechaInicioReal: aplicacion.fecha_inicio_ejecucion || '',
     fechaFinReal: obtenerFechaHoy(),
     observaciones: '',
   });
@@ -561,6 +562,8 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
 
   const handleDescargarPDF = async () => {
     try {
+      validarFechasAplicacion({ fecha_inicio_ejecucion: datosFinales.fechaInicioReal, fecha_fin_ejecucion: datosFinales.fechaFinReal });
+      if (!datosFinales.fechaInicioReal || !datosFinales.fechaFinReal) throw new Error('Inicio y fin reales son requeridos.');
       const fechaInicio = new Date(datosFinales.fechaInicioReal);
       const fechaFin = new Date(datosFinales.fechaFinReal);
       const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
