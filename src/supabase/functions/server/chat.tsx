@@ -3985,7 +3985,12 @@ export async function llmToolLoop(
     if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
       return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos. Precisa el rango de fechas o vuelve a intentar la consulta.', toolInteractions };
     }
-    return { text: msg.content || '', toolInteractions };
+    // A terminal protocol message must contain actual text. Do not persist an
+    // empty/malformed assistant turn as a successful completed answer.
+    if (typeof msg.content !== 'string' || !msg.content.trim()) {
+      throw new Error('No pude completar la consulta: el modelo no devolvió una respuesta de texto. Vuelve a intentar la consulta.');
+    }
+    return { text: msg.content, toolInteractions };
   }
 
   if (consultaAplicacionesObligatoria) {
@@ -4028,11 +4033,11 @@ export async function llmToolLoop(
   const finalResult = await finalRes.json();
   const finalText = finalResult.choices?.[0]?.message?.content;
 
-  if (!finalText) {
+  if (typeof finalText !== 'string' || !finalText.trim()) {
     // Callejon sin salida de verdad. Se lanza en vez de devolver un string
     // plano: asi el cliente lo pinta como error (con su reintento) en lugar de
     // como una respuesta valida de Esco.
-    console.error('[Esco] Fallback sin contenido', JSON.stringify(finalResult).slice(0, 400));
+    console.error('[Esco] Fallback sin contenido de texto válido');
     throw new Error('No pude completar la consulta: agote los intentos de busqueda sin llegar a una respuesta. Volve a preguntar acotando el periodo o el lote.');
   }
 
