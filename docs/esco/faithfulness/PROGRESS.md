@@ -1,13 +1,13 @@
 # Progress and handoff
 
-## Current state — I03-d refresh, 2026-10-30 UTC
+## Current state —366 closed-loop refresh, 2026-10-30 UTC
 
-- Actual main0e80cae23ab257a845ba94db18a09d1a4856a5f6 (tree84ac7a28) includes359/361/363. Preserve all security/371/PO/release work and original source3d3e654. No372 dependency.
-- 363 merged02:57:25UTC; postmerge CI40994634155 passed5034 tests/227 files, types/lint, GitHub Vercel success. Original fixture blobs remain identical2f996c7.
-- Current candidate is EXISTING364 only: retain original replay.ts/test from19d1678, unchanged nine dependency modules; merge actualmain without force-push and retarget to main. Never merge the obsolete integration-base as a PR. Only three tracker files reconcile.
-- Declarative JSON replay invokes both fixture finalizers and propagates invalidity; missing cases stay in coverage, missing judge/reviewer/usage stay unavailable. Scripted deterministic success is not verified success or model-quality improvement. Measurementv1.1/labels/adjudication unchanged.
-- Need refreshed focused/full checks, independent adversarial review and exact-head CI, then parent review before ready/merge. Stop before366 until364 lands. No providers/private fixtures/runtime changes/backend operations or production writes.
-- 371 frontend merged; approved backend run40992476137 stopped before management access. Last verified backendv281. Parent separately reports188 applied/postverified02:32:12UTC; no data repair. This task does not re-query production state.
+- Actual main61d2fafcd5d45cc28cda7a71854c08774c14572d (treef405a82d) includes359/361/363/364. Preserve security,371 runtime/UI/controls and PO changes;372 remains separate and unmerged. Original planning source3d3e654 stays intact.
+-364 postmerge CI40996002528 passed5060 tests/228 files, types/lint, GitHub Vercel success. Current scope is EXISTING366 only, refresh and retarget from replay branch to main without force-push or direct integration-base merge.
+- Original helper b4da467 remains byte-identical2d504e1, as do10 offline dependency modules. Main371 changed5 application tool definitions, so old model-body pins failed closed (6fail/25pass). Update only6 hardcoded synthetic digest literals, preserving every test assertion, strict matcher, HTTP header/query/result fixture and runtime source.
+- Independent comparison of8 old/new synthetic envelopes across all6 pins confirms only approved tool definitions differ; messages/model/params/headers/query/results match. No real network, providers, private fixtures, credentials or process.env passthrough. Original31 tests then pass. Full checks/review/CI follow with final candidate receipt, no unrun result claimed.
+- Parent review precedes ready/merge under366-specific grant. Stop after366; no calibration, quality claim or new stage. Usage/judge/review remain unavailable, measurementv1.1/immutable labels unchanged.
+-371 frontend merged, parent reports188 separately applied; approved backend release40992476137 stopped before management access. Last verified backendv281; this task does not query/change it.
 
 ## Historical application correction pass (merged371)
 
@@ -253,3 +253,13 @@ Branch `codex/esco-faithfulness-eval-replay`; target base `158720fed6ceb461efd34
 Reverified original19d1678 and actual main0e80cae; dependencies359/361/363 are merged. Retain original implementation/tests and nine dependency blobs; only tracker reconciliation. Preserve both remote parents with a non-forced update and retarget existing PR to main. No merge of old integration-base, runtime edit, production/provider/private-data access or372 dependency. Final candidate local/review/CI receipts belong to the handoff. Next only after parent review and364 merge: refresh366 on actual main.
 
 Refreshed local checks:26 replay tests;234 evaluator tests/types/focused lint;5060 full tests/228 files, zero skips; full lint0 errors/907 existing warnings; build12.73s and whitespace passed. Independent review passed29 additional synthetic assertions, verified original replay/test and all dependency blobs, and attempted no network. Final remote head/CI is recorded in the handoff.
+
+## Historical session — I03-e unchanged actual-loop verification, 2026-10-29 UTC
+
+Branch `codex/esco-faithfulness-eval-loop`; base #364 `19d16783e7af0dde3a95057dea45446ece76e4a5`. New `evals/esco/lib/ejecutorCongelado.ts` and `escoEvalsLoopCerrado.test.ts`, three tracker docs. Actual read-only births query executes with synthetic model/REST fixtures, forced-query and unavailable/partial-evidence behavior retained. Exact request signatures, no inherited-network fallback, private sticky invalidity and both finalizers. Fresh fetch and exact Deno descriptor restoration; date ownership and cleanup; request/tool-attempt diagnostics. Focused31 and independent7 controls passed. Initial type/sentinel/capture failures are recorded above; final committed-head gates and associated CI must be reported with exact SHA in PR/handoff. No runtime edits or live/provider/private-data actions. Remaining gates: dependency integration/retest, broader independently reviewed scenario coverage, runtime evidence/injection authorization where needed, explicit private disclosure/provider approval before calibration and separate deployment/live-QA authorization. No further stage starts here.
+
+## Session — existing366 refresh/retarget, 2026-10-30 UTC
+
+Reverified original2d504e1 and actual main61d2faf. Preserve original closed HTTP/clock/env helper and all main source. Six synthetic model-body hashes require protocol maintenance after reviewed371 tool definitions; no assertion/matcher relaxation. One initial launcher used the preceding worktree and found no matching test; corrected cwd before the genuine6fail/25pass reproduction. Controlled repinning produced5fail/26pass, then1fail/30pass and final31pass. Independent8-envelope comparison proves the exact bounded delta. Final full/adversarial/CI receipts belong to the handoff. No provider, real environment, private record, production request or deployment. Next: parent review only; no new stage.
+
+Refreshed local checks:31 closed-loop tests;265 evaluator tests/types/focused lint;5091 full tests/229 files, zero skips; lint0 errors/907 existing warnings; build and whitespace passed. Independent review:8 old/new envelopes across6 pins plus7 extra adversarial safety tests, inherited network calls0. Helper/dependency blobs remain unchanged; only6 test digest literals differ from original assertions. Final remote SHA/CI belongs to the handoff.
