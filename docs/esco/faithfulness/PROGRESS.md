@@ -1,17 +1,15 @@
 # Progress and handoff
 
-## Current state — application correction, 2026-10-29 UTC
+## Current state — receipt-access repair, 2026-10-30 UTC
 
-- Baseline main `f175c78a1bc65955f34247589698958565ab20b6`; exact local baseline root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`. Preserve security360/362, runtime367, release controls and PO documents. Original source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-- I01/#357, I02/#358, I03-a/#359 and I03-b/#361 are merged. The current scope is the owner's application lookup/evidence and deterministic date-order correction. Planned-date default is superseded by explicit actual-date default; planned basis requires explicit intent. See APPLICATION_CORRECTION.md.
-- UI create/edit/start/closure boundaries validate planned and actual pairs independently. Draft migration188 guards direct writes without rewriting legacy rows; it has only run against an isolated synthetic PostgreSQL table. No production migration or deployment is authorized by this draft.
-- Direct execution-tool routing, accent/space normalization, candidate ambiguity, actual/planned arguments and incomplete evidence are covered with synthetic closed-loop fixtures. No production trace content is copied into Git. Measurementv1.1 and immutable labels remain intact; this is not live calibration.
-- Runtime367 remains separately released as v281 through370. Parent accepted read-only session/dashboard/expense-history/Registrar smoke20:50–20:53UTC. No application query, births query, real-model calibration or business write was validated there. Temporary release controls remain pending separate cleanup.
-- Remaining offline order:363→364→366; reconcile/retest each later. Never merge the offline integration-base branch. Stop after this correction draft and terminal CI; no merge/deploy or next slice.
-- Parent owns Bot Log. No private fixtures, providers, production writes, credential/access changes or P1-02 work. Historical preserved-source milestones below do not claim activation on main.
+- Current main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe includes merged371. Runtime source remains fixede7a5545/edge6e9969d; preserve all security/offline/PO work and original planning source3d3e654.
+- Postmerge CI40987891472 passed4994 tests and GitHub Vercel status succeeded. Diagnostic40988136741 passed once with observed native80/reconstructed82 source and unchangedv281 metadata.
+- Approved release40992476137 failed before management access: `Diagnostic log redirect unavailable`; secret-bearing step skipped, no source capture/deploy/rollback. No retry occurred.
+- Current task: separate bounded draft for explicit workflow GITHUB_TOKEN actions:read receipt retrieval. No new permission is exercised, no secret accessed and no merge/dispatch authorized by this preparation. Changed controls require a fresh approved diagnose and reviewed receipt before release. See RELEASE_PR371.md.
+- Parent reports migration188 applied and postverified02:32:12UTC, ledger20261030023201. No historical data repair. The backend remains unactivated by this workflow; production UI acceptance belongs to the parent and is not claimed here.
+- Measurementv1.1, immutable labels, disclosure denial and private-data/provider restrictions remain. Offline363→364→366 stays queued, one scope at a time;366 does not close live59-case evaluation or the original phases0–6.
 
-
-## Current application correction pass
+## Historical application correction pass (merged371)
 
 Draft371 initially published493d587 with terminal green CI; parent review nevertheless found five bounded defects. Planned selection now requires positive intent rather than mention; actual/negation/mixed precedence stays safe. Agricultural existence/fumigation routing, valid plural results, unfiltered named/ID state discovery and local-date-only start checks are corrected with regressions. Ten actual handler negative tests cover create/edit/start/close without database calls. Final re-review/check receipts supersede the initial green result below; no activation is authorized.
 
@@ -235,3 +233,9 @@ Update this table and the current-state block in the same session. Add implement
 Branch `codex/esco-faithfulness-summary-safety`; baseline current main47d1386, PO files preserved. Reproduced6 failures in current-main focused controls, fixed canonical `escoConsultas.ts` and synchronized its two generated copies with the existing script. Added synthetic tests to existing main query/loop suites:76 focused passed, independent26 assertions passed. Immediate raw tool data stays complete; persisted truncation/failure cannot pass the births evidence gate. No new business rule, typed-envelope migration, hard context cap, tool injection or Telegram rewrite. Final-head test/type/lint/build/CI receipts belong in PR/handoff. Rollback is source revert and mirror synchronization; deployed rollback would separately require an authorized edge deployment. No deployment or production/private/provider action occurred. Next: parent review and morning queue integration, no further slice.
 
 Initial I04-a implementation `b162e37` full suite:4781 passed,1 failed; the existing documentation guard flagged placement of the public prior-CI receipt near channel-history text. Moved the unchanged receipt into its own section. No guard, allow-list or source/test assertion was relaxed. Functional source/tests remain as independently reviewed; final handoff is the later documentation commit and must pass all final-head gates.
+
+## Session — PR371 receipt-access repair preparation, 2026-10-30 UTC
+
+Baseline13ef1f4 treecc3d233; branchcodex/esco-pr371-receipt-auth. Only workflow/controller/synthetic checks and current release tracker documentation change. Proposal: actions:read with explicit token only in receipt-verification environment; fixed GitHub routes receive it, Azure and management environment do not. Existing run/source/receipt bindings and fail-closed ownership/rollback controls remain. The old successful diagnostic remains historical evidence and cannot authorize release on changed controls. No external authenticated-route probe, merge, dispatch or production change occurred during preparation. Final tests/review/CI receipts belong to the final candidate handoff.
+
+Repair verification:117 synthetic Node controls;4994 full tests/226 files;168 evaluator tests; types/lint/build/YAML/whitespace passed (lint907 existing warnings). Independent review passed12 adversarial assertions plus117 controls and wrapper. No skips. Exact candidate SHA/CI belongs to the published handoff; these local tests exercised the same scoped code.

@@ -28,6 +28,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    permissions:
+      contents: read
+      actions: read
     if: github.repository == 'sforero94/Escociaos' && github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -59,8 +62,9 @@ jobs:
         env:
           CLI_CACHE: ${{ runner.temp }}/pr371-npm-cache
         run: npx --cache "$CLI_CACHE" --yes --package supabase@2.122.0 -- supabase --version
-      - name: Verify selected mode and public diagnostic evidence before management access
+      - name: Verify selected mode and authenticated diagnostic evidence before management access
         env:
+          DIAGNOSTIC_GITHUB_TOKEN: ${{ github.token }}
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
           REVIEWED_DIAGNOSTIC_RUN_ID: ${{ inputs.reviewed_diagnostic_run_id }}

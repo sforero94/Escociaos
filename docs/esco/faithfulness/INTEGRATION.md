@@ -2,12 +2,11 @@
 
 ## Current baseline and scope
 
-Baseline main `f175c78a1bc65955f34247589698958565ab20b6`, root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`, includes merged359 and361. Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-The current application-domain correction changes runtime source, UI date validation and a draft database trigger. It is not deployed. One-time371 controls/tests/docs are now prepared in the same draft, fixed to unchanged e7a5545 runtime. No dispatch or management-secret access occurred; RELEASE_PR371.md defines separate diagnostic/release gates. Security, accepted runtime367/release controls and PO changes remain intact.
+Current main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe contains merged371, preserving security, offline work and PO documents. The application correction frontend is merged; backend activation stopped before management access in release40992476137. Diagnostic40988136741 proved pinnedv281 source/config equivalence. The current bounded draft proposes explicit Actions-read receipt retrieval only; no new dispatch/deploy is included. See RELEASE_PR371.md for exact evidence and fresh-diagnostic binding gates. Original application implementation baselinef175c78 and planning source3d3e654 remain historical provenance.
 
-The owner explicitly selected actual execution dates by default, planned dates only on explicit intent, and independent start/end validation for both pairs. Direct execution-tool routing, normalized name matching, ambiguity and incomplete-evidence safeguards address application lookup. See [APPLICATION_CORRECTION.md](APPLICATION_CORRECTION.md) for inventory, write boundaries, tests and activation limits. No business records are rewritten; migration188 is draft only.
+The owner explicitly selected actual execution dates by default, planned dates only on explicit intent, and independent start/end validation for both pairs. Direct execution-tool routing, normalized name matching, ambiguity and incomplete-evidence safeguards address application lookup. See [APPLICATION_CORRECTION.md](APPLICATION_CORRECTION.md) for inventory, write boundaries, tests and activation limits. No business records are rewritten; parent reports separate migration188 application and postverification02:32:12UTC, ledger20261030023201. This receipt repair includes no SQL change or execution.
 
-Measurementv1.1, immutable labels and adjudication safeguards remain unchanged. No private fixture or provider call is included. Offline363→364→366 stays queued while this correction is reviewed.
+Measurementv1.1, immutable labels and adjudication safeguards remain unchanged. No private fixture or provider call is included. Offline363→364→366 stays queued;366 completes the synthetic integration stack only, not calibration, live acceptance or the original full PLAN.md.
 
 ## Integration order and accepted release
 

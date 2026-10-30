@@ -53,10 +53,11 @@ test('confirmed health failure rolls back only stable owned release and verifies
 });
 test('concurrent deployment blocks rollback',async()=>{const {calls,ops}=harness({metadata:[meta(),meta(),meta(),meta(282),meta(283)],health:[false]});await assert.rejects(release(ops,approved(),run));assert.ok(!calls.includes('deploy:rollback'));});
 test('rollback CLI uncertainty never retries',async()=>{const {calls,ops}=harness({metadata:[meta(),meta(),meta(),meta(282),meta(282)],health:[false],deploy:kind=>{if(kind==='rollback')throw Error('uncertain rollback');}});await assert.rejects(release(ops,approved(),run));assert.deepEqual(calls.filter(c=>c.startsWith('deploy:')),['deploy:release','deploy:rollback']);});
-function publicEvidence({infoPatch={},jobsPatch={},log,location='https://synthetic.blob.core.windows.net/log',deny=false}={}){
+function authenticatedEvidence({infoPatch={},jobsPatch={},log,location='https://synthetic.blob.core.windows.net/log',deny=false}={}){
   const raw=JSON.stringify(approved());const digest=createHash('sha256').update(raw).digest('hex');const calls=[];
   const request=async(url,options)=>{
-    calls.push({url,options});assert.equal(options.headers?.Authorization,undefined);
+    calls.push({url,options});
+    assert.equal(options.headers?.Authorization,url.startsWith('https://api.github.com/repos/sforero94/Escociaos/actions/')?'Bearer synthetic-actions-read':undefined);
     if(deny)return new Response('',{status:403});
     if(url.endsWith('/runs/100'))return Response.json({id:100,path:'.github/workflows/release-pr371-once.yml',event:'workflow_dispatch',head_branch:'main',head_sha:run.controlSha,status:'completed',conclusion:'success',run_attempt:1,...infoPatch});
     if(url.includes('/runs/100/jobs?'))return Response.json({total_count:1,jobs:[{id:300,name:'release',status:'completed',conclusion:'success'}],...jobsPatch});
@@ -65,16 +66,16 @@ function publicEvidence({infoPatch={},jobsPatch={},log,location='https://synthet
     throw Error('Unexpected synthetic request');
   };return {request,calls,raw,digest};
 }
-test('observed prior receipt requires matching successful public run/job/log and exact reviewed digest',async()=>{const h=publicEvidence();assert.deepEqual(await reviewedDiagnostic('100',h.digest,run,h.request),approved());assert.equal(h.calls.length,4);assert.equal(h.calls[2].options.redirect,'manual');});
-for(const infoPatch of [{path:'.github/workflows/other.yml'},{head_sha:'a'.repeat(40)},{head_branch:'other'},{event:'pull_request'},{conclusion:'failure'},{status:'in_progress'},{run_attempt:2},{id:101}])test(`rejects other/failed/retried diagnostic ${JSON.stringify(infoPatch)}`,async()=>{const h=publicEvidence({infoPatch});await assert.rejects(reviewedDiagnostic('100',h.digest,run,h.request));assert.equal(h.calls.length,1);});
-for(const location of ['http://synthetic.blob.core.windows.net/log','https://evil.example/log','https://user:pass@synthetic.blob.core.windows.net/log','https://synthetic.blob.core.windows.net:444/log'])test(`unknown public log route rejected ${location}`,async()=>{const h=publicEvidence({location});await assert.rejects(reviewedDiagnostic('100',h.digest,run,h.request));assert.equal(h.calls.length,3);});
-test('public evidence denial has no token fallback or retry',async()=>{const h=publicEvidence({deny:true});await assert.rejects(reviewedDiagnostic('100',h.digest,run,h.request));assert.equal(h.calls.length,1);});
+test('observed prior receipt requires matching successful authenticated run/job/log and exact reviewed digest',async()=>{const h=authenticatedEvidence();assert.deepEqual(await reviewedDiagnostic('100',h.digest,run,'synthetic-actions-read',h.request),approved());assert.equal(h.calls.length,4);assert.equal(h.calls[2].options.redirect,'manual');});
+for(const infoPatch of [{path:'.github/workflows/other.yml'},{head_sha:'a'.repeat(40)},{head_branch:'other'},{event:'pull_request'},{conclusion:'failure'},{status:'in_progress'},{run_attempt:2},{id:101}])test(`rejects other/failed/retried diagnostic ${JSON.stringify(infoPatch)}`,async()=>{const h=authenticatedEvidence({infoPatch});await assert.rejects(reviewedDiagnostic('100',h.digest,run,'synthetic-actions-read',h.request));assert.equal(h.calls.length,1);});
+for(const location of ['http://synthetic.blob.core.windows.net/log','https://evil.example/log','https://user:pass@synthetic.blob.core.windows.net/log','https://synthetic.blob.core.windows.net:444/log'])test(`unknown signed log route rejected ${location}`,async()=>{const h=authenticatedEvidence({location});await assert.rejects(reviewedDiagnostic('100',h.digest,run,'synthetic-actions-read',h.request));assert.equal(h.calls.length,3);});
+test('authenticated evidence denial has no anonymous fallback or retry',async()=>{const h=authenticatedEvidence({deny:true});await assert.rejects(reviewedDiagnostic('100',h.digest,run,'synthetic-actions-read',h.request));assert.equal(h.calls.length,1);});
 test('missing, duplicate, malformed or oversized diagnostic logs reject',async()=>{
-  const first=publicEvidence();for(const log of ['',`PR371_DIAGNOSTIC_RECEIPT ${first.raw}\nPR371_DIAGNOSTIC_RECEIPT ${first.raw}\n`,'x'.repeat(2*1024*1024+1)]){const h=publicEvidence({log});await assert.rejects(reviewedDiagnostic('100',h.digest,run,h.request));}
-  const h=publicEvidence();await assert.rejects(reviewedDiagnostic('100','0'.repeat(64),run,h.request));
+  const first=authenticatedEvidence();for(const log of ['',`PR371_DIAGNOSTIC_RECEIPT ${first.raw}\nPR371_DIAGNOSTIC_RECEIPT ${first.raw}\n`,'x'.repeat(2*1024*1024+1)]){const h=authenticatedEvidence({log});await assert.rejects(reviewedDiagnostic('100',h.digest,run,'synthetic-actions-read',h.request));}
+  const h=authenticatedEvidence();await assert.rejects(reviewedDiagnostic('100','0'.repeat(64),run,'synthetic-actions-read',h.request));
 });
-test('workflow is manual main-only, shares concurrency and exposes management identity only after public verification',async()=>{
-  const yaml=await readFile('.github/workflows/release-pr371-once.yml','utf8');assert.match(yaml,/permissions:\n  contents: read\n/);assert.match(yaml,/group: escocia-pr367-edge-release/);assert.match(yaml,/github.run_attempt == 1/);assert.match(yaml,/github.ref == 'refs\/heads\/main'/);assert.equal((yaml.match(/secrets\./g)||[]).length,1);assert.ok(yaml.indexOf('--verify-diagnostic')<yaml.indexOf('SUPABASE_ACCESS_TOKEN:'));assert.ok(!/pull_request:|push:|schedule:|contents: write|actions: write/.test(yaml));assert.match(yaml,new RegExp(SOURCE));assert.match(yaml,new RegExp(ROLLBACK_SOURCE));
+test('workflow is manual main-only, shares concurrency and exposes management identity only after authenticated verification',async()=>{
+  const yaml=await readFile('.github/workflows/release-pr371-once.yml','utf8');assert.match(yaml,/permissions:\n  contents: read\n/);assert.match(yaml,/group: escocia-pr367-edge-release/);assert.match(yaml,/github.run_attempt == 1/);assert.match(yaml,/github.ref == 'refs\/heads\/main'/);assert.match(yaml,/actions: read/);assert.equal((yaml.match(/github\.token/g)||[]).length,1);assert.equal((yaml.match(/secrets\./g)||[]).length,1);assert.ok(yaml.indexOf('--verify-diagnostic')<yaml.indexOf('SUPABASE_ACCESS_TOKEN:'));assert.ok(!/pull_request:|push:|schedule:|contents: write|actions: write/.test(yaml));assert.match(yaml,new RegExp(SOURCE));assert.match(yaml,new RegExp(ROLLBACK_SOURCE));
 });
 
 test('health separates confirmed unhealthy responses from transport/body uncertainty',async()=>{
@@ -82,4 +83,20 @@ test('health separates confirmed unhealthy responses from transport/body uncerta
   assert.equal(await healthProbe(async()=>{count++;return Response.json({status:'ok'});},pause),true);assert.equal(count,1);
   for(const response of [()=>new Response('',{status:503}),()=>new Response('malformed')]){count=0;assert.equal(await healthProbe(async()=>{count++;return response();},pause),false);assert.equal(count,3);}
   for(const response of [()=>{throw Error('network');},()=>new Response(new ReadableStream({start(controller){controller.error(Error('truncated transport'));}}))]){count=0;await assert.rejects(healthProbe(async()=>{count++;return response();},pause));assert.equal(count,3);}
+});
+
+test('missing or malformed Actions identity stops before any evidence request',async()=>{
+  for(const token of [undefined,'','  ','synthetic\r\nheader']){const h=authenticatedEvidence();await assert.rejects(reviewedDiagnostic('100',h.digest,run,token,h.request));assert.equal(h.calls.length,0);}
+});
+test('Azure redirects never forward the GitHub identity or follow unknown destinations',async()=>{
+  const h=authenticatedEvidence();await reviewedDiagnostic('100',h.digest,run,'synthetic-actions-read',h.request);
+  assert.equal(h.calls[3].options.headers,undefined);assert.equal(h.calls[3].options.redirect,'error');
+  assert.equal(h.calls.filter(x=>x.options.headers?.Authorization).length,3);
+});
+test('workflow scopes explicit GitHub token to verification step and excludes it from management environment',async()=>{
+  const yaml=await readFile('.github/workflows/release-pr371-once.yml','utf8');
+  const verify=yaml.split('- name: Verify selected mode')[1].split('- name: Run authorized')[0];
+  const management=yaml.split('- name: Run authorized')[1].split('- name: Remove non-secret')[0];
+  assert.match(verify,/DIAGNOSTIC_GITHUB_TOKEN: \$\{\{ github.token \}\}/);assert.ok(!verify.includes('SUPABASE_ACCESS_TOKEN'));
+  assert.ok(!management.includes('DIAGNOSTIC_GITHUB_TOKEN'));assert.ok(!management.includes('github.token'));
 });
