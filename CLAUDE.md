@@ -906,8 +906,24 @@ Migration `187_fin_gastos_lote_reintentable` was applied to Escocia OS productio
 version: `20261029183837`, verified at `2026-10-29 18:38:51 UTC`. SQL SHA256:
 `6bf56111bfea8d8f4fb4e45ddea6291a295c0b7bf200346b9b6de77bb557a1af`.
 Receipt RLS, INVOKER RPC, grants and unchanged existing expense policies/triggers
-passed metadata checks. Frontend PR362 remains inactive. Preserve receipts/RPC on
-rollback. Full evidence: `docs/security-review/expense-release-readiness.md`.
+passed metadata checks. PR362 subsequently released at merge e3b4c40b with green
+postmerge CI/Vercel. Technical closeout accepted 2026-10-30; first legitimate use
+remains follow-up. Preserve receipts/RPC on rollback. Full evidence:
+`docs/security-review/technical-closeout.md`.
+
+## Migration ledger update — 2026-10-30
+
+Migration `188_aplicaciones_orden_fechas` was applied to Escocia OS production
+(`ywhtjwawnkeqlwxbvgup`) with explicit approval. Live ledger version
+`20261030023201`, verified at `2026-10-30 02:32:12 UTC`. Exact SQL SHA256:
+`4d7342094630214b32c6b04a9f67c6cc6c849f16cfa02b4b8f73a75d6ef36183`.
+The new trigger is enabled and its function is INVOKER. Existing date columns,
+RLS/grants/policies/constraints, four triggers and closure RPC metadata match the
+fresh preflight. Historical rows were not repaired; no production test RPC ran.
+PR371 frontend is merged; backend v281 remains the parent-reported baseline.
+The backend371 activation run40992476137 failed before the Supabase-secret step;
+PR372 is a draft control repair, not activated. This migration receipt does not
+establish backend371 deployment or authorize the proposed permission change.
 
 ## Deployment
 

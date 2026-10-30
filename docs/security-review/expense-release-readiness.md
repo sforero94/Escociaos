@@ -2,6 +2,15 @@
 
 Date: 2026-10-29. Source main is c68c37e642ba118675326283f24b6e1d7b4b7dc2
 
+## Current status — technical closeout accepted 2026-10-30
+
+PR362 is released at merge e3b4c40b905154b9f5abdbdadcecc100c2f47fe8 with successful
+postmerge CI 40940596671 and Vercel production/alias checks. The owner accepted
+runtime Web Locks availability limits and later accepted technical closure; first
+legitimate use is operational follow-up. See [closeout](technical-closeout.md).
+The preparation source/base, pending release instructions and negative action
+statements below describe historical stages, not today's deployment status.
+
 ## Production migration receipt — 2026-10-29
 
 This receipt supersedes earlier pending production-application status below.
@@ -22,8 +31,8 @@ TRUNCATE denied; service_role retains privileged access. Existing expense RLS,
 four policy definitions and two enabled triggers match preflight exactly.
 No domain/personnel rows were read, no expense RPC was invoked, no frontend was
 activated and no edge deployment occurred. Preserve RPC/receipts on rollback.
-PR362 still requires operator capability proof and its own release gates.
-(PR360 merged). External PR362 remains draft at
+PR362 subsequently completed its approved release; see the current closeout.
+Historical preparation baseline (PR360 merged): external PR362 was draft at
 e7a1e8619ec1b64f1edde9330e43c4761b6de871, base branch
 codex/security-expense-batch-retry at29a4a757. No remote source, PR base/state or
 deployment configuration was changed in this preparation.
@@ -160,10 +169,9 @@ The original preparation performed no production mutation. The subsequent
 authorized187 application is recorded in the current receipt at the top. No
 production expense, new credential or frontend activation occurred.
 
-Current next action: update the existing draft PR362 against current main and
-verify exact-head checks. Production187 is already applied and verified; do not
-reapply. Confirm actual operator native Web Locks, then obtain specific frontend
-ready/merge/deployment approval. No production expense tests.
+Current next action: preserve accepted technical closeout and record the next
+legitimate operator confirmation. PR362/187 are released; do not reapply or merge
+again. No production expense tests or automatic next remediation.
 
 ## Local Auth/PostgREST stack completed — supersedes the earlier transport gap
 
@@ -200,7 +208,8 @@ are discarded. Application files and exact187 remain unchanged from dff1d49.
 Limits: a synthetic finance schema/roles, not a full production schema/settings
 mirror; no hosted gateway parity, external provider/Storage test, production row
 or genuine field-device confirmation. Mobile viewport is still Chromium. Before
-release, retain fresh metadata preconditions, the exact security-sensitive187
-application approval, production postconditions and actual operator Web Locks
-confirmation; then publish/revalidate/merge362 only with separate authority.
-No push, new PR, hosted SQL application, production deploy or Bot Log write occurred.
+release, the preparation required metadata preconditions, exact187 approval,
+postconditions and operator capability/release review. Later approval accepted
+availability limits and completed activation; genuine devices remain unverified.
+No push, hosted SQL application, production deploy or Bot Log write occurred in
+that local test stage. Current terminal receipts are in technical-closeout.md.
