@@ -1,13 +1,12 @@
 # Progress and handoff
 
-## Current state —366 closed-loop refresh, 2026-10-30 UTC
+## Current state —372 refresh, 2026-10-30 UTC
 
-- Actual main61d2fafcd5d45cc28cda7a71854c08774c14572d (treef405a82d) includes359/361/363/364. Preserve security,371 runtime/UI/controls and PO changes;372 remains separate and unmerged. Original planning source3d3e654 stays intact.
--364 postmerge CI40996002528 passed5060 tests/228 files, types/lint, GitHub Vercel success. Current scope is EXISTING366 only, refresh and retarget from replay branch to main without force-push or direct integration-base merge.
-- Original helper b4da467 remains byte-identical2d504e1, as do10 offline dependency modules. Main371 changed5 application tool definitions, so old model-body pins failed closed (6fail/25pass). Update only6 hardcoded synthetic digest literals, preserving every test assertion, strict matcher, HTTP header/query/result fixture and runtime source.
-- Independent comparison of8 old/new synthetic envelopes across all6 pins confirms only approved tool definitions differ; messages/model/params/headers/query/results match. No real network, providers, private fixtures, credentials or process.env passthrough. Original31 tests then pass. Full checks/review/CI follow with final candidate receipt, no unrun result claimed.
-- Parent review precedes ready/merge under366-specific grant. Stop after366; no calibration, quality claim or new stage. Usage/judge/review remain unavailable, measurementv1.1/immutable labels unchanged.
--371 frontend merged, parent reports188 separately applied; approved backend release40992476137 stopped before management access. Last verified backendv281; this task does not query/change it.
+- Actual mainfece0e5448eb36ac0be8b29333da20691baf114b (treeb0672175) includes363/364/366.366 postmerge CI40998038342 passed5091 tests/229 files, types/lint and GitHub Vercel success. Offline integration is complete for that queue, not calibration or the full original plan.
+- Existing372 alone: merge current main without force-push, preserve reviewed36af47a workflow/controller/checks byte-identically, reconcile documentation only. Keep all runtime/security/PO/SQL/control fixes. No373 merge.
+- Owner03:30UTC explicitly approved372 merge/job-wideActions-read/fresh diagnose/conditional371 release. Current task stops at parentgo after independent review/exact-head CI. No secret use, permission execution, diagnostic or deployment during this refresh.
+- Source e7a5545/tree6e9969d, rollback6345804/tree99ba373, baseline281/config/raw80/reconstructed82/ownership/uncertainty guards unchanged. Old13ef receipt is historical and cannot authorize changed controls. After eventual372 merge, no main changes between fresh diagnosis and release; parent reviews the actual new receipt before release.
+-371 frontend and parent-reported188 are already applied separately; approved earlier backend run40992476137 stopped before management access. Last verified backendv281. No production/business/private/provider query or mutation here; do not label this preparation a live release.
 
 ## Historical application correction pass (merged371)
 
@@ -263,3 +262,9 @@ Branch `codex/esco-faithfulness-eval-loop`; base #364 `19d16783e7af0dde3a95057de
 Reverified original2d504e1 and actual main61d2faf. Preserve original closed HTTP/clock/env helper and all main source. Six synthetic model-body hashes require protocol maintenance after reviewed371 tool definitions; no assertion/matcher relaxation. One initial launcher used the preceding worktree and found no matching test; corrected cwd before the genuine6fail/25pass reproduction. Controlled repinning produced5fail/26pass, then1fail/30pass and final31pass. Independent8-envelope comparison proves the exact bounded delta. Final full/adversarial/CI receipts belong to the handoff. No provider, real environment, private record, production request or deployment. Next: parent review only; no new stage.
 
 Refreshed local checks:31 closed-loop tests;265 evaluator tests/types/focused lint;5091 full tests/229 files, zero skips; lint0 errors/907 existing warnings; build and whitespace passed. Independent review:8 old/new envelopes across6 pins plus7 extra adversarial safety tests, inherited network calls0. Helper/dependency blobs remain unchanged; only6 test digest literals differ from original assertions. Final remote SHA/CI belongs to the handoff.
+
+## Session — refresh existing372 after offline queue integration, 2026-10-30 UTC
+
+Reverified original36af47a and actual mainfece0e5. Preserve all3 reviewed implementation files exactly; reconcile current trackers and release guide only. Both runtime trees, SQL188/RPC106, source/rollback SHA/tree/config/hash pins and original capture helpers remain unchanged. Existing372 fast-forward update preserves both parents; no force-push or new PR. Final local/independent/CI receipts belong to the candidate handoff. Stop before ready/merge for parentgo; no management secret, new diagnostic, deployment, provider, private data or373 merge. User's explicit03:30 permission covers the later bounded sequence, not guard bypass or a moving-main receipt.
+
+Refreshed local checks:117 Node guards;5091 full tests/229 files;265 evaluator tests/types/focused lint; zero skips. Full lint0 errors/907 existing warnings, build and YAML/whitespace passed. Independent review12 additional adversarial tests plus117 controls/wrapper passed; all3 implementation blobs are identical36af47a. No permission/secret/live operation occurred. Final head/CI belongs to the published handoff.

@@ -92,26 +92,29 @@ export async function release(ops, approved, run) {
   must(stable(stamp(await ops.metadata()),restored), 'Deployment changed during rollback verification');
   return {state:'rolled-back',metadata:restored};
 }
-// Public GitHub evidence only: no extra repository permission or token fallback.
+// Explicit reviewed Actions-read identity for fixed GitHub evidence routes only.
+// No anonymous/auth fallback; signed Azure download receives no GitHub token.
 async function bounded(response, limit) {
   must(response.ok && Number(response.headers.get('content-length') || 0) <= limit, 'Evidence response unavailable or oversized');
   const chunks=[]; let size=0;
   for await (const chunk of response.body) { size+=chunk.length; must(size<=limit,'Evidence response oversized'); chunks.push(chunk); }
   return Buffer.concat(chunks).toString('utf8');
 }
-export async function reviewedDiagnostic(id, digest, run, request=fetch) {
+export async function reviewedDiagnostic(id, digest, run, token, request=fetch) {
+  must(typeof token === 'string' && token.trim().length > 0 && !/[\r\n]/.test(token), 'Actions-read diagnostic identity missing or malformed');
   must(/^[1-9]\d*$/.test(id ?? '') && /^[a-f0-9]{64}$/.test(digest ?? '') && BigInt(id)<BigInt(run.runId), 'Reviewed diagnostic run and receipt hash required');
   const base='https://api.github.com/repos/sforero94/Escociaos/actions';
-  const get=async (url,limit=262144) => bounded(await request(url,{redirect:'error',signal:AbortSignal.timeout(20000),headers:{Accept:'application/vnd.github+json'}}),limit);
+  const headers={Accept:'application/vnd.github+json',Authorization:`Bearer ${token}`};
+  const get=async url => bounded(await request(url,{redirect:'error',signal:AbortSignal.timeout(20000),headers}),262144);
   const info=JSON.parse(await get(`${base}/runs/${id}`));
   must(String(info.id) === id && info.path === WORKFLOW && info.event === 'workflow_dispatch' && info.head_branch === 'main' && info.head_sha === run.controlSha && info.status === 'completed' && info.conclusion === 'success' && info.run_attempt === 1, 'Diagnostic run not a successful first-attempt matching-control main dispatch');
   const jobs=JSON.parse(await get(`${base}/runs/${id}/jobs?filter=latest&per_page=100`));
   must(jobs.total_count === 1 && jobs.jobs?.length === 1 && jobs.jobs[0].name === 'release' && jobs.jobs[0].status === 'completed' && jobs.jobs[0].conclusion === 'success' && Number.isSafeInteger(jobs.jobs[0].id), 'Diagnostic job unavailable');
-  const redirect=await request(`${base}/jobs/${jobs.jobs[0].id}/logs`,{redirect:'manual',signal:AbortSignal.timeout(20000)});
-  must(redirect.status === 302, 'Diagnostic log redirect unavailable');
+  const redirect=await request(`${base}/jobs/${jobs.jobs[0].id}/logs`,{redirect:'manual',signal:AbortSignal.timeout(20000),headers});
+  must(redirect.status === 302, `Diagnostic log redirect unavailable (HTTP ${redirect.status})`);
   const location=new URL(redirect.headers.get('location'));
   must(location.protocol === 'https:' && /^[a-z0-9-]+\.blob\.core\.windows\.net$/.test(location.hostname) && !location.username && !location.password && !location.port, 'Unknown diagnostic log host');
-  const logs=await get(location.href,2*1024*1024);
+  const logs=await bounded(await request(location.href,{redirect:'error',signal:AbortSignal.timeout(20000)}),2*1024*1024);
   const records=logs.split(/\r?\n/).map(line=>line.replace(/^\d{4}-\d{2}-\d{2}T\S+ /,'')).filter(line=>line.startsWith(MARKER));
   must(records.length === 1, 'Exactly one observed diagnostic receipt required');
   const raw=records[0].slice(MARKER.length); must(hash(raw) === digest,'Reviewed receipt hash mismatch');
@@ -138,7 +141,7 @@ export async function main(env=process.env) {
   const approvedPath=join(env.RUNNER_TEMP,'pr371-approved.json');
   if (process.argv.includes('--verify-diagnostic')) {
     if (selected === 'release') {
-      const approved=await reviewedDiagnostic(env.REVIEWED_DIAGNOSTIC_RUN_ID,env.REVIEWED_DIAGNOSTIC_SHA256,run);
+      const approved=await reviewedDiagnostic(env.REVIEWED_DIAGNOSTIC_RUN_ID,env.REVIEWED_DIAGNOSTIC_SHA256,run,env.DIAGNOSTIC_GITHUB_TOKEN);
       await writeFile(approvedPath,JSON.stringify(approved),{flag:'wx',mode:0o600});
     } else must(!env.REVIEWED_DIAGNOSTIC_RUN_ID && !env.REVIEWED_DIAGNOSTIC_SHA256,'Diagnostic must not borrow a prior receipt');
     return;

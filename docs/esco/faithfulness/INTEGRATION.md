@@ -1,6 +1,16 @@
-# Faithfulness integration — I03-e refresh
+# Faithfulness integration —372 receipt-access refresh
 
-## Current366 candidate — actual-loop closed transport, 2026-10-30 UTC
+## Current372 candidate — 2026-10-30 UTC
+
+Actual mainfece0e5448eb36ac0be8b29333da20691baf114b, root treeb06721753b18dda1aa42d8cbdd18bf7b4a63bd45, contains merged363/364/366.366 postmerge CI40998038342/job123875672215 passed5091 tests/229 files, types/lint; GitHub Vercel status success. The offline chain is integrated, not a completed historical calibration or fullP1–P6 product plan. No security closeout373 merge is included.
+
+Existing372 is refreshed without force-push from reviewed36af47ae4ee11a3b1641cc5a319f53d1847a7e9a. The workflow, controller and synthetic checks remain byte-identical; only release/current tracker documentation reconciles. Job-wide contents:read plus actions:read is explicit; token environment is scoped to verification, not a step-level permission boundary. Only3 fixed GitHub API requests carry bearer authorization; Azure and Supabase environment receive none. No new secret/PAT, runtime/SQL/source/rollback pin or capture guard change.
+
+The owner explicitly approved372 merge/Actions-read/fresh diagnostic/conditional371 release on2026-10-30 at03:30UTC. This task stops at final candidate/independent review/CI for parentgo before ready/merge. Authorization is not permission to bypass gates. No additional owner question is required within unchanged scope. After372 merge and postmerge checks, freeze main: one fresh diagnose on actual controls SHA, parent review of observed native80/reconstructed82 receipt and metadata, then one release only if all guards pass. No main changes between diagnosis/release. Prior13ef diagnostic cannot authorize updated controls. No blind retry or uncertain rollback.
+
+Runtime remains fixede7a5545bc8d87ad0502caf009d0201cae67fc772/edge6e9969d49f652989ef2c1679ff24be0f976410e7; rollback634580480c72b27c7ccd2d8c006af520d0ca1058/tree99ba3737577f064e27112e4e99a8dd24739c6422. Baseline281 and all raw80/type-only reconstruction/configuration/source/ownership guards are unchanged. Parent reports188 separately applied; this task neither queries nor changes production, schema, historical records or providers. See RELEASE_PR371.md for exact evidence and recovery limits.
+
+## Historical366 refresh (merged366)
 
 Actual main61d2fafcd5d45cc28cda7a71854c08774c14572d, root treef405a82d267298ec739d29569866702f6f8aa7fb, includes359/361/363/364. Existing366 refresh preserves original2d504e17e50b8b8d1d984d31704e07bdc20293a0 history through a non-forced merge, then retargets to main. No direct merge of the obsolete integration-base. Only the original test-only helper/test and three trackers differ from main; all runtime/security/371/PO/control source remains intact.372 is unrelated/unmerged.
 
