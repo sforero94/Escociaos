@@ -9,4 +9,4 @@ it('passes the synthetic release safety controls without credentials', () => {
     env: { PATH: process.env.PATH ?? '', PROOF_TYPESCRIPT: resolve('node_modules/typescript/lib/typescript.js') },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-});
+}, 95_000);

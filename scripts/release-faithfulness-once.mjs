@@ -21,6 +21,10 @@ export function candidate(p = APPROVED) {
     /^[a-f0-9]{64}$/.test(p.fingerprint ?? ''), 'Combined candidate is not frozen and approved');
   return p;
 }
+export function requirePinnedSource(observed, expected) {
+  must(observed && Number.isSafeInteger(observed.count) && observed.count > 0 && /^[a-f0-9]{64}$/.test(observed.hash ?? ''), 'Invalid source fingerprint');
+  must(observed.hash === expected, 'Pinned source differs');
+}
 export function invocation(env) {
   must(env.GITHUB_REPOSITORY === 'sforero94/Escociaos' && env.GITHUB_REF === 'refs/heads/main' &&
     env.GITHUB_EVENT_NAME === 'workflow_dispatch' && env.GITHUB_RUN_ATTEMPT === '1' &&
@@ -123,7 +127,7 @@ export async function main(env=process.env) {
           must(git(dir,['rev-parse','HEAD'])===sha && git(dir,['rev-parse',`HEAD:supabase/functions/${TARGET}`])===tree &&
             git(dir,['status','--porcelain','--untracked-files=all'])==='','Pinned checkout changed');
           must(await readFile(join(dir,'supabase/config.toml'),'utf8')===DEPLOY_CONFIG,'Config changed');
-          must((await fingerprint(join(dir,'supabase/functions',TARGET))).hash===hash,'Pinned source differs');
+          requirePinnedSource(await fingerprint(join(dir,'supabase/functions',TARGET)),hash);
         }
       },
       capture:async(name,kind)=> {
