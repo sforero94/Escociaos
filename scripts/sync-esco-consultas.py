@@ -5,4 +5,5 @@ root = Path(__file__).resolve().parent.parent
 source = (root / 'src/utils/escoConsultas.ts').read_bytes()
 for tree in ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']:
     (root / tree / 'esco-consultas.ts').write_bytes(source)
+    (root / tree / 'escoAplicacionHechos.ts').write_bytes((root / 'src/utils/escoAplicacionHechos.ts').read_bytes())
 (root / 'supabase/functions/make-server-1ccce916/chat.tsx').write_bytes((root / 'src/supabase/functions/server/chat.tsx').read_bytes())

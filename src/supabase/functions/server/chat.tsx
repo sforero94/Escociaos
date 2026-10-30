@@ -1,4 +1,4 @@
-import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, type FilaEsco } from './esco-consultas.ts';
+import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, planRespuestaAplicacion, argumentosRespuestaAplicacion, respuestaDeterministaAplicacion, type FilaEsco } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
 
@@ -747,6 +747,19 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
   try {
     let result: string;
     switch (name) {
+      case 'get_aplicaciones_ejecucion': {
+        // Only this application facts contract opts into positive stable counts.
+        // Keep one attestation per exact generated query across its pages.
+        const counts = new Map<string, ConteoConsulta>();
+        result = JSON.stringify(await ejecutarConsultaEsco(name, args, async (tabla, query) => {
+          const base = query.replace(/&limit=200&offset=\d+$/, '');
+          if (base === query) throw new Error('Paginación de aplicación no verificable.');
+          const key = tabla + '?' + base;
+          if (!counts.has(key)) counts.set(key, {});
+          return await supabaseQueryPage(tabla, query, counts.get(key)!) as FilaEsco[];
+        }));
+        break;
+      }
       case 'get_hato_partos':
       case 'get_hato_eventos':
       case 'get_hato_animales':
@@ -757,7 +770,6 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_ganado_movimientos_detalle':
       case 'get_cosecha_trazabilidad':
       case 'get_produccion_calidad':
-      case 'get_aplicaciones_ejecucion':
       case 'get_recomendaciones_ejecucion':
       case 'get_carencia_cosecha':
       case 'get_monitoreo_cobertura':
@@ -3916,7 +3928,8 @@ export async function llmToolLoop(
   let toolIndex = 0;
   const ultimaPregunta = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
   const consultaPartosObligatoria = requiereConsultaPartos(ultimaPregunta);
-  const consultaAplicacionesObligatoria = requiereConsultaAplicaciones(ultimaPregunta);
+  const planAplicacion = planRespuestaAplicacion(ultimaPregunta);
+  const consultaAplicacionesObligatoria = requiereConsultaAplicaciones(ultimaPregunta) || planAplicacion.tipo === 'aplicacion';
   const fechasPlaneadas = pideFechasPlaneadas(ultimaPregunta);
   const llamadas = new Set<string>();
 
@@ -3967,6 +3980,7 @@ export async function llmToolLoop(
       messages.push(msg);
 
       // Execute each tool call
+      const aplicacionesFrescas: Array<{ resultado: string; args: Record<string, unknown> }> = [];
       for (const tc of msg.tool_calls) {
         const fnName = tc.function?.name;
         let fnArgs: Record<string, unknown> = {};
@@ -3984,12 +3998,14 @@ export async function llmToolLoop(
 
         const consultaAplicacion = ['get_aplicaciones_ejecucion', 'get_application_summary', 'get_application_details', 'get_application_cost_by_lote', 'get_cost_by_lote', 'get_weekly_overview'].includes(fnName);
         const baseNoAutorizada = consultaAplicacion && fnArgs.date_basis === 'planned' && !fechasPlaneadas;
+        if (fnName === 'get_aplicaciones_ejecucion' && !baseNoAutorizada) fnArgs = argumentosRespuestaAplicacion(planAplicacion, fnArgs);
         if (consultaAplicacion && fnArgs.date_basis == null) fnArgs.date_basis = fechasPlaneadas ? 'planned' : 'actual';
         const claveLlamada = `${fnName}:${JSON.stringify(fnArgs)}`;
         const toolResult = baseNoAutorizada ? JSON.stringify({ error: 'El usuario no pidió fechas planeadas. Consulta fechas reales.' }) : llamadas.has(claveLlamada)
           ? JSON.stringify({ error: 'Consulta idéntica ya realizada. Usa el resultado previo o cambia criterio con fundamento; no inventes variantes de nombres.' })
           : await executeTool(fnName, fnArgs, userId);
         llamadas.add(claveLlamada);
+        if (fnName === 'get_aplicaciones_ejecucion') aplicacionesFrescas.push({ resultado: toolResult, args: fnArgs });
 
         onEvent?.({
           type: 'tool_done',
@@ -4015,10 +4031,20 @@ export async function llmToolLoop(
         });
       }
 
+      // Covered answers never reach another prose generation. Only fresh tool
+      // output is eligible; persisted history/model text is not fact input.
+      if (planAplicacion.tipo === 'aplicacion') {
+        if (aplicacionesFrescas.length !== 1) return { text: 'No pude consolidar una consulta de aplicaciones con un único alcance verificable. Precisa la aplicación o el período; no mezclé los resultados ni inferí cantidades.', toolInteractions };
+        const fresh = aplicacionesFrescas[0];
+        const answer = respuestaDeterministaAplicacion(planAplicacion, fresh.resultado, fresh.args);
+        if (answer.tipo === 'texto') return { text: answer.texto, toolInteractions };
+      }
+
       continue; // next round
     }
 
     // No tool calls — return the final text
+    if (planAplicacion.tipo === 'aplicacion') return { text: 'No recibí una consulta fresca verificable de aplicaciones. No puedo responder con cifras del historial o del modelo.', toolInteractions };
     if (consultaAplicacionesObligatoria) {
       const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
       if (segura) return { text: segura, toolInteractions };

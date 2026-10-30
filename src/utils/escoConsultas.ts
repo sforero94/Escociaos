@@ -1,3 +1,4 @@
+import { hechosEjecucionAplicacion, estimacionDosisCanecas } from './escoAplicacionHechos.ts';
 /** Consultas de evidencia de Esco (#311). Sin Deno/SDK; I/O inyectado y probado. */
 export type FilaEsco = Record<string, unknown>;
 export type ConsultaPagina = (tabla: string, query: string) => Promise<FilaEsco[]>;
@@ -124,13 +125,14 @@ export function requiereConsultaAplicaciones(pregunta: string): boolean {
   // Exclude common non-farm meanings without routing every use of "application".
   if (!/\b(?:fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q) && /\b(?:aplicacion(?:es)? (?:movil|web|de empleo|para editar|de software))\b/.test(q)) return false;
   const farm = /\b(?:aplicaci(?:on|ones)|fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q);
-  return farm && /\b(?:como va|avance|progreso|estado|actual|en ejecucion|en curso|activas?|hay|existe(?:n)?|tenemos)\b/.test(q);
+  return farm && (/\b(?:como va|avance|progreso|estado|actual|en ejecucion|en curso|activas?|hay|existe(?:n)?|tenemos)\b/.test(q) || pideFechasPlaneadas(pregunta));
 }
 export function pideFechasPlaneadas(pregunta: string): boolean {
   const clauses = normalizarTextoAplicacion(pregunta).split(/[.;,!?]+|\b(?:pero|sino|en cambio)\b|\by (?=no\b)/);
   let requested: 'actual' | 'planned' | null = null;
   for (const part of clauses) {
-    const clause = part.replace(/^[¿¡\s]+/, '').trim().replace(/^por favor\s+/, '');
+    const clause = part.replace(/^[¿¡\s]+/, '').trim().replace(/^por favor\s+/, '')
+      .replace(/^(?:consulta de )?solo lectura:\s*[¿¡]?\s*/, '');
     const negated = /^(?:no|nunca|sin|ignora|ignorar|excluye|excluir)\b/.test(clause);
     if (negated) {
       // Revocation need not authorize a new basis or guess verb conjugation.
@@ -150,8 +152,12 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
     // A direct plural planned-application request is explicit planned intent;
     // a relative clause merely describing one record is not.
     const plannedCollection = body.match(/^(?:dame|muestra(?:me)?|consulta|busca) (?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) ((?:planeadas?|planificadas?)\b.*)$/);
-    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1] ?? plannedCollection?.[1];
+    // Direct interrogative selection, with an optional explicit temporal qualifier.
+    // Relative descriptions ("cuya fecha planeada...") do not grant consent.
+    const plannedQuestion = body.match(/^(?:que|cual(?:es)?) (?:es |son )?(?:la |las )?(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?) (?:(?:que )?(?:esta(?:n)?|hay|tenemos) )?((?:planeadas?|planificadas?)(?:$| (?:para\b|durante\b|entre\b|desde\b|hasta\b|en (?!ejecucion\b|curso\b)).*))$/);
+    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1] ?? plannedCollection?.[1] ?? plannedQuestion?.[1];
     if (!basis) continue;
+    if (/\b(?:sin(?: usar| utilizar)?|no (?:uses|usar|utilices|utilizar)) (?:las )?fechas? (?:planeadas?|planificadas?)\b/.test(body)) { requested = null; continue; }
     const planned = /\b(?:planeadas?|planificadas?)\b/.test(basis);
     const actual = /\b(?:reales?|de ejecucion)\b/.test(basis);
     // A mixed clause is ambiguous: keep actual default. A later explicit
@@ -160,6 +166,183 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
   }
   return requested === 'planned';
 }
+
+export type PlanRespuestaAplicacion = { tipo: 'fuera'; motivo: string } | {
+  tipo: 'aplicacion'; plural: boolean; base: 'actual' | 'planned';
+  rango: { desde: string; hasta: string } | null; loteSolicitado: boolean;
+  estadoFiltro: 'En ejecución' | 'Cerrada' | null;
+  estado: boolean; fechas: boolean; consumos: boolean; trabajo: boolean; ocultarCostos: boolean; estimacion: boolean; planes: boolean;
+};
+/** Closed application operations, not a filter over arbitrary generated prose. */
+export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): PlanRespuestaAplicacion {
+  const q = normalizarTextoAplicacion(pregunta);
+  const fuera = (motivo: string): PlanRespuestaAplicacion => ({ tipo: 'fuera', motivo });
+  const operation=q.replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, '');
+  if (/[;:,.!?]/.test(operation)) return fuera('clausulas_adicionales_no_cubiertas');
+  if (!/\b(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?)\b/.test(q) ||
+    (/\baplicacion(?:es)? (?:(?:de|para) )?(?:movil|web|empleo|editar|software|visa|visado|contrato)\b/.test(q) && !/\b(?:fumigacion|fertilizacion)\b/.test(q))) return fuera('otro_dominio');
+  if (/\b(?:clima|pronostico|lluvia|inventario|stock|leche|partos?|ventas?|precio|carencia|cosecha|compatible)\b/.test(q)) return fuera('consulta_mixta');
+  if (/\b(?:por que|causa|eficacia|recomienda|debo|puedo|conviene|quien|quienes|guarda|recuerda|porcentaje|cobertura)\b|%/.test(q)) return fuera('operacion_no_soportada');
+  if (/\by (?:que|quien|quienes|como|por que|cual|cuales|cuando|donde)\b/.test(q)) return fuera('subpregunta_no_cubierta');
+  if (/\b(?:rango|periodo) (?:solicitado|anterior|previo)|\b(?:mismo|ese) (?:rango|periodo)\b/.test(q)) return fuera('referencia_temporal_no_resuelta');
+  // A second requested operation must be one of the explicitly rendered fields.
+  if (/\by (?!\d{4}-\d{2}-\d{2}\b|(?:(?:el|los|la|las) )?(?:estado|fechas?|consumo|jornales?|mano de obra|costo laboral|canecas? (?:planeadas?|planificadas?))\b)/.test(q)) return fuera('subpregunta_no_cubierta');
+  const plural = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(q);
+  const pluralTail = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b(.*)$/.exec(q)?.[1].trim() ?? '';
+  if (plural && pluralTail && !/^(?:[?.,!]|(?:estan )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
+  const estimacion = /\b(?:estima|estimacion|teoric[oa]|hipotetic[oa])\b/.test(q);
+  if (estimacion && (!/\bdosis\b/.test(q) || !/\bcanecas? (?:planeadas?|planificadas?)\b/.test(q) || /\b\d+(?:[.,]\d+)? canecas?\b/.test(q))) return fuera('parametros_teoricos_no_verificados');
+  if (!estimacion && /\b(?:dosis|canecas?|bultos?|litros de mezcla)\b/.test(q)) return fuera('magnitud_no_soportada');
+  const trabajo = /\b(?:jornales?|mano de obra|costo laboral)\b/.test(q);
+  const ocultarCostos = /\bsin costos?\b|\bno (?:muestres|incluyas) (?:los )?costos?\b/.test(q);
+  if (/\b(?:costo|costos|costo total|gasto|gastado)\b/.test(q) && !trabajo && !ocultarCostos) return fuera('costo_total_no_es_costo_laboral');
+  const progreso = /\b(?:como va(?:n)?|avance|progreso)\b/.test(q);
+  const estado = /\bestado\b/.test(q) || progreso;
+  const plannedBasis = pideFechasPlaneadas(pregunta);
+  const planes = plannedBasis && !estimacion;
+  const sinConsumo = /\bsin (?:el )?consumo\b|\bno (?:muestres|incluyas|quiero) (?:el )?consumo\b/.test(q);
+  const consumos = !sinConsumo && (progreso || /\b(?:consum\w*|utilizad\w*)\b/.test(q)) && (!estimacion || /\b(?:real|reales|registrado|registrados)\b/.test(q));
+  const fechas = /\bfechas?\b/.test(q) || progreso || planes;
+  if (!estado && !planes && !consumos && !trabajo && !estimacion && !fechas) return fuera('pregunta_no_cubierta');
+  const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const namedPattern = new RegExp('\\b(?:' + months.join('|') + ')(?: de)? (\\d{4})\\b','g');
+  const periods = [...q.matchAll(namedPattern)].length + [...q.matchAll(/\b(?:hoy|ayer|este mes|mes pasado|esta semana|semana pasada)\b/g)].length;
+  const isoDates=q.match(/\d{4}-\d{2}-\d{2}/g)?.length ?? 0;
+  if (periods>1 || (isoDates>0 && (isoDates!==2 || periods>0))) return fuera('multiples_periodos_no_soportados');
+  const named = new RegExp('\\b(?:para|en|durante|de) (?:el mes de )?(' + months.join('|') + ')(?: de)? (\\d{4})\\b').exec(q);
+  let rango: { desde: string; hasta: string } | null = null;
+  const calendar = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  if (named) {
+    const year = Number(named[2]), month = months.indexOf(named[1]) + 1;
+    if (year < 100) return fuera('periodo_no_soportado');
+    rango = { desde: calendar(year,month,1), hasta: calendar(year,month,new Date(Date.UTC(year,month,0)).getUTCDate()) };
+  } else {
+    const iso = /\b(?:del?|desde|entre) (\d{4}-\d{2}-\d{2}) (?:al?|hasta|y) (\d{4}-\d{2}-\d{2})\b/.exec(q);
+    if (!iso && isoDates>0) return fuera('periodo_no_soportado');
+    if (iso) { try { rango = { desde: validarFecha(iso[1]), hasta: validarFecha(iso[2]) }; } catch { return fuera('periodo_invalido'); } }
+    else if (/\bhoy\b/.test(q)) rango = { desde: hoy, hasta: hoy };
+    else if (/\bayer\b/.test(q)) rango = { desde: sumarDias(hoy,-1), hasta: sumarDias(hoy,-1) };
+    else if (/\b(?:este mes|mes pasado)\b/.test(q)) {
+      let [year,month] = hoy.split('-').map(Number);
+      if (/\bmes pasado\b/.test(q) && --month === 0) { year--; month = 12; }
+      rango = { desde: calendar(year,month,1), hasta: calendar(year,month,new Date(Date.UTC(year,month,0)).getUTCDate()) };
+    } else if (/\b(?:esta semana|semana pasada)\b/.test(q)) {
+      const [y,m,d] = hoy.split('-').map(Number), day = new Date(Date.UTC(y,m-1,d)).getUTCDay();
+      const monday = sumarDias(hoy,-((day+6)%7)-(/semana pasada/.test(q)?7:0));
+      rango = { desde: monday, hasta: sumarDias(monday,6) };
+    } else if (/\b(?:mes|semana|trimestre|ano|ultimos?|proximos?)\b/.test(q) || months.some(m=>new RegExp('\\b'+m+'\\b').test(q))) return fuera('periodo_no_soportado');
+  }
+  if (rango && rango.desde > rango.hasta) return fuera('periodo_invalido');
+  return { tipo:'aplicacion', plural, base:plannedBasis?'planned':'actual', rango,
+    estadoFiltro:/\b(?:en ejecucion|en curso|activas?)\b/.test(q)?'En ejecución':/\bcerradas?\b/.test(q)?'Cerrada':null,
+    loteSolicitado:/\blotes?\b/.test(q), estado, fechas, consumos, trabajo:trabajo || progreso,
+    ocultarCostos, estimacion, planes };
+}
+export function argumentosRespuestaAplicacion(plan: PlanRespuestaAplicacion, args: FilaEsco): FilaEsco {
+  if (plan.tipo !== 'aplicacion') return args;
+  const bound = { ...args, date_basis:plan.base, alcance:plan.rango?'periodo':'actual' } as FilaEsco;
+  if (plan.rango) { bound.date_from = plan.rango.desde; bound.date_to = plan.rango.hasta; }
+  else { delete bound.date_from; delete bound.date_to; }
+  if (plan.plural) { delete bound.application_id; delete bound.application_name; delete bound.estado; }
+  if (plan.estadoFiltro) bound.estado = plan.estadoFiltro; else delete bound.estado;
+  if (!plan.loteSolicitado) delete bound.lote_name;
+  return bound;
+}
+const literalMd = (value: unknown) => texto(value).replace(/[\\`*_{}[\]()#+.!|<>]/g, '\\$&').replace(/[\r\n]/g, ' ');
+interface AplicacionParaRespuesta {
+  id: string; nombre_aplicacion: string; estado: unknown; tarea_id?: unknown;
+  fecha_inicio_planeada?: unknown; fecha_fin_planeada?: unknown; fecha_inicio_ejecucion?: unknown; fecha_fin_ejecucion?: unknown;
+  fechas_inconsistentes?: unknown; movimientos: FilaEsco[]; registros_trabajo: FilaEsco[];
+  hechos_ejecucion: ReturnType<typeof hechosEjecucionAplicacion>; plan_por_lote?: unknown; productos_planeados?: unknown;
+}
+interface EvidenciaParaRespuesta {
+  error?: unknown; contexto_recortado?: unknown;
+  _evidencia: { herramienta: unknown; consulta_completa: unknown; detalle_completo: unknown; total_hechos: unknown; rango: {desde:string|null;hasta:string|null} };
+  resumen?: {date_basis?:unknown;fechas_reales_ausentes?:number}; detalle: AplicacionParaRespuesta[];
+}
+/** Only a fresh execution result may reach this function from the loop. */
+export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco): { tipo:'fuera'; motivo:string } | { tipo:'texto'; texto:string } {
+  if (plan.tipo !== 'aplicacion') return plan;
+  const failure = (why: string) => ({ tipo:'texto' as const, texto:'No pude verificar '+why+'. No puedo inventar cantidades ni afirmar ausencia de actividad.' });
+  try {
+    const r = JSON.parse(resultado) as EvidenciaParaRespuesta;
+    if (!r || Array.isArray(r) || Object.prototype.hasOwnProperty.call(r,'error') || r.contexto_recortado === true ||
+      r._evidencia?.herramienta !== 'get_aplicaciones_ejecucion' || r._evidencia?.consulta_completa !== true || !Array.isArray(r.detalle) ||
+      typeof r._evidencia.detalle_completo !== 'boolean' || !Number.isSafeInteger(r._evidencia.total_hechos) || Number(r._evidencia.total_hechos)<r.detalle.length) return failure('la consulta de aplicaciones');
+    const range = r._evidencia.rango;
+    if (r.resumen?.date_basis !== plan.base || args.date_basis !== plan.base || range?.desde !== (args.date_from ?? null) || range?.hasta !== (args.date_to ?? null) ||
+      (plan.rango && (range.desde !== plan.rango.desde || range.hasta !== plan.rango.hasta))) return failure('el alcance solicitado');
+    if ((!plan.rango && (range.desde!==null || range.hasta!==null)) || (range.desde && validarFecha(range.desde)!==range.desde) || (range.hasta && validarFecha(range.hasta)!==range.hasta)) return failure('el período solicitado');
+    const scope = `Filtro de inicio ${plan.base==='planned'?'planeado':'real'}: ${range.desde ?? 'sin límite inicial'} a ${range.hasta ?? 'sin límite final'}.`;
+    const actualScope = `Consumos y trabajo: fechas reales ${range.desde ?? 'sin límite inicial'} a ${range.hasta ?? 'sin límite final'}${args.lote_name?', lote consultado '+literalMd(args.lote_name):', todos los lotes consultados'}.`;
+    if (!r.detalle.length) {
+      if (r._evidencia.detalle_completo !== true || r._evidencia.total_hechos !== 0) return failure('una página vacía parcial');
+      return {tipo:'texto',texto:`No encontré registros de aplicaciones con esos filtros. ${scope} Esto no demuestra ausencia de actividad física${plan.base==='actual' && (r.resumen?.fechas_reales_ausentes ?? 0)>0?'; hay registros sin fecha real que no puedo ubicar en ese intervalo':''}.`};
+    }
+    if (r.detalle.some(a=>!texto(a.id) || !texto(a.nombre_aplicacion))) return failure('la identidad de la aplicación');
+    if (!plan.plural && r.detalle.length>1) return {tipo:'texto',texto:'Encontré varias aplicaciones candidatas; precisa cuál: '+r.detalle.map(a=>literalMd(a.nombre_aplicacion)+' ('+literalMd(a.id)+')').join('; ')};
+    const lines:string[] = [scope]; let renderedRows = 0;
+    for (const a of r.detalle) {
+      const f = a.hechos_ejecucion as ReturnType<typeof hechosEjecucionAplicacion>;
+      if (f?.contrato !== 'aplicaciones_hechos_v1' || f.aplicacion_id !== a.id || f.alcance.desde !== range.desde || f.alcance.hasta !== range.hasta || f.alcance.base_seleccion_aplicacion !== plan.base ||
+        !Array.isArray(a.movimientos) || !Array.isArray(a.registros_trabajo)) return failure('los hechos estructurados');
+      const recomputed = hechosEjecucionAplicacion(a.movimientos,a.registros_trabajo,{aplicacionId:a.id,tareaId:a.tarea_id?texto(a.tarea_id):null,
+        tareaExclusiva:f.trabajo.atribucion==='tarea_exclusiva',desde:range.desde,hasta:range.hasta,loteIds:f.alcance.lote_ids,consultaCompleta:true,baseSeleccion:plan.base});
+      if (JSON.stringify(recomputed)!==JSON.stringify(f)) return failure('la consistencia de los hechos');
+      lines.push('\n**'+literalMd(a.nombre_aplicacion)+'** (ID '+literalMd(a.id)+')');
+      if (plan.estado || plan.planes) lines.push('Estado registrado: '+(['calculada','en ejecucion','cerrada'].includes(normalizarTextoAplicacion(a.estado))?literalMd(a.estado):'no verificable')+'.');
+      if (plan.fechas) {
+        const fecha = (value:unknown) => { if (!value) return 'no registrada'; try{return validarFecha(value);}catch{return 'no verificable';} };
+        lines.push(`Fechas planeadas: ${fecha(a.fecha_inicio_planeada)} a ${fecha(a.fecha_fin_planeada)}. Fechas reales: ${fecha(a.fecha_inicio_ejecucion)} a ${fecha(a.fecha_fin_ejecucion)}.`);
+        if (Array.isArray(a.fechas_inconsistentes) && a.fechas_inconsistentes.length) lines.push('Hay fechas contradictorias; no calculé duración ni corregí registros.');
+      }
+      if (plan.consumos) {
+        lines.push(actualScope,'| Producto (ID) | Unidad | Cantidad registrada |','| --- | --- | --- |');
+        if (!f.consumos.productos.length) lines.push('Sin cantidades de consumo verificadas; no equivale a consumo cero.');
+        for (const p of f.consumos.productos) {
+          if (++renderedRows>100) break;
+          const amount = p.cantidad_total ?? (p.cantidad_verificada===null?'no verificable':p.cantidad_verificada+' (subtotal verificado; total desconocido)');
+          lines.push(`| ${literalMd(p.producto_nombre)} (${literalMd(p.producto_id)})${p.nombre_recortado?' [nombre abreviado]':''} | ${literalMd(p.unidad)} | ${amount} |`);
+        }
+        if (!f.consumos.cobertura_cerrada) lines.push('Cobertura de consumo incompleta: faltan cantidades, identidades, unidades o detalle atribuible. Los subtotales no cierran el total.');
+        if (!f.consumos.detalle_productos_completo || renderedRows>100) lines.push(`Detalle limitado: ${f.consumos.grupos_total} grupos de producto/unidad consultados; no afirmo que las filas mostradas sean toda la lista.`);
+      }
+      if (plan.trabajo) {
+        const work=f.trabajo;
+        lines.push(actualScope);
+        if (work.atribucion !== 'tarea_exclusiva') {
+          lines.push('El vínculo de tarea no permite atribuir un total de mano de obra exclusivo a esta aplicación.');
+          if (work.atribucion==='tarea_compartida') lines.push(`Subtotal de la tarea compartida ${literalMd(work.tarea_id)}: ${work.jornales_verificados ?? 'no verificable'} jornales${plan.ocultarCostos?'':', '+(work.costo_verificado_cop ?? 'no verificable')+' COP'}; no lo atribuí a la aplicación.`);
+        } else {
+          lines.push('Mano de obra registrada: '+(work.jornales_total ?? (work.jornales_verificados===null?'jornales no verificables':work.jornales_verificados+' jornales verificados; total desconocido'))+(work.jornales_total===null?'':' jornales')+'.');
+          if (!plan.ocultarCostos) lines.push('Costo laboral registrado: '+(work.costo_total_cop ?? (work.costo_verificado_cop===null?'no verificable':work.costo_verificado_cop+' (subtotal verificado; total desconocido)'))+' COP.');
+        }
+      }
+      if (plan.estimacion) {
+        lines.push('Estimación teórica por filas verificadas del plan y los lotes consultados; no es consumo real ni un total certificado del plan.'); let n=0; const usedLots=new Set<unknown>(), usedRecipes=new Set<unknown>();
+        const lots=rowsPlan(a.plan_por_lote), recipes=rowsPlan(a.productos_planeados);
+        for (const lot of lots) for (const recipe of recipes) {
+          if (!texto(lot.id) || lots.filter(x=>x.id===lot.id || (x.mezcla_id===lot.mezcla_id && x.lote_id===lot.lote_id)).length!==1 ||
+            !texto(recipe.id) || recipes.filter(x=>x.id===recipe.id || (x.mezcla_id===recipe.mezcla_id && x.producto_id===recipe.producto_id)).length!==1 ||
+            lot.mezcla_id !== recipe.mezcla_id || !texto(lot.mezcla_id) || !texto(lot.lote_id) || !texto(recipe.producto_id) || !texto(recipe.unidad_dosis) ||
+            (f.alcance.lote_ids && !f.alcance.lote_ids.includes(texto(lot.lote_id)))) continue;
+          const value=estimacionDosisCanecas(recipe.dosis_por_caneca,lot.numero_canecas);
+          if (value===null || n>=100) continue;
+          n++; usedLots.add(lot.id); usedRecipes.add(recipe.id); lines.push(`Producto ${literalMd(recipe.producto_nombre)} (${literalMd(recipe.producto_id)}), lote ${literalMd(lot.lote_id)}: ${literalMd(String(recipe.dosis_por_caneca))} ${literalMd(recipe.unidad_dosis)}/caneca × ${literalMd(String(lot.numero_canecas))} canecas planeadas = ${value} ${literalMd(recipe.unidad_dosis)} estimados.`);
+        }
+        if (lots.some(l=>!usedLots.has(l.id)) || recipes.some(r=>!usedRecipes.has(r.id))) lines.push('Estimación parcial: hay filas del plan sin cantidad, unidad o vínculo verificable, fuera del lote consultado o no mostradas. No inferí sus cantidades.');
+        if (!n) lines.push('Faltan dosis, unidad, canecas planeadas o un vínculo inequívoco de mezcla; no calculé la estimación.');
+        if (n>=100) lines.push('Estimación limitada a 100 filas; precisa lote/producto para el detalle restante.');
+      }
+    }
+    if (r._evidencia.detalle_completo !== true) lines.push('La página no contiene todas las aplicaciones consultadas; precisa filtros para completar el detalle.');
+    lines.push('Estos son registros consultados, no una certificación de ejecución física completa.');
+    const output=lines.join('\n');
+    if (new TextEncoder().encode(output).length>24000) return {tipo:'texto',texto:'Los hechos verificados exceden el tamaño de esta respuesta. Precisa una aplicación, producto o lote; no sustituí el detalle por una estimación.'};
+    return {tipo:'texto',texto:output};
+  } catch { return failure('la respuesta estructurada de aplicaciones'); }
+}
+function rowsPlan(value: unknown): FilaEsco[] { return Array.isArray(value)?value.filter(x=>x && typeof x==='object' && !Array.isArray(x)):[]; }
 /** Domain guard: a partial/other-domain query never proves application absence. */
 export function respuestaSeguraAplicaciones(interacciones: Array<{ tool: string; result_summary: string }>, pregunta = ''): string | null {
   const unavailable = 'No pude verificar la aplicación con una consulta completa de ejecución. No puedo afirmar que no exista.';
@@ -388,7 +571,20 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     const recetas = await related('aplicaciones_productos', 'id,mezcla_id,producto_id,producto_nombre,dosis_por_caneca,unidad_dosis,cantidad_total_necesaria', 'mezcla_id', mezclas.map(m => m.id));
     const trabajo = await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', selectedApps.map(a => a.tarea_id));
     limites.push('Consumido en rango; trabajo y plan por aplicación completa. Dosis por caneca y consumo total no se comparan sin unidad compatible. Sin captura no demuestra que no se ejecutó.');
-    return finish(selectedApps.map(a => ({ ...a, fechas_inconsistentes: dateIssues(a), base_fecha_consultada: basis, fecha_real_ausente: !a.fecha_inicio_ejecucion, alcance_planeado: legacyPlans.filter(p => p.aplicacion_id === a.id), plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })), productos_planeados: recetas.filter(r => mezclas.some(m => m.id === r.mezcla_id && m.aplicacion_id === a.id)), movimientos: ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) })), registros_trabajo: trabajo.filter(t => t.tarea_id === a.tarea_id) })), { date_basis: basis, alcance: scope, coincidencias: selectedApps.length, fechas_reales_ausentes: matching.filter(a => { try { return !a.fecha_inicio_ejecucion || !validarFecha(a.fecha_inicio_ejecucion); } catch { return true; } }).length, fechas_inconsistentes: matching.filter(a => dateIssues(a).length).length });
+    const scopeLotes = args.lote_name ? lotes.filter(l => contiene(l.nombre, args.lote_name)).map(l => texto(l.id)) : null;
+    return finish(selectedApps.map(a => {
+      const movements = ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) }));
+      const records = trabajo.filter(t => t.tarea_id === a.tarea_id);
+      return { ...a, fechas_inconsistentes: dateIssues(a), base_fecha_consultada: basis, fecha_real_ausente: !a.fecha_inicio_ejecucion,
+        alcance_planeado: legacyPlans.filter(p => p.aplicacion_id === a.id),
+        plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })),
+        productos_planeados: recetas.filter(r => mezclas.some(m => m.id === r.mezcla_id && m.aplicacion_id === a.id)),
+        movimientos: movements, registros_trabajo: records,
+        hechos_ejecucion: hechosEjecucionAplicacion(movements, records, { aplicacionId: texto(a.id), tareaId: a.tarea_id ? texto(a.tarea_id) : null,
+          tareaExclusiva: !!a.tarea_id && apps.filter(other => other.tarea_id === a.tarea_id).length === 1,
+          desde, hasta, loteIds: scopeLotes, consultaCompleta: true, baseSeleccion: basis }),
+      };
+    }), { date_basis: basis, alcance: scope, coincidencias: selectedApps.length, fechas_reales_ausentes: matching.filter(a => { try { return !a.fecha_inicio_ejecucion || !validarFecha(a.fecha_inicio_ejecucion); } catch { return true; } }).length, fechas_inconsistentes: matching.filter(a => dateIssues(a).length).length });
   }
   if (nombre === 'get_monitoreo_cobertura') {
     const [rondas, sublotes, lotes] = await Promise.all([read('rondas_monitoreo', 'id,nombre,fecha_inicio,fecha_fin', 'fecha_inicio'), read('sublotes', 'id,nombre,lote_id'), read('lotes', 'id,nombre,activo')]);

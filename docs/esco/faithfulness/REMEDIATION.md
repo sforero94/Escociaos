@@ -1,8 +1,16 @@
 # Bounded answer-quality remediation
 
-## Baseline and outcome
+## Current local continuation after the v283 campaign
 
-Repository baseline: main `0aa3710f2e01173ba1dd8f5b495d63de9bf6c3c3`, tree `55240cc72366a8b8fb48a31040371682ef6c783c`. Active backend baseline remains v282, runtime source `e7a5545bc8d87ad0502caf009d0201cae67fc772`. Local remediation is not deployed. Preserve security, SQL, access and existing domain calculations.
+Main source baseline: `0efd11efd4ce4e7a2975720d55cba57b9f118478`, tree `010c7f2775d760cca1eff59bc08ad0019bdeb3af`. Reconciled locally onto actual remote main `8930ca34a0b41ce6fcfc06f4e5538d69a57c8bab` (scheduled drift-state JSON only); runtime behavior is unchanged. Live v283 remains frozen. The parent reports40 campaign sends,39 rendered answers and one explicit error; acceptance failed and final grading counts are still under audit. This is not an improvement or rollback claim.
+
+Local-only work now recognizes direct planned application interrogatives and computes registered consumption/labor facts before generation. Application reads require nonnegative exact stable counts; missing quantities, identities, units or scope remain explicit. See [APPLICATION_FACTS_LOCAL.md](APPLICATION_FACTS_LOCAL.md) for the bounded source changes and the application-only deterministic renderer. Covered operations now render fresh facts before a second prose generation; mixed/unsupported operations retain the existing path and its known limits. No publication, merge, deployment, secret access or model call is authorized by this checkpoint.
+
+The superseded one-time release runner still binds to the prior83-file source; the local runtime has84 files. Tests now assert its exact rejection of this unapproved source, without repinning or weakening execution guards. A separately reviewed release remains necessary. Local renderer counterfactual tests fail10/22 against a/b75b23b4 and pass on the candidate; synthetic success is not online acceptance.
+
+## Historical first-package baseline and outcome
+
+At first-package preparation, repository baseline was main `0aa3710f2e01173ba1dd8f5b495d63de9bf6c3c3`, tree `55240cc72366a8b8fb48a31040371682ef6c783c`. Backend baseline then was v282, runtime source `e7a5545bc8d87ad0502caf009d0201cae67fc772`; that local checkpoint was not deployed yet. Preserve security, SQL, access and existing domain calculations.
 
 Confirm causal mechanisms, fix confirmed defects in small packages, and demonstrate materially better factual answers in comparable online Web tests. Parent owns private evidence, independent grading, release coordination and the prospective online campaign. Synthetic replay proves code/protocol behavior, not model quality. No private prompts, records, identities or traces belong in repository fixtures.
 

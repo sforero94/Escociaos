@@ -47,7 +47,9 @@ function install(model: (body: Record<string, unknown>) => unknown, read?: (url:
     const url = new URL(input);
     if (url.origin === FIXTURE && (init?.method ?? 'GET') === 'GET' && read) {
       const rows = read(url);
-      return new Response(JSON.stringify(rows), { headers: { 'content-range': `0-${Math.max(0, rows.length - 1)}/${rows.length}` } });
+      const full = new URL(url); full.searchParams.set('limit','20001'); full.searchParams.set('offset','0');
+      const total = read(full).length, offset = Number(url.searchParams.get('offset') ?? 0);
+      return new Response(JSON.stringify(rows), { headers: { 'content-range': rows.length ? `${offset}-${offset+rows.length-1}/${total}` : `*/${total}` } });
     }
     unexpected.push(`${init?.method ?? 'GET'} ${url.origin}${url.pathname}`);
     throw Error('Unexpected request; network fallback forbidden');
@@ -186,7 +188,12 @@ describe('review regressions: identity and collections retain their scope', () =
       return table === 'aplicaciones' ? [A, B] : [];
     });
     const result = await llmToolLoop([{ role: 'user', content: 'Dame el estado de las aplicaciones de mayo de 2031' }]);
-    expect(result.text).toBe('Synthetic two-application state summary');
+    expect(result.text).toContain('Fumigación plága Z');
+    expect(result.text).toContain('Fertilización sintética');
+    expect(result.text).toContain('Estado registrado: En ejecución');
+    expect(result.text).not.toContain('Synthetic two-application state summary');
+    expect(result.text).not.toContain('Precisa cuál');
+    expect(round).toBe(1);
     expect(JSON.parse(result.toolInteractions[0].result_summary).detalle).toHaveLength(2);
   });
 });
