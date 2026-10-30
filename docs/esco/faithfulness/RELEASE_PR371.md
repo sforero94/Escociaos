@@ -1,0 +1,52 @@
+# One-time PR371 backend controls — preparation only
+
+No diagnostic, deployment, secret access or migration has run during preparation. This document is not approval to execute. Runtime remains fixed at e7a5545bc8d87ad0502caf009d0201cae67fc772; subsequent commits add controls/tests/docs only.
+
+## Fixed identities
+
+| Item | Fixed value |
+| --- | --- |
+| Project / function | ywhtjwawnkeqlwxbvgup / make-server-1ccce916 |
+| Function metadata ID | 9defb252-5ea2-463b-b91b-497e0a7fe582 |
+| Runtime source / edge tree | e7a5545bc8d87ad0502caf009d0201cae67fc772 / 6e9969d49f652989ef2c1679ff24be0f976410e7 |
+| Runtime complete82 fingerprint | b83bc09149e76798832153b2aa620bf91d8d90af26c889dfefe137e8d2465685 |
+| Rollback Git / edge tree | 634580480c72b27c7ccd2d8c006af520d0ca1058 / 99ba3737577f064e27112e4e99a8dd24739c6422 |
+| Rollback complete82 fingerprint | 3010b467d3d259cf34cbce7875b393e67748a709a88413857199dd6b2282ce4e |
+| Expected native80 from Git, NOT observed | 1a7e50e2d0b37c7aa0c014b564ee90312dfcdff971a49ebbc0215686342fa24f |
+| Required baseline bundle / version | 27dc76027a6b6eeddd5866f1e749ec2de32c3ac059b449ec6c8cb703a742756b / 281 |
+| Required baseline timestamp | 1793306746924 (2026-10-29T20:45:46.924Z) |
+
+Baseline also requires ACTIVE, verify_jwt=false, import_map=false and the exact function/version entrypoint. These are historical required values, not a fresh observation. Any movement stops the job. Source and rollback checkouts must be clean, with exact commit/tree/config and full fingerprints. The new controls import only safe pure helpers from the unchanged PR367 files; they never call that release routine or broaden its old authorization.
+
+## Modes and permission boundary
+
+The new workflow is manual, main-only and first-attempt-only, with contents:read. No push/schedule/PR trigger, added credentials, persistent grants, artifacts or source uploads. It shares escocia-pr367-edge-release concurrency with the old job; the owner must additionally confirm an exclusive backend window covering other agents/CLI deployers. Re-run jobs is rejected. A new run after uncertainty requires inspection and new relevant authorization.
+
+Both CLI2.122.0 and TypeScript5.9.3 are installed/tested before management credentials exist. The existing SUPABASE_ACCESS_TOKEN is scoped to the final execution step. The CLI uses its prepared cache offline. No token/output/API body is printed. Console evidence contains counts, paths, hashes, type proof and safe metadata only. Unknown path names are hashed; redirects/symlinks/special files/cache differences are rejected, never normalized away. Existing capture helpers retain exact wrapper/cache rules and the two known type-only omissions.
+
+[GitHub requires workflow_dispatch files on the default branch](https://docs.github.com/actions/managing-workflow-runs/manually-running-a-workflow). This new workflow cannot be dispatched while only in draft371. Merge approval must acknowledge the normal frontend rollout; it does not itself authorize backend/migration execution.
+
+## Required approval sequence
+
+1. Review the final controls/tests and unchanged runtime; specifically approve ready/merge when appropriate. No release workflow dispatch is implied.
+2. Specifically authorize one mode=diagnose dispatch with confirmation DIAGNOSE_PR371_V281_ONLY and blank reviewed-diagnostic inputs. This step uses the existing management identity only for metadata/source download. Diagnose receives no deployment or health capability.
+3. Inspect the successful first-attempt diagnostic: native80 is downloaded evidence; reconstructed82 adds only importHato/tipos.ts and telegram/types.ts from pinned Git after AST/empty-emission and18 explicit incoming type-only-reference checks. Record the actual diagnostic run ID, control SHA and receiptSha256. The v280 capture is not v281 evidence. Any unknown difference stops; no guard relaxation is authorized.
+4. Obtain separate owner approval for one release, conditional verified rollback and exclusive backend window, referencing that observed run/receipt. Dispatch mode=release with confirmation DEPLOY_PR371_WITH_REVIEWED_V281_ROLLBACK and those reviewed inputs. The controls commit must still be identical to the diagnostic; otherwise obtain a new diagnostic/review. Human approval remains an external requirement, not inferred from success or a matching expected hash.
+
+Before the secret-bearing step, release verifies the successful main workflow/run/job and exactly one receipt via public GitHub APIs/logs, with the same controller SHA and run_attempt1, exact reviewed receipt digest and pinned source/baseline fields. Public reads carry no token; denial, expired evidence, extra jobs/receipts or unknown redirects fail closed without auth fallback. The log redirect allowlist permits Azure account hostnames under blob.core.windows.net, not a single pinned account. No token is forwarded. [GitHub documents public-resource access without authentication](https://docs.github.com/en/rest/actions/workflow-jobs#download-job-logs-for-a-workflow-run); live availability is not assumed or tested during preparation.
+
+Release then observes two new complete captures matching the reviewed native80 and reconstructed82, checks stable metadata and clean Git again, and deploys only the fixed source through Supabase CLI. It verifies owned next-version metadata, anonymous health and a fresh deployed-source comparison. Expected next version is282 only if the pinned281 baseline still holds.
+
+## Failure, rollback and evidence limits
+
+CLI errors, metadata movement, DEPLOYING/unknown status, unavailable/truncated health transport or unknown postdeploy layout are uncertain: stop and inspect; do not retry or blindly roll back. Only a stable, owned next-version deployment with confirmed bad health/configuration can trigger one rollback. Rollback redeploys verified clean capture/Git-equivalent281 source and config; it verifies next-version metadata, health and restored native80/reconstructed82 source. No deployment retry occurs. Bounded health retries do not retry deployment.
+
+Git supplies durable source/config after the equality proof. Runner captures are temporary and removed even on failure; no private plaintext artifact is uploaded. Source recovery does not reproduce the original ESZIP, floating dependencies, runtime, secrets or version number. A successful rollback would normally be version283, not literal281. Public log expiry or unavailable anonymous GitHub reads blocks release; no new permission is silently granted.
+
+Migration188 is excluded entirely: no database commands, business reads/writes, old-row repair, provider/model calls or bot messages. Its preflight/application and any cleanup require separate approval. Health/source proof is not live faithfulness calibration or browser/chat acceptance.
+
+After separately accepted release/rollback evidence, propose cleanup of this workflow, controller, synthetic checks/wrapper and this guide. Do not remove prior controls or evidence automatically. The temporary pinned-source test intentionally detects changed runtime while these controls are active.
+
+## Preparation receipts
+
+114 synthetic Node guards passed, including reused capture controls; the new Vitest wrapper runs them without inherited credentials. Full suite4994 tests/226 files, zero skips; evaluator168 tests plus types/focused lint; repository lint0 errors/907 existing warnings; build26.03s and whitespace/source-parity passed. Independent ownership/capture review12 extra assertions and prior-evidence review17 extra assertions passed without external calls. Review corrected the GitHub rerun admission gap and confirmed that interrupted health bodies remain uncertainty. Public API/log access, current281 metadata and actual native captures remain untested until an explicitly authorized diagnostic. Final control-head/CI receipt is recorded in PR371/handoff; runtimee7a5545 evidence is separate.

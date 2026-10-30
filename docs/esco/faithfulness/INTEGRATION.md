@@ -1,6 +1,12 @@
-# Current I03-d — offline scripted evaluator composition
+# Faithfulness integration — I03-d refresh
 
-Runner branch: `codex/esco-faithfulness-eval-replay`, target integration base `codex/esco-faithfulness-offline-base` at `158720fed6ceb461efd34746760db520c557d2a3`. This uses #359 explicit dates, #361 raw history/windows and #363 closed fixture state; it cannot honestly target main until those dependencies land. The PR incremental diff adds only replay composition/tests and tracker updates. Integration-base provenance/order follows below; do not merge that base as a replacement for the reviewed slices.
+## Current I03-d candidate — 2026-10-30 UTC
+
+Actual main0e80cae23ab257a845ba94db18a09d1a4856a5f6, root tree84ac7a28b28f08fbbeda22bfba9c9dde592e5641, now contains359/361/363. Existing draft364 is refreshed through a non-forced merge with original19d16783e7af0dde3a95057dea45446ece76e4a5. Its original replay implementation/tests and all nine imported dependency source blobs are unchanged. Retarget364 to main, not the obsolete offline integration-base; do not merge that base as a PR. Only two original composition files and three reconciled trackers differ from current main. Preserve all security,371 UI/runtime/control source and PO work.372 is unrelated/unmerged, not a dependency.
+
+Merged363 head4fae9c0, merge0e80cae: postmerge CI40994634155/job123864789506 passed5034 tests/227 files, types/lint; GitHub Vercel status success. The reviewed fixture files remain identical2f996c7. Backend371 release40992476137 previously stopped before management access; no backend operation occurs here. Parent reports188 applied separately; no SQL, historical repair or live query in this task.
+
+Current task stops at reviewed draft/terminal CI before parent ready/merge go, under the user's specific364 grant. After364 lands, reconcile366 against actual current main and retest; no readiness claim for future heads. No providers, private fixtures, environment/credentials, production reads/writes or deployment.
 
 ## Composition contract and evidence limits
 
@@ -12,52 +18,79 @@ Runner branch: `codex/esco-faithfulness-eval-replay`, target integration base `c
 - Record pack/scenario/script/base-prompt SHA-256 and reference/rubric versions. These are canonical JSON hashes (including quotes for strings), not original byte hashes, code hashes or authorization/provenance proof. Candidate code identity is the reviewed PR SHA; no unverifiable git/source stamp is invented by the pure API.
 - Network proof: the bounded import graph reaches only offline helpers plus node:crypto; no network/runtime/env path or executable transport input exists. Tests deny inherited fetch while executing both channels and failures, and reject executable injection. This proves this declarative composition makes no network calls in those controls. It is not a sandbox for malicious JavaScript, a general HTTP interceptor, production-loop replay or proof against every process-side network path.
 
-Next milestones: after reviewed dependencies land, retarget/retest this runner; add a separately reviewed production-loop/transport integration with sticky no-fallback guards; review synthetic scenario provenance and coverage; then authorized calibration/live QA. No private disclosure/provider/production/runtime activation is implied. Original P0-03 acceptance criteria remain unfinished until actual-loop isolation is verified. No P1-02 or further slice starts here.
 
-Rollback: revert only incremental offline files; no schema/runtime/deployment rollback. No mobile/provider/live QA applicable to this pure API. Security and alert deployment/migration owner remains separate.
+Rollback: revert the incremental offline composition/test/docs only. No schema/runtime rollback. This slice does not complete private calibration or the original P0-03 scenario coverage requirements; actual-loop integration is366, separate.
 
-# Offline integration base (PR target only)
+## Historical I03-c refresh (merged363)
 
-This branch combines exact reviewed heads #359 (`9de2be29a90a37760d0ce81ed8052eda38ad1bed`), #361 (`917f9ad42b8b491f97f277254af9a97f892210b7`), and #363 (`2f996c7cacebab5a05d03ce5fbd07590b0e67a19`) through local merge commits. No GitHub PR is merged and main stays `6a2dd50`. The only merge conflicts were the three shared tracker docs; the later #363 snapshot supplies current scope/links, and original histories remain in their unchanged parent commits. No code conflict or implementation edit.
+Current remote main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe, root treecc3d23322fb78c047207717cdb86dee4255199db. Existing draft363 receives a non-forced merge integration with its original2f996c7cacebab5a05d03ce5fbd07590b0e67a19 head. Both fixture implementation/test blobs remain byte-identical. Only the three shared trackers are reconciled; no sibling runner/runtime code is imported. Preserve359/361, security360/362,371 UI/source/controls and PO documents. Draft372 remains separate and is not a dependency.
 
-Purpose: minimal explicit base for the dependent offline runner PR, avoiding sibling-code duplication in a main-targeted diff. **Do not merge this integration branch to main.** Morning order: #359 → #361 → #363, reconcile docs and retest each final head; then rebase/merge current main into runner as appropriate without force-pushing, retarget runner to main only after its dependencies are present, inspect the incremental diff and rerun all gates/CI. No merges tonight. The runner uses dates, raw history and the fixture adapter, so it requires all three candidates.
+PR371 is merged; postmerge CI40987891472 passed4994 tests and GitHub Vercel status succeeded. Its diagnostic40988136741 passed; approved release40992476137 stopped at anonymous diagnostic-log redirect verification, before the management step. It did not deploy or roll back; backend remains the last verifiedv281. Parent reports188 separately applied/postverified02:32:12UTC with ledger20261030023201, no historical repair. This offline refresh performs no production reads, writes, providers, permission changes, migrations or deployment.
 
-The prior #363 tracker snapshot follows as history, not a claim this base is another publishable slice.
+User specifically authorized363→364→366 integration, but this task stops at a reviewed candidate/CI for the parent before ready/merge. Do not merge the old offline integration-base. After363 lands, reconcile364 on actual current main and retest;366 follows only after364. These future candidates are not declared ready against an unknown future main.
 
-# Faithfulness integration — I03-c
+### Preserved fixture contract and limits
 
-## Baseline and queue
+Node-only helper with node:crypto; no I/O, network, environment, provider or app/runtime import. Caller supplies an explicitly synthetic manifest; no private scenario pack is bundled. Canonical JSON validates lossless finite values and exact scenario/turn/tool/argument keys. Hashes establish supplied-content consistency, not provenance, human adjudication or truth. Errors, missing/partial/stale evidence and instruction-like output remain opaque results.
 
-Main `6a2dd50bea966f733d6ef42b15bf1346ca77d6dc` includes I01/#357 and I02/#358. Preserved source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`. Both remote refs reverified. Draft #359 input and #361 messages are green and unmerged. Security #360/#362 are parent-owned and untouched. No merges tonight.
+Each installation clones its manifest and retains private sticky failure state. Unmatched/repeated calls, malformed arguments, unconsumed fixtures, skipped turns or attempted state resets cannot be repaired by clearing diagnostics. Consumers must call BOTH verificarFin() before advancing and verificarCasoFin() after the final turn, and propagate failure as unavailable/inconclusive. The adapter itself is not a process-wide network sandbox or a model-quality measurement. Measurementv1.1, immutable labels/adjudication and no direct v1 rate comparison remain unchanged.
 
-| Slice | Scope | Integration order |
-|---|---|---|
-| I01/I02 | Anchors, scoring, measurement v1.1/reports/adjudication | Merged #357/#358 |
-| I03-a | Input validation/selection and explicit dates | Draft #359, main base, review first |
-| I03-b | Pure channel history/message builders | Draft #361, independent main base, review second |
-| I03-c | Closed synthetic tool-fixture adapter | This branch `codex/esco-faithfulness-eval-fixtures`, independent main base, review third |
-| I03 remainder | Transport-independent runner composition, authorized loaders/config and closed HTTP/model guards | Adapt to #361 raw-history API, #359 input/date contract and this adapter's finalization; no runtime/provider/private data automatically authorized |
-| I04 | Runtime injection/evidence changes and both edge copies | Separate review; preserve alert/F1; deployments separately gated |
-| P1-02 | Execution/control changes | Not started; requires parent dispatch/prerequisites |
+Initial reviewed363:40 fixture tests/4797 full tests on2f996c7; parent independently passed15 extra assertions. Those are historical evidence, not validation of this refreshed combination. Final candidate focused/full checks, independent review and exact-head CI are recorded in the handoff. Rollback is an offline source/test/docs revert; no database or deployed-behavior rollback.
 
-No code dependency among queued I03 slices: no stacking, duplicate module or retarget needed. Three tracker docs overlap. After each earlier merge, reconcile current state while preserving historical evidence and rerun checks/CI on the changed final head before the next merge. Do not reuse old CI receipts or force-push.
+## Historical application-correction scope before371 merge
 
-## I03-c replay contract
+Baseline main `f175c78a1bc65955f34247589698958565ab20b6`, root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`, includes merged359 and361. Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
+The current application-domain correction changes runtime source, UI date validation and a draft database trigger. It is not deployed. One-time371 controls/tests/docs are now prepared in the same draft, fixed to unchanged e7a5545 runtime. No dispatch or management-secret access occurred; RELEASE_PR371.md defines separate diagnostic/release gates. Security, accepted runtime367/release controls and PO changes remain intact.
 
-- Node-only offline helper uses `node:crypto` SHA-256; no app/runtime import, I/O, fetch, environment lookup or provider code. Caller supplies explicitly synthetic manifests, no bundled dataset. Tests construct synthetic controls. Source case/model conversion and scenario pack excluded pending separate provenance/runner review.
-- Canonicalization sorts object keys, preserves arrays and null vs absent keys. Rejects nonfinite numbers, undefined, functions, bigint, sparse/decorated arrays, symbols, accessors, hidden properties, exotic prototypes, cycles and depth above 100. JSON `-0` normalizes to `0`. This is not a general arbitrary JavaScript-object decoder.
-- Manifest validates schema/source/review declaration, nonblank versions, unique SYN IDs, exact channel, explicit valid local timestamp, criteria/turn/fixture shapes, exact scenario hash index and duplicate tool/argument keys per turn. Hashes prove integrity relative to the supplied manifest only: a self-declared flag/hash does not establish provenance, real-world truth, human adjudication or a source-byte authorization gate.
-- Each installation snapshots its manifest. Matching has no fallback. Each call consumes one fixture. Call `verificarFin()` before advancing and `verificarCasoFin()` after the last turn. Unconsumed fixtures, early finalization, skipped turns, unknown/duplicate calls and invalid arguments permanently invalidate the installation, even when exceptions are caught or diagnostics cleared. A separately valid run needs a new installation.
-- Empty/null/errors/partial/stale/missing evidence and long/truncated/instruction-like strings remain opaque JSON results. No approval, repair or success promotion. Truncated strings are JSON-encoded as strings (`JSON.stringify(result)`), matching the source API; not raw HTTP transcripts. Intentional duplicate metadata is preserved but no scripted model runs here.
-- Future orchestration must invoke both finalizers and propagate invalidity as unavailable/inconclusive. This adapter cannot intercept networking or prove production-loop isolation. Mocked answers cannot measure quality. Measurement v1.1, labels and adjudication remain unchanged; v1 comparisons require common-contract recomputation.
+The owner explicitly selected actual execution dates by default, planned dates only on explicit intent, and independent start/end validation for both pairs. Direct execution-tool routing, normalized name matching, ambiguity and incomplete-evidence safeguards address application lookup. See [APPLICATION_CORRECTION.md](APPLICATION_CORRECTION.md) for inventory, write boundaries, tests and activation limits. No business records are rewritten; migration188 is draft only.
 
-## Review, remaining milestones and rollback
+Measurementv1.1, immutable labels and adjudication safeguards remain unchanged. No private fixture or provider call is included. Offline363→364→366 stays queued while this correction is reviewed.
 
-Initial source controls: 10 failed, 1 passed. Independent QA found channel-array coercion and custom-array hash behavior; both fixed with regressions. Focused lint initially rejected a sparse literal; same invalid input now constructed using `Array(2)`, no lint relaxation. Final-head test/type/lint/build receipts are in the handoff/PR.
+## Historical queue before371 merge and accepted367 release
 
-Remaining useful work: transport-independent runner composition; closed transport/network-denial verification; separately reviewed runtime injection/evidence; synthetic scenario provenance/coverage review; then authorized calibration/live QA. No completed calibration or live-faithfulness claim.
+| Slice | Current state | Dependency / next action |
+| --- | --- | --- |
+| I01 | PR357 merged | 15 corrected synthetic anchor tests; prior evidence retained below |
+| I02 | PR358 merged | Pure scoring/reporting and measurementv1.1; prior CI40765357918 passed |
+| I03-a | PR359 merged | Merge50d3776; postmerge CI40956872042 passed |
+| I03-b | PR361 merged | Mergef175c78; postmerge CI passed |
+| I03-c | PR363 draft | Reconcile against current main; closed fixture transports |
+| I03-d | PR364 draft | Reconcile after363; offline runner composition |
+| I03-e | PR366 draft | Reconcile after364; synthetic actual-loop integration |
+| I04-a | PR367 merged and backend released | Accepted corrective summary-safety portion only; broader runtime work remains separate |
+| P1-02 | Not started in this continuation | No authorization to advance here |
 
-Rollback: revert offline files. No schema/history/traffic rollback, no mobile/live channel/provider QA exercised. Alert migration186/edge deployment belongs to the other owner; no live ledger/deployment state queried. Private disclosure, paid calls, telemetry, schedules, canaries and activation stay gated.
+Do not merge `codex/esco-faithfulness-offline-base`. Reconcile tracker conflicts and retest each later candidate.
+Security #360/#362, migration files, release controls and all PO changes remain part of the base.
+No subsequent slice is included to satisfy imports.
+
+PR367 fixed source `634580480c72b27c7ccd2d8c006af520d0ca1058` deployed as v281.
+PR370 merged at `9a447d9e1a9202b07dee7e555435443b47892f4a`.
+[Release40951834611](https://github.com/sforero94/Escociaos/actions/runs/40951834611) passed once, with no rollback.
+Both native80-file captures passed exact source/cache/type checks; reconstructed82-file comparisons matched pinned rollback Git.
+This proves source/configuration recovery, not bit-identical ESZIP, dependencies, runtime or secrets.
+Metadata confirmed ACTIVE, verify_jwt=false and updated2026-10-29T20:45:46.924Z; anonymous health passed.
+Parent accepted read-only browser smoke at20:50–20:53UTC: session, dashboard, expense history and Registrar; no application console errors.
+No functional births query, real model calibration or business write was tested.
+Temporary release controls remain pending a separately reviewed cleanup after acceptance; this refresh does not remove them.
+The historical drift Actions failure was not rerun; read-only source/tree/metadata checks subsequently aligned.
+
+## I04-a behavior retained from main
+
+Saved summaries preserve own error markers and downgrade completeness after context truncation.
+The births gate rejects error/context-loss summaries. Short results, complete-empty and valid paginated aggregates remain compatible.
+Immediate full tool payloads remain unchanged. This is not a hard size cap or general semantic fact checker.
+The completed correction reproduced six failures, then passed76 focused and26 independent synthetic assertions.
+Those historical counts are not PR361 validation and are not live faithfulness measurements.
+
+## Validation for this refresh
+
+All message source/test blobs retain their reviewed917f9ad identities; the existing main input adapter remains unchanged.
+Original23 focused message tests covered19/20/21 rows, repeated turns, excluded evidence, absent values and malformed protocol.
+Earlier findings corrected missing-value formatting, unknown-channel fallback and unbounded21/23-row histories before that reviewed head.
+Those are historical implementation receipts, not validation of this refreshed candidate.
+Final-head full suite, evaluator check, types, lint, build, independent review and exact-head CI are required for this refresh.
+No unrun check is marked passed here. No private JSONL, paid provider, live calibration or production write is exercised.
 
 ## Review corrections and measurement semantics
 
@@ -74,7 +107,7 @@ now uses the existing ES2020-compatible API. No test or compiler setting relaxed
 Final-candidate checks are reported with the exact handoff SHA after commit.
 
 These are typed pure APIs, not a general decoder of arbitrary run/review JSON.
-Golden input validation remains I03. Prompt separation is tested synthetically;
+I03-a adds case-shape/calendar validation; semantic input truth remains unverified. Prompt separation is tested synthetically;
 no real model injection-resistance claim follows. Anchors only check token presence:
 `1.234` retains both numeric candidates, small integers remain soft, and a strong
 anchor may occur in any evaluated turn. This does not prove entity/period support,
@@ -105,7 +138,7 @@ Final-candidate checks are reported in the correction handoff; `115db6e`'s
 - Initial candidate: 13 tests, zero skips; types/focused lint passed. Repository lint passed with 907 warnings; build passed in 17.97s; alert/F1/edge parity regression 232 tests across 6 files passed. Source code/test byte equality and whitespace check passed then.
 - Initial implementation `16e95e342620b7412d6614493c9e66ddc00c8f6a` and documentation handoff `f7ad0dae0df236771ddd7e18767f0e5343e0f8c5`: 13 focused / 4678 full tests, zero skips, types/lint/build passed. Logs `/tmp/esco-i01-final-*` and `/tmp/esco-i01-handoff-*`.
 - Independent I01 review: sign/year regressions reproduced 2 failures / 13 passes; fixes in `abb0ec5`. Reviewed final head `b6470a4`: 15 focused / 4680 full tests, zero skips; types/lint/build/whitespace passed. Corrected build 30.29s; 907 existing lint warnings. Logs `/tmp/esco-i01-corrected-*`.
-- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication is a separate approval and has not been attempted.
+- I01 publication was initially denied, then explicitly approved at 19:55 UTC. PR #357 opened; parent reviewed and merged after the user's 20:10 UTC approval. Earlier “no PR” and “publication blocked” notes in session history describe the earlier state only. I02 publication was later approved; PR #358 passed CI and merged.
 
 ## Gates, QA and rollback
 
@@ -114,12 +147,9 @@ calls. D01 remains resolved; P0-02 private disclosure to OpenRouter remains bloc
 The $1 cap does not authorize disclosure. Security PR #324, medium security fixes,
 credentials and access remain outside scope.
 
-PR #356 described migration 186 unapplied and edge deployment pending. No live
-ledger or deployment state is queried here; that owner remains responsible.
-No migration, deployment, telemetry, recurring spend, pilot or canary.
+PR367 and the reviewed release controls completed the separate backend release below.
+This application correction prepares migration188 without applying it; no deployment, telemetry, pilot or canary change.
 
-Recommend publishing/merging I02 only after parent review, explicit draft-publication
-authorization and PR CI. Rollback is a normal revert; no schema, history or traffic
-rollback. Desktop/mobile/live Web/Telegram QA is not exercised by these pure
-modules. A future runtime release requires authorized checks in both channels and
-preservation of alert/F1 behavior; these synthetic tests do not establish live QA.
+PR361 is merged. The application correction remains draft pending review and separate activation approval.
+Application rollback requires coordinated UI/backend source revert and removal of its date-order trigger if separately applied; no data restoration is supplied.
+Existing desktop/browser acceptance does not validate these pure modules or live model faithfulness.

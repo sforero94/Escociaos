@@ -13,8 +13,8 @@ himself: `runbooks/respuesta-sabado.md`.
 
 **Saturday never does work.** It runs no sweep, dispatches no agent, opens no
 PR, merges nothing, deploys nothing, calls no Supabase tool and writes nothing
-to the database. Its only writes are the Notion report page and the memory
-commit. It files no finding, except one against the operation itself (§
+to the database. Its only writes are the Notion report page, the memory
+commit and its Bot Log row (constitution §4 Phase 5b). It files no finding, except one against the operation itself (§
 Failure handling).
 
 > **Why a Routine report plus a reply session, and not a Routine-spawned
@@ -36,8 +36,9 @@ Failure handling).
   nothing is built or tested.
 - Read the root `CLAUDE.md`, the constitution and `evals/rubrica-ruteo.md`.
 - Write mode (constitution §7): verify the push path with the memory commit.
-- Tool preflight (constitution §4), narrowed to what Saturday uses: Composio
-  `notion` (account `thinksid`) and `github` (reads). Record the `ATTENDED=` line.
+- Tool preflight (constitution §4), narrowed to what Saturday uses: the official
+  Notion connector (step 2b) and Composio `github` (reads). Record the
+  `ATTENDED=` line.
 - **Friday check**: the latest `reports/YYYY-MM-DD-viernes.md` must be from the
   day before. If it is missing, say so on the first line of the report: the
   Saturday report is then built from the ledger alone, and Friday's absence is
@@ -83,16 +84,21 @@ An empty section says `Nada esta semana.`
 
 **Phase 3 — Publish**
 
-- **Notion**: one new page with the full report, through Composio
-  `NOTION_CREATE_NOTION_PAGE`, `account: thinksid`, `parent_id:
-  40667755-ed68-814f-b676-f9e28be7d2f3` (the "Escocia OS — Reportes del sábado" page,
-  created 2026-10-26 next to the Mantenimiento database), title `Reporte del sábado
-  YYYY-MM-DD`, and the whole report in the `markdown` argument, so that it is one call.
-  **The guard hook allows that slug under that parent only.** Any other parent, or any
-  other Notion write, is denied in this unattended run. If the call is denied or fails,
-  record it under NO CORRIÓ and continue: the file and the push still carry everything.
+- **Notion**: one new page with the full report, through the official Notion
+  connector, `notion-create-pages`, parent
+  `{"type": "page_id", "page_id": "40667755-ed68-814f-b676-f9e28be7d2f3"}` (the
+  "Escocia OS — Reportes del sábado" page, created 2026-10-26 next to the
+  Mantenimiento database), title `Reporte del sábado YYYY-MM-DD`, and the whole
+  report in the page `content`, so that it is one call. No other parent and no
+  other Notion page (constitution §6). If the call is denied or fails, record it
+  under NO CORRIÓ and continue: the file and the push still carry everything.
 - **File**: `escociaos-po/reports/YYYY-MM-DD-sabado.md`, in the memory commit,
   after the pre-commit check (constitution §4 Phase 5). Allowed paths only.
+- **Bot Log** — the last write: one new row for `YYYY-MM-DD-sabado`
+  (constitution §4 Phase 5b), `Estado = Espera a Santiago` whenever the report
+  has an item for him, `Necesito de Santiago = Responder el reporte del sábado
+  (sesión nueva)`, and the Notion page plus the report file in `Enlaces`. The
+  reply session closes this same row.
 
 **Phase 4 — Notify**
 
