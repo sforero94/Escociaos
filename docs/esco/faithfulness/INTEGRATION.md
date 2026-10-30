@@ -1,6 +1,22 @@
-# Faithfulness integration — application correction
+# Faithfulness integration — I03-c refresh
 
-## Current baseline and scope
+## Current I03-c candidate — 2026-10-30 UTC
+
+Current remote main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe, root treecc3d23322fb78c047207717cdb86dee4255199db. Existing draft363 receives a non-forced merge integration with its original2f996c7cacebab5a05d03ce5fbd07590b0e67a19 head. Both fixture implementation/test blobs remain byte-identical. Only the three shared trackers are reconciled; no sibling runner/runtime code is imported. Preserve359/361, security360/362,371 UI/source/controls and PO documents. Draft372 remains separate and is not a dependency.
+
+PR371 is merged; postmerge CI40987891472 passed4994 tests and GitHub Vercel status succeeded. Its diagnostic40988136741 passed; approved release40992476137 stopped at anonymous diagnostic-log redirect verification, before the management step. It did not deploy or roll back; backend remains the last verifiedv281. Parent reports188 separately applied/postverified02:32:12UTC with ledger20261030023201, no historical repair. This offline refresh performs no production reads, writes, providers, permission changes, migrations or deployment.
+
+User specifically authorized363→364→366 integration, but this task stops at a reviewed candidate/CI for the parent before ready/merge. Do not merge the old offline integration-base. After363 lands, reconcile364 on actual current main and retest;366 follows only after364. These future candidates are not declared ready against an unknown future main.
+
+### Preserved fixture contract and limits
+
+Node-only helper with node:crypto; no I/O, network, environment, provider or app/runtime import. Caller supplies an explicitly synthetic manifest; no private scenario pack is bundled. Canonical JSON validates lossless finite values and exact scenario/turn/tool/argument keys. Hashes establish supplied-content consistency, not provenance, human adjudication or truth. Errors, missing/partial/stale evidence and instruction-like output remain opaque results.
+
+Each installation clones its manifest and retains private sticky failure state. Unmatched/repeated calls, malformed arguments, unconsumed fixtures, skipped turns or attempted state resets cannot be repaired by clearing diagnostics. Consumers must call BOTH verificarFin() before advancing and verificarCasoFin() after the final turn, and propagate failure as unavailable/inconclusive. The adapter itself is not a process-wide network sandbox or a model-quality measurement. Measurementv1.1, immutable labels/adjudication and no direct v1 rate comparison remain unchanged.
+
+Initial reviewed363:40 fixture tests/4797 full tests on2f996c7; parent independently passed15 extra assertions. Those are historical evidence, not validation of this refreshed combination. Final candidate focused/full checks, independent review and exact-head CI are recorded in the handoff. Rollback is an offline source/test/docs revert; no database or deployed-behavior rollback.
+
+## Historical application-correction scope before371 merge
 
 Baseline main `f175c78a1bc65955f34247589698958565ab20b6`, root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`, includes merged359 and361. Preserved planning source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
 The current application-domain correction changes runtime source, UI date validation and a draft database trigger. It is not deployed. One-time371 controls/tests/docs are now prepared in the same draft, fixed to unchanged e7a5545 runtime. No dispatch or management-secret access occurred; RELEASE_PR371.md defines separate diagnostic/release gates. Security, accepted runtime367/release controls and PO changes remain intact.
@@ -9,7 +25,7 @@ The owner explicitly selected actual execution dates by default, planned dates o
 
 Measurementv1.1, immutable labels and adjudication safeguards remain unchanged. No private fixture or provider call is included. Offline363→364→366 stays queued while this correction is reviewed.
 
-## Integration order and accepted release
+## Historical queue before371 merge and accepted367 release
 
 | Slice | Current state | Dependency / next action |
 | --- | --- | --- |

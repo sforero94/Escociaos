@@ -1,17 +1,15 @@
 # Progress and handoff
 
-## Current state — application correction, 2026-10-29 UTC
+## Current state — I03-c refresh, 2026-10-30 UTC
 
-- Baseline main `f175c78a1bc65955f34247589698958565ab20b6`; exact local baseline root tree `8baf11662a14df15ac8484ddab52d9b4cdbc2771`. Preserve security360/362, runtime367, release controls and PO documents. Original source remains `3d3e65454d8d2f78971593f1fe90a0514ce22301`.
-- I01/#357, I02/#358, I03-a/#359 and I03-b/#361 are merged. The current scope is the owner's application lookup/evidence and deterministic date-order correction. Planned-date default is superseded by explicit actual-date default; planned basis requires explicit intent. See APPLICATION_CORRECTION.md.
-- UI create/edit/start/closure boundaries validate planned and actual pairs independently. Draft migration188 guards direct writes without rewriting legacy rows; it has only run against an isolated synthetic PostgreSQL table. No production migration or deployment is authorized by this draft.
-- Direct execution-tool routing, accent/space normalization, candidate ambiguity, actual/planned arguments and incomplete evidence are covered with synthetic closed-loop fixtures. No production trace content is copied into Git. Measurementv1.1 and immutable labels remain intact; this is not live calibration.
-- Runtime367 remains separately released as v281 through370. Parent accepted read-only session/dashboard/expense-history/Registrar smoke20:50–20:53UTC. No application query, births query, real-model calibration or business write was validated there. Temporary release controls remain pending separate cleanup.
-- Remaining offline order:363→364→366; reconcile/retest each later. Never merge the offline integration-base branch. Stop after this correction draft and terminal CI; no merge/deploy or next slice.
-- Parent owns Bot Log. No private fixtures, providers, production writes, credential/access changes or P1-02 work. Historical preserved-source milestones below do not claim activation on main.
+- Baseline main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe, root treecc3d23322fb78c047207717cdb86dee4255199db. Preserve all security/PO/runtime/controls and original planning source3d3e654.
+- Existing draft363 is the sole candidate. Original fixture source/test from2f996c7 remain byte-identical; only current-main integration and three tracker docs change. No372 dependency or new implementation.
+- I01/357, I02/358,359/361 and application correction371 are merged.371 postmerge CI40987891472 passed4994 tests; diagnostic40988136741 passed, release40992476137 stopped before management access. Backend remains last verifiedv281;372 receipt-access repair is a separate unmerged draft.
+- Parent reports separate188 application/postverification02:32:12UTC, ledger20261030023201; no historical repair. This task performs no live ledger, business or provider access.
+- Required now: refreshed40 fixture tests/full suite/evaluator/types/lint/build, independent adversarial review and exact candidate CI; do not reuse old checks. User's363-specific merge authorization is known, but parent readiness review precedes ready/merge. Stop here, do not start364.
+- Remaining order363→364→366, each reconciled/retested after its actual dependencies land. Never merge the old offline integration-base. No private calibration, production traffic, backend/permissions change or quality claim.
 
-
-## Current application correction pass
+## Historical application correction pass (merged371)
 
 Draft371 initially published493d587 with terminal green CI; parent review nevertheless found five bounded defects. Planned selection now requires positive intent rather than mention; actual/negation/mixed precedence stays safe. Agricultural existence/fumigation routing, valid plural results, unfiltered named/ID state discovery and local-date-only start checks are corrected with regressions. Ten actual handler negative tests cover create/edit/start/close without database calls. Final re-review/check receipts supersede the initial green result below; no activation is authorized.
 
@@ -235,3 +233,13 @@ Update this table and the current-state block in the same session. Add implement
 Branch `codex/esco-faithfulness-summary-safety`; baseline current main47d1386, PO files preserved. Reproduced6 failures in current-main focused controls, fixed canonical `escoConsultas.ts` and synchronized its two generated copies with the existing script. Added synthetic tests to existing main query/loop suites:76 focused passed, independent26 assertions passed. Immediate raw tool data stays complete; persisted truncation/failure cannot pass the births evidence gate. No new business rule, typed-envelope migration, hard context cap, tool injection or Telegram rewrite. Final-head test/type/lint/build/CI receipts belong in PR/handoff. Rollback is source revert and mirror synchronization; deployed rollback would separately require an authorized edge deployment. No deployment or production/private/provider action occurred. Next: parent review and morning queue integration, no further slice.
 
 Initial I04-a implementation `b162e37` full suite:4781 passed,1 failed; the existing documentation guard flagged placement of the public prior-CI receipt near channel-history text. Moved the unchanged receipt into its own section. No guard, allow-list or source/test assertion was relaxed. Functional source/tests remain as independently reviewed; final handoff is the later documentation commit and must pass all final-head gates.
+
+## Historical session — I03-c closed fixture adapter, 2026-10-29 UTC
+
+Branch: `codex/esco-faithfulness-eval-fixtures`, base main `6a2dd50`. Source preserved. Changes: Node-only canonical/hash/manifest and closed tool replay in `src/utils/escoEvals/fixtures.ts`, synthetic `escoEvalsFixtures.test.ts`, three tracker docs. No other scope imported. Initial 10 failing controls fixed; independent reviewer found and rechecked two additional fixes. Precommit gates: `eval:esco:check` 132 tests, `npm test` 4797/219 files, zero skips; types/lint/build passed (907 prior warnings, build27.19s), whitespace clean. Logs `/tmp/esco-i03c-final-{check,suite,lint,build}.log`; initial failures `/tmp/esco-i03c-repro.log`. Final committed head must pass gates before publication; exact receipt belongs in PR/handoff. No mobile/live QA applicable to this offline helper. Remaining: final-head CI and morning review; next useful implementation is transport-independent replay composition after parent dispatch. Keep #359/#361 queued, no merges/production actions.
+
+## Session — refresh existing363 against merged371 main, 2026-10-30 UTC
+
+Original head2f996c7 and actual main13ef1f4 reverified. Prepare a merge integration preserving both remote parents without force-push; original fixtures.ts and escoEvalsFixtures.test.ts blobs are unchanged. Reconcile current trackers only, retaining prior historical evidence and all main security/runtime/PO source. Node-only synthetic adapter has no production capability; consumers must invoke both finalizers and propagate sticky failure. Hashes prove consistency only. Final verification/independent review/CI belongs to the candidate handoff; no unrun check is passed here. Next scope only after parent review and363 merge: refresh364 against actual main, not old integration-base.
+
+Local refreshed-candidate checks:40 fixture tests;208 evaluator tests/types/focused lint;5034 full tests/227 files, zero skips; full lint0 errors/907 existing warnings; build and whitespace passed. Independent review passed25 additional synthetic assertions and verified original blob parity. CI must validate the new remote merge head; historical2f996c7 results do not substitute.
