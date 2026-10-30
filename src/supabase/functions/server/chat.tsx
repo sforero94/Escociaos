@@ -19,6 +19,7 @@ import {
   type PersistedMemory,
 } from './memory.ts';
 import { buildRadiationContext } from './radiation-context.ts';
+import { serializarEvidenciaLeche } from './hato-produccion-evidencia.ts';
 import {
   buildGanadoInventorySummary,
   renderMovimientosRecientes,
@@ -147,7 +148,10 @@ function getAdminHeaders() {
   };
 }
 
-async function supabaseQueryPage(table: string, query: string): Promise<unknown[]> {
+// Opt-in attestation for the milk tool only. An absent count is unknown, not
+// evidence that a short page exhausted the query. Other callers keep prior behavior.
+interface ConteoConsulta { total?: number }
+async function supabaseQueryPage(table: string, query: string, conteo?: ConteoConsulta): Promise<unknown[]> {
   const { url, headers } = getAdminHeaders();
   const res = await fetch(`${url}/rest/v1/${table}?${query}`, { headers: { ...headers, Prefer: 'count=exact' } });
   if (!res.ok) {
@@ -159,6 +163,20 @@ async function supabaseQueryPage(table: string, query: string): Promise<unknown[
   const total = Number(res.headers.get('content-range')?.split('/')[1]);
   const offset = Number(/(?:^|&)offset=(\d+)/.exec(query)?.[1] ?? 0);
   const requested = Number(/(?:^|&)limit=(\d+)/.exec(query)?.[1] ?? 200);
+  if (conteo) {
+    const range = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(res.headers.get('content-range') ?? '');
+    if (!range || !Array.isArray(rows) || !Number.isSafeInteger(total) || total < 0
+      || (conteo.total !== undefined && conteo.total !== total)) {
+      throw new Error(`Cobertura no verificable en ${table}: falta un conteo exacto estable.`);
+    }
+    const first = Number(range[1]); const last = Number(range[2]);
+    if (rows.length > requested || (rows.length > 0
+      ? !Number.isSafeInteger(first) || !Number.isSafeInteger(last) || first !== offset || last - first + 1 !== rows.length || last >= total
+      : range[1] !== undefined || offset < total)) {
+      throw new Error(`Cobertura no verificable en ${table}: rango de página inconsistente.`);
+    }
+    conteo.total = total;
+  }
   if (Number.isFinite(total) && rows.length < requested && offset + rows.length < total) {
     throw new Error(`Consulta incompleta en ${table}: el servidor recortó la página.`);
   }
@@ -172,35 +190,37 @@ async function supabaseQueryPage(table: string, query: string): Promise<unknown[
  * ~1.250 filas por año y los reportes financieros leen dos años, así que una
  * consulta sin paginar devolvería un P&G incompleto que se ve normal.
  */
-async function supabaseQueryAll(table: string, query: string): Promise<unknown[]> {
+async function supabaseQueryAll(table: string, query: string, conteoEstricto = false): Promise<unknown[]> {
   const PAGINA = 200;
   const MAX_PAGINAS = 100;
   const filas: unknown[] = [];
+  const conteo: ConteoConsulta | undefined = conteoEstricto ? {} : undefined;
 
   for (let p = 0; p < MAX_PAGINAS; p += 1) {
     const clave = table === 'v_hato_estado_actual' ? 'animal_id' : table === 'v_hato_pajillas_stock' ? 'pajilla_id' : 'id';
     const base = /(?:^|&)order=/.test(query) ? query : `${query}&order=${clave}.asc`;
-    const pagina = await supabaseQueryPage(table, `${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
+    const pagina = await supabaseQueryPage(table, `${base}&limit=${PAGINA}&offset=${p * PAGINA}`, conteo);
     filas.push(...pagina);
-    if (pagina.length < PAGINA) return filas;
+    if (pagina.length < PAGINA || (conteo && filas.length === conteo.total)) return filas;
   }
   throw new Error(`Consulta incompleta en ${table}: reduce el rango de fechas.`);
 }
 
 /** Las listas históricas se paginan; un limit heredado limita el universo explícitamente. */
-async function supabaseQuery(table: string, query: string): Promise<unknown[]> {
-  if (/(?:^|&)offset=/.test(query)) return supabaseQueryPage(table, query);
+async function supabaseQuery(table: string, query: string, conteoEstricto = false): Promise<unknown[]> {
+  if (/(?:^|&)offset=/.test(query)) return supabaseQueryPage(table, query, conteoEstricto ? {} : undefined);
   const limit = /(?:^|&)limit=(\d+)/.exec(query);
   let base = query.replace(/&?limit=\d+/g, '');
   if (!/(?:^|&)order=/.test(base)) base += table === 'v_hato_estado_actual' ? '&order=animal_id.asc' : table === 'v_hato_pajillas_stock' ? '&order=pajilla_id.asc' : '&order=id.asc';
-  if (!limit) return supabaseQueryAll(table, base);
+  if (!limit) return supabaseQueryAll(table, base, conteoEstricto);
   const max = Number(limit[1]);
   const rows: unknown[] = [];
+  const conteo: ConteoConsulta | undefined = conteoEstricto ? {} : undefined;
   for (let offset = 0; offset < max; offset += 200) {
     const size = Math.min(200, max - offset);
-    const page = await supabaseQueryPage(table, `${base}&limit=${size}&offset=${offset}`);
+    const page = await supabaseQueryPage(table, `${base}&limit=${size}&offset=${offset}`, conteo);
     rows.push(...page);
-    if (page.length < size) break;
+    if (page.length < size || (conteo && rows.length === conteo.total)) break;
   }
   return rows;
 }
@@ -791,7 +811,9 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
     // Herramientas legadas pueden limitar universo y detalle: nunca evidencia de ausencia global.
     if (!HERRAMIENTAS_CONSULTA.some(t => t.name === name) && name.startsWith('get_')) {
       const parsed = JSON.parse(result);
-      if (!parsed.error) parsed._evidencia = {
+      // Milk now supplies a scoped envelope only after complete paginated
+      // weights and strict identity/measurement checks. Keep other legacy tools conservative.
+      if (!parsed.error && name !== 'get_hato_produccion') parsed._evidencia = {
         herramienta: name, rango: { desde: args.date_from ?? null, hasta: args.date_to ?? null },
         consulta_completa: false,
         limites: ['Consulta legada con límites de filas/detalle. Para listas completas o negar registros usa las herramientas de evidencia por período.'],
@@ -3512,21 +3534,25 @@ async function execHatoProduccion(args: Record<string, unknown>): Promise<string
   const desde = date_from || hace90.toISOString().split('T')[0];
   const hasta = date_to || hoy;
 
-  let pesajesQuery = `select=fecha,litros_am,litros_pm,litros_total,animal:hato_animales(numero,nombre)&fecha=gte.${e(desde)}&fecha=lte.${e(hasta)}&order=fecha.asc&limit=2000`;
+  let pesajesQuery = `select=animal_id,fecha,litros_am,litros_pm,litros_total,animal:hato_animales(numero,nombre)&fecha=gte.${e(desde)}&fecha=lte.${e(hasta)}&order=fecha.asc,animal_id.asc`;
+  let identidadesParaNumero: string[] = [];
   if (animal_numero != null) {
-    // El número de chapeta vive en la tabla embebida -- se resuelve el
-    // animal_id primero para poder filtrar server-side.
-    const animalRows = (await supabaseQuery('hato_animales', `select=id&numero=eq.${Number(animal_numero)}`)) as Array<{ id: string }>;
+    // A recycled display number can match several historical UUIDs. Preserve
+    // them separately; choosing the first would silently change the universe.
+    const animalRows = (await supabaseQuery('hato_animales', `select=id&numero=eq.${Number(animal_numero)}`, true)) as Array<{ id: string }>;
     if (animalRows.length === 0) {
       return JSON.stringify({ error: `No existe ningún animal con numero=${animal_numero}.` });
     }
-    pesajesQuery += `&animal_id=eq.${e(animalRows[0].id)}`;
+    identidadesParaNumero = animalRows.map(a => a.id).sort();
+    pesajesQuery += identidadesParaNumero.length === 1
+      ? `&animal_id=eq.${e(identidadesParaNumero[0])}`
+      : `&animal_id=in.(${identidadesParaNumero.map(e).join(',')})`;
   }
 
   const limiteQuincenas = Number.isFinite(Number(num_quincenas)) && Number(num_quincenas) > 0 ? Number(num_quincenas) : 6;
 
   const [pesajes, quincenas] = await Promise.all([
-    supabaseQuery('hato_pesajes_leche', pesajesQuery) as Promise<HatoPesajeRow[]>,
+    supabaseQueryAll('hato_pesajes_leche', pesajesQuery, true) as Promise<HatoPesajeRow[]>,
     supabaseQuery(
       'hato_produccion_quincenal',
       // `origen_dato` + el embed `fin_ingreso:fin_ingresos(cantidad)`
@@ -3534,7 +3560,8 @@ async function execHatoProduccion(args: Record<string, unknown>): Promise<string
       // origen_dato='medido' `litros_total` es NULL en la tabla a
       // propósito -- resolverLitrosQuincenal() los lee del ingreso
       // enlazado, nunca de la columna directa (ver hato-aggregation.ts).
-      `select=anio,mes,quincena,fecha_inicio,fecha_fin,litros_total,origen_dato,litros_pomar_confirmado,num_vacas_ordeno,notas,fin_ingreso:fin_ingresos(cantidad)&order=anio.desc,mes.desc,quincena.desc&limit=${limiteQuincenas}`
+      `select=anio,mes,quincena,fecha_inicio,fecha_fin,litros_total,origen_dato,litros_pomar_confirmado,num_vacas_ordeno,notas,fin_ingreso:fin_ingresos(cantidad)&order=anio.desc,mes.desc,quincena.desc&limit=${limiteQuincenas}`,
+      true
     ) as Promise<HatoProduccionQuincenalDbRow[]>,
   ]);
 
@@ -3544,7 +3571,7 @@ async function execHatoProduccion(args: Record<string, unknown>): Promise<string
     produccionQuincenal: quincenas,
   });
 
-  return JSON.stringify(summary);
+  return serializarEvidenciaLeche(summary, { identidadesParaNumero, maximoQuincenas: limiteQuincenas });
 }
 
 // ----------------------------------------------------------------------------
@@ -3750,6 +3777,14 @@ MANEJO DE FECHAS (OBLIGATORIO):
   - "diciembre a marzo" → dic del año anterior a mar del actual (si estamos en ene-jun)
   - "ultimos N meses" → N meses atras hasta hoy
 - NUNCA pidas confirmacion de año o rango cuando se puede inferir razonablemente
+
+FIDELIDAD DE LA RESPUESTA (antes del formato):
+- Conserva cada cifra junto con su entidad, unidad, período y fuente. Usa los agregados y clasificaciones calculados por las herramientas; no los sustituyas por una estimación. Si derivas un cálculo adicional, muestra sus entradas verificadas y la fórmula; no mezcles series ni universos distintos.
+- Distingue observaciones registradas, datos ausentes e inferencias. Una coincidencia candidata no confirma identidad, recepción o cumplimiento. Un resultado parcial no demuestra ausencia en el universo completo.
+- El clima, una tendencia o una coincidencia temporal pueden apoyar una hipótesis, pero por sí solos no prueban una condición física de campo ni una causa. Cuando sea una inferencia, declárala y explica qué observación la confirmaría; no la presentes como medición o hecho registrado.
+- Responde las partes que sí tienen evidencia y limita solo las que no la tienen. No inventes valores o explicaciones para completar una tabla, gráfico o narrativa.
+- Para leche: consulta_completa/agregados_completos se refieren al resumen de todos los pesajes consultados; detalle_completo puede ser false porque solo se exponen muestras/perfiles limitados. Responde los agregados y rankings disponibles; para detalle omitido precisa el rango/animal y no inventes observaciones.
+- Para leche: promedio_litros y las clasificaciones del resumen usan L/pesaje observado. No son producción acumulada del rango. num_pesajes indica la cobertura por animal; la lista no certifica todo el hato. Los números de chapeta son etiquetas mutables: animal_id identifica cada animal.
 
 FORMATO DE RESPUESTA (prioridad):
 1. GRAFICOS — cuando hay dimension temporal o comparaciones entre categorias, SIEMPRE incluye gráficos. Nunca digas que no puedes generar graficos.
