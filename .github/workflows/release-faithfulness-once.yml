@@ -1,0 +1,66 @@
+name: One reviewed Faithfulness backend release
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: DEPLOY_APPROVED_FAITHFULNESS_WITH_V282_ROLLBACK
+        required: true
+        type: string
+      exclusive_backend_window:
+        description: Owner confirmed no concurrent backend deployer
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: escocia-backend-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'sforero94/Escociaos' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+      EXCLUSIVE_BACKEND_WINDOW: ${{ inputs.exclusive_backend_window }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reject unfrozen source before credentials
+        id: binding
+        run: |
+          set -euo pipefail
+          source_sha="$(node scripts/release-faithfulness-once.mjs --source)"
+          printf 'source=%s\n' "$source_sha" >> "$GITHUB_OUTPUT"
+      - name: Checkout fixed reviewed candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ steps.binding.outputs.source }}
+          path: release-source
+          persist-credentials: false
+      - name: Checkout fixed v282 rollback source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: e7a5545bc8d87ad0502caf009d0201cae67fc772
+          path: rollback-source
+          persist-credentials: false
+      - name: Prepare pinned CLI and type proof without management credentials
+        env:
+          CLI_CACHE: ${{ runner.temp }}/faithfulness-cli-cache
+        run: |
+          npx --cache "$CLI_CACHE" --yes --package supabase@2.122.0 -- supabase --version
+          npm install --prefix "$RUNNER_TEMP/faithfulness-proof" --ignore-scripts --no-audit --no-fund typescript@5.9.3
+      - name: Synthetic negative controls without management credentials
+        env:
+          PROOF_TYPESCRIPT: ${{ runner.temp }}/faithfulness-proof/node_modules/typescript/lib/typescript.js
+          RELEASE_TEST_BASELINE: ${{ github.workspace }}/rollback-source/supabase/functions/make-server-1ccce916
+        run: node --test scripts/release-faithfulness-once.checks.mjs
+      - name: Capture, deploy once and verify; conditional owned rollback only
+        env:
+          CLI_CACHE: ${{ runner.temp }}/faithfulness-cli-cache
+          PROOF_TYPESCRIPT: ${{ runner.temp }}/faithfulness-proof/node_modules/typescript/lib/typescript.js
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/release-faithfulness-once.mjs
