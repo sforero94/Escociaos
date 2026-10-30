@@ -2455,3 +2455,10 @@ La auto-poda no aplica.
 | **2026-10-29-jueves** | 1 (ESCO-165) | pendiente (sábado 10-31) | 0 (sin respuesta aún) |
 Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strategy y usage-analytics al primer jueves del mes. La sonda P0 nunca entra.
 - **Hecho de campo (Santiago, 2026-10-29):** en las aplicaciones, los correctores de pH (Acidurez, Acondicionador sys, Potenzol ph-D) son intercambiables. El plan repite la cantidad total bajo cada uno; David completa la necesidad combinando lo que hay en bodega. Un faltante "planeado vs saldo" por producto no es un faltante real. Vale para Monday (data-integrity) y para la advertencia de inventario de la corrida 2026-10-26-lunes, que era falsa por la misma razón. [corrida: 2026-10-29-jueves]
+
+## Racha del viernes — 2026-10-30
+| Corrida | Conjunto elegible | FDS preparadas | Racha de vacios |
+|---|---|---|---|
+| 2026-10-30-viernes | 0 | 1 (ESCO-165 propuesta) | **0** (la regla exige elegible vacio Y nada que preparar) |
+- Ledger hasta 188 (`20261030023201`), 185–188 con archivo en main. Siguiente numero libre 189 (barrer ramas igual). [corrida: 2026-10-30-viernes]
+- ESCO-165 F2: la tabla nueva con RLS lleva CREATE POLICY -> no es ddl_aditivo del viernes (V2a + parser del hook); va FDS/datos. [corrida: 2026-10-30-viernes]
