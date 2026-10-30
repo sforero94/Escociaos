@@ -1,3 +1,5 @@
+> Archived release preparation. The one-time controls and their exclusive tests are retired after accepted releases. The text below records historical gates, not current pending work. PR367 deployed as v281; PR371 subsequently deployed as v282. See [final release receipts](esco/faithfulness/RELEASE_PR371.md). No secrets, external runs/artifacts, deployment state or rollback Git commits are removed.
+
 # PR367 release repair — review and execution approval required
 
 Deploy only source `634580480c72b27c7ccd2d8c006af520d0ca1058` to project
