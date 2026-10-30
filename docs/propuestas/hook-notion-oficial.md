@@ -1,6 +1,8 @@
 # Propuesta — el guard hook vigila el conector oficial de Notion
 
-**Estado: propuesta, NO activa.** Escrita 2026-10-29. Las rutinas de Escocia OS pasaron
+**Estado: APLICADA el 2026-10-30** (rama `claude/hook-notion-oficial`). Santiago aprobó
+la edición en una sesión en vivo con el modo «Accept edits». Este documento queda como
+registro; no vuelvas a correr el script. Escrita 2026-10-29. Las rutinas de Escocia OS pasaron
 de Composio al conector oficial de Notion (decisión de Santiago, 2026-10-29). Hoy ese
 conector solo lo limita la allowlist de cada rutina (`permitted_tools`). Esta propuesta
 agrega la segunda capa en el hook.

@@ -644,6 +644,77 @@ describe('hook real (stdin → stdout): lo que no depende del día', () => {
   });
 });
 
+describe('Notion oficial en una Routine desatendida (2026-10-29)', () => {
+  const MANT = 'collection://b22d2385-a812-4d4a-8094-cefa9d080f60';
+  const BOT_LOG = '40767755-ed68-801e-8339-000bd8a8a652';
+  const REPORTES = '40667755-ed68-814f-b676-f9e28be7d2f3';
+  const des = { desatendida: true };
+  const crear = (parent: unknown, pages: unknown[], extra: Record<string, unknown> = {}) =>
+    decision('mcp__Notion__notion-create-pages', { parent, pages, ...extra }, des);
+  const fila = (frente: unknown) => [{ properties: { Tarea: 'Corrida', Frente: frente }, content: '## Progreso' }];
+
+  it('en una sesión atendida no opina', () => {
+    expect(decision('mcp__Notion__notion-delete-pages', { page_ids: ['x'] })).toBeNull();
+    expect(decision('mcp__Notion__notion-create-pages', { parent: 'memory', pages: [{}] })).toBeNull();
+  });
+
+  it('las lecturas pasan', () => {
+    expect(decision('mcp__Notion__notion-search', { query: 'x' }, des)).toBe('allow');
+    expect(decision('mcp__Notion__notion-fetch', { id: MANT }, des)).toBe('allow');
+    expect(decision('mcp__Notion__notion-query-data-sources', {}, des)).toBe('allow');
+  });
+
+  it('crea filas en Mantenimiento, en el Bot Log con Frente Escocia OS, y la página del sábado', () => {
+    expect(crear({ type: 'data_source_id', data_source_id: MANT }, [{ properties: { Hallazgo: 'x' } }])).toBe('allow');
+    expect(crear({ type: 'data_source_id', data_source_id: BOT_LOG }, fila('Escocia OS'))).toBe('allow');
+    expect(crear({ type: 'data_source_id', data_source_id: `collection://${BOT_LOG}` }, fila('Escocia OS'))).toBe('allow');
+    expect(crear({ type: 'database_id', database_id: '40767755ed6880d4b4dac623ce5687de' }, fila('Escocia OS'))).toBe('allow');
+    expect(crear({ type: 'page_id', page_id: REPORTES }, [{ properties: { title: 'Reporte' } }], { allow_async: false })).toBe('allow');
+  });
+
+  it('el Bot Log exige Frente = Escocia OS en cada página', () => {
+    expect(crear({ type: 'data_source_id', data_source_id: BOT_LOG }, fila('Artemis'))).toBe('deny');
+    expect(crear({ type: 'data_source_id', data_source_id: BOT_LOG }, [{ properties: { Tarea: 'x' } }])).toBe('deny');
+    expect(crear({ type: 'data_source_id', data_source_id: BOT_LOG }, [...fila('Escocia OS'), ...fila('Otro')])).toBe('deny');
+  });
+
+  it('otro padre, borrador, memoria, plantilla o skill se deniega', () => {
+    expect(crear({ type: 'page_id', page_id: 'c52d9258fed7466d8e700fa92980d3df' }, [{}])).toBe('deny');
+    expect(crear({ type: 'data_source_id', data_source_id: 'd113dc65-e9a9-4198-b70f-3844c11d04ba' }, [{}])).toBe('deny');
+    expect(crear('memory', [{}])).toBe('deny');
+    expect(crear(undefined, [{}])).toBe('deny');
+    expect(decision('mcp__Notion__notion-create-pages', { creation_mode: 'draft', pages: [{}] }, des)).toBe('deny');
+    expect(crear({ type: 'page_id', page_id: REPORTES }, [{ template_id: 'x' }])).toBe('deny');
+    expect(crear({ type: 'page_id', page_id: REPORTES }, [{ is_skill: true }])).toBe('deny');
+    expect(crear({ type: 'page_id', page_id: REPORTES, database_id: MANT }, [{}])).toBe('deny');
+    expect(crear({ type: 'page_id', page_id: REPORTES }, [])).toBe('deny');
+  });
+
+  it('actualizar solo propiedades o agregar al final', () => {
+    const upd = (entrada: Record<string, unknown>) =>
+      decision('mcp__Notion__notion-update-page', { page_id: 'x', ...entrada }, des);
+    expect(upd({ command: 'update_properties', properties: { Estado: 'Hecha' } })).toBe('allow');
+    expect(upd({ command: 'insert_content', content: '- línea' })).toBe('allow');
+    expect(upd({ command: 'insert_content', content: '- línea', position: { type: 'end' } })).toBe('allow');
+    expect(upd({ command: 'insert_content', content: 'x', position: { type: 'start' } })).toBe('deny');
+    expect(upd({ command: 'replace_content', new_str: '' })).toBe('deny');
+    expect(upd({ command: 'update_content', content_updates: [] })).toBe('deny');
+    expect(upd({ command: 'apply_template', template_id: 'x' })).toBe('deny');
+    expect(upd({ command: 'update_properties', properties: {}, allow_deleting_content: true })).toBe('deny');
+    expect(upd({ command: 'update_properties', is_skill: true })).toBe('deny');
+  });
+
+  it('borrar, mover, duplicar o comentar se deniega', () => {
+    for (const tool of ['notion-delete-pages', 'notion-move-pages', 'notion-duplicate-page', 'notion-create-comment', 'notion-update-data-source']) {
+      expect(decision(`mcp__Notion__${tool}`, {}, des)).toBe('deny');
+    }
+  });
+
+  it('Composio no se confunde con el Notion oficial', () => {
+    expect(decision('mcp__Composio__COMPOSIO_SEARCH_TOOLS', { queries: [] }, des)).toBe('allow');
+  });
+});
+
 describe('Composio: página del reporte del sábado en Notion', () => {
   const composio = 'mcp__Composio__COMPOSIO_MULTI_EXECUTE_TOOL';
   const REPORTES = '40667755ed68814fb676f9e28be7d2f3';
