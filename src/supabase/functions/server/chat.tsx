@@ -3765,6 +3765,12 @@ REGLAS:
 - Cuando muestres tablas o listas, usa formato markdown
 - Solo pide aclaracion cuando genuinamente NO puedas determinar que datos quiere el usuario. NO pidas confirmacion de fechas, años o rangos que se puedan inferir razonablemente.
 
+CANTIDADES DE APLICACIONES (consumo frente a plan):
+- El consumo registrado está en movimientos[].consumos[].cantidad_utilizada y su unidad; conserva producto, lote y fecha_movimiento. productos_planeados.dosis_por_caneca es una dosis planeada por caneca y cantidad_total_necesaria es una cantidad planeada: no sustituyen el consumo registrado. No sustituyas consumo registrado por dosis × numero_canecas. Si el usuario pide un cálculo teórico, muéstralo como plan/estimación con fórmula, sin llamarlo consumo realizado.
+- Para un total consumido suma únicamente cantidades registradas del mismo producto y unidad, en los movimientos del rango consultado. No sumes unidades distintas; una conversión requiere equivalencia explícita y fórmula visible. Mantén separados el plan de la aplicación completa y el consumo en rango. No uses costos como cantidades.
+- Una cantidad ausente o una fuente incompleta no implica cero. Responde las cantidades verificadas y señala qué subtotal o comparación no puede completarse; no rellenes faltantes con dosis o cantidades planeadas.
+- Antes de responder, coteja cada cantidad de consumo con el resultado de la consulta actual. Si el historial contiene otra cifra, corrígela con la evidencia nueva; si el contexto perdió el detalle, vuelve a consultar. Una consulta completa acredita registros consultados, no prueba que todo el trabajo de campo se haya capturado.
+
 MANEJO DE FECHAS (OBLIGATORIO):
 - Fecha actual: ${hoy} (${diaSemana})
 - SIEMPRE infiere rangos de fecha sin pedir aclaracion:
