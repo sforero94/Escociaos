@@ -148,10 +148,10 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
     // aplicación cuya fecha planeada..." describes a record, not a date basis.
     const direct = body.match(/^(?:por favor )?(?:us[ae]s?|usar|utiliza(?:r)?|consulta(?:r)?|prefiero|quiero|necesito|muestra(?:me)?|dame|busca(?:r)?|filtra(?:r)?|ignora(?:r)?|exclu(?:ye|ir))\s+(?:(?:por|segun|con) )?(?:(?:la|las) )?((?:fechas?(?: de (?:inicio|fin))? )?(?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
     const question = body.match(/^(?:cual(?:es)?|que) (?:es |son )?(?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
-    const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca|lista) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
     // A direct plural planned-application request is explicit planned intent;
     // a relative clause merely describing one record is not.
-    const plannedCollection = body.match(/^(?:dame|muestra(?:me)?|consulta|busca) (?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) ((?:planeadas?|planificadas?)\b.*)$/);
+    const plannedCollection = body.match(/^(?:dame|muestra(?:me)?|consulta|busca|lista) (?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) ((?:planeadas?|planificadas?)\b.*)$/);
     // Direct interrogative selection, with an optional explicit temporal qualifier.
     // Relative descriptions ("cuya fecha planeada...") do not grant consent.
     const plannedQuestion = body.match(/^(?:que|cual(?:es)?) (?:es |son )?(?:la |las )?(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?) (?:(?:que )?(?:esta(?:n)?|hay|tenemos) )?((?:planeadas?|planificadas?)(?:$| (?:para\b|durante\b|entre\b|desde\b|hasta\b|en (?!ejecucion\b|curso\b)).*))$/);
@@ -167,6 +167,66 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
   return requested === 'planned';
 }
 
+export interface SolicitudAplicacion { pregunta: string; anterior?: string }
+type SeleccionAplicacion = { estado:'verificada'; version:'aplicacion_selector_v1'; aplicacion_ids:string[]|null; lote_ids:string[]|null; referencia:'actual'|'usuario_anterior' } | { estado:'aclarar'; mensaje:string };
+const normalizarSelector = (v:unknown) => normalizarTextoAplicacion(v).replace(/[«»"'()[\],:;!?¿¡—–]/g,' ').replace(/\s+/g,' ').trim();
+const palabrasNombre = (v:unknown) => normalizarSelector(v).split(' ').filter(w=>!['el','la','los','las','de','del','contra','control','aplicacion','fumigacion','fertilizacion'].includes(w)).join(' ');
+/** Literal application/lot selectors against the already-read fresh catalogs. No model identity authority. */
+export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco[], lotes:FilaEsco[], plural:boolean):SeleccionAplicacion {
+  const fail=(message:string):SeleccionAplicacion=>({estado:'aclarar',mensaje:message});
+  const q=normalizarSelector(s.pregunta);
+  const extract=(question:string,lot=false) => {
+    const found=question.match(lot?/\blote\s+(.+)$/ : /\b(?:aplicacion|fumigacion|fertilizacion)\b\s*(.*)$/);
+    if(!found)return '';
+    return found[1].replace(/^(?:(?:llamada|denominada|nombre|id|contra|para|de)\s+)+/,'')
+      .split(/\b(?:(?:en (?:el |la |ese |este |anterior )?)?lote|del? (?=\d)|desde|entre|(?:en|para|durante|de) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)|segun|sin|con (?:canecas|dosis)|hoy|ayer|anteayer|hace dos dias|este mes|mes pasado|esta semana|semana pasada|y (?:el |los |la |las )?(?:estado|fechas|consumo|jornales|mano de obra|costo laboral))\b/)[0].trim();
+  };
+  let reference:'actual'|'usuario_anterior'='actual', appSelector=extract(q), lotSelector=extract(q,true);
+  if(!appSelector && /\b(?:esa|esta|anterior) aplicacion\b|\baplicacion anterior\b/.test(q)) {
+    const previous=normalizarSelector(s.anterior ?? '');
+    if(!/\b(?:aplicacion|fumigacion|fertilizacion)\b/.test(previous) || /\b(?:esa|esta|anterior) aplicacion\b/.test(previous)) return fail('Precisa el nombre o ID de la aplicación; la referencia anterior no es inequívoca.');
+    appSelector=extract(previous); reference='usuario_anterior';
+    if(!appSelector)return fail('Precisa el nombre o ID de la aplicación; no uso identidades del modelo o del texto de una respuesta anterior.');
+    if(!lotSelector && /\b(?:ese|este|anterior) lote\b/.test(q))lotSelector=extract(previous,true);
+  }
+
+  const identityQuestion=reference==='usuario_anterior'?normalizarSelector(s.anterior??''):q;
+  const idsMentioned=apps.filter(a=>texto(a.id) && (' '+identityQuestion+' ').includes(' '+normalizarSelector(a.id)+' '));
+  let candidates=apps;
+  if(!plural) {
+    // An explicit user ID and name must agree. Model IDs are deliberately absent.
+    if(idsMentioned.length>1)return fail('Hay varios IDs de aplicación en la petición; precisa uno.');
+    const selectorWithoutId=idsMentioned.length===1 ? appSelector.replace(new RegExp(normalizarSelector(idsMentioned[0].id).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g'),'').replace(/\bid\b/g,'').trim():appSelector;
+    const selector=palabrasNombre(selectorWithoutId);
+    if(selector)candidates=apps.filter(a=>(' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+selector+' '));
+    if(idsMentioned.length===1) {
+      if(selector && !candidates.some(a=>a.id===idsMentioned[0].id))return fail('El nombre y el ID indicados por el usuario no corresponden a la misma aplicación.');
+      candidates=idsMentioned;
+    }
+    if(!candidates.length)return fail('No pude vincular el nombre indicado a una aplicación del catálogo consultado. Precisa el nombre o ID; esto no prueba ausencia de actividad.');
+    if(candidates.length!==1)return fail('Precisa cuál aplicación: '+candidates.slice(0,5).map(a=>literalMd(a.nombre_aplicacion)+' ('+literalMd(a.id)+')').join('; '));
+  }
+  if(!lotSelector && /\b(?:ese|este|anterior) lote\b/.test(q)) {
+    const previous=normalizarSelector(s.anterior??''), previousApp=extract(previous);
+    const matches=apps.filter(a=>normalizarSelector(a.id)===previousApp || (' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+palabrasNombre(previousApp)+' '));
+    if(plural || candidates.length!==1 || !previousApp || matches.length!==1 || matches[0].id!==candidates[0].id)return fail('Precisa el lote; la referencia anterior no es inequívoca para esta aplicación.');
+    lotSelector=extract(previous,true);if(!lotSelector)return fail('Precisa el nombre o ID del lote anterior.');
+  }
+  let selectedLots:FilaEsco[]|null=null;
+  if(lotSelector) {
+    const name=palabrasNombre(lotSelector);
+    const exactIds=lotes.filter(l=>normalizarSelector(l.id)===normalizarSelector(lotSelector));
+    selectedLots=exactIds.length?exactIds:lotes.filter(l=>(' '+palabrasNombre(l.nombre)+' ').includes(' '+name+' '));
+    if(selectedLots.length!==1)return fail('Precisa un lote inequívoco del catálogo consultado; no sustituí el lote solicitado por el del modelo.');
+  } else if(/\blote\b/.test(q))return fail('Precisa el nombre o ID del lote solicitado.');
+  return {estado:'verificada',version:'aplicacion_selector_v1',aplicacion_ids:plural?null:candidates.map(a=>texto(a.id)),lote_ids:selectedLots?.map(l=>texto(l.id))??null,referencia:reference};
+}
+
+function normalizarPreguntaAplicacion(value:string):string {
+  return normalizarTextoAplicacion(value)
+    .replace(/\b(aplicacion|fumigacion|fertilizacion):\s*/g,'$1 ')
+    .replace(/,\s*(?=(?:en (?:el )?lote|del? \d|desde|entre|sin costos?|la aplicacion|el estado|las fechas|los jornales)\b)/g,' ');
+}
 export type PlanRespuestaAplicacion = { tipo: 'fuera'; motivo: string } | {
   tipo: 'aplicacion'; plural: boolean; base: 'actual' | 'planned';
   rango: { desde: string; hasta: string } | null; loteSolicitado: boolean;
@@ -175,7 +235,7 @@ export type PlanRespuestaAplicacion = { tipo: 'fuera'; motivo: string } | {
 };
 /** Closed application operations, not a filter over arbitrary generated prose. */
 export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): PlanRespuestaAplicacion {
-  const q = normalizarTextoAplicacion(pregunta);
+  const q = normalizarPreguntaAplicacion(pregunta);
   const fuera = (motivo: string): PlanRespuestaAplicacion => ({ tipo: 'fuera', motivo });
   const operation=q.replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, '');
   if (/[;:,.!?]/.test(operation)) return fuera('clausulas_adicionales_no_cubiertas');
@@ -186,10 +246,11 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   if (/\by (?:que|quien|quienes|como|por que|cual|cuales|cuando|donde)\b/.test(q)) return fuera('subpregunta_no_cubierta');
   if (/\b(?:rango|periodo) (?:solicitado|anterior|previo)|\b(?:mismo|ese) (?:rango|periodo)\b/.test(q)) return fuera('referencia_temporal_no_resuelta');
   // A second requested operation must be one of the explicitly rendered fields.
-  if (/\by (?!\d{4}-\d{2}-\d{2}\b|(?:(?:el|los|la|las) )?(?:estado|fechas?|consumo|jornales?|mano de obra|costo laboral|canecas? (?:planeadas?|planificadas?))\b)/.test(q)) return fuera('subpregunta_no_cubierta');
+  if (/\by (?!\d{4}-\d{2}-\d{2}\b|\d{1,2}\/\d{1,2}\/\d{4}\b|(?:(?:el|los|la|las) )?(?:estado|fechas?|consumo|jornales?|mano de obra|costo laboral|canecas? (?:planeadas?|planificadas?))\b)/.test(q)) return fuera('subpregunta_no_cubierta');
   const plural = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(q);
   const pluralTail = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b(.*)$/.exec(q)?.[1].trim() ?? '';
-  if (plural && pluralTail && !/^(?:[?.,!]|(?:estan )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
+  if (plural && pluralTail && !/^(?:[?.,!]|(?:(?:estan|hay|tenemos) )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
+  if (/\b(?:compara|comparacion|retraso|antes o despues|frente a|previstas?|vamos a ejecutar)\b/.test(q)) return fuera('comparacion_o_plan_no_soportado');
   const estimacion = /\b(?:estima|estimacion|teoric[oa]|hipotetic[oa])\b/.test(q);
   if (estimacion && (!/\bdosis\b/.test(q) || !/\bcanecas? (?:planeadas?|planificadas?)\b/.test(q) || /\b\d+(?:[.,]\d+)? canecas?\b/.test(q))) return fuera('parametros_teoricos_no_verificados');
   if (!estimacion && /\b(?:dosis|canecas?|bultos?|litros de mezcla)\b/.test(q)) return fuera('magnitud_no_soportada');
@@ -206,13 +267,20 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   if (!estado && !planes && !consumos && !trabajo && !estimacion && !fechas) return fuera('pregunta_no_cubierta');
   const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const namedPattern = new RegExp('\\b(?:' + months.join('|') + ')(?: de)? (\\d{4})\\b','g');
-  const periods = [...q.matchAll(namedPattern)].length + [...q.matchAll(/\b(?:hoy|ayer|este mes|mes pasado|esta semana|semana pasada)\b/g)].length;
+  const periods = [...q.matchAll(namedPattern)].length + [...q.matchAll(/\b(?:hoy|ayer|anteayer|hace (?:dos|2) dias|este mes|mes pasado|esta semana|semana pasada)\b/g)].length;
   const isoDates=q.match(/\d{4}-\d{2}-\d{2}/g)?.length ?? 0;
   if (periods>1 || (isoDates>0 && (isoDates!==2 || periods>0))) return fuera('multiples_periodos_no_soportados');
   const named = new RegExp('\\b(?:para|en|durante|de) (?:el mes de )?(' + months.join('|') + ')(?: de)? (\\d{4})\\b').exec(q);
   let rango: { desde: string; hasta: string } | null = null;
   const calendar = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  if (named) {
+  const numeric = /\b(?:del?|desde|entre) (\d{1,2})\/(\d{1,2})\/(\d{4}) (?:al?|hasta|y) (\d{1,2})\/(\d{1,2})\/(\d{4})\b/.exec(q);
+  const withinMonth = new RegExp('\\bdel? (\\d{1,2}) al? (\\d{1,2}) de ('+months.join('|')+')(?: de)? (\\d{4})\\b').exec(q);
+  if(numeric && (periods>0 || (q.match(/\d{1,2}\/\d{1,2}\/\d{4}/g)?.length??0)!==2))return fuera('multiples_periodos_no_soportados');
+  if(numeric || withinMonth) {
+    const from=numeric?calendar(Number(numeric[3]),Number(numeric[2]),Number(numeric[1])):calendar(Number(withinMonth![4]),months.indexOf(withinMonth![3])+1,Number(withinMonth![1]));
+    const to=numeric?calendar(Number(numeric[6]),Number(numeric[5]),Number(numeric[4])):calendar(Number(withinMonth![4]),months.indexOf(withinMonth![3])+1,Number(withinMonth![2]));
+    try {rango={desde:validarFecha(from),hasta:validarFecha(to)};}catch{return fuera('periodo_invalido');}
+  } else if (named) {
     const year = Number(named[2]), month = months.indexOf(named[1]) + 1;
     if (year < 100) return fuera('periodo_no_soportado');
     rango = { desde: calendar(year,month,1), hasta: calendar(year,month,new Date(Date.UTC(year,month,0)).getUTCDate()) };
@@ -221,6 +289,7 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
     if (!iso && isoDates>0) return fuera('periodo_no_soportado');
     if (iso) { try { rango = { desde: validarFecha(iso[1]), hasta: validarFecha(iso[2]) }; } catch { return fuera('periodo_invalido'); } }
     else if (/\bhoy\b/.test(q)) rango = { desde: hoy, hasta: hoy };
+    else if (/\b(?:anteayer|hace (?:dos|2) dias)\b/.test(q)) rango = { desde: sumarDias(hoy,-2), hasta: sumarDias(hoy,-2) };
     else if (/\bayer\b/.test(q)) rango = { desde: sumarDias(hoy,-1), hasta: sumarDias(hoy,-1) };
     else if (/\b(?:este mes|mes pasado)\b/.test(q)) {
       let [year,month] = hoy.split('-').map(Number);
@@ -230,13 +299,17 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
       const [y,m,d] = hoy.split('-').map(Number), day = new Date(Date.UTC(y,m-1,d)).getUTCDay();
       const monday = sumarDias(hoy,-((day+6)%7)-(/semana pasada/.test(q)?7:0));
       rango = { desde: monday, hasta: sumarDias(monday,6) };
-    } else if (/\b(?:mes|semana|trimestre|ano|ultimos?|proximos?)\b/.test(q) || months.some(m=>new RegExp('\\b'+m+'\\b').test(q))) return fuera('periodo_no_soportado');
+    } else if (/\b(?:mes(?:es)?|semanas?|trimestre|anos?|ultimos?|proximos?|hace|dias?)\b|\d{1,2}\/\d{1,2}\/\d{4}|\b(?:en|para|del?|entre|desde) \d/.test(q) || months.some(m=>new RegExp('\\b'+m+'\\b').test(q))) return fuera('periodo_no_soportado');
   }
   if (rango && rango.desde > rango.hasta) return fuera('periodo_invalido');
   return { tipo:'aplicacion', plural, base:plannedBasis?'planned':'actual', rango,
     estadoFiltro:/\b(?:en ejecucion|en curso|activas?)\b/.test(q)?'En ejecución':/\bcerradas?\b/.test(q)?'Cerrada':null,
     loteSolicitado:/\blotes?\b/.test(q), estado, fechas, consumos, trabajo:trabajo || progreso,
     ocultarCostos, estimacion, planes };
+}
+export function aclaracionPlanAplicacion(plan:PlanRespuestaAplicacion):string|null {
+  return plan.tipo==='fuera' && /^(?:periodo_|multiples_periodos_|referencia_temporal_|comparacion_o_plan_|clausulas_adicionales_|subconjunto_plural_|subpregunta_)/.test(plan.motivo)
+    ? 'Necesito precisar el alcance de aplicaciones: indica un período y nombre/lote inequívocos. Puedo mostrar fechas planeadas y reales registradas; esta respuesta no calcula comparaciones, retrasos ni asume un rango más amplio.' : null;
 }
 export function argumentosRespuestaAplicacion(plan: PlanRespuestaAplicacion, args: FilaEsco): FilaEsco {
   if (plan.tipo !== 'aplicacion') return args;
@@ -256,7 +329,7 @@ interface AplicacionParaRespuesta {
   hechos_ejecucion: ReturnType<typeof hechosEjecucionAplicacion>; plan_por_lote?: unknown; productos_planeados?: unknown;
 }
 interface EvidenciaParaRespuesta {
-  error?: unknown; contexto_recortado?: unknown;
+  error?: unknown; contexto_recortado?: unknown; seleccion?: SeleccionAplicacion;
   _evidencia: { herramienta: unknown; consulta_completa: unknown; detalle_completo: unknown; total_hechos: unknown; rango: {desde:string|null;hasta:string|null} };
   resumen?: {date_basis?:unknown;fechas_reales_ausentes?:number}; detalle: AplicacionParaRespuesta[];
 }
@@ -266,9 +339,12 @@ export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, r
   const failure = (why: string) => ({ tipo:'texto' as const, texto:'No pude verificar '+why+'. No puedo inventar cantidades ni afirmar ausencia de actividad.' });
   try {
     const r = JSON.parse(resultado) as EvidenciaParaRespuesta;
+    if(r?.seleccion?.estado==='aclarar' && r.error==='seleccion_no_resuelta')return {tipo:'texto',texto:r.seleccion.mensaje};
     if (!r || Array.isArray(r) || Object.prototype.hasOwnProperty.call(r,'error') || r.contexto_recortado === true ||
       r._evidencia?.herramienta !== 'get_aplicaciones_ejecucion' || r._evidencia?.consulta_completa !== true || !Array.isArray(r.detalle) ||
       typeof r._evidencia.detalle_completo !== 'boolean' || !Number.isSafeInteger(r._evidencia.total_hechos) || Number(r._evidencia.total_hechos)<r.detalle.length) return failure('la consulta de aplicaciones');
+    if(r.seleccion?.estado!=='verificada' || r.seleccion.version!=='aplicacion_selector_v1')return failure('la selección de aplicación y lote');
+    if(r.seleccion.aplicacion_ids && r.detalle.some(a=>!r.seleccion || r.seleccion.estado!=='verificada' || !r.seleccion.aplicacion_ids?.includes(a.id)))return failure('la identidad solicitada');
     const range = r._evidencia.rango;
     if (r.resumen?.date_basis !== plan.base || args.date_basis !== plan.base || range?.desde !== (args.date_from ?? null) || range?.hasta !== (args.date_to ?? null) ||
       (plan.rango && (range.desde !== plan.rango.desde || range.hasta !== plan.rango.hasta))) return failure('el alcance solicitado');
@@ -284,7 +360,7 @@ export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, r
     const lines:string[] = [scope]; let renderedRows = 0;
     for (const a of r.detalle) {
       const f = a.hechos_ejecucion as ReturnType<typeof hechosEjecucionAplicacion>;
-      if (f?.contrato !== 'aplicaciones_hechos_v1' || f.aplicacion_id !== a.id || f.alcance.desde !== range.desde || f.alcance.hasta !== range.hasta || f.alcance.base_seleccion_aplicacion !== plan.base ||
+      if (JSON.stringify(f?.alcance?.lote_ids)!==JSON.stringify(r.seleccion.lote_ids) || f?.contrato !== 'aplicaciones_hechos_v1' || f.aplicacion_id !== a.id || f.alcance.desde !== range.desde || f.alcance.hasta !== range.hasta || f.alcance.base_seleccion_aplicacion !== plan.base ||
         !Array.isArray(a.movimientos) || !Array.isArray(a.registros_trabajo)) return failure('los hechos estructurados');
       const recomputed = hechosEjecucionAplicacion(a.movimientos,a.registros_trabajo,{aplicacionId:a.id,tareaId:a.tarea_id?texto(a.tarea_id):null,
         tareaExclusiva:f.trabajo.atribucion==='tarea_exclusiva',desde:range.desde,hasta:range.hasta,loteIds:f.alcance.lote_ids,consultaCompleta:true,baseSeleccion:plan.base});
@@ -368,7 +444,7 @@ export function respuestaSeguraAplicaciones(interacciones: Array<{ tool: string;
     return null;
   } catch { return unavailable; }
 }
-export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: ConsultaPagina, hoy = fechaBogota()): Promise<FilaEsco> {
+export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: ConsultaPagina, hoy = fechaBogota(), solicitud?: SolicitudAplicacion): Promise<FilaEsco> {
   const def = HERRAMIENTAS_CONSULTA.find(t => t.name === nombre);
   if (!def) throw new Error(`Herramienta desconocida: ${nombre}`);
   const req = def.parameters.required as string[];
@@ -502,8 +578,16 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
       read('movimientos_diarios', 'id,aplicacion_id,lote_id,fecha_movimiento,numero_canecas,numero_bultos,responsable,notas', carencia ? undefined : 'fecha_movimiento', carencia ? `&fecha_movimiento=lte.${fechaCosecha}` : ''),
       read('productos', 'id,nombre,unidad_medida,periodo_carencia_dias'), read('lotes', 'id,nombre'),
     ]);
+    const seleccion = nombre==='get_aplicaciones_ejecucion' && solicitud ? resolverSeleccionAplicacion(solicitud,apps,lotes,planRespuestaAplicacion(solicitud.pregunta,hoy).tipo==='aplicacion' && /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(normalizarTextoAplicacion(solicitud.pregunta))) : null;
+    if(seleccion?.estado==='aclarar')return {error:'seleccion_no_resuelta',seleccion};
+    if(seleccion?.estado==='verificada') {
+      delete args.application_id; delete args.application_name; delete args.lote_name;
+      if(seleccion.aplicacion_ids?.length===1)args.application_id=seleccion.aplicacion_ids[0];
+      if(seleccion.lote_ids?.length===1)args.lote_name=texto(lotes.find(l=>l.id===seleccion.lote_ids![0])?.nombre);
+    }
+    const loteCoincide=(loteId:unknown)=>seleccion?.estado==='verificada' && seleccion.lote_ids ? seleccion.lote_ids.includes(texto(loteId)) : contiene(lotes.find(l=>l.id===loteId)?.nombre,args.lote_name);
     const lm = mapa(lotes); const pm = mapa(productos); const am = mapa(apps);
-    const ms = movimientos.filter(m => (!args.application_id || m.aplicacion_id === args.application_id) && contiene(lm.get(texto(m.lote_id))?.nombre, args.lote_name));
+    const ms = movimientos.filter(m => (!args.application_id || m.aplicacion_id === args.application_id) && loteCoincide(m.lote_id));
     const consumos = await related('movimientos_diarios_productos', 'id,movimiento_diario_id,producto_id,producto_nombre,cantidad_utilizada,unidad', 'movimiento_diario_id', ms.map(m => m.id));
     const mm = mapa(ms);
     const consumoShape = (c: FilaEsco) => { const m = mm.get(texto(c.movimiento_diario_id)); return { ...c, movimiento: m, producto: pm.get(texto(c.producto_id)) ?? null, aplicacion: am.get(texto(m?.aplicacion_id)) ?? null, lote: lm.get(texto(m?.lote_id)) ?? null }; };
@@ -566,18 +650,18 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     });
     const legacyPlans = await related('aplicaciones_lotes', 'id,aplicacion_id,lote_id,sublotes_ids,total_arboles', 'aplicacion_id', candidates.map(a => a.id));
     const planes = await related('aplicaciones_calculos', 'id,aplicacion_id,lote_id,lote_nombre,mezcla_id,litros_mezcla,numero_canecas,kilos_totales,numero_bultos', 'aplicacion_id', candidates.map(a => a.id));
-    const selectedApps = candidates.filter(a => !args.lote_name || ms.some(m => m.aplicacion_id === a.id) || [...legacyPlans, ...planes].some(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)));
+    const selectedApps = candidates.filter(a => !args.lote_name || ms.some(m => m.aplicacion_id === a.id) || [...legacyPlans, ...planes].some(p => p.aplicacion_id === a.id && loteCoincide(p.lote_id)));
     const mezclas = await related('aplicaciones_mezclas', 'id,aplicacion_id,nombre_mezcla', 'aplicacion_id', selectedApps.map(a => a.id));
     const recetas = await related('aplicaciones_productos', 'id,mezcla_id,producto_id,producto_nombre,dosis_por_caneca,unidad_dosis,cantidad_total_necesaria', 'mezcla_id', mezclas.map(m => m.id));
     const trabajo = await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', selectedApps.map(a => a.tarea_id));
     limites.push('Consumido en rango; trabajo y plan por aplicación completa. Dosis por caneca y consumo total no se comparan sin unidad compatible. Sin captura no demuestra que no se ejecutó.');
-    const scopeLotes = args.lote_name ? lotes.filter(l => contiene(l.nombre, args.lote_name)).map(l => texto(l.id)) : null;
-    return finish(selectedApps.map(a => {
+    const scopeLotes = seleccion?.estado==='verificada' ? seleccion.lote_ids : args.lote_name ? lotes.filter(l => contiene(l.nombre, args.lote_name)).map(l => texto(l.id)) : null;
+    const completed = finish(selectedApps.map(a => {
       const movements = ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) }));
       const records = trabajo.filter(t => t.tarea_id === a.tarea_id);
       return { ...a, fechas_inconsistentes: dateIssues(a), base_fecha_consultada: basis, fecha_real_ausente: !a.fecha_inicio_ejecucion,
         alcance_planeado: legacyPlans.filter(p => p.aplicacion_id === a.id),
-        plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })),
+        plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && loteCoincide(p.lote_id)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })),
         productos_planeados: recetas.filter(r => mezclas.some(m => m.id === r.mezcla_id && m.aplicacion_id === a.id)),
         movimientos: movements, registros_trabajo: records,
         hechos_ejecucion: hechosEjecucionAplicacion(movements, records, { aplicacionId: texto(a.id), tareaId: a.tarea_id ? texto(a.tarea_id) : null,
@@ -585,6 +669,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
           desde, hasta, loteIds: scopeLotes, consultaCompleta: true, baseSeleccion: basis }),
       };
     }), { date_basis: basis, alcance: scope, coincidencias: selectedApps.length, fechas_reales_ausentes: matching.filter(a => { try { return !a.fecha_inicio_ejecucion || !validarFecha(a.fecha_inicio_ejecucion); } catch { return true; } }).length, fechas_inconsistentes: matching.filter(a => dateIssues(a).length).length });
+    return seleccion ? {...completed,seleccion} : completed;
   }
   if (nombre === 'get_monitoreo_cobertura') {
     const [rondas, sublotes, lotes] = await Promise.all([read('rondas_monitoreo', 'id,nombre,fecha_inicio,fecha_fin', 'fecha_inicio'), read('sublotes', 'id,nombre,lote_id'), read('lotes', 'id,nombre,activo')]);

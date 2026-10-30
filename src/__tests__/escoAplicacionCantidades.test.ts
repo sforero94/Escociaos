@@ -102,7 +102,7 @@ async function run(options: { missing?: boolean; unavailable?: boolean; answer?:
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(options.plannedQuestion?'2026-10-30T17:00:00Z':'2032-04-02T17:00:00Z'));
   const result = await llmToolLoop([{ role: 'system', content: getSystemPrompt() },
     ...(options.history?[{role:'assistant',content:options.history}]:[]),
-    { role: 'user', content: options.question ?? options.plannedQuestion ?? '¿Cómo va la aplicación de plaga Z? Indica el consumo real en el rango solicitado.' }]);
+    { role: 'user', content: options.question ?? options.plannedQuestion ?? '¿Cómo va la aplicación de plaga Z y cuál es el pronóstico de lluvia?' }]);
   expect(rejected).toEqual([]); expect(bodies).toHaveLength(options.expectedCalls ?? (options.plannedQuestion?1:2));
   return { result, bodies, evidence: JSON.parse(bodies[1]?.messages.find(m => m.role === 'tool')?.content ?? result.toolInteractions[0].result_summary) };
 }

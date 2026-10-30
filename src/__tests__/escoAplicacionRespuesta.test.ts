@@ -16,7 +16,7 @@ function fixture(question=q, options: {partial?:boolean;shared?:boolean;tamper?:
   if(options.tamper) facts.consumos.productos[0].cantidad_total='999';
   const app={id:'app',nombre_aplicacion:'Aplicación [no enlace](https://invalid)',estado:'En ejecución',tarea_id:'task',movimientos:movements,registros_trabajo:work,hechos_ejecucion:facts,
     fecha_inicio_planeada:'2032-03-01',fecha_inicio_ejecucion:null,fechas_inconsistentes:['inicio']};
-  const result={_evidencia:{herramienta:'get_aplicaciones_ejecucion',consulta_completa:true,detalle_completo:true,total_hechos:1,rango:{desde:args.date_from??null,hasta:args.date_to??null}},resumen:{date_basis:args.date_basis},detalle:[app]};
+  const result={seleccion:{estado:'verificada',version:'aplicacion_selector_v1',aplicacion_ids:plan.tipo==='aplicacion'&&plan.plural?null:['app'],lote_ids:null,referencia:'actual'},_evidencia:{herramienta:'get_aplicaciones_ejecucion',consulta_completa:true,detalle_completo:true,total_hechos:1,rango:{desde:args.date_from??null,hasta:args.date_to??null}},resumen:{date_basis:args.date_basis},detalle:[app]};
   const render=(value:unknown=result)=>respuestaDeterministaAplicacion(plan,JSON.stringify(value),args);
   const text=(value:unknown=result)=>{const answer=render(value);expect(answer.tipo).toBe('texto');return answer.tipo==='texto'?answer.texto:'';};
   return {plan,args,result,app,render,text};
@@ -77,8 +77,8 @@ describe('closed application fact response',()=>{
     expect(fixture('Estado de la aplicación sintética').text()).not.toContain('11000');
     expect(fixture(q+' sin costos').text()).not.toContain('11000');
   });
-  it('returns singular ambiguity rather than choosing a candidate',()=>{
-    const f=fixture();expect(f.text({...f.result,detalle:[f.app,{...f.app,id:'other',nombre_aplicacion:'Otra'}],_evidencia:{...f.result._evidencia,total_hechos:2}})).toContain('Encontré varias aplicaciones candidatas');
+  it('rejects details outside the verified identity instead of choosing a candidate',()=>{
+    const f=fixture();expect(f.text({...f.result,detalle:[f.app,{...f.app,id:'other',nombre_aplicacion:'Otra'}],_evidencia:{...f.result._evidencia,total_hechos:2}})).toContain('No pude verificar la identidad solicitada');
   });
   it('bounds the displayed response and requests narrower scope instead of silently truncating',()=>{
     const f=fixture(); const answer=f.text({...f.result,detalle:[{...f.app,nombre_aplicacion:'X'.repeat(24001)}]});

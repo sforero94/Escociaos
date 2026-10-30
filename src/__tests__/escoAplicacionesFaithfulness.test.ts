@@ -113,7 +113,9 @@ describe('synthetic actual-loop application interpretation', () => {
         unexpected.push(url.pathname); throw Error('Unexpected table');
       });
       const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación de control de plaga Z?' }]);
-      expect(JSON.parse(result.toolInteractions[0].result_summary)._evidencia.consulta_completa).toBe(false);
+      const first=JSON.parse(result.toolInteractions[0].result_summary);
+      if(tool==='get_tareas')expect(first.error).toContain('solo permite');
+      else expect(first._evidencia.consulta_completa).toBe(false);
       expect(result.text).not.toBe(unsupported);
     });
   }
