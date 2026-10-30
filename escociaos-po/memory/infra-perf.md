@@ -702,3 +702,9 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - MÉTODO: clima_avisos no tiene enviado_en; columnas clave, created_at, detalle. [corrida: 2026-10-26-lunes]
 - La 183 se sostiene: 10-18..10-25 = 8/8 días ok, 288 lecturas; reconstruido no aparece desde 10-15. [corrida: 2026-10-26-lunes]
 - Líneas base: DB 132 MB (net._http_response 60 + cron.job_run_details 26), 20 conexiones · Storage 268 MB / 315 objetos, 0 nuevos en 7 d · 5 crons / 876 corridas / 0 fallos en 72 h · edge 300/300 en 200 · suite 209 / 4.278, lint 0 / 910, tsc limpio · entry 106,1 KB gz · árboles edge 81/81 · consulta app más lenta monitoreos 180,8 ms. [corrida: 2026-10-26-lunes]
+
+## Corrida 2026-10-29-jueves
+- sin_hallazgos (sonda P0). Vercel PROMOTED 47d1386 = HEAD. Edge **v280** (2026-10-28T19:37:58Z, verify_jwt=false), ezbr `dc67ed8b…ff00`, desplegada 3m47s después de ad5455f (#356); /health anónimo 200. Migración 186 aplicada 42 s ANTES del deploy (ledger 20261028193716): orden correcto. [corrida: 2026-10-29-jueves]
+- **cron.job = 6 jobs desde la 186**: se suma `hato-alertas-respuesta-trazas-retencion` ('20 8 * * *', SQL puro, sin HTTP). 6/6 activos es el estado sano; la línea base anterior era 5. [corrida: 2026-10-29-jueves]
+- El drift-state del repo quedó en baddd4e porque la corrida #68 del detector fue anterior al deploy v280. Que el hash difiera hasta la #69 no es deriva. [corrida: 2026-10-29-jueves]
+- Líneas base: suite 218 ficheros / 4.757 pruebas en verde, tsc limpio · árboles edge 82/82 · clima 288/288 los días 10-25..10-28 · 871 corridas de clima-sync en ~72 h, 0 fallos · edge 333×200 + 1×404 (19:38:14Z, 16 s tras el deploy) en 24 h · pg_net 4 timeouts en ~6 h (cosmético). [corrida: 2026-10-29-jueves]

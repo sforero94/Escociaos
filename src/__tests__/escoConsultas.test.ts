@@ -171,7 +171,7 @@ describe('Conciliaciones operativas: FK y datos ausentes', () => {
 });
 describe('Contrato y enrutamiento', () => {
   for (const tool of HERRAMIENTAS_CONSULTA) it(`${tool.name}: consulta ejecutable con evidencia`, async () => {
-    const r = await ejecutarConsultaEsco(tool.name, { ...rango, fecha_cosecha: '2026-10-07' }, consulta({ fin_negocios: [{ id: 'n', nombre: 'Aguacate Hass' }] }));
+    const r = await ejecutarConsultaEsco(tool.name, tool.name === 'get_aplicaciones_ejecucion' ? rango : { ...rango, fecha_cosecha: '2026-10-07' }, consulta({ fin_negocios: [{ id: 'n', nombre: 'Aguacate Hass' }] }));
     expect(evidencia(r).consulta_completa).toBe(true);
   });
   it('sin evidencia exitosa del historial no permite respuesta global de partos', () => {
@@ -187,6 +187,54 @@ describe('Contrato y enrutamiento', () => {
     expect(s.contexto_recortado).toBe(true);
     expect(s.resumen.total).toBe(1000);
     expect(s.detalle).toBeUndefined();
+  });
+  it('no acepta el contexto recortado de partos como evidencia completa', () => {
+    const raw = JSON.stringify({ _evidencia: { herramienta: 'get_hato_partos', consulta_completa: true,
+      detalle_completo: true, rango: { desde: rango.date_from, hasta: rango.date_to } }, resumen: { total: 1 }, detalle: 'x'.repeat(25000) });
+    const summary = resumirContexto(raw);
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: summary }])).toBe(false);
+    expect(JSON.parse(summary)._evidencia).toMatchObject({ consulta_completa: false, detalle_completo: false });
+  });
+  it('conserva el fallo al recortar un error largo sin copiar su texto', () => {
+    const secretLikeError = 'synthetic-raw-error-'.repeat(2000);
+    const summary = resumirContexto(JSON.stringify({ error: secretLikeError }));
+    expect(Object.prototype.hasOwnProperty.call(JSON.parse(summary), 'error')).toBe(true);
+    expect(summary).not.toContain(secretLikeError);
+  });
+  it.each([false, null, 0, ''])('rechaza la presencia de un error aunque su valor sea %s', error => {
+    const summary = JSON.stringify({ error, _evidencia: { consulta_completa: true, rango: { desde: rango.date_from, hasta: rango.date_to } } });
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: summary }])).toBe(false);
+  });
+  it.each([false, null, 0, ''])('preserva errores falsy cortos y largos: %s', error => {
+    const short = JSON.stringify({ error, _evidencia: { consulta_completa: true } });
+    expect(resumirContexto(short)).toBe(short);
+    const long = JSON.stringify({ error, detalle: 'x'.repeat(25000), _evidencia: { consulta_completa: true } });
+    expect(JSON.parse(resumirContexto(long)).error).toBe('La consulta anterior falló; vuelve a consultar.');
+  });
+  it.each(['{invalid', 'null', '[]', '0', 'false', '"opaque"'])('preserva entradas cortas y no aprueba las malformadas/primitivas: %s', raw => {
+    expect(resumirContexto(raw)).toBe(raw);
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: raw }])).toBe(false);
+    const truncated = JSON.parse(resumirContexto(raw, 0));
+    expect(truncated.contexto_recortado).toBe(true);
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: JSON.stringify(truncated) }])).toBe(false);
+  });
+  it.each([true, 'false', null, 0, []])('rechaza un marcador presente de recorte salvo false explícito: %s', contexto_recortado => {
+    const raw = JSON.stringify({ contexto_recortado, _evidencia: { consulta_completa: true,
+      rango: { desde: rango.date_from, hasta: rango.date_to } } });
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: raw }])).toBe(false);
+  });
+  it.each([0, 101])('mantiene vacío completo o agregado válido con detalle paginado: %s', total => {
+    const raw = JSON.stringify({ contexto_recortado: false, _evidencia: { consulta_completa: true,
+      detalle_completo: total === 0, total_hechos: total, rango: { desde: rango.date_from, hasta: rango.date_to } }, resumen: { total } });
+    expect(resumirContexto(raw)).toBe(raw);
+    expect(evidenciaPartosSuficiente([{ tool: 'get_hato_partos', result_summary: raw }])).toBe(true);
+  });
+  it('conserva el resumen aun si supera el umbral: no introduce un nuevo límite duro', () => {
+    const raw = JSON.stringify({ _evidencia: { consulta_completa: true }, resumen: { note: 'x'.repeat(25000) } });
+    const summary = resumirContexto(raw);
+    expect(JSON.parse(summary).resumen.note).toHaveLength(25000);
+    expect(summary.length).toBeGreaterThan(24000);
+    expect(JSON.parse(summary)._evidencia.consulta_completa).toBe(false);
   });
   it('copias de motor y chat son idénticas; historial carga últimos 20', () => {
     const canonical = readFileSync('src/utils/escoConsultas.ts', 'utf8');

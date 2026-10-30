@@ -1,3 +1,4 @@
+import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, X, AlertTriangle, Check } from 'lucide-react';
@@ -444,6 +445,8 @@ export function CalculadoraAplicaciones() {
     }
 
     try {
+      if (!state.configuracion.fecha_inicio_planeada) throw new Error('La fecha de inicio planeada es requerida.');
+      validarFechasAplicacion(state.configuracion);
       setState((prev) => ({ ...prev, guardando: true, error: null }));
 
       const {

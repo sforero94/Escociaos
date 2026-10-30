@@ -899,6 +899,16 @@ Three module contracts live as **nested `CLAUDE.md` files** rather than in this 
 
 ---
 
+## Migration ledger update — 2026-10-29
+
+Migration `187_fin_gastos_lote_reintentable` was applied to Escocia OS production
+(`ywhtjwawnkeqlwxbvgup`) through the approved Composio migration route. Live ledger
+version: `20261029183837`, verified at `2026-10-29 18:38:51 UTC`. SQL SHA256:
+`6bf56111bfea8d8f4fb4e45ddea6291a295c0b7bf200346b9b6de77bb557a1af`.
+Receipt RLS, INVOKER RPC, grants and unchanged existing expense policies/triggers
+passed metadata checks. Frontend PR362 remains inactive. Preserve receipts/RPC on
+rollback. Full evidence: `docs/security-review/expense-release-readiness.md`.
+
 ## Deployment
 
 The app is deployed on **Vercel** with:

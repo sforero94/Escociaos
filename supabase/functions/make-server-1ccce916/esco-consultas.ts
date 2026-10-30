@@ -28,7 +28,7 @@ const definiciones: Array<[string, string, boolean, Record<string, unknown>?, st
   ['get_ganado_movimientos_detalle', 'Historia completa de movimientos de ceba agrupados por grupo de traslado o transacción, con potreros/fincas; las dos patas del traslado no son dos hechos independientes.', true],
   ['get_cosecha_trazabilidad', 'Detalle de cosechas, responsables, canastillas, preselección y vínculos cosecha-despacho-cliente; kilos cosechados vs asignados, incluyendo despachos fuera del rango unidos por FK. Producción exportación/nacional es una fuente distinta.', true, { cosecha_id: { type: 'string' }, lote_name: { type: 'string' } }],
   ['get_produccion_calidad', 'Calidad registrada por lote/sublote/año/cosecha: exportación y nacional, porcentajes solo con desglose disponible. No convertir desglose nulo en cero.', false, { year: { type: 'number' }, cosecha_tipo: { type: 'string' }, lote_name: { type: 'string' } }],
-  ['get_aplicaciones_ejecucion', 'Historia de intervenciones por lote y aplicación: fechas, productos/dosis planeados, consumos y trabajo real, cobertura planeada/registrada. No comparar dosis por caneca con cantidades consumidas sin conversión.', true, { application_id: { type: 'string' }, lote_name: { type: 'string' } }],
+  ['get_aplicaciones_ejecucion', 'Busca aplicaciones por nombre/estado y muestra historia real. Sin filtro explícito incluye todos los estados. Fechas reales por defecto; date_basis=planned solo si el usuario pide planeadas. Sin rango no inventa un período. Historia de intervenciones por lote y aplicación: fechas, productos/dosis planeados, consumos y trabajo real, cobertura planeada/registrada. No comparar dosis por caneca con cantidades consumidas sin conversión.', false, { application_id: { type: 'string' }, application_name: { type: 'string', description: 'Nombre parcial, normaliza tildes y espacios' }, estado: { type: 'string', enum: ['Calculada', 'En ejecución', 'Cerrada'], description: 'Filtro explícito de estado; omitir al descubrir estado por nombre/ID. Calculada se muestra Planificada en la UI'  }, alcance: { type: 'string', enum: ['actual', 'periodo'], description: 'actual: búsqueda actual; periodo requiere ambas fechas' }, date_basis: { type: 'string', enum: ['actual', 'planned'], default: 'actual' }, lote_name: { type: 'string' } }],
   ['get_recomendaciones_ejecucion', 'Recomendaciones de visita frente a aplicaciones: muestra recomendaciones y candidatas por insumo/fecha para revisión. No hay FK recomendación-aplicación; ninguna coincidencia demuestra cumplimiento.', true],
   ['get_carencia_cosecha', 'Carencia por lote a fecha de cosecha consultada, usando consumos reales y períodos del catálogo; faltantes dan no verificable, nunca autorización automática para cosechar.', false, { fecha_cosecha: { type: 'string', description: 'YYYY-MM-DD' }, lote_name: { type: 'string' } }, ['fecha_cosecha']],
   ['get_monitoreo_cobertura', 'Cobertura registrada de rondas por lote/sublote/plaga frente al catálogo actual. Sin registro no significa sin plaga; catálogo actual no demuestra alcance esperado histórico.', true, { ronda_id: { type: 'string' }, lote_name: { type: 'string' } }],
@@ -46,8 +46,10 @@ export const HERRAMIENTAS_CONSULTA: HerramientaConsulta[] = definiciones.map(([n
   parameters: { type: 'object', properties: {
     date_from: { type: 'string', description: 'Fecha inicial YYYY-MM-DD; en animales filtra nacimiento' },
     date_to: { type: 'string', description: 'Fecha final YYYY-MM-DD inclusiva' },
-    nombre: { type: 'string', description: 'Nombre parcial de animal, cuando aplica' },
-    numero: { type: 'number', description: 'Chapeta, cuando aplica; identidad definitiva es UUID' },
+    ...(name === 'get_aplicaciones_ejecucion' ? {} : {
+      nombre: { type: 'string', description: 'Nombre parcial de animal, cuando aplica' },
+      numero: { type: 'number', description: 'Chapeta, cuando aplica; identidad definitiva es UUID' },
+    }),
     detalle_offset: { type: 'integer', minimum: 0, description: 'Siguiente página de detalle; inicio por defecto 0, página de 100 hechos' },
     ...extras,
   }, required: [...(rango ? ['date_from', 'date_to'] : []), ...required] },
@@ -98,11 +100,90 @@ export async function leerCompleto(q: ConsultaPagina, tabla: string, query: stri
 export function resumirContexto(resultado: string, max = 24000): string {
   if (resultado.length <= max) return resultado;
   try {
-    const r = JSON.parse(resultado);
-    return JSON.stringify({ _evidencia: r._evidencia ?? null, resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
+    const parsed: unknown = JSON.parse(resultado);
+    const r = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as FilaEsco : {};
+    const legacy = r._evidencia !== null && typeof r._evidencia === 'object' && !Array.isArray(r._evidencia) ? r._evidencia as FilaEsco : null;
+    return JSON.stringify({
+      ...(Object.prototype.hasOwnProperty.call(r, 'error') ? { error: 'La consulta anterior falló; vuelve a consultar.' } : {}),
+      _evidencia: legacy ? { ...legacy, consulta_completa: false, detalle_completo: false } : null,
+      resumen: r.resumen ?? null, contexto_recortado: true, instruccion: 'Vuelve a consultar la herramienta. Este contexto no contiene el detalle completo.' });
   } catch {
     return JSON.stringify({ contexto_recortado: true, instruccion: 'Resultado anterior no preservado; vuelve a consultar antes de concluir.' });
   }
+}
+export function normalizarTextoAplicacion(value: unknown): string {
+  return texto(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+export function baseFechaAplicacion(args: FilaEsco): 'actual' | 'planned' {
+  const base = args.date_basis ?? 'actual';
+  if (base !== 'actual' && base !== 'planned') throw new Error('date_basis debe ser actual o planned.');
+  return base;
+}
+export function requiereConsultaAplicaciones(pregunta: string): boolean {
+  const q = normalizarTextoAplicacion(pregunta);
+  // Exclude common non-farm meanings without routing every use of "application".
+  if (!/\b(?:fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q) && /\b(?:aplicacion(?:es)? (?:movil|web|de empleo|para editar|de software))\b/.test(q)) return false;
+  const farm = /\b(?:aplicaci(?:on|ones)|fumigaci(?:on|ones)|fertilizaci(?:on|ones))\b/.test(q);
+  return farm && /\b(?:como va|avance|progreso|estado|actual|en ejecucion|en curso|activas?|hay|existe(?:n)?|tenemos)\b/.test(q);
+}
+export function pideFechasPlaneadas(pregunta: string): boolean {
+  const clauses = normalizarTextoAplicacion(pregunta).split(/[.;,!?]+|\b(?:pero|sino|en cambio)\b|\by (?=no\b)/);
+  let requested: 'actual' | 'planned' | null = null;
+  for (const part of clauses) {
+    const clause = part.replace(/^[¿¡\s]+/, '').trim().replace(/^por favor\s+/, '');
+    const negated = /^(?:no|nunca|sin|ignora|ignorar|excluye|excluir)\b/.test(clause);
+    if (negated) {
+      // Revocation need not authorize a new basis or guess verb conjugation.
+      // A conservative explicit denial removes prior consent in this clause.
+      // Without a named basis, do not guess the referent: withdraw planned consent.
+      if ((requested === 'planned' && /\b(?:planeadas?|planificadas?)\b/.test(clause)) ||
+          (requested === 'actual' && /\b(?:reales?|de ejecucion)\b/.test(clause)) ||
+          (requested === 'planned' && !/\b(?:planeadas?|planificadas?|reales?|de ejecucion)\b/.test(clause))) requested = null;
+      continue;
+    }
+    const body = clause;
+    // Only a direct date-basis request is actionable. "Dame el estado de la
+    // aplicación cuya fecha planeada..." describes a record, not a date basis.
+    const direct = body.match(/^(?:por favor )?(?:us[ae]s?|usar|utiliza(?:r)?|consulta(?:r)?|prefiero|quiero|necesito|muestra(?:me)?|dame|busca(?:r)?|filtra(?:r)?|ignora(?:r)?|exclu(?:ye|ir))\s+(?:(?:por|segun|con) )?(?:(?:la|las) )?((?:fechas?(?: de (?:inicio|fin))? )?(?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const question = body.match(/^(?:cual(?:es)?|que) (?:es |son )?(?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    // A direct plural planned-application request is explicit planned intent;
+    // a relative clause merely describing one record is not.
+    const plannedCollection = body.match(/^(?:dame|muestra(?:me)?|consulta|busca) (?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) ((?:planeadas?|planificadas?)\b.*)$/);
+    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1] ?? plannedCollection?.[1];
+    if (!basis) continue;
+    const planned = /\b(?:planeadas?|planificadas?)\b/.test(basis);
+    const actual = /\b(?:reales?|de ejecucion)\b/.test(basis);
+    // A mixed clause is ambiguous: keep actual default. A later explicit
+    // positive clause can resolve a preceding negation or contrast.
+    requested = planned && !actual ? 'planned' : 'actual';
+  }
+  return requested === 'planned';
+}
+/** Domain guard: a partial/other-domain query never proves application absence. */
+export function respuestaSeguraAplicaciones(interacciones: Array<{ tool: string; result_summary: string }>, pregunta = ''): string | null {
+  const unavailable = 'No pude verificar la aplicación con una consulta completa de ejecución. No puedo afirmar que no exista.';
+  const last = [...interacciones].reverse().find(t => t.tool === 'get_aplicaciones_ejecucion');
+  if (!last) return unavailable;
+  try {
+    const r = JSON.parse(last.result_summary);
+    if (!r || typeof r !== 'object' || Object.prototype.hasOwnProperty.call(r, 'error') ||
+      (Object.prototype.hasOwnProperty.call(r, 'contexto_recortado') && r.contexto_recortado !== false) ||
+      r._evidencia?.herramienta !== 'get_aplicaciones_ejecucion' || r._evidencia?.consulta_completa !== true || r._evidencia?.detalle_completo !== true || !Array.isArray(r.detalle)) return unavailable;
+    if (r.detalle.some((a: FilaEsco) => !a || typeof a.id !== 'string' || !texto(a.nombre_aplicacion).trim())) return unavailable;
+    const collection = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(normalizarTextoAplicacion(pregunta)) && !/\b(?:la|esa|una|esta) aplicacion\b/.test(normalizarTextoAplicacion(pregunta));
+    if (r.detalle.length > 1 && collection) {
+      if (r.detalle.some((a: FilaEsco) => (a.fechas_inconsistentes != null && (!Array.isArray(a.fechas_inconsistentes) || a.fechas_inconsistentes.length > 0)) || (a.base_fecha_consultada !== 'planned' && a.fecha_real_ausente === true))) return 'Encontré aplicaciones, pero hay fechas reales ausentes o inconsistentes. No puedo confirmar su duración ni sustituirlas por fechas planeadas.';
+      return null;
+    }
+    if (r.detalle.length > 1) return 'Encontré varias aplicaciones candidatas. Precisa cuál quieres consultar: ' + r.detalle.slice(0, 5).map((a: FilaEsco) => texto(a.nombre_aplicacion)).join('; ');
+    if (!r.detalle.length && r.resumen?.fechas_inconsistentes > 0) return 'Hay registros con fechas inconsistentes; no puedo descartar una aplicación por este rango.';
+    if (!r.detalle.length) return r.resumen?.fechas_reales_ausentes > 0 ? 'Hay aplicaciones sin fechas reales registradas; no puedo descartarlas por este rango.' : 'No encontré coincidencias dentro de los filtros consultados. Esto no demuestra ausencia fuera de ese alcance.';
+    if (typeof r.detalle[0]?.id !== 'string' || !texto(r.detalle[0]?.nombre_aplicacion).trim()) return unavailable;
+    if (r.detalle[0].base_fecha_consultada !== 'planned' && r.detalle[0].fecha_real_ausente === true) return `Encontré ${texto(r.detalle[0].nombre_aplicacion)}, estado ${texto(r.detalle[0].estado)}. No tiene fecha de inicio real registrada; la planeada no sustituye ese dato.`;
+    if (r.detalle[0].fechas_inconsistentes?.length) return 'Encontré la aplicación, pero sus fechas registradas son inconsistentes. No puedo confirmar su duración sin aclararlas.';
+    return null;
+  } catch { return unavailable; }
 }
 export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: ConsultaPagina, hoy = fechaBogota()): Promise<FilaEsco> {
   const def = HERRAMIENTAS_CONSULTA.find(t => t.name === nombre);
@@ -234,7 +315,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     const fechaCosecha = carencia ? validarFecha(args.fecha_cosecha) : null;
     // Carencia necesita toda la historia anterior, no solo un rango corto arbitrario.
     const [apps, movimientos, productos, lotes] = await Promise.all([
-      read('aplicaciones', 'id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),
+      read('aplicaciones', 'id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),
       read('movimientos_diarios', 'id,aplicacion_id,lote_id,fecha_movimiento,numero_canecas,numero_bultos,responsable,notas', carencia ? undefined : 'fecha_movimiento', carencia ? `&fecha_movimiento=lte.${fechaCosecha}` : ''),
       read('productos', 'id,nombre,unidad_medida,periodo_carencia_dias'), read('lotes', 'id,nombre'),
     ]);
@@ -278,15 +359,36 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
         return { ...s, visita: vm.get(texto(s.informe_id)), estado_cumplimiento: 'sin_vinculo_confirmado', consumos_candidatos: candidatos.map(consumoShape) };
       }));
     }
-    const candidates = apps.filter(a => (!args.application_id || a.id === args.application_id) && (ms.some(m => m.aplicacion_id === a.id) || ((!desde || texto(a.fecha_inicio_planeada) >= desde) && (!hasta || texto(a.fecha_inicio_planeada) <= hasta))));
+    const allowed = new Set(['application_id', 'application_name', 'estado', 'alcance', 'date_basis', 'lote_name', 'date_from', 'date_to', 'detalle_offset']);
+    if (Object.keys(args).some(key => !allowed.has(key))) throw new Error('Filtro de aplicación desconocido.');
+    for (const key of ['lote_name', 'application_id', 'application_name', 'estado']) if (args[key] != null && (typeof args[key] !== 'string' || !normalizarTextoAplicacion(args[key]))) throw new Error(key + ' debe ser texto no vacío.');
+    if (args.estado != null && !['calculada', 'en ejecucion', 'cerrada'].includes(normalizarTextoAplicacion(args.estado))) throw new Error('Estado de aplicación inválido.');
+    const basis = baseFechaAplicacion(args);
+    const scope = args.alcance ?? (desde || hasta ? 'periodo' : 'actual');
+    if (scope !== 'actual' && scope !== 'periodo') throw new Error('alcance debe ser actual o periodo.');
+    if (scope === 'periodo' && (!desde || !hasta)) throw new Error('El período requiere date_from y date_to.');
+    const name = normalizarTextoAplicacion(args.application_name);
+    const state = normalizarTextoAplicacion(args.estado ?? '');
+    const matching = apps.filter(a => (!args.application_id || a.id === args.application_id) &&
+      (!name || normalizarTextoAplicacion(a.nombre_aplicacion).includes(name)) &&
+      (!state || normalizarTextoAplicacion(a.estado) === state));
+    const dateKey = basis === 'actual' ? 'fecha_inicio_ejecucion' : 'fecha_inicio_planeada';
+    const candidates = matching.filter(a => (!desde && !hasta) ||
+      ((!!a[dateKey] && (!desde || texto(a[dateKey]) >= desde) && (!hasta || texto(a[dateKey]) <= hasta)) ||
+       (basis === 'actual' && ms.some(m => m.aplicacion_id === a.id))));
+    const dateIssues = (a: FilaEsco) => [['fecha_inicio_planeada', 'fecha_fin_planeada'], ['fecha_inicio_ejecucion', 'fecha_fin_ejecucion']].flatMap(([start, end]) => {
+      try { if (a[start]) validarFecha(a[start]); if (a[end]) validarFecha(a[end]); }
+      catch { return [start + ':fecha_invalida']; }
+      return a[start] && a[end] && texto(a[start]) > texto(a[end]) ? [start + ':inicio_posterior_al_final'] : [];
+    });
     const legacyPlans = await related('aplicaciones_lotes', 'id,aplicacion_id,lote_id,sublotes_ids,total_arboles', 'aplicacion_id', candidates.map(a => a.id));
-    const selectedApps = candidates.filter(a => !args.lote_name || ms.some(m => m.aplicacion_id === a.id) || legacyPlans.some(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)));
-    const planes = await related('aplicaciones_lotes_planificado', 'id,aplicacion_id,lote_id,mezcla_id,litros_mezcla_planificado,canecas_planificado', 'aplicacion_id', selectedApps.map(a => a.id));
+    const planes = await related('aplicaciones_calculos', 'id,aplicacion_id,lote_id,lote_nombre,mezcla_id,litros_mezcla,numero_canecas,kilos_totales,numero_bultos', 'aplicacion_id', candidates.map(a => a.id));
+    const selectedApps = candidates.filter(a => !args.lote_name || ms.some(m => m.aplicacion_id === a.id) || [...legacyPlans, ...planes].some(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)));
     const mezclas = await related('aplicaciones_mezclas', 'id,aplicacion_id,nombre_mezcla', 'aplicacion_id', selectedApps.map(a => a.id));
     const recetas = await related('aplicaciones_productos', 'id,mezcla_id,producto_id,producto_nombre,dosis_por_caneca,unidad_dosis,cantidad_total_necesaria', 'mezcla_id', mezclas.map(m => m.id));
     const trabajo = await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', selectedApps.map(a => a.tarea_id));
     limites.push('Consumido en rango; trabajo y plan por aplicación completa. Dosis por caneca y consumo total no se comparan sin unidad compatible. Sin captura no demuestra que no se ejecutó.');
-    return finish(selectedApps.map(a => ({ ...a, alcance_planeado: legacyPlans.filter(p => p.aplicacion_id === a.id), plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })), productos_planeados: recetas.filter(r => mezclas.some(m => m.id === r.mezcla_id && m.aplicacion_id === a.id)), movimientos: ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) })), registros_trabajo: trabajo.filter(t => t.tarea_id === a.tarea_id) })));
+    return finish(selectedApps.map(a => ({ ...a, fechas_inconsistentes: dateIssues(a), base_fecha_consultada: basis, fecha_real_ausente: !a.fecha_inicio_ejecucion, alcance_planeado: legacyPlans.filter(p => p.aplicacion_id === a.id), plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && contiene(lm.get(texto(p.lote_id))?.nombre, args.lote_name)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })), productos_planeados: recetas.filter(r => mezclas.some(m => m.id === r.mezcla_id && m.aplicacion_id === a.id)), movimientos: ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) })), registros_trabajo: trabajo.filter(t => t.tarea_id === a.tarea_id) })), { date_basis: basis, alcance: scope, coincidencias: selectedApps.length, fechas_reales_ausentes: matching.filter(a => { try { return !a.fecha_inicio_ejecucion || !validarFecha(a.fecha_inicio_ejecucion); } catch { return true; } }).length, fechas_inconsistentes: matching.filter(a => dateIssues(a).length).length });
   }
   if (nombre === 'get_monitoreo_cobertura') {
     const [rondas, sublotes, lotes] = await Promise.all([read('rondas_monitoreo', 'id,nombre,fecha_inicio,fecha_fin', 'fecha_inicio'), read('sublotes', 'id,nombre,lote_id'), read('lotes', 'id,nombre,activo')]);
@@ -387,6 +489,15 @@ export function requiereConsultaPartos(pregunta: string): boolean {
 export function evidenciaPartosSuficiente(interacciones: Array<{ tool: string; result_summary: string }>): boolean {
   return interacciones.some(t => {
     if (t.tool !== 'get_hato_partos') return false;
-    try { const r = JSON.parse(t.result_summary); return !r.error && r._evidencia?.consulta_completa === true && !!r._evidencia?.rango?.desde && !!r._evidencia?.rango?.hasta; } catch { return false; }
+    try {
+      const r: unknown = JSON.parse(t.result_summary);
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+      const result = r as FilaEsco;
+      if (Object.prototype.hasOwnProperty.call(result, 'error')
+        || (Object.prototype.hasOwnProperty.call(result, 'contexto_recortado') && result.contexto_recortado !== false)) return false;
+      const evidence = result._evidencia as FilaEsco | undefined;
+      const range = evidence?.rango as FilaEsco | undefined;
+      return evidence?.consulta_completa === true && !!range?.desde && !!range?.hasta;
+    } catch { return false; }
   });
 }
