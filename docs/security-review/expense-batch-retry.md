@@ -3,9 +3,10 @@
 Current status (2026-10-29): PR360 merged; exact187 is applied in Escocia OS
 production, live ledger `20261029183837`. Metadata postconditions passed.
 See [the production receipt](expense-release-readiness.md). Do not reapply.
-Earlier unapplied/development instructions below are historical. PR362 still
-requires actual operator Web Locks confirmation and specific frontend release
-approval. Preserve RPC and receipts on rollback.
+Earlier unapplied/development instructions below are historical. PR362 is released
+at merge e3b4c40b with accepted runtime availability limits; technical closure was
+accepted 2026-10-30. First legitimate use remains follow-up, not a release gate.
+See [closeout](technical-closeout.md). Preserve RPC and receipts on rollback.
 
 
 Status: additive candidate, **not applied and not released**. Integration base `main` after PR367 is

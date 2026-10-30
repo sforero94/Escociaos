@@ -1,17 +1,25 @@
 # Security review — progress tracker
 
-Updated: 2026-10-28 (America/New_York). This is the session queue and handoff
+Updated: 2026-10-30 (UTC). This is the session queue and handoff
 record, not a claim of current production state. Read [the plan](plan.md) and
 [the session guide](session-guide.md) before changing a status.
 
-## Current release status — 2026-10-29
+## Current technical closeout — accepted 2026-10-30
 
-PR360 is merged; exact187 applied and metadata-verified in production at ledger
-`20261029183837`. Empty local real Auth/PostgREST validation is complete. PR362
-remains a draft: operator Chrome/Safari native Web Locks capability and specific
-frontend ready/merge/deployment authorization remain pending. Do not reapply187.
-The chronology below preserves earlier instructions and evidence as historical
-records; this status supersedes older pending DB gates and mock-only limitations.
+The owner accepted technical closure of S1–S5 plus expense retry with the recorded
+limits. PR360/187 and PR362 are released: frontend merge e3b4c40b, postmerge
+CI 40940596671 success, Vercel READY/production alias assigned. Web Locks availability
+limits were explicitly accepted; actual devices are not certified. F1/expense
+first legitimate use remains operational follow-up, not another implementation
+gate. Exact188 is separately applied at ledger 20261030023201 for date-pair order;
+it does not fix general application-plan atomicity. PR371 frontend is merged;
+backend v282 subsequently deployed through release 41000471057 after the earlier
+pre-secret failure and specifically reviewed PR372 repair. Offline 363/364/366 are
+integrated. The 30-question web exercise completed on stable v282. Functional
+Faithfulness acceptance remains open: exploratory findings require separate review.
+See [closeout](technical-closeout.md) for terminal receipts and preserved history.
+Do not reapply187/188 or resume PR324. Chronology below is historical; release
+receipts and this accepted status supersede older pending gates.
 
 ## Queue
 
@@ -22,15 +30,14 @@ records; this status supersedes older pending DB gates and mock-only limitations
 | S2 — active accounts, role isolation and exposure | Assessed with gaps — read-only | Access matrix and revocation analysis complete for named surfaces; no new verified critical/high issue. | [S2 assessment](s2-assessment.md). Auth ban in edit confirmed in source; inactive creation/service-role activity path unconfirmed. Owner-only revocation and existing broad SELECT class deferred. Edge payload limit and separate DB-export boundary remain. |
 | S3 — Telegram identity and privileged operations | Assessed with gaps — read-only | Identity/operation and callback/replay maps complete; two medium source results, no new verified critical/high issue. | [S3 assessment](s3-assessment.md). App/bot revocation is independent; module freshness and alert claim/effect gaps are code-only. Edge parity and separate DB-export boundary remain open. |
 | S4 — secrets, files and reachable dependencies | Assessed with gaps — read-only | Locked xlsx 0.18.5 and browser/edge parser reachability verified against current primary advisories; file/secret/persistence boundaries mapped. | [S4 assessment](s4-assessment.md). Known dependency risk retained; shared-profile draft risk recorded. No new verified critical/high candidate. Live Storage and edge parity unchecked; full lint still open. |
-| S5 — ranked report and remediation scopes | Closed with gaps — read-only consolidation | Seven medium source findings retained; no new verified critical/high candidate. Proposed next backlog decision: expense-batch retry only; no implementation. | [S5 consolidation](s5-consolidation.md). Documentation-only merge recommendation is conditional on reviewer acceptance, stale PR metadata refresh and final-head checks. Local full-lint/evidence gaps remain. |
+| S5 — ranked report and remediation scopes | Assessment closed with gaps; technical closeout accepted | Seven historical medium source findings retained; expense-only retry subsequently selected and released. No other fix is selected. | [Historical S5](s5-consolidation.md), [current closeout](technical-closeout.md). Review evidence limits and operational follow-up remain explicit. |
 | Expense-batch retry — DB prerequisite | PR360 merged; production187 applied | Live ledger20261029183837; exact SQL and metadata postconditions verified. | [Release receipt](expense-release-readiness.md); preserve RPC/receipts. |
-| Expense-batch retry — frontend activation | Draft PR362; operator capability/release approval pending | Native per-user Web Lock across pending read/write/send/cleanup; exact-payload cleanup and adversarial concurrency regressions. | [Frontend runbook](expense-batch-frontend.md); DB prerequisite applied (ledger20261029183837); local real-stack validation complete; operator Web Locks and specific frontend release approval pending. |
+| Expense-batch retry — frontend activation | PR362 released; technical closeout accepted | Native per-user Web Lock and exact-payload recovery; postmerge CI/Vercel green. | [Closeout](technical-closeout.md); accepted availability limits, first legitimate use follow-up; keep pending requests. |
 
-The bounded S1–S5 review closed with gaps. The later overnight instruction
-authorized expense-only implementation; the morning-review instruction requires
-queued drafts without merge. The historical S5 close-out below remains unchanged.
-The current decision and merge/test qualifications are in
-[S5](s5-consolidation.md); the PR title/body still describe S1 and are stale.
+The bounded S1–S5 review closed with gaps. Later explicit approvals authorized the
+expense-only implementation and releases, followed by technical closeout. The
+historical S5 close-out below remains unchanged; its proposed-next-step and
+then-current PR metadata are historical, not current action instructions.
 Existing CI success is recorded separately from historical local lint counts.
 
 Scope IDs S1–S5 label this continuation queue. They do not rename F1 or assign

@@ -1,12 +1,12 @@
 # Expense-batch retry — dependent frontend activation
 
-Status: draft preparation against main. Source and local synthetic validation are
-complete; production migration187 is applied and verified in live ledger
-`20261029183837` (2026-10-29). See [release evidence](expense-release-readiness.md).
-Actual operator Chrome/Safari Web Locks capability remains unverified. Main
-auto-deploys: do not mark ready or merge before operator verification and specific
-frontend release authorization. The database runbook retains all trust limits and
-rollback constraints. Earlier assessment records below are historical.
+Status: PR362 released at merge e3b4c40b on2026-10-29; postmerge CI 40940596671 and
+Vercel production/alias checks passed. Exact187 is applied at ledger20261029183837.
+The owner accepted technical closure2026-10-30 and runtime Web Locks availability
+limits; actual Chrome/Safari devices are not certified. First legitimate use is
+operational follow-up. See [closeout](technical-closeout.md) and
+[release evidence](expense-release-readiness.md). Earlier assessment records and
+test totals below are historical; all trust/rollback constraints remain.
 
 ## Parent-review blockers and correction
 
@@ -106,10 +106,9 @@ denied DB export and F1 genuine-operator gaps. No production parity is asserted.
 
 ## Activation and rollback order
 
-PR360 is merged and exact187 is applied in production, ledger20261029183837.
-Retarget the existing draft to current main and verify exact-head CI. Confirm
-operator Web Locks support before specific frontend merge/deployment approval.
-Do not reapply187 or use production expense transactions as validation.
+PR360/187 and PR362 activation are complete under explicit approval. Runtime
+availability limits were accepted instead of device-version collection. Do not
+reapply187, merge362 again or create production expenses for validation.
 
 After exposure, keep RPC/receipts and all browser pending entries on rollback.
 Pause affected capture before reverting to the old direct writer. Resolve the
@@ -119,10 +118,8 @@ steal locks or recapture an uncertain batch as a workaround.
 ## Next-session prompt
 
 ```text
-Review the existing PR362 draft against current main and its exact-head checks.
-Read current production receipt and local real-stack evidence in
-expense-release-readiness.md. Do not reapply187: ledger20261029183837 is verified.
-Confirm native Web Locks in each actual Chrome/Safari operator profile over HTTPS,
-then obtain specific frontend ready/merge authorization. Preserve frozen payloads,
-PGB01/legacy22023 conflicts and prior exclusions. No other remediation.
+Read technical-closeout.md. Technical scope is accepted and PR362/187 released.
+Record the next legitimate operator confirmation without fake transactions or
+browser-version collection. Preserve frozen payloads, receipts, PGB01/legacy22023
+conflicts and prior exclusions. No reapplication, release or new remediation.
 ```
