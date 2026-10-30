@@ -586,13 +586,15 @@ never by convenience.
      which Notion tools may run. **Saving the Routine edit dialog also drops
      connectors that the dialog does not list** — on 2026-10-29 it removed Composio
      from all four Routines. After any edit, re-check `mcp_connections`.
-  2. **The guard hook, when unattended** (proposed in `docs/propuestas/hook-notion-oficial.md`,
-     not yet active: changing the hook and `.claude/settings.json` needs Santiago's
-     own approval). It allows reads; `notion-create-pages` only under Mantenimiento,
-     the Bot Log (with `Frente = Escocia OS`) or the "Reportes del sábado" page;
-     `notion-update-page` only with `update_properties` or `insert_content` at the
-     end; and denies everything else (delete, move, duplicate, share, rewrite).
-     Until it is active, these limits are a prompt rule and nothing more.
+  2. **The guard hook, when unattended** (active since 2026-10-30; Santiago approved
+     the edit in a live session in "Accept edits" mode, because auto mode blocks any
+     change to the hook as self-modification). It allows reads; `notion-create-pages`
+     only under Mantenimiento, the Bot Log (with `Frente = Escocia OS`) or the
+     "Reportes del sábado" page; `notion-update-page` only with `update_properties` or
+     `insert_content` at the end; and denies everything else (delete, move, duplicate,
+     share, rewrite). In an attended session it has no opinion on Notion. Tests:
+     `src/__tests__/supabaseGuardHook.test.ts`, block "Notion oficial en una Routine
+     desatendida". A denial on one of the allowed calls is a P1 against the operation.
   Writes a run may make in Notion: rows in Mantenimiento (create, update
   properties, append evidence), Saturday's report page, Saturday-reply's
   `Respuesta` section (append), and its own Bot Log row (§4 Phase 5b). Never

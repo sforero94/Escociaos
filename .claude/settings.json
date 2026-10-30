@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__.*[Ss][Uu][Pp][Aa][Bb][Aa][Ss][Ee].*__.*|mcp__Composio__.*|mcp__github__(merge_pull_request|enable_pr_auto_merge)",
+        "matcher": "mcp__.*[Ss][Uu][Pp][Aa][Bb][Aa][Ss][Ee].*__.*|mcp__Composio__.*|mcp__.*[Nn][Oo][Tt][Ii][Oo][Nn].*__notion-.*|mcp__github__(merge_pull_request|enable_pr_auto_merge)",
         "hooks": [
           {
             "type": "command",
