@@ -1,3 +1,4 @@
+import { validarFechasAplicacion } from '@/utils/fechasAplicacion';
 import { useState, useEffect, useRef } from 'react';
 import { MapPin, AlertCircle, Search, ChevronDown, X, Bug, ShoppingCart } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
@@ -241,6 +242,7 @@ export function PasoConfiguracion({
         }
       });
     }
+    try { validarFechasAplicacion(data); } catch (error) { nuevosErrores.fecha_inicio_planeada = (error as Error).message; }
     setErrores(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
   };
@@ -270,7 +272,7 @@ export function PasoConfiguracion({
       }
     }
 
-    if (formData.nombre && formData.tipo && formData.fecha_inicio_planeada && numLotes > 0) {
+    if (formData.nombre && formData.tipo && numLotes > 0) {
       validar(formData);
       onUpdate(formData as ConfiguracionAplicacion);
     }

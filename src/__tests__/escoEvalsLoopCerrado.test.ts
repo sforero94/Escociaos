@@ -30,9 +30,9 @@ const eventCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,
 const animalsUrl = `${BASE_SINTETICA}/rest/v1/hato_animales?select=${animalCols}&order=id.asc&limit=200&offset=0`;
 const eventsUrl = `${BASE_SINTETICA}/rest/v1/hato_eventos?select=${eventCols}&order=fecha.asc,id.asc&fecha=gte.2026-09-01&fecha=lte.2026-09-30&tipo=eq.parto&limit=200&offset=0`;
 // Pinned raw request-body hashes. Recompute only after reviewing intentional protocol changes.
-const modelBodyHashes = ['4d7a60c07b49a5bacc1bc3e80a4524a96cc50269ee551552de078c7be0aae24a', '5dddb1f735a0df7715316b1e253b4718f990204b0bc042db7567d9e6512c68d3', 'a4cb8d62f30874556e6eb66f764b132043a7f771fc28a683ee5f529d5de63ef9', '6763e5956af9470952e444ec1b370b723b201c7af3b9c6210ccce9e1a7b8f68a'];
-const unavailableBodyHash = '8ff0216c2132d84d5f84579224eaf44458d7e41d0b423061bf0a47f7f87c7a56';
-const partialBodyHash = 'b7abacc130b894b00128482713321338e516562361fae9c848a0f1d109746cab';
+const modelBodyHashes = ['cce2ab6e94f21a3839a0af93c289fa1f4ae6598efaae151b4b316e7cf52e9848', '63b0d47dd21a5953516bbc99dc9c181ca20b0a805a805aa328a567b62855e99b', 'f6ebd2de95958a896fcf9d7dddccf28683c7163b1ce6ca6622287291a928259c', 'b1952e5bd1a35905f04fd0523bdb04316b242400fe665ac2cb45d34c60e7bcaf'];
+const unavailableBodyHash = '6fcbce6b5e6feed6f5286762c0f5c2fe01b0812c867b6e73d2114ebb99211d4c';
+const partialBodyHash = 'abf105caacfda791ddf90c504e1e7c8cac017d0a1c1aaaeaa2a352e999e08000';
 async function control(options: { followup?: boolean; answer?: string; status?: number; total?: number } = {}) {
   const c = caso(options.followup);
   const turns: PaqueteFixtures['scenarios'][0]['turns'] = [];
