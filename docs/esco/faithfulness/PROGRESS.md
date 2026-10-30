@@ -1,13 +1,13 @@
 # Progress and handoff
 
-## Current state — I03-c refresh, 2026-10-30 UTC
+## Current state — I03-d refresh, 2026-10-30 UTC
 
-- Baseline main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe, root treecc3d23322fb78c047207717cdb86dee4255199db. Preserve all security/PO/runtime/controls and original planning source3d3e654.
-- Existing draft363 is the sole candidate. Original fixture source/test from2f996c7 remain byte-identical; only current-main integration and three tracker docs change. No372 dependency or new implementation.
-- I01/357, I02/358,359/361 and application correction371 are merged.371 postmerge CI40987891472 passed4994 tests; diagnostic40988136741 passed, release40992476137 stopped before management access. Backend remains last verifiedv281;372 receipt-access repair is a separate unmerged draft.
-- Parent reports separate188 application/postverification02:32:12UTC, ledger20261030023201; no historical repair. This task performs no live ledger, business or provider access.
-- Required now: refreshed40 fixture tests/full suite/evaluator/types/lint/build, independent adversarial review and exact candidate CI; do not reuse old checks. User's363-specific merge authorization is known, but parent readiness review precedes ready/merge. Stop here, do not start364.
-- Remaining order363→364→366, each reconciled/retested after its actual dependencies land. Never merge the old offline integration-base. No private calibration, production traffic, backend/permissions change or quality claim.
+- Actual main0e80cae23ab257a845ba94db18a09d1a4856a5f6 (tree84ac7a28) includes359/361/363. Preserve all security/371/PO/release work and original source3d3e654. No372 dependency.
+- 363 merged02:57:25UTC; postmerge CI40994634155 passed5034 tests/227 files, types/lint, GitHub Vercel success. Original fixture blobs remain identical2f996c7.
+- Current candidate is EXISTING364 only: retain original replay.ts/test from19d1678, unchanged nine dependency modules; merge actualmain without force-push and retarget to main. Never merge the obsolete integration-base as a PR. Only three tracker files reconcile.
+- Declarative JSON replay invokes both fixture finalizers and propagates invalidity; missing cases stay in coverage, missing judge/reviewer/usage stay unavailable. Scripted deterministic success is not verified success or model-quality improvement. Measurementv1.1/labels/adjudication unchanged.
+- Need refreshed focused/full checks, independent adversarial review and exact-head CI, then parent review before ready/merge. Stop before366 until364 lands. No providers/private fixtures/runtime changes/backend operations or production writes.
+- 371 frontend merged; approved backend run40992476137 stopped before management access. Last verified backendv281. Parent separately reports188 applied/postverified02:32:12UTC; no data repair. This task does not re-query production state.
 
 ## Historical application correction pass (merged371)
 
@@ -243,3 +243,13 @@ Branch: `codex/esco-faithfulness-eval-fixtures`, base main `6a2dd50`. Source pre
 Original head2f996c7 and actual main13ef1f4 reverified. Prepare a merge integration preserving both remote parents without force-push; original fixtures.ts and escoEvalsFixtures.test.ts blobs are unchanged. Reconcile current trackers only, retaining prior historical evidence and all main security/runtime/PO source. Node-only synthetic adapter has no production capability; consumers must invoke both finalizers and propagate sticky failure. Hashes prove consistency only. Final verification/independent review/CI belongs to the candidate handoff; no unrun check is passed here. Next scope only after parent review and363 merge: refresh364 against actual main, not old integration-base.
 
 Local refreshed-candidate checks:40 fixture tests;208 evaluator tests/types/focused lint;5034 full tests/227 files, zero skips; full lint0 errors/907 existing warnings; build and whitespace passed. Independent review passed25 additional synthetic assertions and verified original blob parity. CI must validate the new remote merge head; historical2f996c7 results do not substitute.
+
+## Historical session — I03-d offline composition, 2026-10-29 UTC
+
+Branch `codex/esco-faithfulness-eval-replay`; target base `158720fed6ceb461efd34746760db520c557d2a3`. Local integration base combines exact reviewed #359/#361/#363; no GitHub merge or main mutation. Only tracker docs conflicted, resolved to later snapshot with original parent histories preserved. New code: replay.ts and synthetic replay tests; no dependency implementation edits. Both finalizers called, sticky fixture errors propagate as inconclusive. Initial 24 tests plus independent 12 assertions passed; added two channel-window controls. Precommit eval check and final-head full tests/types/lint/build must pass before publication; receipts are reported with exact candidate in PR/handoff, not inferred from source or prior PRs. Remaining: terminal CI, morning dependency merges/retarget/retest, then separately dispatched actual-loop isolation work. No runtime/provider/private-source/credential/production action. No calibration/live QA.
+
+## Session — existing364 refresh/retarget, 2026-10-30 UTC
+
+Reverified original19d1678 and actual main0e80cae; dependencies359/361/363 are merged. Retain original implementation/tests and nine dependency blobs; only tracker reconciliation. Preserve both remote parents with a non-forced update and retarget existing PR to main. No merge of old integration-base, runtime edit, production/provider/private-data access or372 dependency. Final candidate local/review/CI receipts belong to the handoff. Next only after parent review and364 merge: refresh366 on actual main.
+
+Refreshed local checks:26 replay tests;234 evaluator tests/types/focused lint;5060 full tests/228 files, zero skips; full lint0 errors/907 existing warnings; build12.73s and whitespace passed. Independent review passed29 additional synthetic assertions, verified original replay/test and all dependency blobs, and attempted no network. Final remote head/CI is recorded in the handoff.

@@ -1,6 +1,27 @@
-# Faithfulness integration — I03-c refresh
+# Faithfulness integration — I03-d refresh
 
-## Current I03-c candidate — 2026-10-30 UTC
+## Current I03-d candidate — 2026-10-30 UTC
+
+Actual main0e80cae23ab257a845ba94db18a09d1a4856a5f6, root tree84ac7a28b28f08fbbeda22bfba9c9dde592e5641, now contains359/361/363. Existing draft364 is refreshed through a non-forced merge with original19d16783e7af0dde3a95057dea45446ece76e4a5. Its original replay implementation/tests and all nine imported dependency source blobs are unchanged. Retarget364 to main, not the obsolete offline integration-base; do not merge that base as a PR. Only two original composition files and three reconciled trackers differ from current main. Preserve all security,371 UI/runtime/control source and PO work.372 is unrelated/unmerged, not a dependency.
+
+Merged363 head4fae9c0, merge0e80cae: postmerge CI40994634155/job123864789506 passed5034 tests/227 files, types/lint; GitHub Vercel status success. The reviewed fixture files remain identical2f996c7. Backend371 release40992476137 previously stopped before management access; no backend operation occurs here. Parent reports188 applied separately; no SQL, historical repair or live query in this task.
+
+Current task stops at reviewed draft/terminal CI before parent ready/merge go, under the user's specific364 grant. After364 lands, reconcile366 against actual current main and retest; no readiness claim for future heads. No providers, private fixtures, environment/credentials, production reads/writes or deployment.
+
+## Composition contract and evidence limits
+
+- `ejecutarReplaySintetico(pack, scripts, promptBase)` accepts strict JSON synthetic manifests and declarative per-turn tool-call/answer scripts. It supplies no executable callback, URL, fetch fallback, model key or implicit environment/config. Unknown script properties, functions, lossy values and tampered hashes reject before execution. No source scenario pack or private fixture is loaded.
+- It builds the reviewed channel messages, matches each request through the closed fixture adapter, calls `verificarFin()` for every turn and `verificarCasoFin()` after the last turn, then runs deterministic scoring and measurement **v1.1** with an explicitly unavailable semantic judge/review. Failures remain inconclusive; success of scripted plumbing is not verified service success. Missing scenarios remain listed against all expected manifest IDs; zero scripts is zero coverage, not a fallback/all selection.
+- Error/unknown/partial/stale/empty/truncated results are opaque full JSON serialization. No production event means no invented `error:false`, token usage or timings; metadata usage=null. No result-summary truncation simulation or real-model prompt-injection defense is claimed. Both channels' existing windows are retained, including Telegram omitting new questions beyond 20 stored rows; scripts do not prove the model could answer from that window.
+- Only completed turns enter `corrida.turnos`. Calls consumed inside a later-failing turn are not a complete attempted-call audit; earlier completed turns remain. Fixture diagnostics and `corrida.error` retain invalidity, so partial traces cannot produce verified success. This matches the source runner's completed-turn behavior.
+- Timestamp is explicit Bogotá UTC-5. Fixture seconds are preserved by applying the validated seconds after the minute-resolution date helper. No global clock freeze or runtime-date claim. Synthetic labels remain unadjudicated/no_verificable and excluded from golden; no immutable historical label is edited. Scripts can declare numeric/date anchors for seeded controls, not independently adjudicated truth.
+- Record pack/scenario/script/base-prompt SHA-256 and reference/rubric versions. These are canonical JSON hashes (including quotes for strings), not original byte hashes, code hashes or authorization/provenance proof. Candidate code identity is the reviewed PR SHA; no unverifiable git/source stamp is invented by the pure API.
+- Network proof: the bounded import graph reaches only offline helpers plus node:crypto; no network/runtime/env path or executable transport input exists. Tests deny inherited fetch while executing both channels and failures, and reject executable injection. This proves this declarative composition makes no network calls in those controls. It is not a sandbox for malicious JavaScript, a general HTTP interceptor, production-loop replay or proof against every process-side network path.
+
+
+Rollback: revert the incremental offline composition/test/docs only. No schema/runtime rollback. This slice does not complete private calibration or the original P0-03 scenario coverage requirements; actual-loop integration is366, separate.
+
+## Historical I03-c refresh (merged363)
 
 Current remote main13ef1f4ded1d0505d8d9b5b823314a65c891f2fe, root treecc3d23322fb78c047207717cdb86dee4255199db. Existing draft363 receives a non-forced merge integration with its original2f996c7cacebab5a05d03ce5fbd07590b0e67a19 head. Both fixture implementation/test blobs remain byte-identical. Only the three shared trackers are reconciled; no sibling runner/runtime code is imported. Preserve359/361, security360/362,371 UI/source/controls and PO documents. Draft372 remains separate and is not a dependency.
 
