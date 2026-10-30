@@ -199,3 +199,26 @@ describe('review regressions: identity and collections retain their scope', () =
     expect(JSON.parse(result.toolInteractions[0].result_summary).detalle).toHaveLength(2);
   });
 });
+
+
+describe('routing regressions — closed actual loop',()=>{
+  it('leaves a comma-bearing labor-only question with its normal domain flow',async()=>{
+    let modelCalls=0;
+    const marker='Respuesta sintética de trabajo; esto no prueba su exactitud factual.';
+    install(()=>{modelCalls++;return {role:'assistant',content:marker};});
+    const result=await llmToolLoop([{role:'user',content:'Solo lectura: ¿Cuántas jornadas y qué costo laboral hubo por lote la semana pasada, sin detalle individual?'}]);
+    expect(result.text).toBe(marker);expect(modelCalls).toBe(1);expect(result.toolInteractions).toEqual([]);
+  });
+  it('renders an actual execution cohort using the asked month, not model-selected dates or identity',async()=>{
+    vi.useFakeTimers();vi.setSystemTime(new Date('2032-05-18T17:00:00Z'));
+    try {
+      let modelCalls=0;
+      const app={...A,id:'synthetic-may',nombre_aplicacion:'Fumigación sintética de mayo',fecha_inicio_ejecucion:'2032-05-04',fecha_inicio_planeada:'2032-01-02'};
+      install(()=>{modelCalls++;return call('get_aplicaciones_ejecucion',{application_id:'wrong-model-id',date_from:'2030-01-01',date_to:'2030-01-02',estado:'Cerrada'});},url=>url.pathname==='/rest/v1/aplicaciones'?[app]:[]);
+      const result=await llmToolLoop([{role:'user',content:'Consulta de solo lectura: ¿Qué aplicaciones realizamos en mayo?'}]);
+      expect(modelCalls).toBe(1);expect(result.text).toContain('Fumigación sintética de mayo');
+      expect(result.text).toContain('2032-05-01 a 2032-05-31');expect(result.text).not.toContain('Necesito precisar');
+      expect(result.toolInteractions[0].args).toEqual({date_basis:'actual',alcance:'periodo',date_from:'2032-05-01',date_to:'2032-05-31'});
+    } finally {vi.useRealTimers();}
+  });
+});
