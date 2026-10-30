@@ -64,8 +64,11 @@ applied at ledger 20261030023201. These are parent/provider release receipts, no
 new production reads performed for this documentation.
 
 PR363/364/366 are integrated: the offline Faithfulness chain is complete, not a
-live accuracy certification. The separate 30-question Esco web evaluation is
-beginning on v282; no evaluation result, score, accuracy or completion is claimed.
+live accuracy certification. At the earlier release checkpoint, the separate
+30-question Esco web exercise was beginning. Status update2026-10-30: it has now
+completed on stable v282. Functional Faithfulness acceptance remains open because
+exploratory findings require separate review. No private questions, answers,
+business figures, error counts, traces or private links are published here.
 First legitimate F1/expense use and preserved security limits below remain intact.
 
 ## Acceptance limits and operational follow-up

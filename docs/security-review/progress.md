@@ -15,7 +15,8 @@ gate. Exact188 is separately applied at ledger 20261030023201 for date-pair orde
 it does not fix general application-plan atomicity. PR371 frontend is merged;
 backend v282 subsequently deployed through release 41000471057 after the earlier
 pre-secret failure and specifically reviewed PR372 repair. Offline 363/364/366 are
-integrated. The 30-question web evaluation is beginning, with no result claimed.
+integrated. The 30-question web exercise completed on stable v282. Functional
+Faithfulness acceptance remains open: exploratory findings require separate review.
 See [closeout](technical-closeout.md) for terminal receipts and preserved history.
 Do not reapply187/188 or resume PR324. Chronology below is historical; release
 receipts and this accepted status supersede older pending gates.

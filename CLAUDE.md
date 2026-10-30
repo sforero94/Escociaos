@@ -926,7 +926,8 @@ before the Supabase-secret step. After separately approved PR372 merged, release
 2026-10-30T04:01:08.200Z, fixed runtime e7a5545, bundle SHA256
 `d595fd7375726d36aadd90fe771b8782f55f9ae2b996fb0e45f79404cd69215a`,
 verified backups/source/health and no rollback. Offline 363/364/366 are integrated;
-the web evaluation of 30 questions is beginning, with no score or accuracy claim. See
+the web exercise of 30 questions completed on stable v282. Functional Faithfulness
+acceptance remains open because exploratory findings require separate review. See
 `docs/security-review/technical-closeout.md`; this receipt authorizes no action.
 
 ## Deployment
