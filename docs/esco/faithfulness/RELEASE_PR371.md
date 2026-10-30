@@ -1,3 +1,17 @@
+# Completed release and temporary-control retirement
+
+PR372 merged as `9a0ab0695c80ede3025a7e4c3bba303e6a4fc1a0`. [Diagnostic40999825424](https://github.com/sforero94/Escociaos/actions/runs/40999825424), job123881374409, succeeded once. Receipt SHA256: `88f60844dfe7ddf1bd05b4d8a19be96ad746f4af7126e4bfa92459462aa45efa`.
+
+[Release41000471057](https://github.com/sforero94/Escociaos/actions/runs/41000471057), job123883440389, succeeded once at2026-10-30T04:01:18Z. Authenticated receipt verification passed before management access. Two fresh v281 captures matched native80 `1a7e50e2d0b37c7aa0c014b564ee90312dfcdff971a49ebbc0215686342fa24f` and reconstructed82 `3010b467d3d259cf34cbce7875b393e67748a709a88413857199dd6b2282ce4e`.
+
+The release deployed source `e7a5545bc8d87ad0502caf009d0201cae67fc772`, edge tree `6e9969d49f652989ef2c1679ff24be0f976410e7`, to `ywhtjwawnkeqlwxbvgup / make-server-1ccce916`. Observed v282 was ACTIVE, verify_jwt=false, updated2026-10-30T04:01:08.200Z, bundle `d595fd7375726d36aadd90fe771b8782f55f9ae2b996fb0e45f79404cd69215a`. Health200/status=ok and postdeploy source comparison passed. Native80 hash: `13f0a6dc3e24f036ad835e00c658805c70c96b2e38ef4b0e139ddc8d0425f1dd`; reconstructed82 hash: `b83bc09149e76798832153b2aa620bf91d8d90af26c889dfefe137e8d2465685`.
+
+Only `importHato/tipos.ts` and `telegram/types.ts` were restored from pinned Git after type-only proof; they were not downloaded. No rollback occurred. Temporary captures were removed; no private source artifact was uploaded. Git source/config recovery does not guarantee identical ESZIP, dependencies, runtime or secrets. Durable rollback source remains `634580480c72b27c7ccd2d8c006af520d0ca1058`, edge tree `99ba3737577f064e27112e4e99a8dd24739c6422`.
+
+This cleanup removes only the two manual workflows, their six exclusive controller/capture/check scripts, and the Vitest wrapper that ran those scripts. Consumer inspection found no other executable consumers. Standard CI, drift detection, runtime, SQL, application/evaluator regressions, repository secrets, external runs/artifacts and rollback commits remain untouched. Historical preparation text below is archived evidence, not current pending approval. Backend/source/health verification does not establish model quality or calibration. The separate 30-question Web evaluation does not replace frozen calibration. Retiring the jobs removes their automated recovery path; any future recovery requires a separately reviewed procedure using the preserved Git source and receipts.
+
+## Archived preparation history
+
 # One-time PR371 backend controls
 
 Current status: diagnostic40988136741 passed; release40992476137 stopped before management access and did not deploy. Current refreshed candidate awaits parent review/go; explicit owner authorization and remaining execution gates are recorded below. Runtime remains fixed at e7a5545bc8d87ad0502caf009d0201cae67fc772; subsequent commits add controls/tests/docs only.
