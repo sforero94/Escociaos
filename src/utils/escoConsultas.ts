@@ -190,7 +190,30 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
     if(!lotSelector && /\b(?:ese|este|anterior) lote\b/.test(q))lotSelector=extract(previous,true);
   }
 
-  const identityQuestion=reference==='usuario_anterior'?normalizarSelector(s.anterior??''):q;
+  const identityRaw=reference==='usuario_anterior'?s.anterior??'':s.pregunta;
+  const identityQuestion=normalizarSelector(identityRaw);
+  // A named month in the user's application selector is identity evidence,
+  // not permission to choose the model's ID or substitute planned dates.
+  const monthlyNames=(rows:FilaEsco[],raw:string):{rows:FilaEsco[];uncertain:Set<FilaEsco>}=>{
+    const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const span=(normalizarSelector(raw).match(/\b(?:aplicacion|fumigacion|fertilizacion)\b(.*)$/)?.[1]??'').split(/\blote\b/)[0];
+    const qualifier=new RegExp('\\bde ('+months.join('|')+')(?: de)? (\\d{4})\\b').exec(span);
+    const anyMonth=new RegExp('\\b(?:'+months.join('|')+')\\b');
+    if(!qualifier || /\b(?:desde|entre|del?\s+\d)/.test(span.slice(0,qualifier.index)) || !rows.some(a=>anyMonth.test(normalizarSelector(a.nombre_aplicacion))))return {rows,uncertain:new Set()};
+    const month=new RegExp('\\b'+qualifier[1]+'\\b'),year=qualifier[2];
+    const dateKey=pideFechasPlaneadas(raw)?'fecha_inicio_planeada':'fecha_inicio_ejecucion';
+    const selected:FilaEsco[]=[],uncertain=new Set<FilaEsco>();
+    for(const a of rows) {
+      const name=normalizarSelector(a.nombre_aplicacion);if(!month.test(name))continue;
+      const years=[...new Set(name.match(/\b\d{4}\b/g)??[])];
+      let dateYear:string|null=null;try{dateYear=validarFecha(a[dateKey]).slice(0,4);}catch{/* Unknown remains unknown. */}
+      const conflict=years.length>1 || (years.length===1 && dateYear!==null && years[0]!==dateYear);
+      const unknown=conflict || (!!a[dateKey] && dateYear===null) || (years.length===0 && dateYear===null);
+      if(unknown){selected.push(a);uncertain.add(a);}
+      else if((years[0]??dateYear)===year)selected.push(a);
+    }
+    return {rows:selected,uncertain};
+  };
   const idsMentioned=apps.filter(a=>texto(a.id) && (' '+identityQuestion+' ').includes(' '+normalizarSelector(a.id)+' '));
   let candidates=apps;
   if(!plural) {
@@ -199,16 +222,18 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
     const selectorWithoutId=idsMentioned.length===1 ? appSelector.replace(new RegExp(normalizarSelector(idsMentioned[0].id).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g'),'').replace(/\bid\b/g,'').trim():appSelector;
     const selector=palabrasNombre(selectorWithoutId);
     if(selector)candidates=apps.filter(a=>(' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+selector+' '));
+    const monthly=monthlyNames(candidates,identityRaw);candidates=monthly.rows;
     if(idsMentioned.length===1) {
-      if(selector && !candidates.some(a=>a.id===idsMentioned[0].id))return fail('El nombre y el ID indicados por el usuario no corresponden a la misma aplicación.');
+      if(!candidates.some(a=>a.id===idsMentioned[0].id))return fail('El nombre y el ID indicados por el usuario no corresponden a la misma aplicación.');
       candidates=idsMentioned;
     }
+    if(candidates.some(a=>monthly.uncertain.has(a)))return fail('Hay candidatos del mes con año ausente o contradictorio. Precisa la identidad y verifica sus fechas; no descarté candidatos por datos desconocidos.');
     if(!candidates.length)return fail('No pude vincular el nombre indicado a una aplicación del catálogo consultado. Precisa el nombre o ID; esto no prueba ausencia de actividad.');
     if(candidates.length!==1)return fail('Precisa cuál aplicación: '+candidates.slice(0,5).map(a=>literalMd(a.nombre_aplicacion)+' ('+literalMd(a.id)+')').join('; '));
   }
   if(!lotSelector && /\b(?:ese|este|anterior) lote\b/.test(q)) {
     const previous=normalizarSelector(s.anterior??''), previousApp=extract(previous);
-    const matches=apps.filter(a=>normalizarSelector(a.id)===previousApp || (' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+palabrasNombre(previousApp)+' '));
+    const matches=monthlyNames(apps.filter(a=>normalizarSelector(a.id)===previousApp || (' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+palabrasNombre(previousApp)+' ')),s.anterior??'').rows;
     if(plural || candidates.length!==1 || !previousApp || matches.length!==1 || matches[0].id!==candidates[0].id)return fail('Precisa el lote; la referencia anterior no es inequívoca para esta aplicación.');
     lotSelector=extract(previous,true);if(!lotSelector)return fail('Precisa el nombre o ID del lote anterior.');
   }
