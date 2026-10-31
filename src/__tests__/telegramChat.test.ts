@@ -46,8 +46,8 @@ describe('Telegram Message History', () => {
   });
 
   it('buildTelegramLlmMessages debe cargar historial con metadata', () => {
-    // Supabase client uses .select("role,content,metadata")
-    expect(botSource).toMatch(/\.select\(["']role,content,metadata["']\)/);
+    // Supabase client uses .select("id,role,content,metadata")
+    expect(botSource).toMatch(/\.select\(["']id,role,content,metadata["']\)/);
   });
 
   it('buildTelegramLlmMessages debe inyectar contexto de tool_interactions previas', () => {

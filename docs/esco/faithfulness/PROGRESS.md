@@ -1,6 +1,13 @@
 # Progress and handoff
 
-## Current state —372 refresh, 2026-10-30 UTC
+## Current state — registered date cohort correction, 2026-10-31 UTC
+
+- Verified baseline main `33ed54c2d5e15b7f48cbe04293516cbb3b0ecb61`; live v286 is unchanged. R01/R02 passed online; LC02 refused before tool use. Campaign remains 3 sent / 2 useful / 1 failed / 13 unrun, not acceptance.
+- Explicit owner approval covers bounded registered-date comparison and safe Web/Telegram context preservation, tests and passing merge. Deployment remains separate. Parent clarified existing private KV is within scope; catalog-only isolation verification succeeded without business reads or writes.
+- Candidate adds a server-private bounded receipt and fresh exact-membership requery, with equal/different/not-verifiable date pairs. No model call for this continuation, dose arithmetic, causal interpretation, record edits or new access. See [contract and limits](APPLICATION_DATE_COHORT.md).
+- Local final candidate: 5,386 tests/240 files, zero skips; types/build passed; lint 0 errors/907 existing warnings; mirrors/whitespace passed. Independent re-review: 96 focused tests plus six adversarial assertions, no remaining concrete blocker. Exact-head CI and merge receipts follow in the PR/handoff; earlier release checks do not validate this candidate. No deployment or migration is performed by this correction.
+
+## Historical state —372 refresh, 2026-10-30 UTC
 
 - Actual mainfece0e5448eb36ac0be8b29333da20691baf114b (treeb0672175) includes363/364/366.366 postmerge CI40998038342 passed5091 tests/229 files, types/lint and GitHub Vercel success. Offline integration is complete for that queue, not calibration or the full original plan.
 - Existing372 alone: merge current main without force-push, preserve reviewed36af47a workflow/controller/checks byte-identically, reconcile documentation only. Keep all runtime/security/PO/SQL/control fixes. No373 merge.

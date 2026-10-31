@@ -1,3 +1,4 @@
+import { cohorteValida, type CohorteAplicaciones } from './escoCohorteAplicaciones.ts';
 import { hechosEjecucionAplicacion, estimacionDosisCanecas } from './escoAplicacionHechos.ts';
 /** Consultas de evidencia de Esco (#311). Sin Deno/SDK; I/O inyectado y probado. */
 export type FilaEsco = Record<string, unknown>;
@@ -167,7 +168,7 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
   return requested === 'planned';
 }
 
-export interface SolicitudAplicacion { pregunta: string; anterior?: string }
+export interface SolicitudAplicacion { pregunta: string; anterior?: string; cohorteIds?: string[] }
 type SeleccionAplicacion = { estado:'verificada'; version:'aplicacion_selector_v1'; aplicacion_ids:string[]|null; lote_ids:string[]|null; referencia:'actual'|'usuario_anterior' } | { estado:'aclarar'; mensaje:string };
 const normalizarSelector = (v:unknown) => normalizarTextoAplicacion(v).replace(/[«»"'()[\],:;!?¿¡—–]/g,' ').replace(/\s+/g,' ').trim();
 const palabrasNombre = (v:unknown) => normalizarSelector(v).split(' ').filter(w=>!['el','la','los','las','de','del','contra','control','aplicacion','fumigacion','fertilizacion'].includes(w)).join(' ');
@@ -372,8 +373,52 @@ interface EvidenciaParaRespuesta {
   _evidencia: { herramienta: unknown; consulta_completa: unknown; detalle_completo: unknown; total_hechos: unknown; rango: {desde:string|null;hasta:string|null} };
   resumen?: {date_basis?:unknown;fechas_reales_ausentes?:number}; detalle: AplicacionParaRespuesta[];
 }
+/** Closed date-pair operation over a previously issued cohort, never dose arithmetic. */
+export function pideComparacionFechasCohorte(pregunta: string): boolean {
+  const q = normalizarTextoAplicacion(pregunta).replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/[¿?¡!.,;:]/g,' ').replace(/\s+/g,' ').trim();
+  return /^(?:en|para) (?:esas|estas) aplicaciones (?:hay diferencias entre las fechas planeadas y las fechas reales|compara las fechas planeadas y las fechas reales)(?: muestralas)?(?: sin corregir ningun registro)?$/.test(q);
+}
+/** Bounded complete generic actual cohorts only; no model-selected IDs or lot. */
+export function capturarCohorteAplicaciones(plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco, listadoCompleto: boolean): CohorteAplicaciones | null {
+  return listadoCompleto ? cohorteDesdeEvidencia(plan,resultado,args) : null;
+}
+function cohorteDesdeEvidencia(plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco): CohorteAplicaciones | null {
+  if (plan.tipo !== 'aplicacion' || !plan.plural || plan.base !== 'actual' || !plan.rango || plan.loteSolicitado || plan.estadoFiltro) return null;
+  try {
+    const r = JSON.parse(resultado) as EvidenciaParaRespuesta;
+    if (!r || Array.isArray(r) || Object.prototype.hasOwnProperty.call(r,'error') || r.contexto_recortado === true ||
+      r._evidencia?.herramienta !== 'get_aplicaciones_ejecucion' || r._evidencia.consulta_completa !== true || r._evidencia.detalle_completo !== true ||
+      !Array.isArray(r.detalle) || r._evidencia.total_hechos !== r.detalle.length || r.resumen?.date_basis !== 'actual' ||
+      r.seleccion?.estado !== 'verificada' || r.seleccion.version !== 'aplicacion_selector_v1' || r.seleccion.aplicacion_ids !== null || r.seleccion.lote_ids !== null ||
+      r._evidencia.rango?.desde !== plan.rango.desde || r._evidencia.rango.hasta !== plan.rango.hasta || args.date_basis !== 'actual' ||
+      args.date_from !== plan.rango.desde || args.date_to !== plan.rango.hasta || args.application_id || args.application_name || args.lote_name || args.estado) return null;
+    const cohort = {ids:r.detalle.map(a=>a.id),desde:plan.rango.desde,hasta:plan.rango.hasta};
+    return cohorteValida(cohort) ? cohort : null;
+  } catch { return null; }
+}
+export function compararFechasCohorte(cohorte: CohorteAplicaciones, plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco): string {
+  const fresh = cohorteDesdeEvidencia(plan,resultado,args);
+  const fail = 'No pude verificar la misma cohorte de aplicaciones. Vuelve a consultar el listado; no sustituí sus integrantes ni amplié el período.';
+  if (!fresh || !cohorteValida(cohorte) || fresh.desde !== cohorte.desde || fresh.hasta !== cohorte.hasta || JSON.stringify([...fresh.ids].sort()) !== JSON.stringify([...cohorte.ids].sort())) return fail;
+  const r = JSON.parse(resultado) as EvidenciaParaRespuesta;
+  const lines = [`Cohorte conservada: fechas reales ${cohorte.desde} a ${cohorte.hasta}; ${cohorte.ids.length} aplicaciones. Comparo fechas registradas actuales, sin calcular retrasos, causas ni corregir registros.`];
+  if (!fresh.ids.length) lines.push('El listado verificado estaba vacío y sigue vacío; no hay pares de fechas que comparar.');
+  for (const a of r.detalle) {
+    if (!texto(a.nombre_aplicacion)) return fail;
+    lines.push('**'+literalMd(a.nombre_aplicacion)+'** (ID '+literalMd(a.id)+')');
+    const date = (v:unknown):string|null => {try{return validarFecha(v);}catch{return null;}};
+    const pi=date(a.fecha_inicio_planeada), pf=date(a.fecha_fin_planeada), ri=date(a.fecha_inicio_ejecucion), rf=date(a.fecha_fin_ejecucion);
+    const contradictorias = !!((pi && pf && pi>pf) || (ri && rf && ri>rf));
+    for (const [nombre,p,real] of [['Inicio',pi,ri],['Fin',pf,rf]] as const) {
+      lines.push(`${nombre}: planeada ${p??'no verificable'}; real ${real??'no verificable'}; ${contradictorias || !p || !real ? 'no verificable' : p===real ? 'iguales' : 'diferentes'}.`);
+    }
+    if (contradictorias) lines.push('Hay un par inicio/final contradictorio; no interpreté su diferencia.');
+  }
+  const output=lines.join('\n');
+  return new TextEncoder().encode(output).byteLength>24000 ? 'Las fechas verificadas exceden el tamaño de esta respuesta. Consulta un listado más pequeño; no omití integrantes para afirmar una comparación completa.' : output;
+}
 /** Only a fresh execution result may reach this function from the loop. */
-export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco): { tipo:'fuera'; motivo:string } | { tipo:'texto'; texto:string } {
+export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco): { tipo:'fuera'; motivo:string } | { tipo:'texto'; texto:string; listadoCompleto?:boolean } {
   if (plan.tipo !== 'aplicacion') return plan;
   const failure = (why: string) => ({ tipo:'texto' as const, texto:'No pude verificar '+why+'. No puedo inventar cantidades ni afirmar ausencia de actividad.' });
   try {
@@ -392,7 +437,7 @@ export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, r
     const actualScope = `Consumos y trabajo: fechas reales ${range.desde ?? 'sin límite inicial'} a ${range.hasta ?? 'sin límite final'}${args.lote_name?', lote consultado '+literalMd(args.lote_name):', todos los lotes consultados'}.`;
     if (!r.detalle.length) {
       if (r._evidencia.detalle_completo !== true || r._evidencia.total_hechos !== 0) return failure('una página vacía parcial');
-      return {tipo:'texto',texto:`No encontré registros de aplicaciones con esos filtros. ${scope} Esto no demuestra ausencia de actividad física${plan.base==='actual' && (r.resumen?.fechas_reales_ausentes ?? 0)>0?'; hay registros sin fecha real que no puedo ubicar en ese intervalo':''}.`};
+      return {tipo:'texto',listadoCompleto:true,texto:`No encontré registros de aplicaciones con esos filtros. ${scope} Esto no demuestra ausencia de actividad física${plan.base==='actual' && (r.resumen?.fechas_reales_ausentes ?? 0)>0?'; hay registros sin fecha real que no puedo ubicar en ese intervalo':''}.`};
     }
     if (r.detalle.some(a=>!texto(a.id) || !texto(a.nombre_aplicacion))) return failure('la identidad de la aplicación');
     if (!plan.plural && r.detalle.length>1) return {tipo:'texto',texto:'Encontré varias aplicaciones candidatas; precisa cuál: '+r.detalle.map(a=>literalMd(a.nombre_aplicacion)+' ('+literalMd(a.id)+')').join('; ')};
@@ -454,7 +499,7 @@ export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, r
     lines.push('Estos son registros consultados, no una certificación de ejecución física completa.');
     const output=lines.join('\n');
     if (new TextEncoder().encode(output).length>24000) return {tipo:'texto',texto:'Los hechos verificados exceden el tamaño de esta respuesta. Precisa una aplicación, producto o lote; no sustituí el detalle por una estimación.'};
-    return {tipo:'texto',texto:output};
+    return {tipo:'texto',texto:output,listadoCompleto:r._evidencia.detalle_completo===true};
   } catch { return failure('la respuesta estructurada de aplicaciones'); }
 }
 function rowsPlan(value: unknown): FilaEsco[] { return Array.isArray(value)?value.filter(x=>x && typeof x==='object' && !Array.isArray(x)):[]; }
@@ -690,6 +735,12 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     const legacyPlans = await related('aplicaciones_lotes', 'id,aplicacion_id,lote_id,sublotes_ids,total_arboles', 'aplicacion_id', candidates.map(a => a.id));
     const planes = await related('aplicaciones_calculos', 'id,aplicacion_id,lote_id,lote_nombre,mezcla_id,litros_mezcla,numero_canecas,kilos_totales,numero_bultos', 'aplicacion_id', candidates.map(a => a.id));
     const selectedApps = candidates.filter(a => !args.lote_name || ms.some(m => m.aplicacion_id === a.id) || [...legacyPlans, ...planes].some(p => p.aplicacion_id === a.id && loteCoincide(p.lote_id)));
+    // Internal server receipt only; never a public tool argument/model selector.
+    // Read the original actual cohort completely, then rebind its exact IDs.
+    if (solicitud?.cohorteIds) {
+      const ids = solicitud.cohorteIds;
+      if (ids.length>50 || new Set(ids).size!==ids.length || JSON.stringify([...ids].sort())!==JSON.stringify(selectedApps.map(a=>texto(a.id)).sort())) return {error:'cohorte_modificada'};
+    }
     const mezclas = await related('aplicaciones_mezclas', 'id,aplicacion_id,nombre_mezcla', 'aplicacion_id', selectedApps.map(a => a.id));
     const recetas = await related('aplicaciones_productos', 'id,mezcla_id,producto_id,producto_nombre,dosis_por_caneca,unidad_dosis,cantidad_total_necesaria', 'mezcla_id', mezclas.map(m => m.id));
     const trabajo = await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', selectedApps.map(a => a.tarea_id));

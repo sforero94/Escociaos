@@ -21,7 +21,7 @@ describe('paridad estática de mensajes: ambos árboles actuales', () => {
       expect(web).toContain(plantilla);
       expect(bot).toContain(plantilla);
       expect(web).toContain('order=created_at.desc,id.desc&limit=20');
-      expect(bot).toMatch(/\.order\("created_at", \{ ascending: true \}\)\s*\.limit\(20\)/);
+      expect(bot).toMatch(/\.order\("created_at", \{ ascending: false \}\)\s*\.order\("id", \{ ascending: false \}\)\s*\.limit\(20\)/);
       // Solo lee fuentes locales; no importa ni ejecuta handlers de producción.
     });
   }

@@ -38,7 +38,8 @@ import {
 // escribe con `service_role` (`auth.uid()` NULL), que no puede satisfacer
 // ese NOT NULL ni restringirse a Gerencia (decisión 5 del dueño). `/pesaje`
 // no toca dinero y se mantiene intacto.
-import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
+import { contextoDesdeHistorial, type ContextoCohorte } from "../escoCohorteAplicaciones.ts";
+import { llmToolLoop, getSystemPrompt, conservarCohorteAplicaciones } from "../chat.tsx";
 import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 import { procesarRespuestaAlertaTelegram } from "./responderAlertaHato.ts";
 
@@ -2066,36 +2067,32 @@ function getBot(): Bot<BotContext> {
     role: string,
     content: string,
     metadata?: Record<string, unknown>,
-  ): Promise<void> {
+    messageId = crypto.randomUUID(),
+  ): Promise<string> {
     const sb = getSupabaseAdmin();
     const { error } = await sb.from("chat_messages").insert({
+      id:messageId,
       conversation_id: conversationId,
       role,
       content,
       metadata: metadata || {},
     });
-    if (error) console.error("[Telegram] Save message error:", error.message);
+    if (error) throw new Error("No pude conservar el mensaje de Telegram");
+    return messageId;
   }
 
   async function buildTelegramLlmMessages(
     conversationId: string,
     userId: string,
-  ): Promise<
-    Array<{
-      role: string;
-      content: string | null;
-      tool_calls?: unknown[];
-      tool_call_id?: string;
-      name?: string;
-    }>
-  > {
+  ): Promise<{ messages: Array<{role:string; content:string|null; tool_calls?:unknown[]; tool_call_id?:string; name?:string}>; contexto:ContextoCohorte }> {
     const sb = getSupabaseAdmin();
     const [{ data: history }, { data: memoriasRows }] = await Promise.all([
       sb
         .from("chat_messages")
-        .select("role,content,metadata")
+        .select("id,role,content,metadata")
         .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .limit(20),
       sb
         .from("esco_memorias")
@@ -2127,8 +2124,9 @@ function getBot(): Bot<BotContext> {
       name?: string;
     }> = [{ role: "system", content: getSystemPrompt(memorias) + telegramTweaks }];
 
+    const chronological=(history??[]).reverse();
     if (history) {
-      for (const m of history) {
+      for (const m of chronological) {
         const meta = m.metadata as
           | {
               tool_interactions?: Array<{
@@ -2154,7 +2152,7 @@ function getBot(): Bot<BotContext> {
       }
     }
 
-    return messages;
+    return {messages,contexto:contextoDesdeHistorial(userId,conversationId,'telegram',chronological)};
   }
 
   // ==========================================================================
@@ -2427,18 +2425,21 @@ function getBot(): Bot<BotContext> {
 
       // Persist conversation
       const conversationId = await getOrCreateTelegramConversation(userId);
-      await saveTelegramMessage(conversationId, "user", userMessage);
+      const usuarioMensajeId=await saveTelegramMessage(conversationId, "user", userMessage);
+      const asistenteMensajeId=crypto.randomUUID();
 
       // Build messages with full history + tool context + memorias
-      const llmMessages = await buildTelegramLlmMessages(conversationId, userId);
+      const {messages:llmMessages,contexto} = await buildTelegramLlmMessages(conversationId, userId);
 
-      const { text: responseText, toolInteractions } =
-        await llmToolLoop(llmMessages, userId);
+      const { text: responseText, toolInteractions, cohorteAplicaciones } =
+        await llmToolLoop(llmMessages, userId,undefined,contexto);
+      const cohortHandle=await conservarCohorteAplicaciones(contexto,usuarioMensajeId,asistenteMensajeId,userMessage,cohorteAplicaciones);
 
       // Save assistant response with tool interaction metadata
       await saveTelegramMessage(conversationId, "assistant", responseText, {
         tool_interactions: toolInteractions,
-      });
+        ...(cohortHandle?{application_cohort:cohortHandle}:{}),
+      },asistenteMensajeId);
 
       // If Esco proposed saving a memory, render inline confirmation buttons
       // before the regular response. The token roundtrips through callback_data

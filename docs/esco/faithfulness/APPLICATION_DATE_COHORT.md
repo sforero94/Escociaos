@@ -1,0 +1,29 @@
+# Bounded registered application date comparison
+
+## Contract
+
+A fresh, complete generic actual-period application list can issue a private cohort receipt. The next immediate user turn can ask whether the stored planned and actual start/end dates of **those applications** are equal or different. This is not dose/consumption comparison, delay/duration calculation, causal explanation, physical compliance, or a record edit. Missing or invalid dates remain not verifiable; inverted start/end pairs invalidate comparison for that application.
+
+The follow-up does not call the model. It requeries the original actual-period scope through the existing application executor, binds the exact server-issued IDs, and rejects any added/removed/replaced membership or unknown coverage. A planned record without actual-period membership does not join the cohort. Fresh date values can change; the receipt preserves membership and scope, not a historical snapshot of date values.
+
+Eligible lists: actual basis, explicit resolved period, generic plural applications, no named/ID subset, lot filter or state filter, complete detail, unique UUID identities, at most 50 records. Complete zero-record cohorts are valid. Other lists, missing old receipts and expired receipts require a fresh supported list. Only the bounded date-comparison wording family is supported; this is not unrestricted language coverage.
+
+## Provenance and storage
+
+Owner-writable `chat_messages.metadata` cannot authenticate server evidence. Metadata contains only a random opaque UUID handle. Existing private `kv_store_1ccce916` stores one receipt per user, at most 4,096 UTF-8 bytes. It contains version/project, authenticated user/conversation/channel, source user/assistant message IDs, source question hash, exact application IDs, original actual range, issue/expiry timestamps and the handle. It contains no source answers, quantities, personnel data or raw user question.
+
+Existing catalog-only read on 2026-10-31 (Composio `escocia-os`, log `log_JSL37OEXo-HD`) confirmed RLS enabled, zero policies, no anon/authenticated SELECT/INSERT/UPDATE grants and existing service-role CRUD. Repository migration082 documents the same deny-all boundary. No policies, grants, credentials, schema or endpoints change. Isolation is the existing project plus authenticated user and owned conversation; the application schema has no separate tenant column. Never infer a new tenant dimension from model output.
+
+The receipt's 30-minute validity is enforced on reads. Expired receipts are deleted on attempted use. New eligible lists replace the single slot; a following completed non-list turn with the previous handle clears it. There is no background sweeper or guaranteed physical deletion exactly at expiry: an inactive user's one small expired record can persist until later access/replacement. No global prefix scan or unrelated KV access is added. A storage failure cannot authenticate context; optional issuance failure leaves the supported list answer intact and the next comparison unavailable.
+
+Each channel reloads the latest 20 database messages with IDs. Only the immediate previous user/assistant pair is eligible. Copying handles into text, another message, conversation, user or channel does not establish provenance. No unsigned-history fallback or backfill exists. Current channel authentication/role gates and existing complete application reads remain in force.
+
+## Validation and release boundary
+
+The initial production campaign remains 3/16 sent: two useful passes, one failed date-comparison continuation and thirteen unrun. It is not relabeled or a completed acceptance campaign. New synthetic tests exercise shared actual loop, private storage adapter, complete/incomplete/empty evidence, changed membership, fresh/null/invalid/inverted dates, expiry, forged handles and channel bindings. These prove deterministic behavior under controlled inputs, not live model quality or deployed UI behavior.
+
+Source-only merge is authorized; backend deployment needs separate approval and fresh v286 recovery proof. Existing consumed release pins remain immutable. A source rollback removes the optional receipt consumer; opaque metadata and at most one private receipt per user do not affect old readers. No migration or data repair is required. Future release controls must pin the actual merged runtime and capture the current recovery source/config; recovery is not a promise of an identical compiled binary.
+
+Final local candidate checks: 5,386 tests / 240 files, zero skips; typecheck passed; lint zero errors / 907 pre-existing warnings; build passed (30.83s); mirror and whitespace checks passed. Independent review passed 96 focused tests plus six extra output-bound/list-eligibility assertions after correcting both review findings. The first aggregate attempt failed eight assertions (history-shape expectations, fixed release inventory count and an overly broad UTC static detector); the final candidate fixes their actual contracts without changing consumed release pins or skipping guards. The first new test file also needed a syntax/type correction. Historical failed runs are not represented as successful checks.
+
+The three consumed release check suites now positively assert that an unreviewed 85-file current inventory is rejected by unchanged capture controls, instead of treating current source as an immutable 83/84-file release. Their existing synthetic approved-inventory, fingerprint and fail-closed tests remain. No controller, workflow, approved source pin or production setting changed.

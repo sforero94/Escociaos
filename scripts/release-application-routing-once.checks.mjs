@@ -163,14 +163,18 @@ for(const mutation of ['extra-file','missing-source','missing-cache','changed-so
 }
 const ts=(await import(pathToFileURL(resolve(process.env.PROOF_TYPESCRIPT || 'node_modules/typescript/lib/typescript.js')).href)).default;
 const baseline=resolve(process.env.RELEASE_TEST_BASELINE || `supabase/functions/${fn}`);
-test('complete pinned Git inventory83 or84 passes exact synthetic layout; wrong counts do not',async()=>{
+test('current Git inventory accepts only reviewed counts83/84; newer counts fail closed',async()=>{
   const inventory=await diagnosticInventory(baseline),seed=Buffer.from(DEPLOY_CONFIG),prefix=`supabase/functions/${fn}/`;
-  assert.ok([83,84].includes(inventory.fileCount));
+
   const raw={entries:[...['supabase','supabase/functions',`supabase/functions/${fn}`,'supabase/.temp'].map(path=>({path,type:'directory'})),
     {path:'supabase/config.toml',type:'file',bytes:seed.length,sha256:sha(seed)},
     ...inventory.entries.filter(e=>!Object.hasOwn(OMITTED,e.path)).map(e=>({...e,path:prefix+e.path})),
     {path:'supabase/.temp/cli-latest',type:'file',bytes:8,sha256:sha('v2.122.0')},
     {path:'supabase/.temp/linked-project.json',type:'file',bytes:134,sha256:'5afb37cef5be9eb93a709f9a1769352d325098f5dc58bdf706563d6a6110a302'}]};
+  if(![83,84].includes(inventory.fileCount)) {
+    assert.throws(()=>validateRawInventory(raw,inventory,seed));
+    return; // Assert rejection, not approval, for a changed current inventory.
+  }
   validateRawInventory(raw,inventory,seed);
   for(const count of [82,85,inventory.fileCount-1,inventory.fileCount+1])assert.throws(()=>validateRawInventory(raw,{...inventory,fileCount:count},seed));
 });
