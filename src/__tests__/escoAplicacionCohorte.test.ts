@@ -66,9 +66,16 @@ describe('closed-loop fresh application date comparison',()=>{
    if(u.origin!=='https://cohort.test')throw new Error('Unexpected synthetic network');
    const table=u.pathname.split('/').at(-1)!;
    if(table==='kv_store_1ccce916'){
-    if(init?.method==='POST'){const b=JSON.parse(String(init.body));kv.set(b.key,b.value);return new Response(null,{status:201});}
+    // Match the actual key/value-only PostgreSQL table: unknown ORDER columns
+    // return42703 instead of being silently ignored by the in-memory fixture.
+    const columns=new Set(['key','value']);
+    const order=(u.searchParams.get('order')??'').split(',').filter(Boolean);
+    const invalid=order.find(term=>!columns.has(term.split('.')[0])) ?? [...u.searchParams.keys()].find(k=>!columns.has(k) && !['select','order','limit','offset','on_conflict'].includes(k));
+    if(invalid)return new Response(JSON.stringify({code:'42703',message:`column kv_store_1ccce916.${invalid.split('.')[0]} does not exist`}),{status:400});
+    if(u.searchParams.get('select') && u.searchParams.get('select')!=='value')throw new Error('Unknown KV projection');
+    if(init?.method==='POST'){const b=JSON.parse(String(init.body));expect(Object.keys(b).sort()).toEqual(['key','value']);expect(typeof b.key).toBe('string');expect(b.value).not.toBeNull();expect(u.searchParams.get('on_conflict')).toBe('key');kv.set(b.key,b.value);return new Response(null,{status:201});}
     const key=u.searchParams.get('key')?.replace(/^eq\./,'')??'';
-    if(init?.method==='DELETE'){kv.delete(key);return new Response(null,{status:204});}
+    if(init?.method==='DELETE'){expect([...u.searchParams.keys()]).toEqual(['key']);kv.delete(key);return new Response(null,{status:204});}
     return new Response(JSON.stringify(kv.has(key)?[{value:kv.get(key)}]:[]));
    }
    if((init?.method??'GET')!=='GET'||!tables.has(table))throw new Error('Unexpected synthetic request');
@@ -87,6 +94,46 @@ describe('closed-loop fresh application date comparison',()=>{
   expect(answer.text).toContain('3 aplicaciones');expect(answer.text).toContain('Fin: planeada 2033-06-15; real 2033-05-15; diferentes.');
   expect(answer.text).toContain('iguales.');expect(answer.text).not.toContain('physical compliance proven');expect(f.model()).toBe(1);
   expect(answer.toolInteractions).toHaveLength(1);expect(answer.toolInteractions[0].args).toMatchObject({date_basis:'actual',date_from:'2033-05-01',date_to:'2033-05-31'});
+ });
+ it('KV adapter writes, reads and deletes using only key/value schema',async()=>{
+  const f=await fixture();await f.compare();
+  await conservarCohorteAplicaciones(f.bound,id(8),id(9),followup);
+  expect((await f.compare()).text).toContain('listado reciente y verificable');
+  const reads=f.requests.filter(r=>r.startsWith('GET ') && r.includes('/kv_store_1ccce916?'));
+  expect(reads.length).toBe(2);for(const request of reads){const u=new URL(request.slice(4));expect(u.searchParams.get('order')).toBe('key.asc');expect(u.searchParams.get('select')).toBe('value');expect(u.searchParams.get('limit')).toBe('1');expect(u.searchParams.get('offset')).toBe('0');}
+  expect(f.requests.filter(r=>r.startsWith('POST ') && r.includes('/kv_store_1ccce916?'))).toHaveLength(1);
+  expect(f.requests.filter(r=>r.startsWith('DELETE ') && r.includes('/kv_store_1ccce916?'))).toHaveLength(1);
+ });
+ it('upserts one private user slot without an id column or repeated application query',async()=>{
+  const f=await fixture();const replacement=await conservarCohorteAplicaciones(context(),id(20),id(21),question,f.first.cohorteAplicaciones);
+  expect(replacement).toBeTruthy();expect(replacement).not.toBe(f.bound.anterior?.handle);expect(f.kv.size).toBe(1);
+  expect((await f.compare()).text).toContain('listado reciente y verificable');expect(f.model()).toBe(1);
+ });
+ it('deletes an expired receipt through its exact key and requests a fresh list',async()=>{
+  const f=await fixture();vi.setSystemTime(new Date(Date.now()+VIGENCIA_COHORTE_MS+1));
+  expect((await f.compare()).text).toContain('listado reciente y verificable');expect(f.kv.size).toBe(0);
+  expect(f.requests.some(r=>r.startsWith('DELETE ') && r.includes('/kv_store_1ccce916?key=eq.'))).toBe(true);
+ });
+ it.each([{status:400,code:'42703',message:'column kv_store_1ccce916.id does not exist'},{status:403,code:'42501',message:'permission denied for table kv_store_1ccce916'},{status:503,code:'PGRST002',message:'Could not query the database for the schema cache'}])('keeps KV read failure explicit and actionable without exposing SQL: $status',async ({status,code,message})=>{
+  const f=await fixture(),original=globalThis.fetch;const diagnostic=vi.spyOn(console,'error').mockImplementation(()=>{});
+  vi.stubGlobal('fetch',async(input:string,init?:RequestInit)=>input.includes('/kv_store_1ccce916?') && (init?.method??'GET')==='GET'?new Response(JSON.stringify({code,message}),{status}):original(input,init));
+  let error:unknown;try{await f.compare();}catch(e){error=e;}
+  expect(error).toBeInstanceOf(Error);expect((error as Error).message).toContain('No pude recuperar el contexto verificado');expect((error as Error).message).toContain('Consulta de nuevo el listado');
+  expect((error as Error).message).not.toMatch(/kv_store|42703|42501|PGRST002|column/);expect(JSON.stringify(diagnostic.mock.calls)).toContain(code);expect(f.model()).toBe(1);diagnostic.mockRestore();
+ });
+ it.each(['transport','malformed-json'] as const)('KV %s failure never becomes an answer or raw client error',async mode=>{
+  const f=await fixture(),original=globalThis.fetch;
+  vi.stubGlobal('fetch',async(input:string,init?:RequestInit)=>{
+   if(input.includes('/kv_store_1ccce916?') && (init?.method??'GET')==='GET'){
+    if(mode==='transport')throw new TypeError('synthetic transport detail');return new Response('invalid synthetic JSON');
+   }
+   return original(input,init);
+  });
+  await expect(f.compare()).rejects.toThrow('No pude recuperar el contexto verificado');expect(f.model()).toBe(1);
+ });
+ it('context write failure issues no new handle and does not erase an earlier slot ad hoc',async()=>{
+  const f=await fixture(),original=globalThis.fetch;vi.stubGlobal('fetch',async(input:string,init?:RequestInit)=>input.includes('/kv_store_1ccce916?') && init?.method==='POST'?new Response(null,{status:503}):original(input,init));
+  expect(await conservarCohorteAplicaciones(context(),id(20),id(21),question,f.first.cohorteAplicaciones)).toBeUndefined();expect(f.kv.size).toBe(1);
  });
  it.each(['add','remove','replace'] as const)('rejects changed exact membership: %s',async change=>{
   const f=await fixture();if(change==='add')f.apps.push({...f.apps[0],id:id(99)});else if(change==='remove')f.apps.pop();else f.apps[0].id=id(99);

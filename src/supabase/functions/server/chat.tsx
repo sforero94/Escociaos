@@ -245,7 +245,17 @@ async function supabaseInsert(table: string, data: Record<string, unknown>): Pro
 /** Existing private KV, one slot per authenticated user; no public receipt API. */
 function almacenCohorteAplicaciones(): AlmacenCohorte {
   return {
-    get: async key => { const rows = await supabaseQuery('kv_store_1ccce916', `select=value&key=eq.${encodeURIComponent(key)}&limit=1`) as Array<{value:unknown}>; return rows[0]?.value ?? null; },
+    get: async key => {
+      try {
+        // KV has key/value only. The generic reader otherwise defaults to id.
+        const rows = await supabaseQuery('kv_store_1ccce916', `select=value&key=eq.${encodeURIComponent(key)}&order=key.asc&limit=1`) as Array<{value:unknown}>;
+        return rows[0]?.value ?? null;
+      } catch {
+        // The query helper retains status/database diagnostics in server logs;
+        // the client receives an actionable context error, never SQL internals.
+        throw new Error('No pude recuperar el contexto verificado de aplicaciones. Consulta de nuevo el listado e intenta la comparación otra vez.');
+      }
+    },
     set: async (key,value) => {
       const {url,headers}=getAdminHeaders();
       const r=await fetch(`${url}/rest/v1/kv_store_1ccce916?on_conflict=key`, {method:'POST',headers:{...headers,Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({key,value})});
