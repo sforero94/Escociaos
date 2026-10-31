@@ -1,12 +1,12 @@
 # Progress and handoff
 
-## Current state — registered date cohort correction, 2026-10-31 UTC
+## Current state — KV receipt schema correction, 2026-10-31 UTC
 
-- Verified baseline main `33ed54c2d5e15b7f48cbe04293516cbb3b0ecb61`; live v286 is unchanged. R01/R02 passed online; LC02 refused before tool use. Campaign remains 3 sent / 2 useful / 1 failed / 13 unrun, not acceptance.
-- Explicit owner approval covers bounded registered-date comparison and safe Web/Telegram context preservation, tests and passing merge. Deployment remains separate. Parent clarified existing private KV is within scope; catalog-only isolation verification succeeded without business reads or writes.
-- PR387 merged at `c2be2a5ba36cf39c22d4db251c0e5348910f1802` after exact-head CI41233661563. Postmerge CI41233949240 passed 5,386 tests / 240 files; GitHub Vercel passed. Backend remains v286; source merge did not deploy it. The correction adds a server-private bounded receipt and fresh exact-membership requery, with equal/different/not-verifiable date pairs. No model call for this continuation, dose arithmetic, causal interpretation, record edits or new access. See [contract and limits](APPLICATION_DATE_COHORT.md).
-- A separate control-only release draft pins that merged source and unchanged v286 recovery; preparation passed 5,387 tests / 240 files plus independent40 + 40 guards / six assertions, types/lint/build. No ready/merge/dispatch/deploy of this new control is authorized. See [release boundaries](RELEASE_APPLICATION_DATE_COHORT.md).
-- Local final source candidate: 5,386  tests / 240 files, zero skips; types/build passed; lint 0 errors/907 existing warnings; mirrors/whitespace passed. Independent re-review: 96 focused tests plus six adversarial assertions, no remaining concrete blocker. Exact-head CI41233661563 and postmerge CI41233949240 confirm this source; earlier release checks remain historical. No deployment or migration is performed by this correction.
+- Verified main `96086f03c65cd0fae0375661f32a73cfd41bc725` includes merged387/388. Release41236683500 succeeded once: active v287, healthy/source/config verified; no rollback. This was technical release verification, not answer-quality acceptance.
+- Parent's fresh v287 gate stopped after three sends: R01/R02 useful, LC02 operational KV 400 / 42703, thirteen unrun. Preserve this outcome separately from the earlier v286 continuation refusal; neither becomes a safety pass.
+- Confirmed mechanism: generic pagination injected nonexistent `id` ordering into the existing key/value-only KV table. Fix only explicit `key` ordering and Web error sanitization; schema/permissions/identity/cohort/date semantics remain unchanged. No private receipt values or business records read during investigation.
+- Schema-aware fixture reproduces the baseline failure. Isolated real PostgreSQL/PostgREST reproduced 400 vs 200, and three selected actual-loop cases passed after the fix. Local final checks passed 5,396 tests / 240 files, types/build and lint (0 errors / 907 existing warnings); independent review passed all 40 cohort tests. Exact-head CI gates the associated source merge. A subsequent controlled release remains draft-only until separate approval; no deployment in this correction task.
+- See [operational correction and evidence limits](APPLICATION_DATE_COHORT.md#kv-schema-operational-correction-source-only). No historical trace repair, production cache deletion, migrations, provider changes or expanded access.
 
 ## Historical state —372 refresh, 2026-10-30 UTC
 
