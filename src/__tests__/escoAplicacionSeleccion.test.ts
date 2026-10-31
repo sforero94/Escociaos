@@ -11,9 +11,9 @@ async function answer(q:string,args:FilaEsco,extra:FilaEsco[]=[],anterior?:strin
  const r=await ejecutarConsultaEsco('get_aplicaciones_ejecucion',bound,database(extra),hoy,{pregunta:q,anterior});
  return {plan,bound,r,text:respuestaDeterministaAplicacion(plan,JSON.stringify(r),bound)};
 }
-async function loopProbe(sequence:string[],options:{question?:string;previous?:string;wrong?:boolean;fail?:boolean}={}) {
+async function loopProbe(sequence:string[],options:{question?:string;previous?:string;wrong?:boolean;fail?:boolean;extra?:FilaEsco[]}={}) {
  const modulePath='../supabase/functions/server/chat.tsx';
- const {llmToolLoop}=await import(modulePath) as {llmToolLoop:(messages:{role:string;content:string}[])=>Promise<{text:string;toolInteractions:{tool:string;args:FilaEsco;result_summary:string}[]}>};const read=database();let calls=0;const unexpected:string[]=[],reads:string[]=[];
+ const {llmToolLoop}=await import(modulePath) as {llmToolLoop:(messages:{role:string;content:string}[])=>Promise<{text:string;toolInteractions:{tool:string;args:FilaEsco;result_summary:string}[]}>};const read=database(options.extra??[]);let calls=0;const unexpected:string[]=[],reads:string[]=[];
  vi.stubGlobal('Deno',{env:{get:(key:string)=>({SUPABASE_URL:'https://review-fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic',OPENROUTER_API_KEY:'synthetic'} as Record<string,string>)[key]}});
  vi.stubGlobal('fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
   const req=new Request(input,init),u=new URL(req.url);
@@ -136,5 +136,17 @@ describe('literal-month identity and follow-up safeguards',()=>{
  it('keeps ambiguous prior names unresolved rather than using the model-selected ID',async()=>{
   const r=await answer('¿Y cuántos jornales llevamos en esa aplicación?',{application_id:'app-a'},[{...apps[0],id:'duplicate'}],'¿Cuánto se ha usado en la aplicación Ácaro Z?');
   expect(r.text).toMatchObject({tipo:'texto',texto:expect.stringContaining('Precisa cuál aplicación')});
+ });
+});
+
+
+describe('monthly selector through the closed actual loop',()=>{
+ it('answers the requested named month despite a wrong model ID and another monthly record',async()=>{
+  const extra=[{...apps[0],id:'spring',nombre_aplicacion:'Fumigación control plaga Q abril',fecha_inicio_ejecucion:'2033-04-05'},
+   {...apps[0],id:'autumn',nombre_aplicacion:'Fumigación control plaga Q septiembre',fecha_inicio_ejecucion:'2033-09-14'}];
+  const r=await loopProbe(['get_aplicaciones_ejecucion'],{question:'¿Cómo va la aplicación contra plaga Q de septiembre de 2033?',wrong:true,extra});
+  expect(r.calls).toBe(1);expect(r.result.text).toContain('Fumigación control plaga Q septiembre');
+  expect(r.result.text).not.toContain('Precisa cuál');expect(r.result.text).not.toContain('Fumigación control plaga Q abril');
+  expect(r.result.toolInteractions[0].args.application_id).toBe('autumn');
  });
 });
