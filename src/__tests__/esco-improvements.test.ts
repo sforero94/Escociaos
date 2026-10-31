@@ -47,7 +47,7 @@ describe('Fase 1.1: Memoria de Tool Calls', () => {
   });
 
   it('debe cargar metadata en el query de historial', () => {
-    expect(chatSource).toMatch(/select=role,content,metadata/);
+    expect(chatSource).toMatch(/select=id,role,content,metadata/);
   });
 
   it('debe inyectar contexto de tools previos como mensajes del sistema', () => {

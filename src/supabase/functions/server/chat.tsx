@@ -1,4 +1,5 @@
-import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, planRespuestaAplicacion, argumentosRespuestaAplicacion, respuestaDeterministaAplicacion, aclaracionPlanAplicacion, type FilaEsco, type SolicitudAplicacion } from './esco-consultas.ts';
+import { cargarCohorte, emitirCohorte, contextoDesdeHistorial, type AlmacenCohorte, type CohorteAplicaciones, type ContextoCohorte, type MensajeCohorte } from './escoCohorteAplicaciones.ts';
+import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, planRespuestaAplicacion, argumentosRespuestaAplicacion, respuestaDeterministaAplicacion, aclaracionPlanAplicacion, pideComparacionFechasCohorte, capturarCohorteAplicaciones, compararFechasCohorte, type FilaEsco, type SolicitudAplicacion } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
 
@@ -239,6 +240,35 @@ async function supabaseInsert(table: string, data: Record<string, unknown>): Pro
   }
   const rows = await res.json();
   return Array.isArray(rows) ? rows[0] : rows;
+}
+
+/** Existing private KV, one slot per authenticated user; no public receipt API. */
+function almacenCohorteAplicaciones(): AlmacenCohorte {
+  return {
+    get: async key => { const rows = await supabaseQuery('kv_store_1ccce916', `select=value&key=eq.${encodeURIComponent(key)}&limit=1`) as Array<{value:unknown}>; return rows[0]?.value ?? null; },
+    set: async (key,value) => {
+      const {url,headers}=getAdminHeaders();
+      const r=await fetch(`${url}/rest/v1/kv_store_1ccce916?on_conflict=key`, {method:'POST',headers:{...headers,Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({key,value})});
+      if(!r.ok)throw new Error('No pude conservar el recibo privado de aplicaciones');
+    },
+    del: async key => {
+      const {url,headers}=getAdminHeaders();
+      const r=await fetch(`${url}/rest/v1/kv_store_1ccce916?key=eq.${encodeURIComponent(key)}`, {method:'DELETE',headers});
+      if(!r.ok)throw new Error('No pude retirar el recibo privado de aplicaciones');
+    },
+  };
+}
+export async function conservarCohorteAplicaciones(contexto: ContextoCohorte, usuarioMensajeId: string, asistenteId: string, pregunta: string, cohorte?: CohorteAplicaciones): Promise<string | undefined> {
+  const almacen=almacenCohorteAplicaciones();
+  try {
+    if(!cohorte) { if(contexto.anterior?.handle)await almacen.del('esco:application-date-cohort:v1:'+contexto.usuario); return undefined; }
+    return await emitirCohorte(almacen,contexto,usuarioMensajeId,asistenteId,pregunta,cohorte) ?? undefined;
+  } catch {
+    // Facts remain answerable if optional context persistence fails. No handle
+    // means the next turn cannot authenticate or silently reconstruct a cohort.
+    console.warn('[Esco] No pude conservar el contexto privado de aplicaciones');
+    return undefined;
+  }
 }
 
 // ============================================================================
@@ -3920,7 +3950,21 @@ export async function llmToolLoop(
   messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>,
   userId?: string,
   onEvent?: (event: ToolLoopEvent) => void,
-): Promise<{ text: string; toolInteractions: ToolInteraction[] }> {
+  contextoCohorte?: ContextoCohorte,
+): Promise<{ text: string; toolInteractions: ToolInteraction[]; cohorteAplicaciones?: CohorteAplicaciones }> {
+  const preguntaCohorte = [...messages].reverse().find(m=>m.role==='user')?.content ?? '';
+  if(pideComparacionFechasCohorte(preguntaCohorte)) {
+    const unavailable='Necesito un listado reciente y verificable de esas aplicaciones. Vuelve a consultar el período; no tomé identidades del texto del modelo ni amplié la cohorte.';
+    if(!contextoCohorte || contextoCohorte.usuario!==userId)return {text:unavailable,toolInteractions:[]};
+    const receipt=await cargarCohorte(almacenCohorteAplicaciones(),contextoCohorte);
+    if(!receipt)return {text:unavailable,toolInteractions:[]};
+    const original=contextoCohorte.anterior!.pregunta;
+    const plan=planRespuestaAplicacion(original);
+    if(plan.tipo!=='aplicacion' || !plan.plural || plan.base!=='actual' || plan.rango?.desde!==receipt.desde || plan.rango.hasta!==receipt.hasta || plan.loteSolicitado || plan.estadoFiltro)return {text:unavailable,toolInteractions:[]};
+    const args=argumentosRespuestaAplicacion(plan,{});
+    const result=await executeTool('get_aplicaciones_ejecucion',args,userId,{pregunta:original,cohorteIds:receipt.ids});
+    return {text:compararFechasCohorte(receipt,plan,result,args),toolInteractions:[{tool:'get_aplicaciones_ejecucion',args,result_summary:resumirContexto(result)}]};
+  }
   const headers = getOpenRouterHeaders();
   const tools = getToolsForAPI();
   const maxRounds = 3;
@@ -4045,7 +4089,7 @@ export async function llmToolLoop(
         if (aplicacionesFrescas.length !== 1) return { text: 'No pude consolidar una consulta de aplicaciones con un único alcance verificable. Precisa la aplicación o el período; no mezclé los resultados ni inferí cantidades.', toolInteractions };
         const fresh = aplicacionesFrescas[0];
         const answer = respuestaDeterministaAplicacion(planAplicacion, fresh.resultado, fresh.args);
-        if (answer.tipo === 'texto') return { text: answer.texto, toolInteractions };
+        if (answer.tipo === 'texto') return { text: answer.texto, toolInteractions, cohorteAplicaciones:capturarCohorteAplicaciones(planAplicacion,fresh.resultado,fresh.args,answer.listadoCompleto===true) ?? undefined };
       }
 
       continue; // next round
@@ -4190,7 +4234,10 @@ export async function handleChatMessage(c: Context) {
   }
 
   // Save user message
+  const usuarioMensajeId=crypto.randomUUID();
+  const asistenteMensajeId=crypto.randomUUID();
   await supabaseInsert('chat_messages', {
+    id:usuarioMensajeId,
     conversation_id: conversationId,
     role: 'user',
     content: message.trim(),
@@ -4200,8 +4247,8 @@ export async function handleChatMessage(c: Context) {
   // long-term memorias to inject into the system prompt.
   const [history, memorias] = await Promise.all([
     supabaseQuery('chat_messages',
-      `select=role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.desc,id.desc&limit=20`
-    ) as Promise<Array<{ role: string; content: string; metadata?: { tool_interactions?: ToolInteraction[] } }>>,
+      `select=id,role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.desc,id.desc&limit=20`
+    ) as Promise<Array<MensajeCohorte & { metadata?: { tool_interactions?: ToolInteraction[]; application_cohort?: unknown } }>>,
     fetchActiveMemorias(userId),
   ]);
 
@@ -4209,7 +4256,9 @@ export async function handleChatMessage(c: Context) {
   const llmMessages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> = [
     { role: 'system', content: getSystemPrompt(memorias) },
   ];
-  for (const m of history.reverse()) {
+  history.reverse();
+  const contextoCohorte=contextoDesdeHistorial(userId,conversationId,'web',history);
+  for (const m of history) {
     if (m.role === 'assistant' && m.metadata?.tool_interactions?.length) {
       const ctx = m.metadata.tool_interactions
         .map((t: ToolInteraction) => `[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]`)
@@ -4231,11 +4280,14 @@ export async function handleChatMessage(c: Context) {
         // Tool-calling loop (non-streaming) then stream the final answer.
         // `send` reenvia la traza tal cual: el cliente decide como mostrarla y
         // como traducir el nombre tecnico de cada herramienta.
-        const { text: finalText, toolInteractions } = await llmToolLoop(
+        const { text: finalText, toolInteractions, cohorteAplicaciones } = await llmToolLoop(
           llmMessages,
           userId,
           (event) => send(event as unknown as Record<string, unknown>),
+          contextoCohorte,
         );
+
+        const cohortHandle=await conservarCohorteAplicaciones(contextoCohorte,usuarioMensajeId,asistenteMensajeId,message.trim(),cohorteAplicaciones);
 
         // Stream the final text character by character in chunks
         const chunkSize = 8;
@@ -4249,9 +4301,10 @@ export async function handleChatMessage(c: Context) {
         // Save assistant message with tool interaction metadata for context persistence
         await supabaseInsert('chat_messages', {
           conversation_id: conversationId,
+          id:asistenteMensajeId,
           role: 'assistant',
           content: finalText,
-          metadata: { tool_interactions: toolInteractions },
+          metadata: { tool_interactions: toolInteractions, ...(cohortHandle?{application_cohort:cohortHandle}:{}) },
         });
 
         // Auto-title for new conversations
