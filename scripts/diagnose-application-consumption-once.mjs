@@ -3,19 +3,20 @@ import {execFileSync} from 'node:child_process';
 import {cp,mkdir,mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {PROJECT,TARGET,DEPLOY_CONFIG,normalized,fingerprint} from './release-faithfulness-proof.mjs';
+import {PROJECT,TARGET,DEPLOY_CONFIG,normalized,fingerprint,diagnosticInventory} from './release-faithfulness-proof.mjs';
 import {reconstructCapture} from './release-application-date-cohort-capture.mjs';
+import {inspectRawCapture} from './diagnose-application-consumption-classifier.mjs';
 export const SOURCE=Object.freeze({sha:'48a925cca797ac470832f07f6b1c6f7addc61a4b',tree:'1bc6254f47858acc63a3329ec219df296dddf6b4',hash:'d611ff0a8864b05a0e960e21edb242219dfa07e2e64c11c8d8ada9d2cec2d4f5'});
 export const RECOVERY=Object.freeze({sha:'bf6a8a30dadcafdc9e27b3b9514d1b77f8d4ad58',tree:'14b02e7c564c8a05d6d26939f008111e759c1c65',hash:'a8ad35ddfb11af95909791ad96a08e9a90bde9c61bd2efde7bffdc54d44d6a02',native:'6e0027496d63d6b8c603e5590d0e4a4cd22a30df54173351ce2f4f797956bee4'});
 export const BASELINE=Object.freeze({version:288,status:'ACTIVE',verifyJwt:false,hash:'7c2583626cc7e7ecac531ef62a71e6d3581a4426be05bfd58df9b6218d978beb',updatedAt:1793554013172});
-const stages=new Set(['tooling','invocation','setup','metadata','source','first_download','first_proof','metadata_after','cleanup','complete']);
+const stages=new Set(['mismatch','tooling','invocation','setup','metadata','source','first_download','first_proof','metadata_after','cleanup','complete']);
 const codes=new Set(['CLI_SETUP_FAILED','TS_SETUP_FAILED','INVOCATION_REJECTED','SETUP_REJECTED','HTTP_STATUS','TRANSPORT_UNCERTAIN','BODY_LIMIT','METADATA_INVALID','BASELINE_REJECTED','SOURCE_REJECTED','PROOF_REJECTED','CLI_EXIT','CLI_TIMEOUT']);
 const guards=new Map([
  ['Invalid deployment metadata','METADATA_INVALID'],['Raw download differs from exact observed source/cache layout','RAW_LAYOUT_REJECTED'],
  ['Wrong TypeScript proof version','TYPE_PROOF_REJECTED'],['Unsafe Git source','TYPE_PROOF_REJECTED'],['Unparseable Git source','TYPE_PROOF_REJECTED'],
  ['Omitted module hash changed','TYPE_PROOF_REJECTED'],['Omitted module has runtime statements','TYPE_PROOF_REJECTED'],['Omitted module emits runtime content','TYPE_PROOF_REJECTED'],
  ['Runtime reference to omitted module','TYPE_PROOF_REJECTED'],['Unexpected type-only reference inventory','TYPE_PROOF_REJECTED'],
- ['Reconstructed source differs from complete pinned Git source','PROOF_REJECTED'],['Unexpected download wrapper','RAW_LAYOUT_REJECTED'],['Seeded deployment config changed','SOURCE_REJECTED'],
+ ['Reconstructed source differs from complete pinned Git source','PROOF_REJECTED'],['Unexpected download wrapper','WRAPPER_LAYOUT_REJECTED'],['Seeded deployment config changed','SOURCE_REJECTED'],
 ]);
 const own=(e,k)=>{try{return Object.getOwnPropertyDescriptor(e,k)?.value;}catch{return undefined;}};
 const fail=(code,extra={})=>Object.assign(new Error(),{diagnosticCode:code,...extra});
@@ -34,7 +35,7 @@ export async function observed(stage,operation,emit){
 }
 export function invocation(env,args=[]){
  must(args.length===0 || (args.length===1 && args[0]==='--check-invocation'),'INVOCATION_REJECTED');
- must(env.GITHUB_REPOSITORY==='sforero94/Escociaos' && env.GITHUB_REF==='refs/heads/main' && env.GITHUB_EVENT_NAME==='workflow_dispatch' && env.GITHUB_RUN_ATTEMPT==='1' && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA??'') && /^[1-9]\d*$/.test(env.GITHUB_RUN_ID??'') && env.DIAGNOSE_CONFIRMATION==='DIAGNOSE_APPLICATION_CONSUMPTION_V288_ONLY','INVOCATION_REJECTED');
+ must(env.GITHUB_REPOSITORY==='sforero94/Escociaos' && env.GITHUB_REF==='refs/heads/main' && env.GITHUB_EVENT_NAME==='workflow_dispatch' && env.GITHUB_RUN_ATTEMPT==='1' && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA??'') && /^[1-9]\d*$/.test(env.GITHUB_RUN_ID??'') && env.DIAGNOSE_CONFIRMATION==='DIAGNOSE_APPLICATION_CONSUMPTION_V288_CLASSIFY_ONLY','INVOCATION_REJECTED');
 }
 const stable=(a,b)=>['version','status','verifyJwt','hash','updatedAt'].every(k=>a[k]===b[k]);
 function stamp(meta){const value=normalized(meta);must(Number.isSafeInteger(meta.updated_at) && meta.updated_at>0,'METADATA_INVALID');return {...value,updatedAt:meta.updated_at};}
@@ -99,7 +100,12 @@ export async function main(env=process.env,args=process.argv.slice(2)){
   },
   metadata:()=>metadata(fetch,env.SUPABASE_ACCESS_TOKEN),verifySource:()=>verifyCheckouts(source,recovery,env.GITHUB_SHA,git),
   download:async()=>{await verifyCheckouts(source,recovery,env.GITHUB_SHA,git);await mkdir(join(raw,'supabase'),{recursive:true});await cp(join(recovery,'supabase/config.toml'),join(raw,'supabase/config.toml'));downloadOnly(execFileSync,raw,env);},
-  prove:()=>reconstructCapture(raw,recovery,join(root,'first-clean'),ts),
+  prove:async()=>{
+   const rawInventory=await diagnosticInventory(raw),gitInventory=await diagnosticInventory(join(recovery,'supabase/functions',TARGET));
+   const config=await readFile(join(recovery,'supabase/config.toml'));
+   inspectRawCapture(rawInventory,gitInventory,config,emit);
+   return reconstructCapture(raw,recovery,join(root,'first-clean'),ts);
+  },
   cleanup:async()=>{if(root){await rm(root,{recursive:true,force:true});root=null;}},
  },emit);
 }

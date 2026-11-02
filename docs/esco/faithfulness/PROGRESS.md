@@ -1,6 +1,13 @@
 # Progress and handoff
 
-## Current state — read-only release diagnosis preparation, 2026-11-02 UTC
+## Current state — second read-only mismatch diagnosis preparation, 2026-11-02 UTC
+
+- PR393 merged as `29ecd88fac81d05bc80c9a14d2bcdbe15723f30c`; exact-merge CI41452325454 / job125300306214 passed 5,420 tests / 241 files, types/lint and GitHub Vercel. PO documents and runtime remain preserved.
+- Its one approved diagnosis41452881917 / job125302160494 passed setup, initial baseline metadata, pinned Git/config checks and download, then failed first proof with RAW_LAYOUT_REJECTED. Cleanup passed; no artifacts, deployments or rollbacks. No second metadata guard ran. Independent afterward metadata matched ACTIVE v288; do not infer a continuous snapshot, a specific differing entry or the older release cause.
+- Explicit November 2 owner approval covers a second bounded classifier, conditional integration and one new read-only execution after review. The [same diagnostic workflow](DIAGNOSE_APPLICATION_CONSUMPTION.md) now requires a unique classify-only confirmation. Original source/layout/config/proof guards and source/recovery pins are unchanged; output adds only fixed categories and bounded counts, no paths, hashes or contents.
+- Classification observes the exact preflight snapshot rejected by the unchanged guard; failure remains failure. The full existing proof pipeline still runs if preflight passes. Unknown/unsafe/malformed/mixed representation differences cannot become cache-only confidence. Current turn stops at draft publication and parent review, without merge or execution. No online acceptance is claimed.
+
+## Historical state — read-only release diagnosis preparation, 2026-11-02 UTC
 
 - PR391 source `48a925cca797ac470832f07f6b1c6f7addc61a4b` is integrated. PR392 controls merged unchanged as `ffe607797f086b2e3955dc7364b14bc393a73b87`, preserving the intervening PO documentation. Exact-merge CI41446157692 passed 5,419 tests / 241 files, types/lint and GitHub Vercel.
 - The single approved release41446616421 / job125281202903 exited1 before the first successful capture receipt. No deployment or rollback marker; independently verified ACTIVE v288 metadata/configuration remained unchanged. There are no retained artifacts. Generic error suppression prevents distinguishing auth/transport/setup from a source/proof guard. Latest-version cache drift is only a locally reproduced hypothesis.
