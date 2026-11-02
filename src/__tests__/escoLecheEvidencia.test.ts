@@ -1,5 +1,6 @@
 // Synthetic source evidence, not a model-quality campaign.
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Evidence, Fact } from '../utils/escoEvidencia';
 import { buildProduccionSummary, type HatoPesajeRow } from '../supabase/functions/server/hato-aggregation';
 const path = '../supabase/functions/server/chat.tsx';
 const { llmToolLoop, getSystemPrompt } = await import(path) as {
@@ -17,7 +18,7 @@ const pesaje = (animal_id: string, litros_total: number, day = 0) => ({
 function calcular(rows: HatoPesajeRow[]) {
   return buildProduccionSummary({ periodo: period, pesajes: rows, produccionQuincenal: [] });
 }
-function transport(rows: ReturnType<typeof pesaje>[], failOffset?: number, animalNumero?: number, countMode = 'exact', countTable = 'hato_pesajes_leche') {
+function transport(rows: ReturnType<typeof pesaje>[], failOffset?: number, animalNumero?: number, countMode = 'exact', countTable = 'hato_pesajes_leche', quincenasRequested = false, modelPeriod = period) {
   function countHeaders(table: string, offset: number, length: number, total: number): Record<string, string> {
     if (table === countTable && countMode === 'missing') return {};
     if (table === countTable && countMode === 'wildcard') return { 'content-range': '0-79/*' };
@@ -40,13 +41,14 @@ function transport(rows: ReturnType<typeof pesaje>[], failOffset?: number, anima
       modelBodies.push(JSON.parse(await request.text()));
       return Response.json({ choices: [{ message: modelBodies.length === 1
         ? { role: 'assistant', content: null, tool_calls: [{ id: 'synthetic', type: 'function', function: {
-          name: 'get_hato_produccion', arguments: JSON.stringify({ date_from: period.desde, date_to: period.hasta, num_quincenas: 1, animal_numero: animalNumero }),
+          name: 'get_hato_produccion', arguments: JSON.stringify({ date_from: modelPeriod.desde, date_to: modelPeriod.hasta, num_quincenas: quincenasRequested ? 1 : undefined, animal_numero: animalNumero }),
         } }] } : { role: 'assistant', content: 'Respuesta sintética de control.' } }] });
     }
     if (u.origin === 'https://leche-fixture.invalid' && request.method === 'GET') {
       const offset = Number(u.searchParams.get('offset') ?? 0);
       const limit = Number(u.searchParams.get('limit') ?? 200);
       if (u.pathname === '/rest/v1/hato_pesajes_leche') {
+        expect(u.searchParams.get('select')).toBe('animal_id,fecha,litros_total,animal:hato_animales(numero,nombre)');
         expect(u.searchParams.getAll('fecha')).toEqual(['gte.' + period.desde, 'lte.' + period.hasta]);
         if (offset === failOffset) return Response.json({ message: 'synthetic unavailable' }, { status: 503 });
         const filter = u.searchParams.get('animal_id');
@@ -56,7 +58,7 @@ function transport(rows: ReturnType<typeof pesaje>[], failOffset?: number, anima
       }
       if (u.pathname === '/rest/v1/hato_animales') {
         expect(u.searchParams.get('numero')).toBe('eq.87');
-        const animals = [...new Set(rows.map(r => r.animal_id))].map(id => ({ id }));
+        const animals = [...new Set(rows.map(r => r.animal_id))].map(id => ({ id, numero: 87 }));
         return Response.json(animals, { headers: countHeaders('hato_animales', 0, animals.length, animals.length) });
       }
       if (u.pathname === '/rest/v1/hato_produccion_quincenal') return Response.json([], { headers: countHeaders('hato_produccion_quincenal', 0, 0, 0) });
@@ -65,13 +67,33 @@ function transport(rows: ReturnType<typeof pesaje>[], failOffset?: number, anima
   });
   return { requests, unmatched, modelBodies };
 }
-async function run(rows: ReturnType<typeof pesaje>[], failOffset?: number, animalNumero?: number, countMode = 'exact', countTable = 'hato_pesajes_leche') {
-  const f = transport(rows, failOffset, animalNumero, countMode, countTable);
-  const result = await llmToolLoop([{ role: 'system', content: getSystemPrompt() }, { role: 'user', content: 'Compara los pesajes medidos en el rango solicitado.' }]);
-  expect(f.unmatched).toEqual([]); expect(f.modelBodies).toHaveLength(2);
-  const immediate = JSON.parse(f.modelBodies[1].messages.find(m => m.role === 'tool')!.content);
-  const saved = JSON.parse(result.toolInteractions[0].result_summary);
-  return { ...f, immediate, saved };
+interface SavedContext { state?: 'validated' | 'unavailable'; evidence?: Evidence; error?: string; consulta_completa?: boolean; code?: string; essentialFactsUnavailable?: boolean; omittedDetail?: boolean }
+async function run(rows: ReturnType<typeof pesaje>[], failOffset?: number, animalNumero?: number, countMode = 'exact', countTable = 'hato_pesajes_leche', quincenasRequested = false, modelPeriod = period) {
+  const f = transport(rows, failOffset, animalNumero, countMode, countTable, quincenasRequested, modelPeriod);
+  const question = `Compara los pesajes medidos del ${period.desde} al ${period.hasta}${animalNumero === undefined ? '' : ` de la vaca con número ${animalNumero}`}${quincenasRequested ? ' y la serie quincenal' : ''}.`;
+  const result = await llmToolLoop([{ role: 'system', content: getSystemPrompt() }, { role: 'user', content: question }]);
+  expect(f.unmatched).toEqual([]); expect(f.modelBodies).toHaveLength(1);
+  expect(result.toolInteractions).toHaveLength(1);
+  expect(f.modelBodies[0].messages.filter(m => m.content === question)).toHaveLength(1);
+  expect(f.modelBodies[0].messages.some(m => m.role === 'tool')).toBe(false);
+  const saved = JSON.parse(result.toolInteractions[0].result_summary) as SavedContext;
+  // Source observations and the legacy DTO never become another model request.
+  expect(JSON.stringify(f.modelBodies)).not.toContain('VACA SINTETICA');
+  expect(JSON.stringify(saved)).not.toMatch(/pesajes_semanales|muestras_recientes|litros_am|litros_pm|observaciones|created_by/);
+  return { ...f, saved, result };
+}
+function savedFact(result: Awaited<ReturnType<typeof run>>, metric: Fact['metric'], animalId?: string): Fact {
+  expect(result.saved.state, JSON.stringify(result.saved)).toBe('validated');
+  const fact = result.saved.evidence?.facts.find(f => f.metric === metric && (animalId === undefined ? f.entities.length === 0 : f.entities.some(e => e.kind === 'animal' && e.id === animalId)));
+  expect(fact).toBeDefined();
+  return fact!;
+}
+function expectUnavailable(result: Awaited<ReturnType<typeof run>>) {
+  expect(result.saved.state).not.toBe('validated');
+  if (result.saved.state === 'unavailable') expect(result.saved).toEqual({ state: 'unavailable', code: 'source_unavailable', essentialFactsUnavailable: true, omittedDetail: true });
+  else expect(result.saved).toMatchObject({ error: expect.any(String), consulta_completa: false });
+  expect(result.saved.evidence).toBeUndefined();
+  expect(result.result.text).not.toContain('Respuesta sintética de control.');
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('milk evidence preserves measured identity, values and coverage', () => {
@@ -117,65 +139,154 @@ describe('milk evidence preserves measured identity, values and coverage', () =>
     expect(r.resumen.mayores_promedios).toHaveLength(5);
     expect(r.pesajes_semanales.por_vaca).toHaveLength(7);
   });
-  it('reads the 2001st observation, bounds provider detail and preserves the saved evidence', async () => {
+  it('reads the 2001st observation and persists bounded canonical facts without exposing source values to the model', async () => {
     const r = await run([...Array.from({ length: 2000 }, (_, i) => pesaje('animal-a', 10, i)), pesaje('animal-b', 90, 2000)]);
-    expect(r.immediate.pesajes_semanales.total_registros).toBe(2001);
-    expect(r.immediate.resumen.mayores_promedios[0]).toMatchObject({ animal_id: 'animal-b', promedio_litros: 90, puesto: 1, num_pesajes: 1 });
-    expect(r.immediate._evidencia).toMatchObject({ consulta_completa: true, agregados_completos: true, detalle_completo: false, herramienta: 'get_hato_produccion', rango: period });
-    expect(Buffer.byteLength(JSON.stringify(r.immediate))).toBeLessThanOrEqual(20000);
-    expect(r.immediate._evidencia.recortes.pesajes_omitidos).toBe(1981);
-    expect(r.immediate.pesajes_semanales.muestras_recientes).toHaveLength(20);
-    expect(r.saved).toEqual(r.immediate);
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '2001', unit: 'registro' });
+    expect(savedFact(r, 'milk.volume').value).toEqual({ kind: 'decimal', value: '20090', unit: 'L' });
+    expect(savedFact(r, 'milk.count').coverage).toMatchObject({ population: 'complete', rowsRead: 2001, expectedRows: 2001, identityUnique: true });
+    expect(savedFact(r, 'milk.mean').value.kind).toBe('unknown'); // No rounded mean is multiplied back into a volume.
+    expect(Buffer.byteLength(JSON.stringify(r.saved))).toBeLessThanOrEqual(24000);
+    expect(savedFact(r, 'milk.count', 'animal-a').value).toEqual({ kind: 'decimal', value: '2000', unit: 'registro' });
+    expect(savedFact(r, 'milk.volume', 'animal-a').value).toEqual({ kind: 'decimal', value: '20000', unit: 'L' });
+    expect(savedFact(r, 'milk.mean', 'animal-a').value).toEqual({ kind: 'decimal', value: '10', unit: 'L/pesaje', denominator: 'pesaje_observado' });
+    expect(savedFact(r, 'milk.count', 'animal-b').value).toEqual({ kind: 'decimal', value: '1', unit: 'registro' });
+    expect(savedFact(r, 'milk.volume', 'animal-b').value).toEqual({ kind: 'decimal', value: '90', unit: 'L' });
+    expect(savedFact(r, 'milk.mean', 'animal-b').value).toEqual({ kind: 'decimal', value: '90', unit: 'L/pesaje', denominator: 'pesaje_observado' });
+    expect(r.saved.evidence?.facts).toHaveLength(9);
+    expect(r.saved.evidence?.facts.filter(f => f.metric === 'milk.mean' && f.entities.length > 0).map(f => f.entities[0].id)).toEqual(['animal-b', 'animal-a']);
     expect(r.requests.some(url => new URL(url).pathname.endsWith('/hato_pesajes_leche') && new URL(url).searchParams.get('offset') === '2000')).toBe(true);
   });
-  it('retains all permanent identities when a queried number was recycled', async () => {
+  it('asks to disambiguate a recycled number rather than merging historical UUIDs', async () => {
     const r = await run([pesaje('animal-a', 28), pesaje('animal-b', 12)], undefined, 87);
-    expect(r.immediate.pesajes_semanales.por_vaca.map((v: { animal_id: string }) => v.animal_id)).toEqual(['animal-a', 'animal-b']);
-    expect(r.immediate._evidencia).toMatchObject({ numero_ambiguo: true, identidades_para_numero: ['animal-a', 'animal-b'] });
+    expectUnavailable(r);
+    expect(r.requests.some(url => new URL(url).pathname.endsWith('/hato_pesajes_leche'))).toBe(false);
+    expect(JSON.stringify(r.saved)).not.toMatch(/animal-a|animal-b/);
+    expect(r.result.text).toMatch(/aclara|precisa|identidad|ambigu|UUID|más de un/i);
   });
-  it('preserves a complete short result without context loss', async () => {
+  it('preserves a complete short result and its exact mean without context loss', async () => {
     const r = await run([pesaje('animal-a', 28), pesaje('animal-a', 30, 7)]);
-    expect(r.saved).toEqual(r.immediate);
-    expect(r.immediate.resumen.mayores_promedios[0]).toMatchObject({ animal_id: 'animal-a', promedio_litros: 29 });
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '2', unit: 'registro' });
+    expect(savedFact(r, 'milk.volume').value).toEqual({ kind: 'decimal', value: '58', unit: 'L' });
+    expect(savedFact(r, 'milk.mean').value).toEqual({ kind: 'decimal', value: '29', unit: 'L/pesaje', denominator: 'pesaje_observado' });
+    expect(r.saved.evidence?.scopes[0].period).toMatchObject({ from: period.desde, to: period.hasta, clock: 'America/Bogota', basis: 'observation', fieldMeaning: 'fecha' });
   });
-  it('bounds provider evidence for 20000 observations before generation', async () => {
+  it('uses the actual explicit user period instead of model-proposed historical dates', async () => {
+    const r = await run([pesaje('animal-a', 28)], undefined, undefined, 'exact', 'hato_pesajes_leche', false, { desde: '1999-01-01', hasta: '1999-01-07' });
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '1', unit: 'registro' });
+    expect(r.saved.evidence?.scopes.every(s => s.period?.from === period.desde && s.period.to === period.hasta)).toBe(true);
+    expect(JSON.stringify(r.saved)).not.toContain('1999-01');
+    expect(r.requests.filter(url => new URL(url).pathname.endsWith('/hato_pesajes_leche')).every(url => JSON.stringify(new URL(url).searchParams.getAll('fecha')) === JSON.stringify(['gte.' + period.desde, 'lte.' + period.hasta]))).toBe(true);
+  });
+  it('binds an unambiguous cow number to one permanent UUID and preserves its attribution', async () => {
+    const r = await run([pesaje('animal-a', 28), pesaje('animal-a', 30, 7)], undefined, 87);
+    expect(savedFact(r, 'milk.mean', 'animal-a').entities).toEqual([{ kind: 'animal', id: 'animal-a' }]);
+    expect(r.saved.evidence?.scopes[0].filters).toEqual({ animal_id: 'animal-a' });
+    expect(r.requests.filter(url => new URL(url).pathname.endsWith('/hato_pesajes_leche')).every(url => new URL(url).searchParams.get('animal_id') === 'eq.animal-a')).toBe(true);
+  });
+  it('bounds canonical persistence for 20000 observations and never submits the source DTO for generation', async () => {
     const r = await run(Array.from({ length: 20000 }, (_, i) => pesaje('animal-' + (i % 10), 10, Math.floor(i / 10))));
-    const content = r.modelBodies[1].messages.find(m => m.role === 'tool')!.content;
-    expect(Buffer.byteLength(JSON.stringify(content))).toBeLessThanOrEqual(20000);
-    expect(r.immediate.resumen.total_registros).toBe(20000);
-    expect(r.immediate._evidencia).toMatchObject({ consulta_completa: true, agregados_completos: true, detalle_completo: false });
+    expect(Buffer.byteLength(JSON.stringify(r.saved))).toBeLessThanOrEqual(24000);
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '20000', unit: 'registro' });
+    expect(savedFact(r, 'milk.volume').value).toEqual({ kind: 'decimal', value: '200000', unit: 'L' });
+    expect(savedFact(r, 'milk.mean').value).toEqual({ kind: 'decimal', value: '10', unit: 'L/pesaje', denominator: 'pesaje_observado' });
+    expect(r.saved.evidence!.facts.length).toBeGreaterThan(3);
+    expect(r.saved.evidence!.facts.length).toBeLessThanOrEqual(200);
+    expect(r.saved.evidence?.state).toBe('partial');
+    expect(r.saved.evidence?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'budget_exceeded' })]));
+    const childCounts = r.saved.evidence?.facts.filter(f => f.metric === 'milk.count' && f.entities.length > 0) ?? [];
+    expect(childCounts.length).toBeGreaterThan(0);
+    expect(childCounts.length).toBeLessThan(10);
+    expect(childCounts.every(f => f.value.kind === 'decimal' && f.value.value === '2000')).toBe(true);
+    expect(childCounts.reduce((n, f) => n + (f.value.kind === 'decimal' ? Number(f.value.value) : 0), 0)).toBeLessThan(20000);
   });
   it('finishes an exact full page using its verified total without an unnecessary empty read', async () => {
     const r = await run(Array.from({ length: 200 }, (_, i) => pesaje('animal-a', 10, i)));
-    expect(r.immediate._evidencia.consulta_completa).toBe(true);
+    expect(savedFact(r, 'milk.count').coverage.population).toBe('complete');
     expect(r.requests.filter(url => new URL(url).pathname.endsWith('/hato_pesajes_leche'))).toHaveLength(1);
   });
   it('accepts exactly 20000 verified rows without inventing a stricter limit', async () => {
     const r = await run(Array.from({ length: 20000 }, (_, i) => pesaje('animal-' + (i % 10), 10, Math.floor(i / 10))));
-    expect(r.immediate._evidencia.consulta_completa).toBe(true);
-    expect(r.immediate.pesajes_semanales.total_registros).toBe(20000);
+    expect(savedFact(r, 'milk.count').coverage).toMatchObject({ population: 'complete', rowsRead: 20000, expectedRows: 20000 });
+    expect(r.requests.filter(url => new URL(url).pathname.endsWith('/hato_pesajes_leche'))).toHaveLength(100);
   });
   it('fails closed at the existing 20000-row safety ceiling instead of publishing partial averages', async () => {
     const rows = Array.from({ length: 20001 }, (_, i) => pesaje('animal-' + (i % 10), 10, Math.floor(i / 10)));
-    const r = await run(rows);
-    expect(r.immediate.error).toContain('reduce el rango'); expect(r.immediate.resumen).toBeUndefined();
-    expect(r.immediate._evidencia).toBeUndefined();
+    const r = await run(rows); expectUnavailable(r);
+    expect(r.result.text).not.toMatch(/\|[^\n]*Promedio por pesaje observado[^\n]*\|/);
   });
   it.each(['missing', 'wildcard', 'wrong-range'])('never certifies unverifiable weight coverage: %s', async mode => {
     const r = await run(Array.from({ length: 80 }, (_, i) => pesaje('animal-a', 10, i)), undefined, undefined, mode);
-    expect(r.immediate.error).toBeTruthy(); expect(r.immediate._evidencia).toBeUndefined();
+    expectUnavailable(r);
   });
   it('rejects changing exact totals across pages rather than claiming a stable universe', async () => {
     const r = await run(Array.from({ length: 400 }, (_, i) => pesaje('animal-a', 10, i)), undefined, undefined, 'changing');
-    expect(r.immediate.error).toBeTruthy(); expect(r.immediate._evidencia).toBeUndefined();
+    expectUnavailable(r);
   });
-  it.each(['hato_animales', 'hato_produccion_quincenal'])('requires coverage proof for every milk source: %s', async table => {
-    const r = await run([pesaje('animal-a', 10)], undefined, table === 'hato_animales' ? 87 : undefined, 'missing', table);
-    expect(r.immediate.error).toBeTruthy(); expect(r.immediate._evidencia).toBeUndefined();
+  it('requires an exact coverage proof before resolving a cow number', async () => {
+    const r = await run([pesaje('animal-a', 10)], undefined, 87, 'missing', 'hato_animales');
+    expectUnavailable(r);
+    expect(r.requests.some(url => new URL(url).pathname.endsWith('/hato_pesajes_leche'))).toBe(false);
+  });
+  it('does not certify quincenal data when that separate source is unverified or unsupported', async () => {
+    const r = await run([pesaje('animal-a', 10)], undefined, undefined, 'missing', 'hato_produccion_quincenal', true);
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '1', unit: 'registro' });
+    expect(r.saved.evidence?.state).toBe('partial');
+    expect(r.saved.evidence?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'unsupported_operation' })]));
+    expect(r.requests.some(url => new URL(url).pathname.endsWith('/hato_produccion_quincenal'))).toBe(false);
+    expect(r.result.text).toMatch(/fuera del contrato|no verificable|no disponible|no puedo verificar/i);
   });
   it('does not aggregate an available first page after a later source failure', async () => {
     const r = await run(Array.from({ length: 201 }, (_, i) => pesaje('animal-a', 10, i)), 200);
-    expect(r.immediate.error).toBeTruthy(); expect(r.immediate.resumen).toBeUndefined();
-    expect(r.saved).toEqual(r.immediate);
+    expectUnavailable(r);
+    expect(r.requests.some(url => new URL(url).pathname.endsWith('/hato_pesajes_leche') && new URL(url).searchParams.get('offset') === '200')).toBe(true);
+  });
+  it('rejects duplicated composite identities across source pages before publishing their totals', async () => {
+    const rows = Array.from({ length: 201 }, (_, i) => pesaje('animal-a', 10, i)); rows[200] = pesaje('animal-a', 90, 0);
+    expectUnavailable(await run(rows));
+  });
+  it('counts distinct UUIDs on the same observation date once each despite identical labels', async () => {
+    const r = await run([pesaje('animal-a', 28), pesaje('animal-b', 12)]);
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '2', unit: 'registro' });
+    for (const id of ['animal-a', 'animal-b']) {
+      expect(savedFact(r, 'milk.count', id).value).toEqual({ kind: 'decimal', value: '1', unit: 'registro' });
+      expect(savedFact(r, 'milk.count', id).coverage).toMatchObject({ rowsRead: 1, expectedRows: 1, identityUnique: true });
+    }
+    expect(savedFact(r, 'milk.mean', 'animal-a').value).toEqual({ kind: 'decimal', value: '28', unit: 'L/pesaje', denominator: 'pesaje_observado' });
+    expect(savedFact(r, 'milk.mean', 'animal-b').value).toEqual({ kind: 'decimal', value: '12', unit: 'L/pesaje', denominator: 'pesaje_observado' });
+  });
+  it('preserves exact per-animal means and ties without inventing differences from a rounded DTO', async () => {
+    const r = await run([pesaje('animal-a', 20.01), pesaje('animal-b', 20.04), pesaje('animal-c', 20.04)]);
+    const means = r.saved.evidence?.facts.filter(f => f.metric === 'milk.mean' && f.entities.length > 0) ?? [];
+    expect(means.map(f => f.value.kind === 'decimal' ? f.value.value : null)).toEqual(['20.04', '20.04', '20.01']);
+    expect(new Set(means.slice(0, 2).map(f => f.entities[0].id))).toEqual(new Set(['animal-b', 'animal-c']));
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '3', unit: 'registro' });
+  });
+  it('reports a verified empty observation population without inventing zero animal production', async () => {
+    const r = await run([]);
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '0', unit: 'registro' });
+    expect(savedFact(r, 'milk.count').assertion).toBe('bounded_empty');
+    expect(savedFact(r, 'milk.volume').value.kind).toBe('unknown');
+    expect(savedFact(r, 'milk.mean').value.kind).toBe('unknown');
+    expect(r.saved.evidence?.facts.some(f => f.entities.length > 0)).toBe(false);
+  });
+  it('preserves the global population while explicitly bounding high-cardinality animal detail', async () => {
+    const r = await run(Array.from({ length: 201 }, (_, i) => pesaje('animal-' + i, 10)));
+    expect(savedFact(r, 'milk.count').value).toEqual({ kind: 'decimal', value: '201', unit: 'registro' });
+    expect(savedFact(r, 'milk.volume').value).toEqual({ kind: 'decimal', value: '2010', unit: 'L' });
+    expect(r.saved.evidence!.facts.length).toBeLessThanOrEqual(200);
+    expect(r.saved.evidence!.facts.filter(f => f.entities.length > 0).length).toBeLessThan(201 * 3);
+    expect(r.saved.evidence?.state).toBe('partial');
+    expect(r.saved.evidence?.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'budget_exceeded' })]));
+    expect(r.result.text).toMatch(/omitid|limitad|no.*exhaustiv/i);
+  });
+  it('keeps a distinctive source value out of every model body and persists only the canonical result', async () => {
+    const contaminated = { ...pesaje('animal-a', 887766.125), observaciones: 'SYN_PRIVATE_MILK_NOTE', created_by: 'SYN_PRIVATE_WORKER_ID', salario: 'SYN_PRIVATE_PAY' };
+    const r = await run([contaminated]);
+    expect(savedFact(r, 'milk.volume').value).toEqual({ kind: 'decimal', value: '887766.125', unit: 'L' });
+    expect(JSON.stringify(r.modelBodies)).not.toContain('887766.125');
+    expect(JSON.stringify(r.modelBodies)).not.toContain('animal-a');
+    expect(JSON.stringify(r.saved)).not.toMatch(/SYN_PRIVATE_MILK_NOTE|SYN_PRIVATE_WORKER_ID|SYN_PRIVATE_PAY/);
+    expect(JSON.stringify(r.modelBodies)).not.toMatch(/SYN_PRIVATE_MILK_NOTE|SYN_PRIVATE_WORKER_ID|SYN_PRIVATE_PAY/);
+    expect(r.requests.filter(url => new URL(url).pathname.endsWith('/hato_pesajes_leche')).every(url => new URL(url).searchParams.get('select') === 'animal_id,fecha,litros_total,animal:hato_animales(numero,nombre)')).toBe(true);
   });
 });

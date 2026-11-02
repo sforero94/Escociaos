@@ -22,16 +22,17 @@ function database(state=app.estado){
   return out.slice(Number(p.get('offset')??0),Number(p.get('offset')??0)+Number(p.get('limit')??200));
  };
 }
-async function loopProbe(channel:'Web'|'Telegram',discovery=false,state=app.estado){
+async function loopProbe(channel:'Web'|'Telegram',discovery=false,state=app.estado,wrongType=false){
  const modulePath='../supabase/functions/server/chat.tsx';const {llmToolLoop}=await import(modulePath) as {llmToolLoop:(messages:unknown[],user:string)=>Promise<{text:string;toolInteractions:{tool:string;args:FilaEsco;result_summary:string}[]}>};const read=database(state);let model=0;const observed:Record<string,unknown>[]=[];
  vi.stubGlobal('Deno',{env:{get:(key:string)=>key==='SUPABASE_URL'?'https://status-fixture.invalid':'synthetic-key'}});
  vi.stubGlobal('fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
   const req=new Request(input,init),url=new URL(req.url);
   if(req.url==='https://openrouter.ai/api/v1/chat/completions'&&req.method==='POST'){
    const n=++model;const body=JSON.parse(await req.text()) as Record<string,unknown>;observed.push(body);
-   const calls=[{name:'get_aplicaciones_ejecucion',args:{application_name:app.nombre_aplicacion,estado:'En ejecución',date_basis:'actual',date_from:'2034-04-01',date_to:'2034-04-30'}},
+   const calls:Array<{name:string;args:FilaEsco}>=[{name:'get_aplicaciones_ejecucion',args:{application_name:app.nombre_aplicacion,estado:'En ejecución',date_basis:'actual',date_from:'2034-04-01',date_to:'2034-04-30'}},
     {name:'get_aplicaciones_ejecucion',args:{application_name:'Fertilización abril',date_basis:'actual'}},
     {name:'get_application_summary',args:{type:'Fertilizacion',date_from:'2034-04-01',date_to:'2034-04-30'}}];
+   if(wrongType)calls[0]={name:'get_application_summary',args:{type:'Fumigacion',date_basis:'actual'}};
    const chosen=discovery?(n===1?calls[2]:calls[0]):calls[n-1];
    if(n===4)return Response.json({choices:[{message:{role:'assistant',content:falseProse}}]});
    if(!chosen)throw Error('Unexpected mocked model round');
@@ -43,6 +44,19 @@ async function loopProbe(channel:'Web'|'Telegram',discovery=false,state=app.esta
  const result=await llmToolLoop(mensajesDesdeHistorial([{role:'user',content:question}], 'Synthetic system prompt',channel),'synthetic-user');
  return {model,result,observed};
 }
+function expectRegisteredStatus(result:Awaited<ReturnType<typeof loopProbe>>['result'],state:string){
+ const row=result.text.split('\n').find(line=>line.includes('`Estado registrado`'));
+ expect(row,'one rendered status fact, not a zero-record replacement').toBeDefined();
+ expect(row).toContain(app.nombre_aplicacion);
+ expect(row).toContain(state==='Calculada'?'Calculada (Planificada en la interfaz)':'`'+state+'`');
+ const contexts=result.toolInteractions.map(h=>JSON.parse(h.result_summary) as {state?:string;evidence?:{facts?:Array<{metric:string;entities:Array<{id:string}>;value:{kind:string;value?:string};source:{tool:string}}>}});
+ const facts=contexts.flatMap(c=>c.evidence?.facts??[]);
+ expect(facts.some(f=>f.metric==='application.count'&&f.value.value==='0')).toBe(false);
+ const statuses=facts.filter(f=>f.metric==='application.status');
+ expect(statuses).toHaveLength(1);expect(statuses[0]).toMatchObject({entities:[{kind:'application',id:app.id}],value:{kind:'status',value:state},source:{tool:'get_aplicaciones_ejecucion'}});
+ expect(result.text).not.toContain(falseProse);expect(result.text).not.toContain('satisfactoriamente');
+ expect(result.text).toContain('No acreditan por sí solos');
+}
 describe('registered application status versus planned consumption',()=>{
  it.each([question,question.replace('Consulta de solo lectura: ',''),question.replace('Sigue abierta','Está abierta'),question.replace('Sigue abierta','Continúa en ejecución'),question.replace('Sigue abierta','Permanece cerrada'),question.replace('Sigue abierta','Está activa')])('recognizes status without filtering away a closed application: %s',q=>{
   const p=planRespuestaAplicacion(q,today);expect(p).toMatchObject({tipo:'aplicacion',estado:true,consumos:false,trabajo:false,base:'actual',rango:null,estadoFiltro:null});
@@ -50,15 +64,16 @@ describe('registered application status versus planned consumption',()=>{
   expect(aclaracionPlanAplicacion(p)).toBeNull();
  });
  it.each(['Web','Telegram'] as const)('answers closed status on %s without reaching three-query planned-data fallback',async channel=>{
-  const r=await loopProbe(channel);expect(r.model).toBe(1);expect(r.result.text).toContain('Estado registrado: Cerrada.');
+  const r=await loopProbe(channel);expect(r.model).toBe(1);expectRegisteredStatus(r.result,'Cerrada');
   expect(r.result.toolInteractions).toHaveLength(1);expect(r.result.toolInteractions[0].args).not.toHaveProperty('estado');
-  expect(r.result.text).not.toContain('188');expect(r.result.text).not.toContain('189');expect(r.result.text).not.toContain('satisfactoriamente');expect(r.result.text).toContain('no una certificación');
+  expect(r.result.text).not.toContain('188');expect(r.result.text).not.toContain('189');expect(r.result.text).not.toContain('satisfactoriamente');expect(r.result.text).toContain('No acreditan por sí solos');
  });
- it('treats a summary with planned quantities as discovery only, never as final consumed facts',async()=>{
-  const r=await loopProbe('Web',true);expect(r.model).toBe(2);expect(r.result.toolInteractions.map(x=>x.tool)).toEqual(['get_application_summary','get_aplicaciones_ejecucion']);
-  expect(r.result.text).toContain('Estado registrado: Cerrada.');expect(r.result.text).not.toContain('188.52');expect(r.result.text).not.toContain(falseProse);
+ it('does not let an unsolicited model type remove the canonically named application',async()=>{const r=await loopProbe('Web',false,'Cerrada',true);expect(r.result.text).toContain('`Estado registrado` | `Cerrada`');expect(r.result.text).not.toContain('0 `registro`');});
+ it('resolves the summary alias through fresh execution facts, never planned consumption',async()=>{
+  const r=await loopProbe('Web',true);expect(r.model).toBe(1);expect(r.result.toolInteractions.map(x=>x.tool)).toEqual(['get_application_summary']);
+  expectRegisteredStatus(r.result,'Cerrada');expect(r.result.text).not.toContain('188.52');expect(r.result.text).not.toContain(falseProse);
  });
- it.each(['En ejecución','Calculada'])('reports the recorded %s state without inferring physical success',async state=>{const r=await loopProbe('Web',false,state);expect(r.model).toBe(1);expect(r.result.text).toContain('Estado registrado: '+state+'.');expect(r.result.text).not.toContain('satisfactoriamente');expect(r.result.text).not.toContain('188');});
+ it.each(['En ejecución','Calculada'])('reports the recorded %s state without inferring physical success',async state=>{const r=await loopProbe('Web',false,state);expect(r.model).toBe(1);expectRegisteredStatus(r.result,state);expect(r.result.text).not.toContain('satisfactoriamente');expect(r.result.text).not.toContain('188');});
  it('rejects a partial legacy plan summary as authoritative status/consumption evidence',()=>{const plan=planRespuestaAplicacion(question,today),args=argumentosRespuestaAplicacion(plan,{});const r=respuestaDeterministaAplicacion(plan,JSON.stringify({aplicaciones:[app],mezclas_productos:[{cantidad_total_necesaria:'188.52'}],_evidencia:{consulta_completa:false}}),args);expect(r).toMatchObject({tipo:'texto',texto:expect.stringContaining('No pude verificar')});expect(JSON.stringify(r)).not.toContain('188.52');});
  it('binds literal month identity against all fresh candidates, never a different month',()=>{const other={...app,id:'other-month',nombre_aplicacion:'Fertilización mes de mayo'};expect(resolverSeleccionAplicacion({pregunta:question},[app,other],[],false)).toMatchObject({estado:'verificada',aplicacion_ids:[app.id]});expect(resolverSeleccionAplicacion({pregunta:question},[other],[],false)).toMatchObject({estado:'aclarar'});expect(resolverSeleccionAplicacion({pregunta:'¿Sigue abierta esa aplicación?',anterior:question},[app,other],[],false)).toMatchObject({estado:'verificada',aplicacion_ids:[app.id],referencia:'usuario_anterior'});expect(resolverSeleccionAplicacion({pregunta:question.replace('abril?','abril ID other-month?')},[app,other],[],false)).toMatchObject({estado:'aclarar'});});
  it('retains genuine duplicate name and conflicting user identity ambiguity',()=>{

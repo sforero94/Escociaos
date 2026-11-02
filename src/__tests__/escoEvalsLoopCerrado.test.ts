@@ -4,8 +4,8 @@ import { hashFixture, type PaqueteFixtures } from '../utils/escoEvals/fixtures';
 import type { CasoDorado } from '../utils/escoEvals/tipos';
 
 const PROMPT = 'Control sintético: no uses datos externos.';
-const QUESTION = '¿Qué partos hubo en septiembre?';
-const FOLLOWUP = '¿Qué madre aparece en esos partos?';
+const QUESTION = '¿Qué partos hubo del 2026-09-01 al 2026-09-30?';
+const FOLLOWUP = '¿Qué madre aparece en esos partos del 2026-09-01 al 2026-09-30?';
 const modelHeaders = { authorization: 'Bearer synthetic-placeholder', 'content-type': 'application/json' };
 const dbHeaders = { ...modelHeaders, apikey: 'synthetic-placeholder', prefer: 'count=exact' };
 const result = (body: unknown, status = 200, headers: Record<string, string> = { 'content-type': 'application/json' }) => ({ body: JSON.stringify(body), status, headers });
@@ -26,14 +26,12 @@ function caso(followup = false): CasoDorado {
     golden_status: 'synthetic-control-unadjudicated' };
 }
 const animalCols = 'id,numero,nombre,sexo,etapa,estado,fecha_estado,fecha_nacimiento,fecha_nacimiento_confianza,madre_id,padre_id,padre_toro_id,raza';
-const eventCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,transaccion_ganado_id,fin_ingreso_id,fuente,datos';
+const eventCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,transaccion_ganado_id,fin_ingreso_id,fuente';
 const animalsUrl = `${BASE_SINTETICA}/rest/v1/hato_animales?select=${animalCols}&order=id.asc&limit=200&offset=0`;
 const eventsUrl = `${BASE_SINTETICA}/rest/v1/hato_eventos?select=${eventCols}&order=fecha.asc,id.asc&fecha=gte.2026-09-01&fecha=lte.2026-09-30&tipo=eq.parto&limit=200&offset=0`;
 // Pinned raw request-body hashes. Recompute only after reviewing intentional protocol changes.
-const modelBodyHashes = ['cce2ab6e94f21a3839a0af93c289fa1f4ae6598efaae151b4b316e7cf52e9848', '63b0d47dd21a5953516bbc99dc9c181ca20b0a805a805aa328a567b62855e99b', 'f6ebd2de95958a896fcf9d7dddccf28683c7163b1ce6ca6622287291a928259c', 'b1952e5bd1a35905f04fd0523bdb04316b242400fe665ac2cb45d34c60e7bcaf'];
-const unavailableBodyHash = '6fcbce6b5e6feed6f5286762c0f5c2fe01b0812c867b6e73d2114ebb99211d4c';
-const partialBodyHash = 'abf105caacfda791ddf90c504e1e7c8cac017d0a1c1aaaeaa2a352e999e08000';
-async function control(options: { followup?: boolean; answer?: string; status?: number; total?: number } = {}) {
+const modelBodyHashes = ['0431e88ee4c2d8d99a840cf47dc4afeca83896938dec3f0517a0dd738c4b5948','8e012b6ecfb76be6054e201754f9813b156ccad4a5db30349e255187d12ef655'];
+async function control(options: { followup?: boolean; answer?: string; status?: number; total?: number; sourceMotherNumber?:number } = {}) {
   const c = caso(options.followup);
   const turns: PaqueteFixtures['scenarios'][0]['turns'] = [];
   const signatures = {
@@ -41,13 +39,11 @@ async function control(options: { followup?: boolean; answer?: string; status?: 
     animals: await firmaHttp(animalsUrl, { headers: dbHeaders }), events: await firmaHttp(eventsUrl, { headers: dbHeaders }),
   };
   for (let i = 0; i < (options.followup ? 2 : 1); i++) turns.push({ question: i ? FOLLOWUP : QUESTION, control_answer: '', fixtures: [
-    { tool: 'http', args: { ...signatures.model, body_sha256: modelBodyHashes[i * 2] }, result: message(call) },
-    { tool: 'http', args: signatures.animals, result: result([{ id: 'mother', numero: 87, nombre: 'MADRE SINTETICA', estado: 'activa' }], 200,
+    { tool: 'http', args: { ...signatures.model, body_sha256: modelBodyHashes[i] }, result: message(call) },
+    { tool: 'http', args: signatures.animals, result: result([{ id: 'mother', numero: options.sourceMotherNumber??87, nombre: 'MADRE SINTETICA', estado: 'activa' }], 200,
       { 'content-type': 'application/json', 'content-range': '0-0/1' }) },
     { tool: 'http', args: signatures.events, result: result(options.status === 503 ? { message: 'synthetic unavailable' } : [{ id: 'event', animal_id: 'mother', tipo: 'parto', fecha: '2026-09-20' }], options.status ?? 200,
       { 'content-type': 'application/json', 'content-range': `0-0/${options.total ?? 1}` }) },
-    { tool: 'http', args: { ...signatures.model, body_sha256: options.status === 503 ? unavailableBodyHash : options.total === 300 ? partialBodyHash : modelBodyHashes[i * 2 + 1] },
-      result: message({ role: 'assistant', content: options.answer ?? 'La madre sintética 87 tuvo un parto.' }) },
   ] });
   const s = { id: 'SYN-http', title: 'Synthetic actual-loop HTTP', seeds: ['synthetic'], channel: 'Web' as const,
     as_of_bogota: '2026-10-28 12:00:00', criteria: c.must, turns };
@@ -88,8 +84,8 @@ describe('unchanged actual loop under closed HTTP fixtures', () => {
     expect(r.resultado.corrida.asOf).toBe('2026-10-28T17:00:00.000Z');
     expect(r.resultado.corrida.tokens).toBeUndefined(); expect(vi.isFakeTimers()).toBe(false);
   });
-  it('fails a seeded numeric contradiction while retaining unavailable judge/review', async () => {
-    const { c, pack } = await control({ answer: 'La madre sintética 98 tuvo un parto.' });
+  it('detects seeded source-number contradiction while retaining unavailable judge/review', async () => {
+    const { c, pack } = await control({ sourceMotherNumber:98 });
     const r = await correrCasoCongelado(c, pack, 'SYN-http', PROMPT);
     expect(r.resultado.corrida.error).toBeUndefined(); expect(r.resultado.estado).toBe('falla');
     expect(r.medicion).toMatchObject({ exito_verificado: 0, juez_no_disponible: 1, sin_revision: 1 });

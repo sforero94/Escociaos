@@ -2115,31 +2115,11 @@ function getBot(): Bot<BotContext> {
   async function buildTelegramLlmMessages(
     conversationId: string,
     userId: string,
-  ): Promise<{ messages: Array<{role:string; content:string|null; tool_calls?:unknown[]; tool_call_id?:string; name?:string}>; contexto:ContextoCohorte }> {
+  ): Promise<{ messages: Array<{role:string; content:string|null; tool_calls?:unknown[]; tool_call_id?:string; name?:string;created_at?:string}>; contexto:ContextoCohorte }> {
     const sb = getSupabaseAdmin();
-    const [{ data: history }, { data: memoriasRows }] = await Promise.all([
-      sb
-        .from("chat_messages")
-        .select("id,role,content,metadata")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(20),
-      sb
-        .from("esco_memorias")
-        .select("id,content,created_at,source_channel")
-        .eq("user_id", userId)
-        .is("archived_at", null)
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ]);
-
-    const memorias = (memoriasRows ?? []) as Array<{
-      id: string;
-      content: string;
-      created_at: string;
-      source_channel?: string;
-    }>;
+    const {data:history}=await sb.from("chat_messages")
+      .select("id,role,content,metadata,created_at").eq("conversation_id",conversationId)
+      .order("created_at",{ascending:false}).order("id",{ascending:false}).limit(20);
 
     const telegramTweaks =
       "\n\nEstás respondiendo por Telegram. Sé conciso. " +
@@ -2153,34 +2133,14 @@ function getBot(): Bot<BotContext> {
       tool_calls?: unknown[];
       tool_call_id?: string;
       name?: string;
-    }> = [{ role: "system", content: getSystemPrompt(memorias) + telegramTweaks }];
+      created_at?: string;
+      id?:string;
+    }> = [{ role: "system", content: getSystemPrompt([]) + telegramTweaks }];
 
     const chronological=(history??[]).reverse();
-    if (history) {
-      for (const m of chronological) {
-        const meta = m.metadata as
-          | {
-              tool_interactions?: Array<{
-                tool: string;
-                args: Record<string, unknown>;
-                result_summary: string;
-              }>;
-            }
-          | undefined;
-        if (m.role === "assistant" && meta?.tool_interactions?.length) {
-          const ctx = meta.tool_interactions
-            .map(
-              (t) =>
-                `[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]`,
-            )
-            .join("\n");
-          messages.push({
-            role: "system",
-            content: `Datos consultados en la respuesta anterior:\n${ctx}`,
-          });
-        }
-        messages.push({ role: m.role, content: m.content });
-      }
+    for(const m of chronological){
+      // Preserve user-owned scope locally; never rebuild old assistant/tool/memory text.
+      if(m.role==="user")messages.push({id:m.id,role:m.role,content:m.content,created_at:m.created_at});
     }
 
     return {messages,contexto:contextoDesdeHistorial(userId,conversationId,'telegram',chronological)};
@@ -2463,7 +2423,7 @@ function getBot(): Bot<BotContext> {
       const {messages:llmMessages,contexto} = await buildTelegramLlmMessages(conversationId, userId);
 
       const { text: responseText, toolInteractions, cohorteAplicaciones } =
-        await llmToolLoop(llmMessages, userId,undefined,contexto);
+        await llmToolLoop(llmMessages, userId,undefined,contexto,{pregunta:userMessage,messageId:usuarioMensajeId});
       const cohortHandle=await conservarCohorteAplicaciones(contexto,usuarioMensajeId,asistenteMensajeId,userMessage,cohorteAplicaciones);
 
       // Save assistant response with tool interaction metadata
@@ -2520,9 +2480,8 @@ function getBot(): Bot<BotContext> {
           console.error("[Telegram] Chart render error:", chartErr);
         }
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error desconocido";
-      console.error("[Telegram] Esco AI error:", msg);
+    } catch {
+      console.error("[Telegram] Esco AI error:", "ESCO_QUERY_FAILED");
       await ctx.reply(
         "Hubo un error al procesar tu consulta. Intenta de nuevo.",
       );
@@ -2743,13 +2702,16 @@ export async function handleWebhook(c: HonoContext): Promise<Response> {
   }
 
   try {
+    let update: unknown;
+    try { update = await c.req.json(); } catch { return c.json({error:"Update inválido."},400); }
+    if(!update||typeof update!=="object"||Array.isArray(update)||!Number.isSafeInteger((update as {update_id?:unknown}).update_id))return c.json({error:"Update inválido."},400);
+    const incoming=(update as {message?:unknown}).message;
+    if(incoming!==undefined&&(!incoming||typeof incoming!=="object"||Array.isArray(incoming)||("text" in incoming&&typeof (incoming as {text:unknown}).text!=="string")))return c.json({error:"Update inválido."},400);
     const bot = getBot();
-    const update = await c.req.json();
-    await bot.handleUpdate(update);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Webhook error";
-    console.error("[Telegram] Webhook error:", msg);
-    return c.json({ error: msg }, 500);
+    await bot.handleUpdate(update as Parameters<typeof bot.handleUpdate>[0]);
+  } catch {
+    console.error("[Telegram] Webhook error:", "WEBHOOK_PROCESSING_FAILED");
+    return c.json({ error: "Webhook error" }, 500);
   }
   return c.json({ ok: true });
 }

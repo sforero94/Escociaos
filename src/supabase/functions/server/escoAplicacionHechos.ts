@@ -1,3 +1,5 @@
+import { DEFINITIONS, fechaValida, validarScope, validarEvidencia, type Evidence, type Fact, type PopulationProof, type Scope } from './escoEvidencia.ts';
+
 /** Application-only registered facts. No plan inputs, conversions or model prose. */
 type Fila = Record<string, unknown>;
 type Decimal = { n: bigint; scale: number };
@@ -137,4 +139,73 @@ export function hechosEjecucionAplicacion(movimientos: Fila[], trabajo: Fila[], 
       'Unidades distintas y productos con distinto ID permanecen separados; no hay conversión ni sustitución por plan.',
       'Costo jornal ya es el costo de la fracción registrada: no se multiplica de nuevo. Valores decimales son cadenas exactas.'],
   };
+}
+
+
+/** Exact application record metadata only. Never infer physical success from a status or date. */
+export const PROYECCION_FECHAS_APLICACION = 'id,estado,fecha_inicio_ejecucion,fecha_fin_ejecucion,fecha_inicio_planeada,fecha_fin_planeada' as const;
+export interface LecturaFechasAplicacion { rows: readonly Record<string, unknown>[]; proof: PopulationProof }
+export interface PuertoLecturaFechasAplicacion {
+  read(request: { scope: Scope; table: 'aplicaciones'; projection: typeof PROYECCION_FECHAS_APLICACION }): Promise<LecturaFechasAplicacion>;
+}
+const falloFechas = (scope: Scope, code: string): Evidence => ({ version: 1, state: 'error', scopes: validarScope(scope) ? [scope] : [], facts: [], issues: [{ partId: id(scope?.id) ?? 'application', code }] });
+function alcanceFechas(scope: Scope): boolean {
+  return validarScope(scope) && scope.operation === 'application.execution' && scope.entities.length === 1 &&
+    scope.entities[0].kind === 'application' && Object.keys(scope.filters).every(k => k === 'aplicacion_id') &&
+    (scope.filters.aplicacion_id === undefined || scope.filters.aplicacion_id === scope.entities[0].id) &&
+    (!scope.period || ['fecha_inicio_ejecucion', 'fecha_inicio_planeada'].includes(scope.period.fieldMeaning));
+}
+export function evidenciaFechasAplicacion(scope: Scope, reading: LecturaFechasAplicacion): Evidence {
+  if (!alcanceFechas(scope)) return falloFechas(scope, 'unsupported_operation');
+  const { rows, proof } = reading;
+  if (!Array.isArray(rows) || rows.length > 1 || !proof || proof.scopeId !== scope.id || proof.rowsRead !== rows.length) return falloFechas(scope, 'source_error');
+  const row = rows[0];
+  if (row && (row.id !== scope.entities[0].id || !proof.identityUnique)) return falloFechas(scope, 'duplicate_identity');
+  if (row && scope.period) {
+    const membershipDate = row[scope.period.fieldMeaning];
+    if (!fechaValida(membershipDate) || membershipDate < scope.period.from || membershipDate > scope.period.to) return falloFechas(scope, 'outside_scope');
+  }
+  const inconsistentInterval = (start: unknown, end: unknown) => fechaValida(start) && fechaValida(end) && end < start;
+  const inconsistentDates = !!row && (inconsistentInterval(row.fecha_inicio_ejecucion, row.fecha_fin_ejecucion) || inconsistentInterval(row.fecha_inicio_planeada, row.fecha_fin_planeada));
+  const facts: Fact[] = [];
+  const baseMetrics = ['application.status', 'application.actual_start', 'application.actual_end', 'application.planned_start', 'application.planned_end'] as const;
+  for (const metric of baseMetrics) {
+    const definition = DEFINITIONS[metric], raw = row?.[definition.field];
+    const planned = metric === 'application.planned_start' || metric === 'application.planned_end';
+    const valid = metric === 'application.status' ? ['Calculada', 'En ejecución', 'Cerrada'].includes(raw as string) : fechaValida(raw);
+    const reason = !row || raw === null || raw === undefined ? 'missing_value' : 'invalid_value';
+    facts.push({ id: scope.id + ':' + metric, scopeId: scope.id, metric, definitionId: metric + '.v1', entities: scope.entities.map(({ kind, id }) => ({ kind, id })),
+      value: valid ? metric === 'application.status' ? { kind: 'status', value: raw as string } : { kind: 'date', value: raw as string } : { kind: 'unknown', reason },
+      origin: planned ? 'planned' : 'recorded', assertion: 'record_value',
+      source: { tool: proof.tool, field: definition.field, capturedAt: proof.capturedAt },
+      coverage: { populationId: proof.populationId, population: proof.population, rowsRead: proof.rowsRead, expectedRows: proof.expectedRows,
+        identityUnique: proof.identityUnique, consistency: proof.consistency, values: valid ? 'complete' : 'unknown', missingValues: valid ? 0 : rows.length, reasons: valid ? [] : [reason] },
+    });
+  }
+  for (const [metric, actualMetric, plannedMetric] of [
+    ['application.start_comparison', 'application.actual_start', 'application.planned_start'],
+    ['application.end_comparison', 'application.actual_end', 'application.planned_end'],
+  ] as const) {
+    const actual = facts.find(f => f.metric === actualMetric)!, planned = facts.find(f => f.metric === plannedMetric)!;
+    const comparable = !inconsistentDates && actual.value.kind === 'date' && planned.value.kind === 'date';
+    facts.push({ ...actual, id: scope.id + ':' + metric, metric, definitionId: metric + '.v1', origin: comparable ? 'derived' : 'recorded',
+      assertion: comparable ? 'derived_measure' : 'record_value',
+      value: comparable ? { kind: 'status', value: actual.value.kind === 'date' && planned.value.kind === 'date' && actual.value.value === planned.value.value ? 'Iguales' : 'Diferentes' } : { kind: 'unknown', reason: inconsistentDates ? 'invalid_value' : 'no_direct_evidence' },
+      coverage: { ...actual.coverage, values: comparable ? 'complete' : 'unknown', missingValues: comparable ? 0 : rows.length, reasons: comparable ? [] : [inconsistentDates ? 'invalid_value' : 'no_direct_evidence'] },
+      ...(comparable ? { derivation: { operation: 'compare_dates' as const, inputs: [{ factId: actual.id }, { factId: planned.id }] } } : {}),
+    });
+  }
+  const issues = facts.filter(f => f.value.kind === 'unknown').map(f => ({ partId: f.id, code: f.value.kind === 'unknown' ? f.value.reason : 'missing_value' }));
+  const evidence: Evidence = { version: 1, state: issues.length || proof.population !== 'complete' ? 'partial' : 'ok', scopes: [scope], facts, issues };
+  return validarEvidencia(evidence, [scope], [proof]) ? evidence : falloFechas(scope, 'source_error');
+}
+export async function recolectarFechasAplicacion(scopes: readonly Scope[], port: PuertoLecturaFechasAplicacion): Promise<Evidence> {
+  if (!scopes.length || scopes.length > 20 || new Set(scopes.map(s => s.id)).size !== scopes.length) return { version: 1, state: 'error', scopes: [], facts: [], issues: [{ partId: 'application', code: 'scope_ambiguous' }] };
+  const parts: Evidence[] = [];
+  for (const scope of scopes) {
+    if (!alcanceFechas(scope)) { parts.push(falloFechas(scope, 'unsupported_operation')); continue; }
+    try { parts.push(evidenciaFechasAplicacion(scope, await port.read({ scope, table: 'aplicaciones', projection: PROYECCION_FECHAS_APLICACION }))); }
+    catch { parts.push(falloFechas(scope, 'source_error')); }
+  }
+  return { version: 1, state: parts.every(p => p.state === 'ok') ? 'ok' : parts.every(p => p.state === 'error') ? 'error' : 'partial', scopes: parts.flatMap(p => p.scopes), facts: parts.flatMap(p => p.facts), issues: parts.flatMap(p => p.issues).slice(0, 40) };
 }

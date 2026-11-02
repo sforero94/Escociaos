@@ -149,7 +149,10 @@ describe('closed-loop fresh application date comparison',()=>{
   expect(f.model()).toBe(1);
  });
  it('never issues a receipt when the original complete list could not be shown',async()=>{
-  const f=await fixture('web',true);expect(f.first.text).toContain('exceden el tamaño');expect(f.kv.size).toBe(0);
+  const f=await fixture('web',true);
+  expect(f.first.text).toContain('Aplicación sintética 2');expect(f.first.text).toContain('Aplicación sintética 3');
+  expect(f.first.text).toContain('Hay alcances solicitados sin hechos verificables');
+  expect(f.first.text).not.toContain('3 aplicaciones');expect(f.first.cohorteAplicaciones).toBeUndefined();expect(f.kv.size).toBe(0);
   expect((await f.compare()).text).toContain('listado reciente y verificable');expect(f.model()).toBe(1);
  });
  it('bounds fresh date output without claiming a silently shortened cohort is complete',async()=>{

@@ -45,13 +45,25 @@ describe('Telegram Message History', () => {
     expect(botSource).toContain('async function buildTelegramLlmMessages');
   });
 
-  it('buildTelegramLlmMessages debe cargar historial con metadata', () => {
-    // Supabase client uses .select("id,role,content,metadata")
-    expect(botSource).toMatch(/\.select\(["']id,role,content,metadata["']\)/);
+  it('buildTelegramLlmMessages debe cargar metadata y timestamp del servidor', () => {
+    const start = botSource.indexOf('async function buildTelegramLlmMessages');
+    const builder = botSource.slice(start, botSource.indexOf("contextoDesdeHistorial(userId,conversationId,'telegram'", start));
+    expect(builder).toMatch(/\.select\(["']id,role,content,metadata,created_at["']\)/);
+    expect(builder).toMatch(/created_at\s*:\s*m\.created_at/);
+    expect(builder).toMatch(/id\s*:\s*m\.id/);
   });
 
-  it('buildTelegramLlmMessages debe inyectar contexto de tool_interactions previas', () => {
-    expect(botSource).toContain('Datos consultados en la respuesta anterior');
+  it('buildTelegramLlmMessages no reconstruye contexto anterior y conserva la cohorte opaca', () => {
+    const start = botSource.indexOf('async function buildTelegramLlmMessages');
+    const builder = botSource.slice(start, botSource.indexOf('\n  // ============================================================================', start));
+    expect(builder).toMatch(/getSystemPrompt\(\s*\[\s*\]\s*\)/);
+    expect(builder).toMatch(/if\s*\(\s*m\.role\s*===\s*['"]user['"]\s*\)\s*messages\.push/);
+    expect(builder).not.toMatch(/(?:metadata|meta)\??\.tool_interactions|\.result_summary|JSON\.stringify\(t\.args\)/);
+    expect(builder).not.toContain('Datos consultados en la respuesta anterior');
+    expect(builder).not.toMatch(/\.from\(\s*['"]esco_memorias['"]\s*\)/);
+    expect(builder).toContain("contextoDesdeHistorial(userId,conversationId,'telegram',chronological)");
+    expect(botSource).toContain('messageId:usuarioMensajeId');
+    expect(botSource).toMatch(/application_cohort\s*:\s*cohortHandle/);
   });
 
   it('buildTelegramLlmMessages debe incluir tweaks de Telegram en system prompt', () => {

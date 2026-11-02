@@ -236,14 +236,47 @@ describe('Contrato y enrutamiento', () => {
     expect(summary.length).toBeGreaterThan(24000);
     expect(JSON.parse(summary)._evidencia.consulta_completa).toBe(false);
   });
-  it('copias de motor y chat son idénticas; historial carga últimos 20', () => {
+  it('copias de motor y chat son idénticas; historial carga últimos 20 y fuerza partos en primera ronda', async () => {
     const canonical = readFileSync('src/utils/escoConsultas.ts', 'utf8');
     for (const tree of ['src/supabase/functions/server', 'supabase/functions/make-server-1ccce916']) expect(readFileSync(`${tree}/esco-consultas.ts`, 'utf8')).toBe(canonical);
     const chat = readFileSync('src/supabase/functions/server/chat.tsx', 'utf8');
     expect(readFileSync('supabase/functions/make-server-1ccce916/chat.tsx', 'utf8')).toBe(chat);
     expect(chat).toContain('order=created_at.desc,id.desc&limit=20');
     expect(chat).toContain('history.reverse()');
-    expect(chat).toContain("function: { name: 'get_hato_partos' }");
+    // Parse the actual tool_choice expression. Formatting is not a routing contract.
+    const ts = await import('typescript');
+    const ast = ts.createSourceFile('chat.tsx', chat, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const unwrap = (node: import('typescript').Expression): import('typescript').Expression => ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node;
+    const property = (node: import('typescript').Expression | undefined, key: string): import('typescript').Expression | undefined => {
+      if (!node) return undefined;
+      const value = unwrap(node);
+      if (!ts.isObjectLiteralExpression(value)) return undefined;
+      const found = value.properties.find(p => ts.isPropertyAssignment(p) &&
+        (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text === key);
+      return found && ts.isPropertyAssignment(found) ? found.initializer : undefined;
+    };
+    const literal = (node: import('typescript').Expression | undefined) => node && ts.isStringLiteral(unwrap(node)) ? (unwrap(node) as import('typescript').StringLiteral).text : undefined;
+    let forced = 0;
+    function visit(node: import('typescript').Node) {
+      if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === 'tool_choice') {
+        const outer = unwrap(node.initializer);
+        if (ts.isConditionalExpression(outer)) {
+          const condition = unwrap(outer.condition);
+          const firstRound = unwrap(outer.whenTrue);
+          if (ts.isBinaryExpression(condition) && condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+            ts.isIdentifier(condition.left) && condition.left.text === 'round' && ts.isNumericLiteral(condition.right) && condition.right.text === '0' &&
+            ts.isConditionalExpression(firstRound) && ts.isIdentifier(firstRound.condition) && firstRound.condition.text === 'consultaPartosObligatoria') {
+            expect(literal(property(firstRound.whenTrue, 'type'))).toBe('function');
+            expect(literal(property(property(firstRound.whenTrue, 'function'), 'name'))).toBe('get_hato_partos');
+            expect(literal(firstRound.whenFalse)).toBe('required');
+            expect(literal(outer.whenFalse)).toBe('auto'); forced++;
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(ast);
+    expect(forced, 'one actual first-round mandatory birth-tool choice').toBe(1);
   });
 });
 
