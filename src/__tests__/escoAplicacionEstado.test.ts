@@ -16,14 +16,14 @@ function database(state=app.estado){
  aplicaciones_productos:[{id:'plan-a',mezcla_id:'mix-a',producto_id:'product-a',producto_nombre:'Producto sintético A',cantidad_total_necesaria:'188.52',unidad_dosis:'kg',dosis_por_caneca:'2'}],
  aplicaciones_lotes:[],aplicaciones_lotes_planificado:[],aplicaciones_calculos:[],registros_trabajo:[]};
  return async(table:string,query:string)=>{
-  if(!Object.hasOwn(rows,table))throw Error('Unexpected synthetic table');let out=rows[table];const p=new URLSearchParams(query);
+  if(!Object.prototype.hasOwnProperty.call(rows,table))throw Error('Unexpected synthetic table');let out=rows[table];const p=new URLSearchParams(query);
   for(const[k,v]of p){if(['select','order','offset','limit'].includes(k))continue;const i=v.indexOf('.'),op=v.slice(0,i),value=v.slice(i+1);
    out=out.filter(x=>op==='eq'?String(x[k])===value:op==='in'?value.slice(1,-1).split(',').map(y=>y.replace(/"/g,'')).includes(String(x[k])):op==='gte'?x[k]!=null&&String(x[k])>=value:op==='lte'?x[k]!=null&&String(x[k])<=value:false);}
   return out.slice(Number(p.get('offset')??0),Number(p.get('offset')??0)+Number(p.get('limit')??200));
  };
 }
 async function loopProbe(channel:'Web'|'Telegram',discovery=false,state=app.estado){
- const {llmToolLoop}=await import('../supabase/functions/server/chat.tsx');const read=database(state);let model=0;const observed:Record<string,unknown>[]=[];
+ const modulePath='../supabase/functions/server/chat.tsx';const {llmToolLoop}=await import(modulePath) as {llmToolLoop:(messages:unknown[],user:string)=>Promise<{text:string;toolInteractions:{tool:string;args:FilaEsco;result_summary:string}[]}>};const read=database(state);let model=0;const observed:Record<string,unknown>[]=[];
  vi.stubGlobal('Deno',{env:{get:(key:string)=>key==='SUPABASE_URL'?'https://status-fixture.invalid':'synthetic-key'}});
  vi.stubGlobal('fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
   const req=new Request(input,init),url=new URL(req.url);
