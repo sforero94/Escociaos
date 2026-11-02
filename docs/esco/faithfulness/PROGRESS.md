@@ -1,6 +1,13 @@
 # Progress and handoff
 
-## Current state — application product-question routing and release preparation, 2026-11-02 UTC
+## Current state — read-only release diagnosis preparation, 2026-11-02 UTC
+
+- PR391 source `48a925cca797ac470832f07f6b1c6f7addc61a4b` is integrated. PR392 controls merged unchanged as `ffe607797f086b2e3955dc7364b14bc393a73b87`, preserving the intervening PO documentation. Exact-merge CI41446157692 passed 5,419 tests / 241 files, types/lint and GitHub Vercel.
+- The single approved release41446616421 / job125281202903 exited1 before the first successful capture receipt. No deployment or rollback marker; independently verified ACTIVE v288 metadata/configuration remained unchanged. There are no retained artifacts. Generic error suppression prevents distinguishing auth/transport/setup from a source/proof guard. Latest-version cache drift is only a locally reproduced hypothesis.
+- Explicit owner approval permits a separate diagnose-only job, conditional integration and one read-only execution after review. The [bounded diagnostic draft](DIAGNOSE_APPLICATION_CONSUMPTION.md) fixes source/recovery/baseline, keeps the existing layout/config/type/source guards, reports only safe stage/error codes and bounded HTTP/CLI status, and always attempts cleanup. No release driver or deployment/rollback command is reachable. This turn stops at publication and parent review; no merge or dispatch.
+- Runtime, SQL, shared helpers, credentials/permissions/providers and old consumed controls remain unchanged. Current technical/online outcomes and historical failures are preserved. Final-content checks and independent review are recorded in the candidate handoff; no live diagnosis or online acceptance is claimed.
+
+## Historical state — application product-question routing and release preparation, 2026-11-02 UTC
 
 - Baseline main `efd073f7936b0cab41faf7dba3fca5cfd6919c8a` preserves the scheduled drift-state update after PR390. The approved release of the KV correction succeeded: backend v288, source `bf6a8a30dadcafdc9e27b3b9514d1b77f8d4ad58`, release [41331467207](https://github.com/sforero94/Escociaos/actions/runs/41331467207), one deployment and zero rollbacks. Health/source/configuration verification is separate from answer quality.
 - Parent's v288 campaign stopped after eight sends: six useful answers, one coverage-inconclusive answer, one source-answerable product/lot question refused, eight unrun. Preserve that failure and the inconclusive classification; this candidate has no online acceptance evidence.
