@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: DIAGNOSE_APPLICATION_CONSUMPTION_V288_ONLY
+        description: DIAGNOSE_APPLICATION_CONSUMPTION_V288_CLASSIFY_ONLY
         required: true
         type: string
 permissions:
