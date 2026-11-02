@@ -635,3 +635,10 @@ mensual sigue siendo la unica legible.**
 - database.ts se atrasa tras cada migración aditiva (faltan 180 y 181 desde 10-16). Si crece, filar aparte, no como ESCO-143. [corrida: 2026-10-26-lunes]
 - Ráfaga del 10-23: 3 PR fusionados en 27 s. Próximo chequeo de cadencia mensual: 2026-11-02 (primer lunes). [corrida: 2026-10-26-lunes]
 - Fusionados tras la corrida: #342 (guard de chat-id de Telegram, 27aecef), #340 (475d1d6), #341 (0a95d60). Abierto: #343 (ESCO-164). #342 solo toca un test (telegramWebhookSecretoGuard.test.ts): sin despliegue. [sesion en vivo 2026-10-26]
+
+## Corrida 2026-11-02-lunes
+- Navegación: el worktree es un clon superficial que arranca en el HEAD de la corrida anterior; una cadencia mensual da 0 en semanas anteriores en silencio. Correr `git fetch -q --shallow-since=<inicio de ventana − 7 días> origin main` antes de medir. [corrida: 2026-11-02-lunes]
+- Navegación: para probar vigencia del edge en una ventana de varios PRs, ubicar el commit del drift-state de la versión viva (v288 = d88f6db) y `git diff --stat <sha> origin/main -- supabase/functions/make-server-1ccce916 src/supabase/functions/server`; sólo lo listado está sin desplegar. [corrida: 2026-11-02-lunes]
+- Estado aceptado: un cambio de Esco fusionado y no desplegado NO es hallazgo mientras su PR `chore(esco): prepare … release` esté abierto o fusionado; el detector se pone rojo en ese hueco por diseño. [corrida: 2026-11-02-lunes]
+- Baseline despliegue: HEAD 48a925c, frontend PROMOTED (verificado por contenido); edge v288 = d88f6db, un PR atrás (#391, release #392); migraciones hasta 188; ledger del CLAUDE.md sin 186 (filado ESCO-168, VIERNES). [corrida: 2026-11-02-lunes]
+- Baseline cadencia mensual (10-05→11-02): 38,8 commits/semana, 29,5 aterrizajes/semana; fix 83,6% (72,7% sin el programa de fidelidad de Esco); lag edge ~21 h por workflow de release; frontend automático. [corrida: 2026-11-02-lunes]

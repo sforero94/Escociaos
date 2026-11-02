@@ -859,3 +859,10 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - aplicaciones total = 23. Editar un ingreso de aguacate y cambiarle el negocio deja la cosecha vieja en la fila: sin efecto en cifras (todo lector filtra por vista antes). No filar. [corrida: 2026-10-26-lunes]
 - PR #340 (ESCO-161) y #341 (ESCO-163) fusionados por Santiago: 475d1d6 y 0a95d60. Cerrados en Notion. [sesion en vivo 2026-10-26]
 - ESCO-164: decisión «cantidad actual 0 al crear el insumo siempre». PR #343 (ProductForm fuerza 0 en creación, campo de solo lectura). Pendiente fuera de alcance: importar-productos.tsx (CSV, ambos árboles) todavía acepta cantidad_actual en productos nuevos sin movimiento. [sesion en vivo 2026-10-26]
+
+## Corrida 2026-11-02-lunes
+- Baseline main@48a925c VERDE: vitest 241 archivos / 5.418 tests; tsc exit 0; lint 0 errores / 907 warnings (910 antes). [corrida: 2026-11-02-lunes]
+- ESCO-159 verificado en producción y cerrado: reporte semana 43 del 2026-10-26 12:50Z, cero 400 en edge_logs 12:30–13:10Z. query_logs acepta ventanas de más de 24 h atrás si la ventana mide ≤ 24 h. [corrida: 2026-11-02-lunes]
+- ESCO-164 cerrado por el formulario (PR #343); residuo en importar-productos.tsx:451-452 (ambos árboles) filado como ESCO-167 (FDS decision). No reportar el camino CSV como arreglado hasta que se decida. [corrida: 2026-11-02-lunes]
+- La etiqueta real del ENUM no es 'Salida' (22P02): leer etiquetas con group by tipo_movimiento::text antes de filtrar. hato_capturas_foto no tiene created_at. [corrida: 2026-11-02-lunes]
+- hato_alertas_respuesta_trazas (186): una respuesta 'no' escribe evento con omitido:true por diseño; no es un evento perdido. Ventana 24 h tranquila: edge_logs todo 2xx (1.471), sin líneas de error. [corrida: 2026-11-02-lunes]

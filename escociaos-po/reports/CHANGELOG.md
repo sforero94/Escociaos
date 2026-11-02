@@ -23,6 +23,42 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-11-02 — corrida lunes
+
+**25 PRs merged** (2026-10-26 → 2026-11-02) and **four migrations applied** (185 ledger
+`20261028014545`, 186 `20261028193716`, 187 `20261029183837`, 188 `20261030023201`). The
+frontend is on `48a925c` (Vercel READY/PROMOTED, verified by content). The edge function
+`make-server-1ccce916` is v288 (2026-11-01T17:26:53Z = drift state of `d88f6db`). Only #391
+(Esco wording, `esco-consultas.ts`) waits for its release workflow (draft PR #392).
+
+### Inventario
+- A new product always starts at stock 0; the first purchase no longer doubles the stock (ESCO-164, #343). The CSV product import still has the old behaviour (ESCO-167).
+- Purchases, inventory movements and purchase deletes save in one transaction, with a retry that cannot duplicate (#353, migration 185).
+
+### Hato Lechero
+- A "Sí" reply to a Telegram alert records who answered, closes an escalated alert, dates the drying in Bogotá time and confirms. Each reply step is kept 90 days (#356, migration 186).
+
+### Aplicaciones
+- An application cannot be saved with a start date after its end date, planned or real. Existing rows unchanged (#371, migration 188).
+
+### Finanzas
+- A batch of expenses saves with a retry that cannot create duplicates (#360, #362, migration 187).
+
+### Reportes
+- The weekly report PDF is again a readable 16:9 deck (#347); Monitoreo is one slide per page (#348). The planned-application queries no longer return 400 (ESCO-159, #336, verified on the week-43 report).
+
+### Clima
+- Today's live rain groups readings by the Bogotá day, not the browser's day (#349).
+
+### Esco
+- Answers about applications use fresh, permitted facts, keep month and year, and separate recorded consumption from planned quantity (#376–#389). Empty or malformed final answers are rejected (#367, #376). Milk answers keep animal identity and source evidence (#377). Each backend change shipped through its own approved release (v282 → v288).
+
+### Interno
+- Offline Esco faithfulness evaluation (#357–#366); one-time pinned release tooling (#368–#370, #372, #374, #379–#390); security review S1–S5 closed (#354, #373); PO operation updates (#344, #345, #350–#352, #365, #375); Telegram chat-id guard (#342); docs refreshes (#340, #341).
+
+### Requiere despliegue manual
+- #391 (`esco-consultas.ts`, both trees): not on the edge yet; goes through the approved Esco release (draft PR #392). Until then the drift detector reports a difference.
+
 ## 2026-10-26 — corrida lunes
 
 **Three PRs merged** (#336, #337 and #339, all on 2026-10-23 within 27 seconds) and **one
