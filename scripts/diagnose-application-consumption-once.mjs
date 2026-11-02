@@ -4,7 +4,7 @@ import {cp,mkdir,mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {PROJECT,TARGET,DEPLOY_CONFIG,normalized,fingerprint,diagnosticInventory} from './release-faithfulness-proof.mjs';
-import {reconstructCapture} from './release-application-date-cohort-capture.mjs';
+import {reconstructCapture,readLatestCache} from './release-application-date-cohort-capture.mjs';
 import {inspectRawCapture} from './diagnose-application-consumption-classifier.mjs';
 export const SOURCE=Object.freeze({sha:'48a925cca797ac470832f07f6b1c6f7addc61a4b',tree:'1bc6254f47858acc63a3329ec219df296dddf6b4',hash:'d611ff0a8864b05a0e960e21edb242219dfa07e2e64c11c8d8ada9d2cec2d4f5'});
 export const RECOVERY=Object.freeze({sha:'bf6a8a30dadcafdc9e27b3b9514d1b77f8d4ad58',tree:'14b02e7c564c8a05d6d26939f008111e759c1c65',hash:'a8ad35ddfb11af95909791ad96a08e9a90bde9c61bd2efde7bffdc54d44d6a02',native:'6e0027496d63d6b8c603e5590d0e4a4cd22a30df54173351ce2f4f797956bee4'});
@@ -103,7 +103,7 @@ export async function main(env=process.env,args=process.argv.slice(2)){
   prove:async()=>{
    const rawInventory=await diagnosticInventory(raw),gitInventory=await diagnosticInventory(join(recovery,'supabase/functions',TARGET));
    const config=await readFile(join(recovery,'supabase/config.toml'));
-   inspectRawCapture(rawInventory,gitInventory,config,emit);
+   inspectRawCapture(rawInventory,gitInventory,config,emit,await readLatestCache(raw));
    return reconstructCapture(raw,recovery,join(root,'first-clean'),ts);
   },
   cleanup:async()=>{if(root){await rm(root,{recursive:true,force:true});root=null;}},

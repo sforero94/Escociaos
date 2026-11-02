@@ -1,6 +1,13 @@
 # Progress and handoff
 
-## Current state — second read-only mismatch diagnosis preparation, 2026-11-02 UTC
+## Current state — bounded latest-release cache validation, 2026-11-02 UTC
+
+- PR394 merged as `95c85b390db6b5b1b742c1a16ba87ce2d0d5ba3d`; postmerge CI41463885413 / job125339572725 passed 5,420 tests / 241 files, types/lint and GitHub Vercel.
+- Its one classify-only diagnosis41464595925 / job125342064497 / attempt1 reported CACHE_ONLY, cacheChanged=1/latestChanged=1, all other counters zero, then preserved RAW_LAYOUT_REJECTED. Cleanup passed; no artifacts, deployments or rollbacks. Full type/reconstruction proof and the second metadata guard were not reached. Actual cache bytes and the older failed release's cause remain unproved. Independent 14:46 UTC metadata still observed ACTIVE v288.
+- Owner's November 2 outcome-based authorization permits the bounded correction. [Cache policy and evidence](CLI_LATEST_CACHE.md) replace only the known notification entry's fixed hash with bounded ASCII SemVer byte validation, bound to the raw inventory. All source/config/linked-project/wrapper/type/reconstruction, pinned CLI and operational guards remain. No runtime, SQL, workflow permission, provider or credential changes.
+- This candidate stops at draft publication and parent independent review. No new capture, dispatch, deployment, rollback or online send. Online v288 results remain six useful, one coverage-inconclusive, one source-answerable failure, eight unrun. Synthetic proofs are not online acceptance. Final-content local checks, independent review and exact-head CI are reported in the candidate handoff.
+
+## Historical state — second read-only mismatch diagnosis preparation, 2026-11-02 UTC
 
 - PR393 merged as `29ecd88fac81d05bc80c9a14d2bcdbe15723f30c`; exact-merge CI41452325454 / job125300306214 passed 5,420 tests / 241 files, types/lint and GitHub Vercel. PO documents and runtime remain preserved.
 - Its one approved diagnosis41452881917 / job125302160494 passed setup, initial baseline metadata, pinned Git/config checks and download, then failed first proof with RAW_LAYOUT_REJECTED. Cleanup passed; no artifacts, deployments or rollbacks. No second metadata guard ran. Independent afterward metadata matched ACTIVE v288; do not infer a continuous snapshot, a specific differing entry or the older release cause.

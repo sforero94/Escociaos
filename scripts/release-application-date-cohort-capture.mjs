@@ -1,6 +1,7 @@
 // Exact v286 recovery (84 files) and reviewed date-cohort candidate (85 files). No network on import.
 import { createHash } from 'node:crypto';
-import { readFile, cp, mkdir } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { readFile, cp, mkdir, open, lstat } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { diagnosticInventory, downloadedFingerprint, fingerprint, TARGET } from './release-faithfulness-proof.mjs';
 
@@ -15,6 +16,39 @@ const CACHE = Object.freeze({
 function insist(ok, message) { if (!ok) throw new Error(message); }
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const layoutError = 'Raw download differs from exact observed source/cache layout';
+const latestPath = 'supabase/.temp/cli-latest';
+// Notification metadata only, never a selector for the pinned CLI binary. This
+// conservative policy is stricter than the upstream writer (raw release tag).
+// Legacy pure callers still require their original exact v2.122.0 snapshot.
+export function latestCacheEntry(content = Buffer.from('v2.122.0')) {
+  insist(Buffer.isBuffer(content) && content.length > 0 && content.length <= 128 &&
+    content.every(byte => byte >= 0x21 && byte <= 0x7e), layoutError);
+  const text = content.toString('ascii');
+  const match = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(text);
+  insist(match && (!match[4] || match[4].split('.').every(part => !/^\d+$/.test(part) || part === '0' || !part.startsWith('0'))), layoutError);
+  return { path: latestPath, type: 'file', bytes: content.length, sha256: hash(content) };
+}
+
+// Read at most 129 bytes, without following the final symlink or reading a FIFO.
+// Bind the validated bytes to the independent raw inventory by size and hash.
+export async function readLatestCache(raw) {
+  let file;
+  try {
+    for (const path of ['supabase', 'supabase/.temp']) insist((await lstat(join(raw, path))).isDirectory(), layoutError);
+    file = await open(join(raw, latestPath), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const before = await file.stat();
+    insist(before.isFile() && before.size > 0 && before.size <= 128, layoutError);
+    const buffer = Buffer.alloc(129);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    const after = await file.stat();
+    insist(bytesRead === before.size && before.size === after.size && before.mtimeMs === after.mtimeMs && before.ctimeMs === after.ctimeMs, layoutError);
+    const content = buffer.subarray(0, bytesRead);
+    latestCacheEntry(content);
+    return content;
+  } catch { throw new Error(layoutError); }
+  finally { if (file) await file.close(); }
+}
 
 // Run against the pinned, clean Git checkout, not the downloaded source.
 export async function proveTypeOnly(gitTree, ts) {
@@ -61,7 +95,7 @@ export async function proveTypeOnly(gitTree, ts) {
   return { typeScriptVersion: ts.version, omitted: OMITTED, statementKinds, references: refs, emitsOnlyEmptyModules: true };
 }
 
-export function validateRawInventory(rawInventory, gitInventory, config) {
+export function validateRawInventory(rawInventory, gitInventory, config, latestContent) {
   const prefix = `supabase/functions/${TARGET}/`;
   insist([84,85].includes(gitInventory.fileCount) && gitInventory.entries.filter(e=>e.type==='file').length===gitInventory.fileCount, 'Unexpected approved Git inventory');
   const expected = [
@@ -69,20 +103,21 @@ export function validateRawInventory(rawInventory, gitInventory, config) {
     { path: 'supabase/config.toml', type: 'file', bytes: config.length, sha256: hash(config) },
     ...gitInventory.entries.filter(e => !Object.hasOwn(OMITTED, e.path)).map(e => ({ ...e, path: prefix + e.path })),
   ];
-  const additions = [{ path: 'supabase/.temp', type: 'directory' }, ...Object.entries(CACHE).map(([name, [bytes, sha256]]) =>
-    ({ path: `supabase/.temp/${name}`, type: 'file', bytes, sha256 }))];
+  const additions = [{ path: 'supabase/.temp', type: 'directory' }, latestCacheEntry(latestContent),
+    ...Object.entries(CACHE).filter(([name]) => name !== 'cli-latest').map(([name, [bytes, sha256]]) =>
+      ({ path: `supabase/.temp/${name}`, type: 'file', bytes, sha256 }))];
   const sorted = (entries) => entries.slice().sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
   insist(equal(sorted(rawInventory.entries), sorted([...expected, ...additions])), 'Raw download differs from exact observed source/cache layout');
 }
 
 // Raw capture stays untouched. Destination must not exist (mkdir, never recursive).
-// All metadata/cache paths are exact, including their observed bytes and hashes.
+// Only the known latest-release notice may vary under the bounded tag policy.
 export async function reconstructCapture(raw, gitRoot, clean, ts) {
   const rawInventory = await diagnosticInventory(raw);
   const gitTree = join(gitRoot, 'supabase/functions', TARGET);
   const gitInventory = await diagnosticInventory(gitTree);
   const config = await readFile(join(gitRoot, 'supabase/config.toml'));
-  validateRawInventory(rawInventory, gitInventory, config);
+  validateRawInventory(rawInventory, gitInventory, config, await readLatestCache(raw));
   const typeProof = await proveTypeOnly(gitTree, ts);
   const reconstructed = await reconstructSource(raw, gitRoot, clean);
   const native = await fingerprint(join(raw, 'supabase/functions', TARGET));

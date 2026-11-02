@@ -1,7 +1,7 @@
 // Diagnostic categories only. This never replaces or relaxes validateRawInventory.
 import {createHash} from 'node:crypto';
 import {TARGET} from './release-faithfulness-proof.mjs';
-import {OMITTED,validateRawInventory} from './release-application-date-cohort-capture.mjs';
+import {OMITTED,validateRawInventory,latestCacheEntry} from './release-application-date-cohort-capture.mjs';
 const prefix=`supabase/functions/${TARGET}/`,limit=512;
 const cache=new Map([
  ['supabase/.temp/cli-latest',{bytes:8,sha256:'e259ceef24c76934bc3c6884c465e636c7f058e1b275e46de8d1e51a5dc8c4c4'}],
@@ -45,7 +45,7 @@ function snapshot(value){
  return result;
 }
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
-export function classifyRaw(raw,gitInventory,config){
+export function classifyRaw(raw,gitInventory,config,latestContent){
  const counts=empty();let gitEntries,expected,reference;
  try{
   gitEntries=snapshot(gitInventory);
@@ -54,10 +54,10 @@ export function classifyRaw(raw,gitInventory,config){
   expected=[...['supabase','supabase/functions',`supabase/functions/${TARGET}`].map(path=>({path,type:'directory'})),
    {path:'supabase/config.toml',type:'file',bytes:config.length,sha256:sha(config)},
    ...gitEntries.filter(e=>!Object.hasOwn(OMITTED,e.path)).map(e=>({...e,path:prefix+e.path})),
-   {path:'supabase/.temp',type:'directory'},...Array.from(cache,([path,value])=>({path,type:'file',...value}))];
+   {path:'supabase/.temp',type:'directory'},...Array.from(cache,([path,value])=>path==='supabase/.temp/cli-latest'?latestCacheEntry(latestContent):({path,type:'file',...value}))];
   // Copied diagnostic reference must itself satisfy the unchanged authority.
   if(expected.length>limit)problem('REFERENCE_INVALID');
-  validateRawInventory({entries:expected},reference,config);
+  validateRawInventory({entries:expected},reference,config,latestContent);
  }catch{return{category:'REFERENCE_INVALID',counts};}
  let actual;
  try{actual=snapshot(raw);}catch(code){
@@ -81,7 +81,7 @@ export function classifyRaw(raw,gitInventory,config){
    if(isCache)inc(entry.path==='supabase/.temp/cli-latest'?'latestChanged':'linkChanged');
   }
  }
- let accepted=false;try{validateRawInventory({entries:actual},reference,config);accepted=true;}catch{/* Classification cannot approve. */}
+ let accepted=false;try{validateRawInventory({entries:actual},reference,config,latestContent);accepted=true;}catch{/* Classification cannot approve. */}
  const kinds=[['CACHE_ONLY',counts.cacheChanged+counts.cacheMissing],['SOURCE_ONLY',counts.sourceChanged+counts.sourceMissing],['WRAPPER_ONLY',counts.wrapperChanged+counts.wrapperMissing],['CONFIG_ONLY',counts.configChanged+counts.configMissing]].filter(([,n])=>n>0);
  let category;
  if(counts.unsafe)category='UNSAFE_LAYOUT';
@@ -91,10 +91,10 @@ export function classifyRaw(raw,gitInventory,config){
  else category=kinds.length?'MIXED_MISMATCH':'UNKNOWN_LAYOUT';
  return{category,counts};
 }
-export function inspectRawCapture(raw,gitInventory,config,emit){
+export function inspectRawCapture(raw,gitInventory,config,emit,latestContent){
  let error,failed=false;
- try{validateRawInventory(raw,gitInventory,config);}catch(e){error=e;failed=true;}
- const event={stage:'mismatch',event:'classified',...classifyRaw(raw,gitInventory,config)};
+ try{validateRawInventory(raw,gitInventory,config,latestContent);}catch(e){error=e;failed=true;}
+ const event={stage:'mismatch',event:'classified',...classifyRaw(raw,gitInventory,config,latestContent)};
  if(failed){try{emit(event);}catch{/* Preserve the original rejection. */}throw error;}
  emit(event); // Reporting failure stops; successful classification cannot bypass proof.
 }
