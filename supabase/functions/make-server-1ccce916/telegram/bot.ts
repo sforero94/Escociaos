@@ -267,6 +267,37 @@ function getBot(): Bot<BotContext> {
     await sendMainMenu(ctx);
   });
 
+  // An expired callback acknowledgement must not hide the actual reply.
+  async function confirmarBotonPesaje(ctx: BotContext) {
+    await ctx.answerCallbackQuery().catch(() => {
+      console.warn("[Telegram] No se pudo confirmar el botón de pesaje.");
+    });
+  }
+
+  // A pending conversation can consume commands/menu buttons before their
+  // handlers run. Give the user a choice before replay, without exiting or
+  // changing that operation. enter() stays below createConversation, where
+  // the plugin has registered the conversation builders for this update.
+  bot.use(async (ctx, next) => {
+    const botonPesaje = ctx.hasCallbackQuery("start_pesajeLeche");
+    if (!ctx.hasCommand("pesaje") && !botonPesaje) return next();
+
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      if (botonPesaje) await confirmarBotonPesaje(ctx);
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+
+    if (!Object.values(ctx.conversation.active()).some((cantidad) => cantidad > 0)) {
+      return next();
+    }
+
+    if (botonPesaje) await confirmarBotonPesaje(ctx);
+    await ctx.reply(
+      "Tienes una operación pendiente. Puedes terminarla o escribir /cancelar para descartarla. Después usa /pesaje para empezar otra carga.",
+    );
+  });
+
   bot.use(createConversation(jornalConversation, "jornal"));
   bot.use(createConversation(monitoreoConversation, "monitoreo"));
   bot.use(createConversation(ingresoConversation, "ingreso"));
@@ -1276,7 +1307,7 @@ function getBot(): Bot<BotContext> {
   });
 
   bot.callbackQuery("start_pesajeLeche", async (ctx) => {
-    await ctx.answerCallbackQuery();
+    await confirmarBotonPesaje(ctx);
     if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
       await ctx.reply("No tienes acceso a este módulo.");
       return;
