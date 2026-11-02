@@ -1,0 +1,63 @@
+name: One read-only application consumption diagnosis
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: DIAGNOSE_APPLICATION_CONSUMPTION_V288_ONLY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: escocia-backend-release
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'sforero94/Escociaos' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DIAGNOSE_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reject other invocations before credentials
+        run: node scripts/diagnose-application-consumption-once.mjs --check-invocation
+      - name: Checkout fixed source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 48a925cca797ac470832f07f6b1c6f7addc61a4b
+          path: release-source
+          persist-credentials: false
+      - name: Checkout fixed v288 recovery
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: bf6a8a30dadcafdc9e27b3b9514d1b77f8d4ad58
+          path: rollback-source
+          persist-credentials: false
+      - name: Prepare pinned tools without management credentials
+        env:
+          CLI_CACHE: ${{ runner.temp }}/faithfulness-cli-cache
+        run: |
+          set -euo pipefail
+          if ! npx --cache "$CLI_CACHE" --yes --package supabase@2.122.0 -- supabase --version >/dev/null 2>&1; then
+            echo '{"stage":"tooling","event":"failed","code":"CLI_SETUP_FAILED"}'
+            exit 1
+          fi
+          if ! npm install --prefix "$RUNNER_TEMP/faithfulness-proof" --ignore-scripts --no-audit --no-fund typescript@5.9.3 >/dev/null 2>&1; then
+            echo '{"stage":"tooling","event":"failed","code":"TS_SETUP_FAILED"}'
+            exit 1
+          fi
+          echo '{"stage":"tooling","event":"ok"}'
+      - name: Closed diagnostic tests without credentials
+        env:
+          PROOF_TYPESCRIPT: ${{ runner.temp }}/faithfulness-proof/node_modules/typescript/lib/typescript.js
+        run: node --test scripts/diagnose-application-consumption-once.checks.mjs
+      - name: Read metadata and first capture only; always clean up
+        env:
+          CLI_CACHE: ${{ runner.temp }}/faithfulness-cli-cache
+          PROOF_TYPESCRIPT: ${{ runner.temp }}/faithfulness-proof/node_modules/typescript/lib/typescript.js
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/diagnose-application-consumption-once.mjs
