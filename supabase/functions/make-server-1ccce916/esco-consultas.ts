@@ -172,6 +172,7 @@ export interface SolicitudAplicacion { pregunta: string; anterior?: string; coho
 type SeleccionAplicacion = { estado:'verificada'; version:'aplicacion_selector_v1'; aplicacion_ids:string[]|null; lote_ids:string[]|null; referencia:'actual'|'usuario_anterior' } | { estado:'aclarar'; mensaje:string };
 const normalizarSelector = (v:unknown) => normalizarTextoAplicacion(v).replace(/[«»"'()[\],:;!?¿¡—–]/g,' ').replace(/\s+/g,' ').trim();
 const palabrasNombre = (v:unknown) => normalizarSelector(v).split(' ').filter(w=>!['el','la','los','las','de','del','contra','control','aplicacion','fumigacion','fertilizacion'].includes(w)).join(' ');
+const preguntaEstadoInicial = (q:string) => /^(?:sigue|esta|continua|permanece) (?:abierta|activa|en ejecucion|en curso|cerrada) (?:la|esa|esta) (?:aplicacion|fumigacion|fertilizacion)\b/.test(q.replace(/^(?:consulta de )?solo lectura:?\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, ''));
 /** Literal application/lot selectors against the already-read fresh catalogs. No model identity authority. */
 export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco[], lotes:FilaEsco[], plural:boolean):SeleccionAplicacion {
   const fail=(message:string):SeleccionAplicacion=>({estado:'aclarar',mensaje:message});
@@ -179,8 +180,12 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
   const extract=(question:string,lot=false) => {
     const found=question.match(lot?/\blote\s+(.+)$/ : /\b(?:aplicacion|fumigacion|fertilizacion)\b\s*(.*)$/);
     if(!found)return '';
-    return found[1].replace(/^(?:(?:llamada|denominada|nombre|id|contra|para|de)\s+)+/,'')
-      .split(/\b(?:(?:en (?:el |la |ese |este |anterior )?)?lote|del? (?=\d)|desde|entre|(?:en|para|durante|de) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)|segun|sin|con (?:canecas|dosis)|hoy|ayer|anteayer|hace dos dias|este mes|mes pasado|esta semana|semana pasada|y (?:el |los |la |las )?(?:estado|fechas|consumo|jornales|mano de obra|costo laboral))\b/)[0].trim();
+    const selector=found[1].replace(/^(?:(?:llamada|denominada|nombre|id|contra|para|de)\s+)+/,'');
+    const boundaries=[...selector.matchAll(/\b(?:(?:en (?:el |la |ese |este |anterior )?)?lote|del? (?=\d)|desde|entre|(?:en|para|durante|de) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)|segun|sin|con (?:canecas|dosis)|hoy|ayer|anteayer|hace dos dias|este mes|mes pasado|esta semana|semana pasada|y (?:el |los |la |las )?(?:estado|fechas|consumo|jornales|mano de obra|costo laboral))\b/g)];
+    // Preserve every literal month token in a named status selector, including
+    // prior-user references and name/ID conflicts. Never select another month.
+    const end=boundaries.find(m=>!(!lot && preguntaEstadoInicial(question) && /^de (?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/.test(m[0]) && /\bmes $/.test(selector.slice(0,m.index))));
+    return selector.slice(0,end?.index??selector.length).trim();
   };
   let reference:'actual'|'usuario_anterior'='actual', appSelector=extract(q), lotSelector=extract(q,true);
   if(!appSelector && /\b(?:esa|esta|anterior) aplicacion\b|\baplicacion anterior\b/.test(q)) {
@@ -269,10 +274,13 @@ export type PlanRespuestaAplicacion = { tipo: 'fuera'; motivo: string } | {
 /** Closed application operations, not a filter over arbitrary generated prose. */
 export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): PlanRespuestaAplicacion {
   const normalizada = normalizarPreguntaAplicacion(pregunta), q = normalizada.texto;
+  const operation=q.replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, '');
+  // A singular status question asks us to discover the registered state, not
+  // to hide closed records behind the model's proposed active-state filter.
+  const estadoInicial=preguntaEstadoInicial(q);
   // A recognized fronted request stays closed if any legacy operation/scope
   // guard rejects it. Never fall through to unconstrained model prose.
-  const fuera = (motivo: string): PlanRespuestaAplicacion => ({ tipo: 'fuera', motivo:normalizada.consumoInicial && motivo!=='otro_dominio' ? 'consumo_inicial_'+motivo : motivo });
-  const operation=q.replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, '');
+  const fuera = (motivo: string): PlanRespuestaAplicacion => ({ tipo: 'fuera', motivo:motivo==='otro_dominio'?motivo:normalizada.consumoInicial?'consumo_inicial_'+motivo:estadoInicial?'estado_inicial_'+motivo:motivo });
   if (!/\b(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?)\b/.test(q) ||
     (/\baplicacion(?:es)? (?:(?:de|para) )?(?:movil|web|empleo|editar|software|visa|visado|contrato)\b/.test(q) && !/\b(?:fumigacion|fertilizacion)\b/.test(q))) return fuera('otro_dominio');
   // Domain must be established before application-specific clarification rules.
@@ -296,7 +304,7 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   const ocultarCostos = /\bsin costos?\b|\bno (?:muestres|incluyas) (?:los )?costos?\b/.test(q);
   if (/\b(?:costo|costos|costo total|gasto|gastado)\b/.test(q) && !trabajo && !ocultarCostos) return fuera('costo_total_no_es_costo_laboral');
   const progreso = /\b(?:como va(?:n)?|avance|progreso)\b/.test(q);
-  const estado = /\bestado\b/.test(q) || progreso || listadoReal;
+  const estado = estadoInicial || /\bestado\b/.test(q) || progreso || listadoReal;
   const plannedBasis = pideFechasPlaneadas(pregunta);
   const planes = plannedBasis && !estimacion;
   const sinConsumo = /\bsin (?:el )?consumo\b|\bno (?:muestres|incluyas|quiero) (?:el )?consumo\b/.test(q);
@@ -304,6 +312,11 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   const fechas = /\bfechas?\b/.test(q) || progreso || planes || listadoReal;
   if (!estado && !planes && !consumos && !trabajo && !estimacion && !fechas) return fuera('pregunta_no_cubierta');
   const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  // A trailing "mes de abril" inside a named status selector is literal
+  // identity, not permission to invent a year or actual-date interval.
+  // Explicit temporal prepositions and extra periods still require parsing.
+  const mesEnNombre = estadoInicial && new RegExp('\\b(?:aplicacion|fumigacion|fertilizacion)\\b(?:(?!\\b(?:en|para|durante|desde|entre|lote|del)\\b).)*\\bmes de (?:'+months.join('|')+')[?!.]*$').test(q);
+  const temporalSinNombre = mesEnNombre ? q.replace(new RegExp('\\bmes de (?:'+months.join('|')+')[?!.]*$'),'') : q;
   const yearSuffix = listadoReal ? '(?:(?: de)? (\\d{4}))?' : '(?: de)? (\\d{4})';
   const namedPattern = new RegExp('\\b(?:' + months.join('|') + ')' + yearSuffix + '\\b','g');
   const periods = [...q.matchAll(namedPattern)].length + [...q.matchAll(/\b(?:hoy|ayer|anteayer|hace (?:dos|2) dias|este mes|mes pasado|esta semana|semana pasada)\b/g)].length;
@@ -342,7 +355,7 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
       const [y,m,d] = hoy.split('-').map(Number), day = new Date(Date.UTC(y,m-1,d)).getUTCDay();
       const monday = sumarDias(hoy,-((day+6)%7)-(/semana pasada/.test(q)?7:0));
       rango = { desde: monday, hasta: sumarDias(monday,6) };
-    } else if (/\b(?:mes(?:es)?|semanas?|trimestre|anos?|ultimos?|proximos?|hace|dias?)\b|\d{1,2}\/\d{1,2}\/\d{4}|\b(?:en|para|del?|entre|desde) \d/.test(q) || months.some(m=>new RegExp('\\b'+(plural?'':'(?:en|para|durante|de) (?:el mes de )?')+m+'\\b').test(q))) return fuera('periodo_no_soportado');
+    } else if (/\b(?:mes(?:es)?|semanas?|trimestre|anos?|ultimos?|proximos?|hace|dias?)\b|\d{1,2}\/\d{1,2}\/\d{4}|\b(?:en|para|del?|entre|desde) \d/.test(temporalSinNombre) || months.some(m=>new RegExp('\\b'+(plural?'':'(?:en|para|durante|de) (?:el mes de )?')+m+'\\b').test(temporalSinNombre))) return fuera('periodo_no_soportado');
   }
   if (rango && rango.desde > rango.hasta) return fuera('periodo_invalido');
   // Require the entire cohort qualifier to be one of the existing parsed
@@ -351,12 +364,12 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   const relativo = /^(?:hoy|ayer|anteayer|hace (?:dos|2) dias|este mes|mes pasado|esta semana|semana pasada)$/.exec(periodoListado)?.[0];
   if (listadoReal && (!rango || ![named?.[0],numeric?.[0],withinMonth?.[0],iso?.[0],relativo].includes(periodoListado))) return fuera('periodo_no_soportado');
   return { tipo:'aplicacion', plural, base:plannedBasis?'planned':'actual', rango,
-    estadoFiltro:/\b(?:en ejecucion|en curso|activas?)\b/.test(q)?'En ejecución':/\bcerradas?\b/.test(q)?'Cerrada':null,
+    estadoFiltro:estadoInicial?null:/\b(?:en ejecucion|en curso|activas?)\b/.test(q)?'En ejecución':/\bcerradas?\b/.test(q)?'Cerrada':null,
     loteSolicitado:/\blotes?\b/.test(q), estado, fechas, consumos, trabajo:trabajo || progreso,
     ocultarCostos, estimacion, planes };
 }
 export function aclaracionPlanAplicacion(plan:PlanRespuestaAplicacion):string|null {
-  return plan.tipo==='fuera' && /^(?:consumo_inicial_|periodo_|multiples_periodos_|referencia_temporal_|comparacion_o_plan_|clausulas_adicionales_|subconjunto_plural_|subpregunta_)/.test(plan.motivo)
+  return plan.tipo==='fuera' && /^(?:estado_inicial_|consumo_inicial_|periodo_|multiples_periodos_|referencia_temporal_|comparacion_o_plan_|clausulas_adicionales_|subconjunto_plural_|subpregunta_)/.test(plan.motivo)
     ? 'Necesito precisar el alcance de aplicaciones: indica un período y nombre/lote inequívocos. Puedo mostrar fechas planeadas y reales registradas; esta respuesta no calcula comparaciones, retrasos ni asume un rango más amplio.' : null;
 }
 export function argumentosRespuestaAplicacion(plan: PlanRespuestaAplicacion, args: FilaEsco): FilaEsco {
