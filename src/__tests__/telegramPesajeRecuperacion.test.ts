@@ -157,13 +157,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe.each(trees)('recuperación de /pesaje: %s', (tree) => {
   it('avisa antes de que /evento consuma /pesaje y conserva el estado persistido', async () => {
     const f = fixture(tree); await f.send('/evento'); const before = f.state(); f.restart();
-    expect((await f.send('/pesaje'))[0]).toMatch(/operación pendiente.*\/cancelar.*\/pesaje/s);
+    expect(await f.send('/pesaje')).toEqual([expect.stringMatching(/operación pendiente.*\/cancelar.*\/pesaje/s)]);
     expect(f.state()).toEqual(before); expect(f.attribution).not.toHaveBeenCalled();
   });
   it('avisa también con el botón del menú y reconoce el callback', async () => {
     const f = fixture(tree); await f.send('/evento'); const before = f.state();
-    expect((await f.callback('start_pesajeLeche'))[0]).toContain('operación pendiente');
-    expect(f.calls.some(c => c.method === 'answerCallbackQuery')).toBe(true);
+    expect(await f.callback('start_pesajeLeche')).toEqual([expect.stringContaining('operación pendiente')]);
+    expect(f.calls.filter(c => c.method === 'answerCallbackQuery')).toHaveLength(1);
     expect(f.state()).toEqual(before);
   });
   it.each(['mes', 'fotos', 'correcciones'])('conserva el propio pesaje pendiente en %s', async (stage) => {
@@ -171,54 +171,57 @@ describe.each(trees)('recuperación de /pesaje: %s', (tree) => {
     if (stage !== 'mes') await f.callback('mes_actual');
     if (stage === 'correcciones') { await f.photo(); await f.callback('fotos_listo'); }
     const before = f.state(); const pipelineCalls = f.pipeline.mock.calls.length; f.restart();
-    expect((await f.send('/pesaje'))[0]).toContain('operación pendiente');
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('operación pendiente')]);
     expect(f.state()).toEqual(before); expect(f.pipeline).toHaveBeenCalledTimes(pipelineCalls);
-    expect((await f.callback('start_pesajeLeche'))[0]).toContain('operación pendiente');
+    expect(await f.callback('start_pesajeLeche')).toEqual([expect.stringContaining('operación pendiente')]);
     expect(f.state()).toEqual(before);
   });
   it.each(['jornal', 'monitoreo', 'ingreso', 'cierreRonda', 'excepcionDavid'])('avisa sin reanudar el otro flujo %s', async (name) => {
     const f = fixture(tree); await f.send('/evento');
     const state = f.state()!; state.state[name] = state.state.eventoHato; delete state.state.eventoHato;
     f.storage.set('telegram_conversations:123', state); f.restart();
-    expect((await f.send('/pesaje'))[0]).toContain('operación pendiente');
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('operación pendiente')]);
     expect(f.state()).toEqual(state);
   });
   it('mantiene /cancelar y permite iniciar un pesaje después', async () => {
     const f = fixture(tree); await f.send('/evento'); await f.send('/pesaje'); f.restart();
-    expect((await f.send('/cancelar'))[0]).toContain('cancelada'); f.restart();
-    expect((await f.send('/pesaje'))[0]).toContain('qué mes');
+    expect(await f.send('/cancelar')).toEqual([
+      expect.stringContaining('cancelada'), expect.stringContaining('¿Qué quieres hacer?'),
+    ]); f.restart();
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('qué mes')]);
   });
   it.each(['/pesaje', 'botón'])('mantiene la autorización revocada sin borrar el borrador: %s', async (entry) => {
     const f = fixture(tree); await f.send('/evento'); const before = f.state(); f.user.modulos_permitidos = []; f.restart();
-    expect((await (entry === '/pesaje' ? f.send(entry) : f.callback('start_pesajeLeche')))[0]).toContain('No tienes acceso');
+    expect(await (entry === '/pesaje' ? f.send(entry) : f.callback('start_pesajeLeche'))).toEqual([expect.stringContaining('No tienes acceso')]);
     expect(f.state()).toEqual(before);
   });
   it('no permite entrar a un usuario sin registro', async () => {
-    const f = fixture(tree, { registered: false }); expect((await f.send('/pesaje'))[0]).toContain('No estás registrado');
+    const f = fixture(tree, { registered: false }); expect(await f.send('/pesaje')).toEqual([expect.stringContaining('No estás registrado')]);
     expect(f.attribution).not.toHaveBeenCalled(); expect(f.state()).toBeUndefined();
   });
   it.each(['/pesaje', '/pesaje@escociaos_bot', '/pesaje con argumentos'])('inicia normalmente sin operación pendiente: %s', async (text) => {
-    const f = fixture(tree); expect((await f.send(text))[0]).toContain('qué mes');
+    const f = fixture(tree); expect(await f.send(text)).toEqual([expect.stringContaining('qué mes')]);
   });
   it('reconoce el sufijo propio y deja pasar el comando dirigido a otro bot', async () => {
     const f = fixture(tree); await f.send('/evento'); const before = f.state();
-    expect((await f.send('/pesaje@escociaos_bot'))[0]).toContain('operación pendiente');
+    expect(await f.send('/pesaje@escociaos_bot')).toEqual([expect.stringContaining('operación pendiente')]);
     expect(await f.send('/pesaje@otro_bot')).toEqual([]); expect(f.state()).toEqual(before);
   });
   it.each([false, true])('una confirmación de callback vencida no oculta la respuesta (pendiente=%s)', async (pending) => {
     const f = fixture(tree, { staleAck: true }); if (pending) await f.send('/evento');
-    expect((await f.callback('start_pesajeLeche'))[0]).toContain(pending ? 'operación pendiente' : 'qué mes');
+    expect(await f.callback('start_pesajeLeche')).toEqual([expect.stringContaining(pending ? 'operación pendiente' : 'qué mes')]);
+    expect(f.calls.filter(c => c.method === 'answerCallbackQuery')).toHaveLength(1);
   });
   it('deja los botones del flujo en su conversación y no inventa nuevas entradas', async () => {
     const f = fixture(tree); await f.send('/evento'); const before = f.state();
     expect(await f.callback('mes_actual')).toEqual([]); expect(f.state()).toEqual(before);
-    expect((await f.callback('cancel_flow'))[0]).toContain('cancelada');
+    expect(await f.callback('cancel_flow')).toEqual([expect.stringContaining('cancelada')]);
   });
   it('conserva las fotos previas y reanuda el replay después del aviso', async () => {
     const f = fixture(tree, { preview: true }); await f.send('/pesaje'); await f.callback('mes_actual');
-    expect((await f.photo())[0]).toContain('Foto 1 recibida'); const before = f.state(); f.restart();
-    await f.send('/pesaje'); expect(f.state()).toEqual(before); f.restart();
-    expect((await f.photo())[0]).toContain('Foto 2 recibida'); expect(f.attribution).toHaveBeenCalledTimes(1);
+    expect(await f.photo()).toEqual([expect.stringContaining('Foto 1 recibida')]); const before = f.state(); f.restart();
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('operación pendiente')]); expect(f.state()).toEqual(before); f.restart();
+    expect(await f.photo()).toEqual([expect.stringContaining('Foto 2 recibida')]); expect(f.attribution).toHaveBeenCalledTimes(1);
   });
   it('reanuda el estado creado por la fuente anterior sin repetir la atribución', async () => {
     // Captured synthetically at 95c85b3 before the fix, grammY 1.46.0 /
@@ -226,27 +229,27 @@ describe.each(trees)('recuperación de /pesaje: %s', (tree) => {
     const f = fixture(tree);
     for (const [key, value] of Object.entries(legacyState)) f.storage.set(key, structuredClone(value));
     const before = f.state(); f.restart();
-    expect((await f.send('/pesaje'))[0]).toContain('operación pendiente'); expect(f.state()).toEqual(before);
-    f.restart(); expect((await f.photo())[0]).toContain('Foto 2 recibida');
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('operación pendiente')]); expect(f.state()).toEqual(before);
+    f.restart(); expect(await f.photo()).toEqual([expect.stringContaining('Foto 2 recibida')]);
     expect(f.attribution).not.toHaveBeenCalled(); expect(f.pipeline).not.toHaveBeenCalled();
   });
   it('no trata el estado transitorio de inventario como una conversación ni lo borra', async () => {
     const f = fixture(tree); const session = { pendienteNotaRonda: { tipo: 'proponer', excepcionId: 'synthetic' } };
     f.storage.set('telegram_sessions:123', session); f.restart();
-    expect((await f.send('/pesaje'))[0]).toContain('qué mes'); expect(f.storage.get('telegram_sessions:123')).toEqual(session);
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('qué mes')]); expect(f.storage.get('telegram_sessions:123')).toEqual(session);
   });
   it('convierte una excepción de atribución en un mensaje seguro y permite reintentar', async () => {
     const options = { lookupThrows: true }; const f = fixture(tree, options);
-    expect((await f.send('/pesaje'))[0]).toContain('No pude consultar tu cuenta');
+    expect(await f.send('/pesaje')).toEqual([expect.stringContaining('No pude consultar tu cuenta')]);
     expect(f.messages.join('\n')).not.toContain('Synthetic transport');
     expect(f.state()?.state.pesajeLeche).toBeUndefined();
-    options.lookupThrows = false; f.restart(); expect((await f.send('/pesaje'))[0]).toContain('qué mes');
+    options.lookupThrows = false; f.restart(); expect(await f.send('/pesaje')).toEqual([expect.stringContaining('qué mes')]);
   });
   it('conserva el rechazo explícito de una cuenta sin vínculo', async () => {
-    const f = fixture(tree); f.user.usuario_id = null; expect((await f.send('/pesaje'))[0]).toContain('no está vinculada');
+    const f = fixture(tree); f.user.usuario_id = null; expect(await f.send('/pesaje')).toEqual([expect.stringContaining('no está vinculada')]);
   });
   it('mantiene el límite de configuración y no procesa fotos sueltas', async () => {
-    const f = fixture(tree, { missingKey: true }); expect((await f.send('/pesaje'))[0]).toContain('falta configuración');
+    const f = fixture(tree, { missingKey: true }); expect(await f.send('/pesaje')).toEqual([expect.stringContaining('falta configuración')]);
     expect(await f.photo()).toEqual([]); expect(f.pipeline).not.toHaveBeenCalled();
   });
 });
