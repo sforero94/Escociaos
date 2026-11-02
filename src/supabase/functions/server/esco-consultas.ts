@@ -175,7 +175,7 @@ const palabrasNombre = (v:unknown) => normalizarSelector(v).split(' ').filter(w=
 /** Literal application/lot selectors against the already-read fresh catalogs. No model identity authority. */
 export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco[], lotes:FilaEsco[], plural:boolean):SeleccionAplicacion {
   const fail=(message:string):SeleccionAplicacion=>({estado:'aclarar',mensaje:message});
-  const q=normalizarSelector(s.pregunta);
+  const q=normalizarSelector(normalizarPreguntaAplicacion(s.pregunta).texto);
   const extract=(question:string,lot=false) => {
     const found=question.match(lot?/\blote\s+(.+)$/ : /\b(?:aplicacion|fumigacion|fertilizacion)\b\s*(.*)$/);
     if(!found)return '';
@@ -184,7 +184,7 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
   };
   let reference:'actual'|'usuario_anterior'='actual', appSelector=extract(q), lotSelector=extract(q,true);
   if(!appSelector && /\b(?:esa|esta|anterior) aplicacion\b|\baplicacion anterior\b/.test(q)) {
-    const previous=normalizarSelector(s.anterior ?? '');
+    const previous=normalizarSelector(normalizarPreguntaAplicacion(s.anterior ?? '').texto);
     if(!/\b(?:aplicacion|fumigacion|fertilizacion)\b/.test(previous) || /\b(?:esa|esta|anterior) aplicacion\b/.test(previous)) return fail('Precisa el nombre o ID de la aplicación; la referencia anterior no es inequívoca.');
     appSelector=extract(previous); reference='usuario_anterior';
     if(!appSelector)return fail('Precisa el nombre o ID de la aplicación; no uso identidades del modelo o del texto de una respuesta anterior.');
@@ -233,7 +233,7 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
     if(candidates.length!==1)return fail('Precisa cuál aplicación: '+candidates.slice(0,5).map(a=>literalMd(a.nombre_aplicacion)+' ('+literalMd(a.id)+')').join('; '));
   }
   if(!lotSelector && /\b(?:ese|este|anterior) lote\b/.test(q)) {
-    const previous=normalizarSelector(s.anterior??''), previousApp=extract(previous);
+    const previous=normalizarSelector(normalizarPreguntaAplicacion(s.anterior??'').texto), previousApp=extract(previous);
     const matches=monthlyNames(apps.filter(a=>normalizarSelector(a.id)===previousApp || (' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+palabrasNombre(previousApp)+' ')),s.anterior??'').rows;
     if(plural || candidates.length!==1 || !previousApp || matches.length!==1 || matches[0].id!==candidates[0].id)return fail('Precisa el lote; la referencia anterior no es inequívoca para esta aplicación.');
     lotSelector=extract(previous,true);if(!lotSelector)return fail('Precisa el nombre o ID del lote anterior.');
@@ -248,11 +248,17 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
   return {estado:'verificada',version:'aplicacion_selector_v1',aplicacion_ids:plural?null:candidates.map(a=>texto(a.id)),lote_ids:selectedLots?.map(l=>texto(l.id))??null,referencia:reference};
 }
 
-function normalizarPreguntaAplicacion(value:string):string {
-  return normalizarTextoAplicacion(value)
+function normalizarPreguntaAplicacion(value:string):{texto:string;consumoInicial:boolean} {
+  const texto = normalizarTextoAplicacion(value)
     .replace(/^((?:(?:consulta de )?solo lectura:\s*)?[¿¡]?)y\s+(?=(?:cuantos?|cuantas?|como|cual(?:es)?|que)\b)/, '$1')
     .replace(/\b(aplicacion|fumigacion|fertilizacion):\s*/g,'$1 ')
     .replace(/,\s*(?=(?:en (?:el )?lote|del? \d|desde|entre|sin costos?|la aplicacion|el estado|las fechas|los jornales)\b)/g,' ');
+  // One existing operation, written with its application selector first. Keep
+  // every selector/scope token; only consume the fixed product/quantity grammar.
+  const operation=texto.replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, '');
+  const fronted=/^en ((?:la|esa|esta) (?:aplicacion|fumigacion|fertilizacion)\b[^,;:!?¿]*?)(?:,\s*|\s+)¿?(?:que|cuales) (?:productos|insumos) se (?:usaron|utilizaron)(?: (en (?:(?:el|ese|este) )?lote\b[^,;:!?¿]+?))?(?: y en que cantidades)?$/.exec(operation);
+  const consumoInicial=/^en (?:la|esa|esta) (?:aplicacion|fumigacion|fertilizacion)\b[^,;:!?¿]*?(?:,\s*|\s+)¿?(?:que|cuales) (?:productos|insumos) se (?:usaron|utilizaron)\b/.test(operation);
+  return fronted ? {texto:'consumo de '+fronted[1]+(fronted[2]?' '+fronted[2]:''),consumoInicial:true} : {texto,consumoInicial};
 }
 export type PlanRespuestaAplicacion = { tipo: 'fuera'; motivo: string } | {
   tipo: 'aplicacion'; plural: boolean; base: 'actual' | 'planned';
@@ -262,8 +268,10 @@ export type PlanRespuestaAplicacion = { tipo: 'fuera'; motivo: string } | {
 };
 /** Closed application operations, not a filter over arbitrary generated prose. */
 export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): PlanRespuestaAplicacion {
-  const q = normalizarPreguntaAplicacion(pregunta);
-  const fuera = (motivo: string): PlanRespuestaAplicacion => ({ tipo: 'fuera', motivo });
+  const normalizada = normalizarPreguntaAplicacion(pregunta), q = normalizada.texto;
+  // A recognized fronted request stays closed if any legacy operation/scope
+  // guard rejects it. Never fall through to unconstrained model prose.
+  const fuera = (motivo: string): PlanRespuestaAplicacion => ({ tipo: 'fuera', motivo:normalizada.consumoInicial && motivo!=='otro_dominio' ? 'consumo_inicial_'+motivo : motivo });
   const operation=q.replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/^[¿¡]/, '').replace(/[?!.]+$/, '');
   if (!/\b(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?)\b/.test(q) ||
     (/\baplicacion(?:es)? (?:(?:de|para) )?(?:movil|web|empleo|editar|software|visa|visado|contrato)\b/.test(q) && !/\b(?:fumigacion|fertilizacion)\b/.test(q))) return fuera('otro_dominio');
@@ -348,7 +356,7 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
     ocultarCostos, estimacion, planes };
 }
 export function aclaracionPlanAplicacion(plan:PlanRespuestaAplicacion):string|null {
-  return plan.tipo==='fuera' && /^(?:periodo_|multiples_periodos_|referencia_temporal_|comparacion_o_plan_|clausulas_adicionales_|subconjunto_plural_|subpregunta_)/.test(plan.motivo)
+  return plan.tipo==='fuera' && /^(?:consumo_inicial_|periodo_|multiples_periodos_|referencia_temporal_|comparacion_o_plan_|clausulas_adicionales_|subconjunto_plural_|subpregunta_)/.test(plan.motivo)
     ? 'Necesito precisar el alcance de aplicaciones: indica un período y nombre/lote inequívocos. Puedo mostrar fechas planeadas y reales registradas; esta respuesta no calcula comparaciones, retrasos ni asume un rango más amplio.' : null;
 }
 export function argumentosRespuestaAplicacion(plan: PlanRespuestaAplicacion, args: FilaEsco): FilaEsco {

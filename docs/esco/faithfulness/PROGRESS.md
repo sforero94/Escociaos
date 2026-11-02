@@ -1,6 +1,13 @@
 # Progress and handoff
 
-## Current state — KV receipt schema correction, 2026-10-31 UTC
+## Current state — application product-question routing, 2026-11-02 UTC
+
+- Baseline main `efd073f7936b0cab41faf7dba3fca5cfd6919c8a` preserves the scheduled drift-state update after PR390. The approved release of the KV correction succeeded: backend v288, source `bf6a8a30dadcafdc9e27b3b9514d1b77f8d4ad58`, release [41331467207](https://github.com/sforero94/Escociaos/actions/runs/41331467207), one deployment and zero rollbacks. Health/source/configuration verification is separate from answer quality.
+- Parent's v288 campaign stopped after eight sends: six useful answers, one coverage-inconclusive answer, one source-answerable product/lot question refused, eight unrun. Preserve that failure and the inconclusive classification; this candidate has no online acceptance evidence.
+- Source reproduction confirms three pre-tool grammar barriers in an application-first consumption question: its comma, quantity subquestion and finite verb. Normalize only that closed product-consumption form before the existing planner and fresh selector binding. Preserve all user selectors, dates and lot; unsupported extra scope still clarifies. Calculations, cohort receipts, access controls and release pins are unchanged.
+- Synthetic baseline: 18 new regressions produced 10 failures / 8 passes. Candidate tests also cover ambiguous catalogs, wrong model application/lot/date arguments, unknown and conflicting selectors, null quantities, prior-user references, unsafe extra operations and the actual shared loop through both channel message builders. Final local checks passed 5,418 tests / 241 files, zero skips, types, build and lint (0 errors / 907 existing warnings). The new suite passed 21 tests; independent review passed 80 focused tests plus four additional assertions after closing a no-comma unsafe-tail fallback. Both generated query mirrors and whitespace checks passed. Exact-head CI must pass before merge coordination. No merge or deployment in this correction task.
+
+## Historical state — KV receipt schema correction, 2026-10-31 UTC
 
 - Verified main `96086f03c65cd0fae0375661f32a73cfd41bc725` includes merged387/388. Release41236683500 succeeded once: active v287, healthy/source/config verified; no rollback. This was technical release verification, not answer-quality acceptance.
 - Parent's fresh v287 gate stopped after three sends: R01/R02 useful, LC02 operational KV 400 / 42703, thirteen unrun. Preserve this outcome separately from the earlier v286 continuation refusal; neither becomes a safety pass.
