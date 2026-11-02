@@ -44,10 +44,9 @@
 //      fotos NUNCA salen de un `external()` como valor de retorno -- se
 //      descargan y se consumen DENTRO del mismo `external()` que llama al
 //      pipeline, nunca por separado.
-//   2. Mientras una conversación está activa, `bot.command("cancelar")`
-//      global NUNCA se dispara (el plugin de conversaciones consume el
-//      update antes) -- cada paso que espera texto o foto reconoce
-//      "cancelar"/"/cancelar" por su cuenta (`esCancelacionTexto`).
+//   2. El `/cancelar` global y el aviso de `/pesaje` pendiente corren antes
+//      del replay en bot.ts. Cada paso también reconoce "cancelar" escrito
+//      sin barra (`esCancelacionTexto`), que sí recibe esta conversación.
 
 import { Conversation } from "npm:@grammyjs/conversations@2";
 import { InlineKeyboard } from "npm:grammy@1";
@@ -99,9 +98,8 @@ function nombreMes(mes: number): string {
   return MESES[mes - 1] ?? String(mes);
 }
 
-/** Reconoce la cancelación escrita a mano -- el `/cancelar` global NUNCA se
- * dispara mientras esta conversación está activa (ver cabecera del
- * archivo). Se comprueba en TODOS los pasos que esperan texto o foto. */
+/** Reconoce la cancelación escrita a mano, además de la salida global
+ * prioritaria. Se comprueba en todos los pasos que esperan texto o foto. */
 function esCancelacionTexto(texto: string): boolean {
   const t = texto.trim().toLowerCase();
   return t === "cancelar" || t === "/cancelar";
@@ -240,9 +238,17 @@ export async function pesajeLecheConversation(
   // no lleva al replay (issue #273: Fernando, vinculado, veía "no vinculada"
   // el 2026-09-19). Se reconsulta `telegram_usuarios` por `ctx.from.id`
   // (nativo de grammY) dentro de `external()`, cuyo resultado sí sobrevive.
-  const resuelto = await conversation.external(async () =>
-    resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id),
-  );
+  const resuelto = await conversation.external(async () => {
+    try {
+      return await resolverUsuarioTelegram(getSupabaseAdmin(), ctx.from?.id);
+    } catch {
+      // Cache the safe failure inside the existing external effect. A rejected
+      // transport must neither escape before the flow's try nor expose details
+      // in chat. Successful old replays keep the same effect order and result.
+      console.error("[Telegram] No se pudo consultar la cuenta para el pesaje.");
+      return { ok: false, motivo: "error_db" } as const;
+    }
+  });
   const atribucion = exigirUsuarioIdVinculado(resuelto);
 
   try {

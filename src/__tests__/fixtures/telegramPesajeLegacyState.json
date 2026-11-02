@@ -1,0 +1,222 @@
+{
+  "telegram_conversations:123": {
+    "version": [
+      0,
+      0
+    ],
+    "state": {
+      "pesajeLeche": [
+        {
+          "interrupts": [
+            9
+          ],
+          "replay": {
+            "send": [
+              {
+                "payload": "wait"
+              },
+              {
+                "payload": "external"
+              },
+              {
+                "payload": "sendMessage"
+              },
+              {
+                "payload": "wait"
+              },
+              {
+                "payload": "answerCallbackQuery"
+              },
+              {
+                "payload": "editMessageText"
+              },
+              {
+                "payload": "sendMessage"
+              },
+              {
+                "payload": "wait"
+              },
+              {
+                "payload": "sendMessage"
+              },
+              {
+                "payload": "wait"
+              }
+            ],
+            "receive": [
+              {
+                "send": 0,
+                "returnValue": {
+                  "update_id": 1,
+                  "message": {
+                    "message_id": 1,
+                    "date": 1,
+                    "chat": {
+                      "id": 123,
+                      "type": "private"
+                    },
+                    "from": {
+                      "id": 123,
+                      "is_bot": false,
+                      "first_name": "Synthetic"
+                    },
+                    "text": "/pesaje",
+                    "entities": [
+                      {
+                        "type": "bot_command",
+                        "offset": 0,
+                        "length": 7
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "send": 1,
+                "returnValue": {
+                  "ok": true,
+                  "ret": {
+                    "ok": true,
+                    "fila": {
+                      "id": "synthetic-telegram-row",
+                      "usuario_id": "synthetic-user",
+                      "nombre_display": "Synthetic"
+                    },
+                    "usuarioId": "synthetic-user",
+                    "nombreDisplay": "Synthetic"
+                  }
+                }
+              },
+              {
+                "send": 2,
+                "returnValue": {
+                  "ok": true,
+                  "res": {
+                    "ok": true,
+                    "result": {
+                      "message_id": 2,
+                      "date": 1,
+                      "chat": {
+                        "id": 123,
+                        "type": "private"
+                      },
+                      "text": "🐄 *Pesaje de leche -- carga por foto*\n\n¿La planilla que vas a fotografiar es de qué mes?"
+                    }
+                  }
+                }
+              },
+              {
+                "send": 3,
+                "returnValue": {
+                  "update_id": 3,
+                  "callback_query": {
+                    "id": "3",
+                    "from": {
+                      "id": 123,
+                      "is_bot": false,
+                      "first_name": "Synthetic"
+                    },
+                    "chat_instance": "synthetic",
+                    "data": "mes_actual",
+                    "message": {
+                      "message_id": 1,
+                      "date": 1,
+                      "chat": {
+                        "id": 123,
+                        "type": "private"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "send": 4,
+                "returnValue": {
+                  "ok": true,
+                  "res": {
+                    "ok": true,
+                    "result": true
+                  }
+                }
+              },
+              {
+                "send": 5,
+                "returnValue": {
+                  "ok": true,
+                  "res": {
+                    "ok": true,
+                    "result": true
+                  }
+                }
+              },
+              {
+                "send": 6,
+                "returnValue": {
+                  "ok": true,
+                  "res": {
+                    "ok": true,
+                    "result": {
+                      "message_id": 4,
+                      "date": 1,
+                      "chat": {
+                        "id": 123,
+                        "type": "private"
+                      },
+                      "text": "📸 Envía las fotos de la planilla de *noviembre 2026* (1 a () => { throw Error('Unexpected dependency '+spec+':'+String(k)); }, puede ser por franjas si no cabe en una toma). Cuando termines, toca *Listo*."
+                    }
+                  }
+                }
+              },
+              {
+                "send": 7,
+                "returnValue": {
+                  "update_id": 5,
+                  "message": {
+                    "message_id": 5,
+                    "date": 1,
+                    "chat": {
+                      "id": 123,
+                      "type": "private"
+                    },
+                    "from": {
+                      "id": 123,
+                      "is_bot": false,
+                      "first_name": "Synthetic"
+                    },
+                    "photo": [
+                      {
+                        "file_id": "synthetic",
+                        "file_unique_id": "synthetic",
+                        "width": 1,
+                        "height": 1
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "send": 8,
+                "returnValue": {
+                  "ok": true,
+                  "res": {
+                    "ok": true,
+                    "result": {
+                      "message_id": 6,
+                      "date": 1,
+                      "chat": {
+                        "id": 123,
+                        "type": "private"
+                      },
+                      "text": "📸 Foto 1 recibida. Envía otra o toca Listo."
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "telegram_sessions:123": {}
+}
