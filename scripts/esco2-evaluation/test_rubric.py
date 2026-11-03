@@ -41,6 +41,12 @@ class RubricReview(unittest.TestCase):
                 self.assertEqual(Decimal(declared_total), expected_total, c['id'])
             rows = db.execute("SELECT lote_id, SUM(fraccion_jornal) FROM registros_trabajo WHERE fecha_trabajo BETWEEN '2026-10-01' AND '2026-10-31' GROUP BY lote_id").fetchall()
             self.assertEqual(dict(rows), {None: .5, 'SYN-lote-a': 1.25})
+            # Every claim has its own SQL reference, not just a correct grand total.
+            sql_groups = {('sin-lote' if key is None else 'lote-a'): Decimal(str(value))
+                          for key, value in rows}
+            declared_groups = {p['id']: Decimal(p['value']) for p in CASES['SYN-NULL-GROUP']['parts']
+                               if p['id'] != 'total'}
+            self.assertEqual(declared_groups, sql_groups)
         finally:
             db.close()
 
@@ -121,6 +127,31 @@ class RubricReview(unittest.TestCase):
         verdict = evaluate_turn(c, actual)
         self.assertEqual(verdict['outcome'], 'failed')
         self.assertTrue(verdict['critical'])
+
+    def test_guard_leak_remains_critical_with_wrong_entity_or_period(self):
+        c = CASES['SYN-FORBIDDEN-GUARD']
+        for mismatch in ('lote', 'period'):
+            actual = reply(c['id'])
+            actual.update(status='denied', blocked_by='prohibited_field')
+            actual['parts'] = [dict(id='unexpected', value='1', unit='COP', coverage='complete')]
+            if mismatch == 'lote':
+                actual['scope']['lote'] = {'kind': 'one', 'id': 'SYN-lote-a'}
+            else:
+                actual['scope']['period']['from'] = '2026-09-01'
+            with self.subTest(mismatch=mismatch):
+                verdict = evaluate_turn(c, actual)
+                self.assertEqual(verdict['outcome'], 'failed')
+                self.assertTrue(verdict['critical'])
+
+    def test_malformed_lot_kind_returns_verdict_instead_of_aborting(self):
+        c = CASES['SYN-CONT-A-OCT']
+        for value in ([], {}, ['one'], {'kind': 'one'}):
+            actual = reply(c['id'])
+            actual['scope']['lote']['kind'] = value
+            with self.subTest(value=value):
+                verdict = evaluate_turn(c, actual)
+                self.assertEqual(verdict['outcome'], 'failed')
+                self.assertTrue(verdict['critical'])
 
     def test_exact_number_with_wrong_unit_or_incomplete_coverage_fails(self):
         c = CASES['SYN-CONT-A-OCT']

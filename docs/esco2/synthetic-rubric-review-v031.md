@@ -71,6 +71,10 @@ Resultado: **26 tests aprobados; 8/8 defectos deliberados detectados**.
 Los 13 controles iniciales están incluidos en los 26, no son una campaña adicional.
 El recuento de tests no mide calidad funcional ni cobertura del golden real.
 
+Seguimiento: se completó después una revisión por otro agente de 698e88b;
+confirmó y cerró tres defectos adicionales, con 28 tests y 10 mutaciones.
+Detalle y límites: [revisión independiente](independent-review-698e88b.md).
+
 ## Límites y entrega
 
 La rúbrica cerrada valida campos/estructura y claims tipados de estas fixtures.

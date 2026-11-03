@@ -23,6 +23,10 @@ MUTANTS = (
     ('accept_stale_scope', 'rubric.py', "if reply['scope'] != expected['scope']:", 'if False:'),
     ('allow_missing_parts', 'rubric.py', 'if set(parts) != set(wanted):', 'if False:'),
     ('allow_prohibited_fields', 'rubric.py', 'if not _safe_shape(reply):', 'if False:'),
+    ('downgrade_guard_leak_on_scope_error', 'rubric.py', "if expected['classification'] == 'guard' and reply['parts']:", 'if False:'),
+    ('corrupt_offsetting_group_oracles', 'rubric-v03.json',
+     '"value": "1.25", "unit": "jornal", "coverage": "complete"}, {"id": "sin-lote", "value": "0.5"',
+     '"value": "100", "unit": "jornal", "coverage": "complete"}, {"id": "sin-lote", "value": "-98.25"'),
 )
 
 
