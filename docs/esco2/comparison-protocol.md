@@ -1,6 +1,6 @@
-# E2-17 — comparison protocol v0.1
+# E2-17 — comparison protocol v0.2
 
-Prepared 2026-11-03 against master plan v0.3. Status: protocol ready for review; provider experiment **not executed**; route selection open. This document does not relax the production ban on model-generated SQL.
+Prepared 2026-11-03 against master plan v0.3. Status: standard route A **ineligible by documented contract**, for independent security/closure review; provider experiment **not executed**. Continue direct route B preparation under v0.3 D16; architecture acceptance and activation remain gated. This document does not relax the production ban on model-generated SQL.
 
 ## Stage 0: route A eligibility before A fixtures
 
@@ -10,17 +10,19 @@ Public evidence checked 2026-11-03:
 
 - [Composio Supabase toolkit](https://docs.composio.dev/toolkits/supabase) lists the candidate. The initial fetched rendering omitted it; a refreshed rendering/search confirmed it. Catalog presence is not proof of its effective contract or permissions.
 - [Composio session configuration](https://docs.composio.dev/docs/configuring-sessions) permits tool restrictions. These restrict exposed tools, and do not establish Supabase row identity or table grants.
-- [Supabase read-only Management endpoint](https://supabase.com/docs/reference/api/v1-read-only-query) documents a project query under `supabase_read_only_user`, with query/parameters and management permission. It does not document forwarding an end-user JWT for RLS. Mapping the candidate to this endpoint is an inference until its actual versioned definition is inspected.
+- Coordination supplied an independent E2-17 finding: the standard candidate executes as `supabase_read_only_user`, without caller JWT or table-allowlist parameters. This updates the earlier unproven eligibility status. No project-specific runtime result is asserted.
+- [Supabase read-only Management endpoint](https://supabase.com/docs/reference/api/v1-read-only-query), independently re-read here, documents execution under that role with query/parameters and management permission. It does not offer end-user JWT/RLS or a table allowlist in its request contract.
+- [Official Supabase initial schema, pinned commit ff09b101523c6479f37fe1e0d02c5f7e3845104c](https://github.com/supabase/postgres/blob/ff09b101523c6479f37fe1e0d02c5f7e3845104c/migrations/db/init-scripts/00000000000000-initial-schema.sql#L20-L22), independently re-read here, creates `supabase_read_only_user` with `BYPASSRLS` and grants `pg_read_all_data`. These defaults contradict the required user RLS/table boundary. This source is a pinned default definition, not an attestation of a concrete project's live grants.
 - [Supabase JWT](https://supabase.com/docs/guides/auth/jwts) and [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) explain the user-token/database-policy boundary. Read-only management access cannot be assumed equivalent.
 
 | Exclusion requirement | Evidence available now | Disposition |
 | --- | --- | --- |
-| Caller Supabase JWT determines actual `auth.uid()` and effective RLS | No versioned candidate input/transport contract or execution trace obtained | **Unproven — do not execute A** |
-| Closed allowed tables/columns independent of model | Tool-level allowlisting documented; no candidate table policy established | **Unproven — do not execute A** |
-| No mutations/side effects, bounded rows/time | Tool name/read-only endpoint are insufficient for effective limits and callable functions | Pending actual contract/security test |
+| Caller Supabase JWT determines actual `auth.uid()` and effective RLS | Standard tool uses management read-only role; no JWT parameter; official role has BYPASSRLS | **Fails for standard tool — stop A** |
+| Closed allowed tables/columns independent of model | No table-allowlist parameter; default role has pg_read_all_data; session tool allowlist is not a table boundary | **Fails for standard tool — stop A** |
+| No mutations/side effects, bounded rows/time | No provider execution; these other controls were not tested because exclusion already applies | Not evaluated; cannot rescue eligibility |
 | Only disposable synthetic target and approved destination | No target/account created or connected | Deliberately not provisioned |
 
-This is an **evidence/access blocker**, not a demonstrated capability failure. Do not mark E2-17 complete, choose B, or create A fixtures on this basis. Obtain the exact candidate schema, toolkit/SDK version, auth type and upstream URL from approved public metadata/vendor documentation or an authorized tool-definition read without creating an account/credential. If the contract demonstrably cannot bind JWT/RLS and closed tables externally, document that incapacity, stop A, obtain the security review and present B for explicit architecture decision under v0.3 D16. If evidence remains unavailable, keep the blocker open. Prompt rules, regex SQL filters, a trusted model, or manually injecting claims into arbitrary SQL do not compensate.
+Conclusion: **the standard SUPABASE_RUN_READ_ONLY_QUERY tool fails both v0.3 exclusion requirements**. Stop route A before fixtures/provider runs and document incapacity under D16. Continue B preparation; place E2-17 in review for independent security confirmation and explicit architecture decision rather than claiming a measured comparison or acceptance. No quality, latency or price result was obtained for A. This conclusion is scoped to the standard tool/contract. It neither inspects a concrete project nor proves that all possible custom Composio gateways are incapable; a custom gateway would be a new design with adaptation cost and its own gates. Do not create one to compensate within this experiment. Prompt rules, regex SQL filters, a trusted model, or manually injecting claims into arbitrary SQL do not compensate.
 
 If eligible by contract, test against a newly authorized disposable synthetic project only. Never attach the production project, service-role secret, real snapshot, private golden, existing reserved 12 cases or held-out. No account, permission, grant or persistent access is created by this protocol.
 
@@ -60,4 +62,4 @@ Cost per accepted answer = (all model token charges + connector charges + alloca
 
 Versioned manifest/protocol, effective security evidence, results for both routes OR proven inability of one, independent reference/review signoff, total cost and maintenance comparison, limits and recommendation, then Santiago's explicit route decision. If A is ineligible, document the failed requirement and external evidence; do not fabricate A quality/latency/cost scores. If blocked, give the exact missing evidence/action and retain open status. Neither a catalog listing nor this local design closes E2-17.
 
-Current remaining action: coordinator resolves authorized candidate-contract metadata and decides whether additional vendor evidence is available. No provider run, credential request, persistent access or private-data transmission was attempted. Continue B design while this remains pending.
+Current remaining action: independent security review of documented standard-tool incapacity, review of B's contracts/proposed permissions and explicit architecture decision. Reconcile B with M1 and E2-06 before M2.5. No provider run, credential request, persistent access or private-data transmission was attempted. Earlier v0.1 evidence blocker is superseded by the independent standard-tool finding and official role definition; the historical tracker entries remain as history.

@@ -21,7 +21,7 @@ Deliverables:
 
 Run the offline check with `python analysis/esco2-design/check_contracts.py` (Python 3 and jsonschema 4.26.0 in this environment). This is a design probe. It is not a Supabase, JWT, RLS, model, planner, web or acceptance test. Nothing imports it from the application.
 
-Current gates: route A eligibility **unproven**, route B controls designed but **unverified against an authorized database**; E2-17 and M2 remain open. M1 references/snapshot, E2-06 access/data handling, review budget and explicit architecture decision remain necessary. No route selected.
+Current gates: the standard route A tool **fails eligibility** (see protocol v0.2 evidence); route B preparation continues, with controls **unverified against an authorized database**. E2-17 is in review for documented incapacity, and M2 remains open. M1 references/snapshot, E2-06 access/data handling, review budget and explicit architecture decision remain necessary. No production route activated.
 
 The independent inventory received from coordination uses `main` `43c3e887`; see architecture.md for its qualification candidates. This design's local baseline is older (`a635a05`), so integration requires reconciliation. No claim that the branch reflects latest main.
 

@@ -127,4 +127,4 @@ These are preliminary engineering estimates, not commitments or approved spend. 
 
 M1 snapshot/reference creation, new held-out authoring, M5–M7 and infrastructure/provider spend are excluded and must not be buried in these hours. Total before those exclusions: 104–186 engineering hours if A is eligible, or 98–170 with documented failure review; Santiago review 6.5–12 hours. Reestimate M3/M4 after E2-17/M2.5. No calendar deadline for E2-17. No dollar estimate without rates, current provider terms and authorized usage caps. Cost comparison formula lives in the protocol.
 
-Next: independent review of design; reconcile M1 map/references; resolve A eligibility; approve concrete M2 block, provider/data gates and M2.5 time box. Neither this estimate nor local probes close M2.
+Next: independent review of design and documented standard-tool A incapacity (protocol v0.2); continue B contract/permission preparation; reconcile M1 map/references; approve concrete M2 block, provider/data gates and M2.5 time box. Neither this estimate nor local probes close M2.
