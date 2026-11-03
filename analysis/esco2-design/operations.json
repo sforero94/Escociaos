@@ -1,0 +1,36 @@
+{
+  "version": "esco2-design-0.1",
+  "status": "design_probe_only",
+  "operations": [{
+    "name": "labores.resumen.v1",
+    "description": "Resume jornales y costos históricos registrados por período y lote; conserva el grupo sin lote. El intervalo debe estar ordenado y no superar 366 días inclusivos.",
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["desde", "hasta", "lotes", "grupo", "metricas"],
+      "properties": {
+        "desde": {"type": "string", "format": "date"},
+        "hasta": {"type": "string", "format": "date"},
+        "lotes": {"type": "array", "maxItems": 100, "uniqueItems": true,
+          "description": "IDs resueltos por catálogo autorizado; vacío incluye todos los lotes autorizados y sin asignación.",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+        "grupo": {"type": "string", "enum": ["lote", "total"]},
+        "metricas": {"type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["jornales", "costo_registrado"]}}
+      }
+    },
+    "semanticRules": {"maximumInclusiveDays": 366, "orderedDates": true},
+    "access": {"channel": "web", "role": "Gerencia", "active": true,
+      "identity": "verified_user_jwt", "conversationOwner": true,
+      "scopeSource": "server_authorization", "methods": ["read"]},
+    "source": {"qualification": "pending_M1", "table": "registros_trabajo", "grain": "id",
+      "projection": ["id", "fecha_trabajo", "lote_id", "fraccion_jornal", "costo_jornal"],
+      "dateField": "fecha_trabajo", "nullLot": "unassigned_group"},
+    "metrics": {
+      "jornales": {"field": "fraccion_jornal", "unit": "jornal", "aggregation": "sum_registered", "missing": "partial"},
+      "costo_registrado": {"field": "costo_jornal", "unit": "COP", "aggregation": "sum_registered", "missing": "partial"}
+    },
+    "resultContract": "docs/esco2/architecture.md#one-operation-definition"
+  }]
+}
