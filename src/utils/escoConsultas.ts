@@ -1,5 +1,6 @@
 import { cohorteValida, type CohorteAplicaciones } from './escoCohorteAplicaciones.ts';
 import { hechosEjecucionAplicacion, estimacionDosisCanecas } from './escoAplicacionHechos.ts';
+import { APPLICATION_METRICS, applicationMetrics, applicationReaderArguments, OperationFailure, type ApplicationMetric } from './escoOperacionContrato.ts';
 /** Consultas de evidencia de Esco (#311). Sin Deno/SDK; I/O inyectado y probado. */
 export type FilaEsco = Record<string, unknown>;
 export type ConsultaPagina = (tabla: string, query: string) => Promise<FilaEsco[]>;
@@ -48,7 +49,7 @@ export const HERRAMIENTAS_CONSULTA: HerramientaConsulta[] = definiciones.map(([n
   parameters: { type: 'object', properties: {
     date_from: { type: 'string', description: 'Fecha inicial YYYY-MM-DD; en animales filtra nacimiento' },
     date_to: { type: 'string', description: 'Fecha final YYYY-MM-DD inclusiva' },
-    ...(name === 'get_aplicaciones_ejecucion' ? {} : {
+    ...(name === 'get_aplicaciones_ejecucion' ? { metric: { oneOf: [{ type: 'string', enum: [...APPLICATION_METRICS] }, { type: 'array', items: { type: 'string', enum: [...APPLICATION_METRICS] }, minItems: 1, maxItems: APPLICATION_METRICS.length }], description: 'Métricas de presentación; omitir incluye estado y fechas. No es un filtro de fuente.' } } : {
       nombre: { type: 'string', description: 'Nombre parcial de animal, cuando aplica' },
       numero: { type: 'number', description: 'Chapeta, cuando aplica; identidad definitiva es UUID' },
     }),
@@ -90,6 +91,7 @@ function sumarDias(fecha: string, dias: number): string {
 /** El rango corto del servidor se descubre por Content-Range en el adaptador;
  * aquí usamos páginas de 200 (menor que max_rows=1000 verificado en producción).
  * Un tope nunca devuelve un total aparentemente completo. */
+class LimiteLecturaEsco extends Error {}
 export async function leerCompleto(q: ConsultaPagina, tabla: string, query: string): Promise<FilaEsco[]> {
   const filas: FilaEsco[] = [];
   for (let offset = 0; offset < 20000; offset += 200) {
@@ -97,7 +99,7 @@ export async function leerCompleto(q: ConsultaPagina, tabla: string, query: stri
     filas.push(...pagina);
     if (pagina.length < 200) return filas;
   }
-  throw new Error(`Consulta incompleta en ${tabla}: supera 20000 filas. Reduce el rango.`);
+  throw new LimiteLecturaEsco(`Consulta incompleta en ${tabla}: supera 20000 filas. Reduce el rango.`);
 }
 export function resumirContexto(resultado: string, max = 24000): string {
   if (resultado.length <= max) return resultado;
@@ -115,6 +117,12 @@ export function resumirContexto(resultado: string, max = 24000): string {
 }
 export function normalizarTextoAplicacion(value: unknown): string {
   return texto(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+function inconsistenciasFechasAplicacion(a:FilaEsco):string[]{
+ return [['fecha_inicio_planeada','fecha_fin_planeada'],['fecha_inicio_ejecucion','fecha_fin_ejecucion']].flatMap(([start,end])=>{
+  try{if(a[start])validarFecha(a[start]);if(a[end])validarFecha(a[end]);}catch{return [start+':fecha_invalida'];}
+  return a[start]&&a[end]&&texto(a[start])>texto(a[end])?[start+':inicio_posterior_al_final']:[];
+ });
 }
 export function baseFechaAplicacion(args: FilaEsco): 'actual' | 'planned' {
   const base = args.date_basis ?? 'actual';
@@ -140,27 +148,28 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
       // A conservative explicit denial removes prior consent in this clause.
       // Without a named basis, do not guess the referent: withdraw planned consent.
       if ((requested === 'planned' && /\b(?:planeadas?|planificadas?)\b/.test(clause)) ||
-          (requested === 'actual' && /\b(?:reales?|de ejecucion)\b/.test(clause)) ||
-          (requested === 'planned' && !/\b(?:planeadas?|planificadas?|reales?|de ejecucion)\b/.test(clause))) requested = null;
+          (requested === 'actual' && /\b(?:real(?:es)?|de ejecucion)\b/.test(clause)) ||
+          (requested === 'planned' && !/\b(?:planeadas?|planificadas?|real(?:es)?|de ejecucion)\b/.test(clause))) requested = null;
       continue;
     }
     const body = clause;
     // Only a direct date-basis request is actionable. "Dame el estado de la
     // aplicación cuya fecha planeada..." describes a record, not a date basis.
-    const direct = body.match(/^(?:por favor )?(?:us[ae]s?|usar|utiliza(?:r)?|consulta(?:r)?|prefiero|quiero|necesito|muestra(?:me)?|dame|busca(?:r)?|filtra(?:r)?|ignora(?:r)?|exclu(?:ye|ir))\s+(?:(?:por|segun|con) )?(?:(?:la|las) )?((?:fechas?(?: de (?:inicio|fin))? )?(?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
-    const question = body.match(/^(?:cual(?:es)?|que) (?:es |son )?(?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
-    const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca|lista) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|reales?|de ejecucion)\b.*)$/);
+    const direct = body.match(/^(?:por favor )?(?:us[ae]s?|usar|utiliza(?:r)?|consulta(?:r)?|prefiero|quiero|necesito|muestra(?:me)?|dame|busca(?:r)?|filtra(?:r)?|ignora(?:r)?|exclu(?:ye|ir))\s+(?:(?:por|segun|con) )?(?:(?:la|las) )?((?:fechas?(?: de (?:inicio|fin))? )?(?:planeadas?|planificadas?|real(?:es)?|de ejecucion)\b.*)$/);
+    const question = body.match(/^(?:cual(?:es)?|que) (?:es |son )?(?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?|real(?:es)?|de ejecucion)\b.*)$/);
+    const collection = body.match(/^(?:(?:dame|muestra(?:me)?|consulta|busca|lista) (?:el estado de |el resumen de |las )?)?(?:aplicaciones|fumigaciones|fertilizaciones) (?:por|segun|con base en) (?:la |las )?fechas? ((?:planeadas?|planificadas?|real(?:es)?|de ejecucion)\b.*)$/);
     // A direct plural planned-application request is explicit planned intent;
     // a relative clause merely describing one record is not.
     const plannedCollection = body.match(/^(?:dame|muestra(?:me)?|consulta|busca|lista) (?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) ((?:planeadas?|planificadas?)\b.*)$/);
     // Direct interrogative selection, with an optional explicit temporal qualifier.
     // Relative descriptions ("cuya fecha planeada...") do not grant consent.
     const plannedQuestion = body.match(/^(?:que|cual(?:es)?) (?:es |son )?(?:la |las )?(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?) (?:(?:que )?(?:esta(?:n)?|hay|tenemos) )?((?:planeadas?|planificadas?)(?:$| (?:para\b|durante\b|entre\b|desde\b|hasta\b|en (?!ejecucion\b|curso\b)).*))$/);
-    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1] ?? plannedCollection?.[1] ?? plannedQuestion?.[1];
+    const plannedDatesQuestion = body.match(/^(?:que|cual(?:es)?) (?:es |son )?(?:la |las )?(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?) (?:tienen|con) (?:la |las )?fechas?(?: de (?:inicio|fin))? ((?:planeadas?|planificadas?)(?:$| (?:para\b|durante\b|entre\b|desde\b|hasta\b|en (?!ejecucion\b|curso\b)).*))$/);
+    const basis = direct?.[1] ?? question?.[1] ?? collection?.[1] ?? plannedCollection?.[1] ?? plannedQuestion?.[1] ?? plannedDatesQuestion?.[1];
     if (!basis) continue;
     if (/\b(?:sin(?: usar| utilizar)?|no (?:uses|usar|utilices|utilizar)) (?:las )?fechas? (?:planeadas?|planificadas?)\b/.test(body)) { requested = null; continue; }
     const planned = /\b(?:planeadas?|planificadas?)\b/.test(basis);
-    const actual = /\b(?:reales?|de ejecucion)\b/.test(basis);
+    const actual = /\b(?:real(?:es)?|de ejecucion)\b/.test(basis);
     // A mixed clause is ambiguous: keep actual default. A later explicit
     // positive clause can resolve a preceding negation or contrast.
     requested = planned && !actual ? 'planned' : 'actual';
@@ -168,7 +177,7 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
   return requested === 'planned';
 }
 
-export interface SolicitudAplicacion { pregunta: string; anterior?: string; cohorteIds?: string[] }
+export interface SolicitudAplicacion { pregunta: string; anterior?: string; cohorteIds?: string[]; metricas?:readonly ApplicationMetric[] }
 type SeleccionAplicacion = { estado:'verificada'; version:'aplicacion_selector_v1'; aplicacion_ids:string[]|null; lote_ids:string[]|null; referencia:'actual'|'usuario_anterior' } | { estado:'aclarar'; mensaje:string };
 const normalizarSelector = (v:unknown) => normalizarTextoAplicacion(v).replace(/[«»"'()[\],:;!?¿¡—–]/g,' ').replace(/\s+/g,' ').trim();
 const palabrasNombre = (v:unknown) => normalizarSelector(v).split(' ').filter(w=>!['el','la','los','las','de','del','contra','control','aplicacion','fumigacion','fertilizacion'].includes(w)).join(' ');
@@ -293,9 +302,10 @@ export function planRespuestaAplicacion(pregunta: string, hoy = fechaBogota()): 
   if (/\by (?!\d{4}-\d{2}-\d{2}\b|\d{1,2}\/\d{1,2}\/\d{4}\b|(?:(?:el|los|la|las) )?(?:estado|fechas?|consumo|jornales?|mano de obra|costo laboral|canecas? (?:planeadas?|planificadas?))\b)/.test(q)) return fuera('subpregunta_no_cubierta');
   const plural = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(q);
   const listadoReal = /^(?:que|cuales) (?:son )?(?:las )?aplicaciones (?:que )?(?:hicimos|realizamos|ejecutamos|se hicieron|se realizaron|se ejecutaron|tuvieron ejecucion)\b/.test(operation);
+  const listadoPlaneadoFechas=pideFechasPlaneadas(pregunta)&&/^(?:que|cuales) (?:son )?(?:las )?(?:aplicaciones|fumigaciones|fertilizaciones) (?:tienen|con) (?:las )?fechas?(?: de (?:inicio|fin))? (?:planeadas?|planificadas?)\b/.test(operation);
   const tail = /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b(.*)$/.exec(q)?.[1].trim() ?? '';
   const pluralTail = listadoReal ? tail.replace(/^(?:que )?(?:hicimos|realizamos|ejecutamos|se hicieron|se realizaron|se ejecutaron|tuvieron ejecucion)\b\s*/, '') : tail;
-  if (plural && !listadoReal && pluralTail && !/^(?:[?.,!]|(?:(?:estan|hay|tenemos) )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
+  if (plural && !listadoReal && !listadoPlaneadoFechas && pluralTail && !/^(?:[?.,!]|(?:(?:estan|hay|tenemos) )?(?:planeadas?|planificadas?|activas?|cerradas?)\b|en\b|(?:de|para|durante) (?:el mes de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|(?:del?|desde|entre) \d{4}-|(?:hoy|ayer|esta semana|este mes|semana pasada|mes pasado)\b|sin\b|y\b)/.test(pluralTail)) return fuera('subconjunto_plural_no_verificado');
   if (/\b(?:compara|comparacion|retraso|antes o despues|frente a|previstas?|vamos a ejecutar)\b/.test(q)) return fuera('comparacion_o_plan_no_soportado');
   const estimacion = /\b(?:estima|estimacion|teoric[oa]|hipotetic[oa])\b/.test(q);
   if (estimacion && (!/\bdosis\b/.test(q) || !/\bcanecas? (?:planeadas?|planificadas?)\b/.test(q) || /\b\d+(?:[.,]\d+)? canecas?\b/.test(q))) return fuera('parametros_teoricos_no_verificados');
@@ -392,12 +402,24 @@ interface AplicacionParaRespuesta {
 interface EvidenciaParaRespuesta {
   error?: unknown; contexto_recortado?: unknown; seleccion?: SeleccionAplicacion;
   _evidencia: { herramienta: unknown; consulta_completa: unknown; detalle_completo: unknown; total_hechos: unknown; rango: {desde:string|null;hasta:string|null} };
-  resumen?: {date_basis?:unknown;fechas_reales_ausentes?:number}; detalle: AplicacionParaRespuesta[];
+  resumen?: {date_basis?:unknown;fechas_reales_ausentes?:number;labor_only?:boolean}; detalle: AplicacionParaRespuesta[];
 }
 /** Closed date-pair operation over a previously issued cohort, never dose arithmetic. */
 export function pideComparacionFechasCohorte(pregunta: string): boolean {
-  const q = normalizarTextoAplicacion(pregunta).replace(/^(?:consulta de )?solo lectura:\s*/, '').replace(/[¿?¡!.,;:]/g,' ').replace(/\s+/g,' ').trim();
-  return /^(?:en|para) (?:esas|estas) aplicaciones (?:hay diferencias entre las fechas planeadas y las fechas reales|compara las fechas planeadas y las fechas reales)(?: muestralas)?(?: sin corregir ningun registro)?$/.test(q);
+  if(typeof pregunta!=='string'||pregunta.length>16000)return false;
+  const q=normalizarTextoAplicacion(pregunta).replace(/[¿?¡!.,;:]/g,' ').replace(/\s+/g,' ').trim();
+  const reference=/\b(?:(?:esas|estas|aquellas|dichas)(?: mismas)? aplicaciones|las mismas aplicaciones|aplicaciones (?:anteriores|listadas|consultadas|del listado|de la lista|que (?:listaste|mostraste|consultaste)))\b/.test(q);
+  const datePair=/\bfechas?\b/.test(q)&&/\b(?:planeadas?|planificadas?)\b/.test(q)&&/\b(?:real(?:es)?|actual(?:es)?|de ejecucion)\b/.test(q);
+  const request=/\b(?:compara(?:r|me|las)?|comparacion|diferencias?|muestra(?:me|las)?|mostrar|presenta(?:me)?|dame|ver|cuales)\b/.test(q);
+  if(!reference||!datePair||!request)return false;
+  // Recognize the registered-date operation by components, not a stored prompt.
+  // A receipt still owns exact membership; this predicate never authorizes one.
+  const unsupported=/\b(?:por que|causas?|motivos?|duracion(?:es)?|retrasos?|dias|horas|cumplimiento|cumplieron|exito|dosis|consumos?|jornales?|costos?|corrige|corregir|modifica|actualiza|borra)\b/g;
+  for(const match of q.matchAll(unsupported)){
+    const prefix=q.slice(0,match.index);
+    if(!/\b(?:sin(?: calcular| inferir| explicar| estimar| analizar| incluir| evaluar| mostrar)?|no(?: calcules| infieras| expliques| estimes| analices| incluyas| evalues| muestres)?)(?: (?:la|el|los|las))? $/.test(prefix))return false;
+  }
+  return true;
 }
 /** Bounded complete generic actual cohorts only; no model-selected IDs or lot. */
 export function capturarCohorteAplicaciones(plan: PlanRespuestaAplicacion, resultado: string, args: FilaEsco, listadoCompleto: boolean): CohorteAplicaciones | null {
@@ -465,11 +487,14 @@ export function respuestaDeterministaAplicacion(plan: PlanRespuestaAplicacion, r
     const lines:string[] = [scope]; let renderedRows = 0;
     for (const a of r.detalle) {
       const f = a.hechos_ejecucion as ReturnType<typeof hechosEjecucionAplicacion>;
-      if (JSON.stringify(f?.alcance?.lote_ids)!==JSON.stringify(r.seleccion.lote_ids) || f?.contrato !== 'aplicaciones_hechos_v1' || f.aplicacion_id !== a.id || f.alcance.desde !== range.desde || f.alcance.hasta !== range.hasta || f.alcance.base_seleccion_aplicacion !== plan.base ||
-        !Array.isArray(a.movimientos) || !Array.isArray(a.registros_trabajo)) return failure('los hechos estructurados');
-      const recomputed = hechosEjecucionAplicacion(a.movimientos,a.registros_trabajo,{aplicacionId:a.id,tareaId:a.tarea_id?texto(a.tarea_id):null,
-        tareaExclusiva:f.trabajo.atribucion==='tarea_exclusiva',desde:range.desde,hasta:range.hasta,loteIds:f.alcance.lote_ids,consultaCompleta:true,baseSeleccion:plan.base});
-      if (JSON.stringify(recomputed)!==JSON.stringify(f)) return failure('la consistencia de los hechos');
+      if(plan.consumos||plan.trabajo||plan.estimacion){
+        if (JSON.stringify(f?.alcance?.lote_ids)!==JSON.stringify(r.seleccion.lote_ids) || f?.contrato !== 'aplicaciones_hechos_v1' || f.aplicacion_id !== a.id || f.alcance.desde !== range.desde || f.alcance.hasta !== range.hasta || f.alcance.base_seleccion_aplicacion !== plan.base ||
+          (!Array.isArray(a.movimientos)&&r.resumen?.labor_only!==true) || !Array.isArray(a.registros_trabajo)) return failure('los hechos estructurados');
+        if(r.resumen?.labor_only&&(plan.consumos||plan.estimacion))return failure('las fuentes no consultadas');
+        const recomputed = hechosEjecucionAplicacion(r.resumen?.labor_only?[]:a.movimientos,a.registros_trabajo,{aplicacionId:a.id,tareaId:a.tarea_id?texto(a.tarea_id):null,
+          tareaExclusiva:f.trabajo.atribucion==='tarea_exclusiva',desde:range.desde,hasta:range.hasta,loteIds:f.alcance.lote_ids,consultaCompleta:true,baseSeleccion:plan.base});
+        if (r.resumen?.labor_only?JSON.stringify(recomputed.trabajo)!==JSON.stringify(f.trabajo):JSON.stringify(recomputed)!==JSON.stringify(f)) return failure('la consistencia de los hechos');
+      }
       lines.push('\n**'+literalMd(a.nombre_aplicacion)+'** (ID '+literalMd(a.id)+')');
       if (plan.estado || plan.planes) lines.push('Estado registrado: '+(['calculada','en ejecucion','cerrada'].includes(normalizarTextoAplicacion(a.estado))?literalMd(a.estado):'no verificable')+'.');
       if (plan.fechas) {
@@ -550,6 +575,22 @@ export function respuestaSeguraAplicaciones(interacciones: Array<{ tool: string;
   } catch { return unavailable; }
 }
 export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: ConsultaPagina, hoy = fechaBogota(), solicitud?: SolicitudAplicacion): Promise<FilaEsco> {
+  if(nombre==='get_aplicaciones_ejecucion'){
+    if(!args||typeof args!=='object'||Array.isArray(args))throw new OperationFailure('invalid_arguments','arguments');
+    args=applicationReaderArguments(args);
+    if(solicitud?.metricas!==undefined)applicationMetrics(solicitud.metricas);
+    try {
+      for(const key of ['lote_name','application_id','application_name','estado'])if(args[key]!=null&&(typeof args[key]!=='string'||!normalizarTextoAplicacion(args[key])))throw Error('invalid_arguments');
+      if(args.estado!=null&&!['calculada','en ejecucion','cerrada'].includes(normalizarTextoAplicacion(args.estado)))throw Error('invalid_arguments');
+      baseFechaAplicacion(args);
+      if(args.selection_basis!==undefined&&!['start','activity'].includes(String(args.selection_basis)))throw Error('invalid_arguments');
+      const from=args.date_from==null?null:validarFecha(args.date_from),to=args.date_to==null?null:validarFecha(args.date_to);
+      if(from&&to&&from>to)throw Error('invalid_arguments');
+      const scope=args.alcance??(from||to?'periodo':'actual');
+      if(!['actual','periodo'].includes(String(scope))||scope==='periodo'&&(!from||!to))throw Error('invalid_arguments');
+      if(args.detalle_offset!=null&&(!Number.isSafeInteger(args.detalle_offset)||Number(args.detalle_offset)<0))throw Error('invalid_arguments');
+    }catch{throw new OperationFailure('invalid_arguments','arguments');}
+  }
   const def = HERRAMIENTAS_CONSULTA.find(t => t.name === nombre);
   if (!def) throw new Error(`Herramienta desconocida: ${nombre}`);
   const req = def.parameters.required as string[];
@@ -566,7 +607,9 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     fuentes.push(tabla);
     const timestamp = fecha === 'abierta_en' || fecha === 'creado_en';
     const rango = fecha ? `${desde ? `&${fecha}=gte.${encodeURIComponent(timestamp ? `${desde}T00:00:00-05:00` : desde)}` : ''}${hasta ? `&${fecha}=${timestamp ? 'lt' : 'lte'}.${encodeURIComponent(timestamp ? `${sumarDias(hasta, 1)}T00:00:00-05:00` : hasta)}` : ''}` : '';
-    const rows = await leerCompleto(q, tabla, `select=${cols}&order=${fecha ? `${fecha}.asc,` : ''}${tabla === 'clima_resumen_diario' ? 'station_id.asc' : 'id.asc'}${rango}${filtro}`);
+    let rows:FilaEsco[];
+    try { rows=await leerCompleto(q, tabla, `select=${cols}&order=${fecha ? `${fecha}.asc,` : ''}${tabla === 'clima_resumen_diario' ? 'station_id.asc' : 'id.asc'}${rango}${filtro}`); }
+    catch(error){if(error instanceof OperationFailure)throw error;if(nombre==='get_aplicaciones_ejecucion')throw new OperationFailure(error instanceof LimiteLecturaEsco?'budget_exceeded':'source_error',error instanceof LimiteLecturaEsco?'budget':'source');throw error;}
     cobertura[tabla] = (cobertura[tabla] ?? 0) + rows.length;
     return rows;
   };
@@ -675,13 +718,72 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     return finish(rows.map(p => ({ ...p, lote: lm.get(texto(p.lote_id)), sublote: sm.get(texto(p.sublote_id)) ?? null, exportacion_pct: numero(p.kg_exportacion) == null || !(Number(p.kg_totales) > 0) ? null : Number(p.kg_exportacion) / Number(p.kg_totales) * 100 })), { kilos: suma(rows, 'kg_totales'), registros_sin_desglose: rows.filter(p => p.kg_exportacion == null || p.kg_nacional == null).length });
   }
   if (['get_aplicaciones_ejecucion', 'get_carencia_cosecha', 'get_recomendaciones_ejecucion', 'get_producto_consumo'].includes(nombre)) {
+    // Internal validated presentation parts can use the independent metadata
+    // population. Never turn unread activity collections into empty captures.
+    const metadataMetrics=solicitud?.metricas;
+    let metadataCatalogs:{apps:FilaEsco[];lots:FilaEsco[]}|null=null;
+    if(nombre==='get_aplicaciones_ejecucion'&&(args.selection_basis??'start')==='start'&&!args.lote_name&&metadataMetrics?.length&&metadataMetrics.every(m=>['status','dates','date_comparison'].includes(m))){
+      const [metadataApps,metadataLots]=await Promise.all([
+        read('aplicaciones','id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),read('lotes','id,nombre'),
+      ]);
+      metadataCatalogs={apps:metadataApps,lots:metadataLots};
+      const metadataPlan=planRespuestaAplicacion(solicitud!.pregunta,hoy);
+      const selection=resolverSeleccionAplicacion(solicitud!,metadataApps,metadataLots,metadataPlan.tipo==='aplicacion'&&/\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(normalizarTextoAplicacion(solicitud!.pregunta)));
+      if(selection.estado==='aclarar')return {error:'seleccion_no_resuelta',seleccion:selection};
+      if(!selection.lote_ids){
+        delete args.application_id;delete args.application_name;delete args.lote_name;
+        if(selection.aplicacion_ids?.length===1)args.application_id=selection.aplicacion_ids[0];
+        const basis=baseFechaAplicacion(args),dateKey=basis==='actual'?'fecha_inicio_ejecucion':'fecha_inicio_planeada';
+        const appName=normalizarTextoAplicacion(args.application_name),appState=normalizarTextoAplicacion(args.estado);
+        const matching=metadataApps.filter(a=>(!args.application_id||a.id===args.application_id)&&(!appName||normalizarTextoAplicacion(a.nombre_aplicacion).includes(appName))&&(!appState||normalizarTextoAplicacion(a.estado)===appState));
+        const selected=matching.filter(a=>{if(!desde&&!hasta)return true;try{const day=validarFecha(a[dateKey]);return(!desde||day>=desde)&&(!hasta||day<=hasta);}catch{return false;}});
+        if(solicitud?.cohorteIds){const ids=solicitud.cohorteIds;if(ids.length>50||new Set(ids).size!==ids.length||JSON.stringify([...ids].sort())!==JSON.stringify(selected.map(a=>texto(a.id)).sort()))return {error:'cohorte_modificada'};}
+        limites.push('Solo estado y fechas registrados; movimientos, consumos y trabajo no consultados. No certifica ejecución física.');
+        const dateMissing=(a:FilaEsco)=>{try{return !a.fecha_inicio_ejecucion||!validarFecha(a.fecha_inicio_ejecucion);}catch{return true;}};
+        return {...finish(selected.map(a=>({...a,fechas_inconsistentes:inconsistenciasFechasAplicacion(a),base_fecha_consultada:basis,fecha_real_ausente:dateMissing(a),membership:{selection_basis:'start',date_basis:basis,desde,hasta,start_field:dateKey}})),{date_basis:basis,selection_basis:'start',alcance:args.alcance??(desde||hasta?'periodo':'actual'),coincidencias:selected.length,fechas_reales_ausentes:matching.filter(dateMissing).length,fechas_inconsistentes:matching.filter(a=>inconsistenciasFechasAplicacion(a).length).length,metadata_only:true}),seleccion:selection};
+      }
+    }
+    if(nombre==='get_aplicaciones_ejecucion'&&metadataMetrics?.length&&metadataMetrics.every(m=>m==='labor')){
+      const [laborApps,laborLots]=metadataCatalogs?[metadataCatalogs.apps,metadataCatalogs.lots]:await Promise.all([
+        read('aplicaciones','id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),read('lotes','id,nombre'),
+      ]);
+      const laborPlan=planRespuestaAplicacion(solicitud!.pregunta,hoy),selection=resolverSeleccionAplicacion(solicitud!,laborApps,laborLots,laborPlan.tipo==='aplicacion'&&/\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(normalizarTextoAplicacion(solicitud!.pregunta)));
+      if(selection.estado==='aclarar')return {error:'seleccion_no_resuelta',seleccion:selection};
+      delete args.application_id;delete args.application_name;delete args.lote_name;
+      if(selection.aplicacion_ids?.length===1)args.application_id=selection.aplicacion_ids[0];
+      const basis=baseFechaAplicacion(args),selectionBasis=args.selection_basis??'start',dateKey=basis==='actual'?'fecha_inicio_ejecucion':'fecha_inicio_planeada';
+      const matching=laborApps.filter(a=>(!args.application_id||a.id===args.application_id)&&(!args.estado||normalizarTextoAplicacion(a.estado)===normalizarTextoAplicacion(args.estado)));
+      const work=await related('registros_trabajo','id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal','tarea_id',matching.map(a=>a.tarea_id));
+      const inWindow=(r:FilaEsco)=>{try{const day=validarFecha(r.fecha_trabajo);return(!desde||day>=desde)&&(!hasta||day<=hasta)&&(!selection.lote_ids||selection.lote_ids.includes(texto(r.lote_id)));}catch{return false;}};
+      const membershipUnknown=(a:FilaEsco)=>{
+        if(selectionBasis!=='activity')return false;
+        if(!texto(a.tarea_id)||laborApps.filter(other=>other.tarea_id===a.tarea_id).length!==1)return true;
+        if(work.some(r=>r.tarea_id===a.tarea_id&&inWindow(r)))return false;
+        return work.some(r=>r.tarea_id===a.tarea_id&&((!!desde||!!hasta)&&!(()=>{try{return !!validarFecha(r.fecha_trabajo);}catch{return false;}})()||!!selection.lote_ids&&!texto(r.lote_id)));
+      };
+      const selected=matching.filter(a=>{
+        if(selectionBasis==='activity'&&membershipUnknown(a))return true;
+        if(!desde&&!hasta)return !selection.lote_ids||work.some(r=>r.tarea_id===a.tarea_id&&selection.lote_ids!.includes(texto(r.lote_id)));
+        if(selectionBasis==='activity')return work.some(r=>r.tarea_id===a.tarea_id&&inWindow(r));
+        try{const day=validarFecha(a[dateKey]);return(!desde||day>=desde)&&(!hasta||day<=hasta)&&(!selection.lote_ids||work.some(r=>r.tarea_id===a.tarea_id&&inWindow(r)));}catch{return false;}
+      });
+      if(solicitud?.cohorteIds){const ids=solicitud.cohorteIds;if(ids.length>50||new Set(ids).size!==ids.length||JSON.stringify([...ids].sort())!==JSON.stringify(selected.map(a=>texto(a.id)).sort()))return {error:'cohorte_modificada'};}
+      const details=selected.map(a=>{
+        const taskRecords=work.filter(r=>r.tarea_id===a.tarea_id),exclusive=!!a.tarea_id&&laborApps.filter(other=>other.tarea_id===a.tarea_id).length===1;
+        const calculated=hechosEjecucionAplicacion([],taskRecords,{aplicacionId:texto(a.id),tareaId:a.tarea_id?texto(a.tarea_id):null,tareaExclusiva:exclusive,desde,hasta,loteIds:selection.lote_ids,consultaCompleta:true,baseSeleccion:basis});
+        const {consumos:_unreadConsumptions,...laborFacts}=calculated;void _unreadConsumptions;
+        return {...a,base_fecha_consultada:basis,fecha_real_ausente:!a.fecha_inicio_ejecucion,fechas_inconsistentes:inconsistenciasFechasAplicacion(a),registros_trabajo:taskRecords,hechos_ejecucion:laborFacts,membership:{selection_basis:selectionBasis,membership_complete:!membershipUnknown(a),date_basis:basis,desde,hasta,start_field:dateKey,work_ids:taskRecords.filter(inWindow).map(r=>r.id)}};
+      });
+      limites.push('Solo mano de obra registrada por tarea: no consultó movimientos, productos ni consumos. Costo jornal ya incluye la fracción registrada; no demuestra ejecución física.');
+      return {...finish(details,{date_basis:basis,selection_basis:selectionBasis,alcance:args.alcance??(desde||hasta?'periodo':'actual'),coincidencias:selected.length,labor_only:true}),seleccion:selection};
+    }
     const carencia = nombre === 'get_carencia_cosecha';
     const fechaCosecha = carencia ? validarFecha(args.fecha_cosecha) : null;
     // Carencia necesita toda la historia anterior, no solo un rango corto arbitrario.
     const [apps, movimientos, productos, lotes] = await Promise.all([
-      read('aplicaciones', 'id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),
+      metadataCatalogs?Promise.resolve(metadataCatalogs.apps):read('aplicaciones', 'id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),
       read('movimientos_diarios', 'id,aplicacion_id,lote_id,fecha_movimiento,numero_canecas,numero_bultos', carencia ? undefined : 'fecha_movimiento', carencia ? `&fecha_movimiento=lte.${fechaCosecha}` : ''),
-      read('productos', 'id,nombre,unidad_medida,periodo_carencia_dias'), read('lotes', 'id,nombre'),
+      read('productos', 'id,nombre,unidad_medida,periodo_carencia_dias'), metadataCatalogs?Promise.resolve(metadataCatalogs.lots):read('lotes', 'id,nombre'),
     ]);
     const seleccion = nombre==='get_aplicaciones_ejecucion' && solicitud ? resolverSeleccionAplicacion(solicitud,apps,lotes,planRespuestaAplicacion(solicitud.pregunta,hoy).tipo==='aplicacion' && /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(normalizarTextoAplicacion(solicitud.pregunta))) : null;
     if(seleccion?.estado==='aclarar')return {error:'seleccion_no_resuelta',seleccion};
@@ -731,7 +833,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
         return { ...s, visita: vm.get(texto(s.informe_id)), estado_cumplimiento: 'sin_vinculo_confirmado', consumos_candidatos: candidatos.map(consumoShape) };
       }));
     }
-    const allowed = new Set(['application_id', 'application_name', 'estado', 'alcance', 'date_basis', 'lote_name', 'date_from', 'date_to', 'detalle_offset']);
+    const allowed = new Set(['application_id', 'application_name', 'estado', 'alcance', 'date_basis', 'lote_name', 'date_from', 'date_to', 'detalle_offset','selection_basis']);
     if (Object.keys(args).some(key => !allowed.has(key))) throw new Error('Filtro de aplicación desconocido.');
     for (const key of ['lote_name', 'application_id', 'application_name', 'estado']) if (args[key] != null && (typeof args[key] !== 'string' || !normalizarTextoAplicacion(args[key]))) throw new Error(key + ' debe ser texto no vacío.');
     if (args.estado != null && !['calculada', 'en ejecucion', 'cerrada'].includes(normalizarTextoAplicacion(args.estado))) throw new Error('Estado de aplicación inválido.');
@@ -744,15 +846,19 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     const matching = apps.filter(a => (!args.application_id || a.id === args.application_id) &&
       (!name || normalizarTextoAplicacion(a.nombre_aplicacion).includes(name)) &&
       (!state || normalizarTextoAplicacion(a.estado) === state));
+    const selectionBasis=args.selection_basis??'start';
+    const activityWork=selectionBasis==='activity'?await related('registros_trabajo','id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal','tarea_id',matching.map(a=>a.tarea_id)):[];
+    const workInWindow=(r:FilaEsco)=>{try{const day=validarFecha(r.fecha_trabajo);return (!desde||day>=desde)&&(!hasta||day<=hasta)&&loteCoincide(r.lote_id);}catch{return false;}};
     const dateKey = basis === 'actual' ? 'fecha_inicio_ejecucion' : 'fecha_inicio_planeada';
-    const candidates = matching.filter(a => (!desde && !hasta) ||
-      ((!!a[dateKey] && (!desde || texto(a[dateKey]) >= desde) && (!hasta || texto(a[dateKey]) <= hasta)) ||
-       (basis === 'actual' && ms.some(m => m.aplicacion_id === a.id))));
-    const dateIssues = (a: FilaEsco) => [['fecha_inicio_planeada', 'fecha_fin_planeada'], ['fecha_inicio_ejecucion', 'fecha_fin_ejecucion']].flatMap(([start, end]) => {
-      try { if (a[start]) validarFecha(a[start]); if (a[end]) validarFecha(a[end]); }
-      catch { return [start + ':fecha_invalida']; }
-      return a[start] && a[end] && texto(a[start]) > texto(a[end]) ? [start + ':inicio_posterior_al_final'] : [];
+    // Start-date membership and activity records are independent populations.
+    // A movement in the window cannot supply a missing or out-of-window start.
+    const candidates = matching.filter(a => {
+      if(!desde&&!hasta)return true;
+      if(selectionBasis==='activity')return ms.some(m=>m.aplicacion_id===a.id)||activityWork.some(r=>a.tarea_id&&r.tarea_id===a.tarea_id&&workInWindow(r));
+      try { const start=validarFecha(a[dateKey]);return (!desde||start>=desde)&&(!hasta||start<=hasta); }
+      catch{return false;}
     });
+    const dateIssues=inconsistenciasFechasAplicacion;
     const legacyPlans = await related('aplicaciones_lotes', 'id,aplicacion_id,lote_id,sublotes_ids,total_arboles', 'aplicacion_id', candidates.map(a => a.id));
     const planes = await related('aplicaciones_calculos', 'id,aplicacion_id,lote_id,lote_nombre,mezcla_id,litros_mezcla,numero_canecas,kilos_totales,numero_bultos', 'aplicacion_id', candidates.map(a => a.id));
     const selectedApps = candidates.filter(a => !args.lote_name || ms.some(m => m.aplicacion_id === a.id) || [...legacyPlans, ...planes].some(p => p.aplicacion_id === a.id && loteCoincide(p.lote_id)));
@@ -764,13 +870,14 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     }
     const mezclas = await related('aplicaciones_mezclas', 'id,aplicacion_id,nombre_mezcla', 'aplicacion_id', selectedApps.map(a => a.id));
     const recetas = await related('aplicaciones_productos', 'id,mezcla_id,producto_id,producto_nombre,dosis_por_caneca,unidad_dosis,cantidad_total_necesaria', 'mezcla_id', mezclas.map(m => m.id));
-    const trabajo = await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', selectedApps.map(a => a.tarea_id));
-    limites.push('Consumido en rango; trabajo y plan por aplicación completa. Dosis por caneca y consumo total no se comparan sin unidad compatible. Sin captura no demuestra que no se ejecutó.');
+    const trabajo = selectionBasis==='activity'?activityWork:await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', selectedApps.map(a => a.tarea_id));
+    limites.push('Selección por inicio o actividad explícita; movimientos y trabajo tienen sus propias fechas. Dosis por caneca y consumo total no se comparan sin unidad compatible. Sin captura no demuestra que no se ejecutó.');
     const scopeLotes = seleccion?.estado==='verificada' ? seleccion.lote_ids : args.lote_name ? lotes.filter(l => contiene(l.nombre, args.lote_name)).map(l => texto(l.id)) : null;
     const completed = finish(selectedApps.map(a => {
-      const movements = ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) }));
+      const movements: FilaEsco[] = ms.filter(m => m.aplicacion_id === a.id).map(m => ({ ...m, lote: lm.get(texto(m.lote_id)) ?? null, consumos: consumos.filter(c => c.movimiento_diario_id === m.id) }));
       const records = trabajo.filter(t => t.tarea_id === a.tarea_id);
       return { ...a, fechas_inconsistentes: dateIssues(a), base_fecha_consultada: basis, fecha_real_ausente: !a.fecha_inicio_ejecucion,
+        membership: {selection_basis:selectionBasis,date_basis:basis,desde,hasta,start_field:dateKey,movement_ids:movements.map(m=>m.id),work_ids:records.filter(workInWindow).map(r=>r.id)},
         alcance_planeado: legacyPlans.filter(p => p.aplicacion_id === a.id),
         plan_por_lote: planes.filter(p => p.aplicacion_id === a.id && loteCoincide(p.lote_id)).map(p => ({ ...p, lote: lm.get(texto(p.lote_id)) ?? null })),
         productos_planeados: recetas.filter(r => mezclas.some(m => m.id === r.mezcla_id && m.aplicacion_id === a.id)),
@@ -779,7 +886,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
           tareaExclusiva: !!a.tarea_id && apps.filter(other => other.tarea_id === a.tarea_id).length === 1,
           desde, hasta, loteIds: scopeLotes, consultaCompleta: true, baseSeleccion: basis }),
       };
-    }), { date_basis: basis, alcance: scope, coincidencias: selectedApps.length, fechas_reales_ausentes: matching.filter(a => { try { return !a.fecha_inicio_ejecucion || !validarFecha(a.fecha_inicio_ejecucion); } catch { return true; } }).length, fechas_inconsistentes: matching.filter(a => dateIssues(a).length).length });
+    }), { date_basis: basis, selection_basis:selectionBasis, alcance: scope, coincidencias: selectedApps.length, fechas_reales_ausentes: matching.filter(a => { try { return !a.fecha_inicio_ejecucion || !validarFecha(a.fecha_inicio_ejecucion); } catch { return true; } }).length, fechas_inconsistentes: matching.filter(a => dateIssues(a).length).length });
     return seleccion ? {...completed,seleccion} : completed;
   }
   if (nombre === 'get_monitoreo_cobertura') {

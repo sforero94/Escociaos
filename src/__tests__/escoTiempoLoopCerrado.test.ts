@@ -169,7 +169,7 @@ describe('actual shared-loop temporal context with closed synthetic HTTP', () =>
       { role: 'user', content: 'Jornales registrados por lote este mes.', created_at: '2034-04-05T17:00:00Z' },
       { role: 'assistant', content: OLD_TEXT },
     ] });
-    expect(JSON.stringify(r.requests[0]), 'a repeated string is not the current turn identity').not.toContain('2034-03-01');
+    expect(JSON.stringify(r.requests), 'a repeated string is not the current turn identity, including safe pre-provider clarification').not.toContain('2034-03-01');
     if (omitCurrentMessageId) expect(r.reads).toEqual([]);
     else if (r.reads.length) boundToUser(r, expected);
     else expect(r.result.text.trim()).not.toBe(''); // Safe unavailable is acceptable without trusted current-turn identity.

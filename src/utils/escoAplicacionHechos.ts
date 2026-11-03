@@ -151,8 +151,11 @@ export interface PuertoLecturaFechasAplicacion {
 const falloFechas = (scope: Scope, code: string): Evidence => ({ version: 1, state: 'error', scopes: validarScope(scope) ? [scope] : [], facts: [], issues: [{ partId: id(scope?.id) ?? 'application', code }] });
 function alcanceFechas(scope: Scope): boolean {
   return validarScope(scope) && scope.operation === 'application.execution' && scope.entities.length === 1 &&
-    scope.entities[0].kind === 'application' && Object.keys(scope.filters).every(k => k === 'aplicacion_id') &&
+    scope.entities[0].kind === 'application' && Object.keys(scope.filters).every(k => ['aplicacion_id','selection_basis','date_from','date_to'].includes(k)) &&
     (scope.filters.aplicacion_id === undefined || scope.filters.aplicacion_id === scope.entities[0].id) &&
+    (scope.filters.selection_basis === undefined || scope.filters.selection_basis === 'activity' && scope.period === null) &&
+    ['date_from','date_to'].every(k=>scope.filters[k]===undefined||scope.filters.selection_basis==='activity'&&fechaValida(scope.filters[k])) &&
+    !(typeof scope.filters.date_from==='string'&&typeof scope.filters.date_to==='string'&&scope.filters.date_from>scope.filters.date_to) &&
     (!scope.period || ['fecha_inicio_ejecucion', 'fecha_inicio_planeada'].includes(scope.period.fieldMeaning));
 }
 export function evidenciaFechasAplicacion(scope: Scope, reading: LecturaFechasAplicacion): Evidence {

@@ -26,7 +26,7 @@ export type Assertion = 'record_value'|'scoped_total'|'verified_subtotal'|'recor
 export interface Fact {
  id:string;scopeId:string;metric:Metric;definitionId:string;entities:Array<Pick<Entity,'kind'|'id'>>;value:Value;origin:Origin;coverage:Coverage;
  source:{tool:string;field:string;capturedAt:string};assertion:Assertion;
- derivation?:{operation:'sum'|'mean'|'count'|'calendar_gaps'|'compare_dates'|'ratio'|'latest'|'group_events'|'min'|'max'|'difference'|'dedupe_max_sum'|'configured_band';inputs:Array<{factId:string}|{populationId:string;field:string}>};
+ derivation?:{operation:'multiply'|'sum'|'mean'|'count'|'calendar_gaps'|'compare_dates'|'ratio'|'latest'|'group_events'|'min'|'max'|'difference'|'dedupe_max_sum'|'configured_band';inputs:Array<{factId:string}|{populationId:string;field:string}>};
 }
 export interface Evidence {version:1;state:'ok'|'partial'|'error';scopes:Scope[];facts:Fact[];issues:Array<{partId:string;code:string}>}
 export interface AnswerPart {partId:string;state:'answered'|'partial'|'clarify'|'unavailable'|'unsupported';factIds:string[];issueCode?:string}
@@ -40,6 +40,10 @@ export const DEFINITIONS = {
  'inventory.count':{operation:'inventory.status',field:'id',unit:'registro',label:'Productos consultados',tool:'get_inventory_status'},
  'climate.rain':{operation:'climate.rainfall',field:'lluvia_total_mm',unit:'mm',label:'Lluvia medida',tool:'get_climate_data'},
  'climate.missing_days':{operation:'climate.rainfall',field:'fecha',unit:'dia',label:'Días sin dato verificable',tool:'get_climate_data'},
+ 'application.journals':{operation:'application.execution',field:'fraccion_jornal',unit:'jornal',label:'Jornales registrados de la aplicación',tool:'get_aplicaciones_ejecucion'},
+ 'application.planned_dose':{operation:'application.execution',field:'dosis_por_caneca',unit:'catalog',label:'Dosis planeada por caneca',tool:'get_aplicaciones_ejecucion'},
+ 'application.planned_drums':{operation:'application.execution',field:'numero_canecas',unit:'caneca',label:'Canecas planeadas',tool:'get_aplicaciones_ejecucion'},
+ 'application.theoretical_quantity':{operation:'application.execution',field:'dosis_por_caneca',unit:'catalog',label:'Estimación teórica (dosis × canecas planeadas; no consumo)',tool:'get_aplicaciones_ejecucion'},
  'application.cost':{operation:'application.execution',field:'costo_jornal',unit:'COP',label:'Costo registrado',tool:'get_aplicaciones_ejecucion'},
  'application.quantity':{operation:'application.execution',field:'cantidad_utilizada',unit:'catalog',label:'Consumo registrado',tool:'get_aplicaciones_ejecucion'},
  'application.status':{operation:'application.execution',field:'estado',unit:'status',label:'Estado registrado',tool:'get_aplicaciones_ejecucion'},
@@ -63,6 +67,7 @@ const OPERATIONS:Record<Metric,readonly string[]>={
  'labor.cost':['sum'],'labor.journals':['sum'],'labor.count':['count'],
  'inventory.stock':[],'inventory.minimum':[],'inventory.count':['count'],
  'climate.rain':['sum'],'climate.missing_days':['calendar_gaps'],
+ 'application.journals':['sum'],'application.planned_dose':[],'application.planned_drums':[],'application.theoretical_quantity':['multiply'],
  'application.cost':['sum'],'application.quantity':['sum'],'application.status':[],'application.count':['count'],
  'application.actual_start':[],'application.actual_end':[],'application.planned_start':[],'application.planned_end':[],
  'application.start_comparison':['compare_dates'],'application.end_comparison':['compare_dates'],
@@ -71,7 +76,7 @@ const OPERATIONS:Record<Metric,readonly string[]>={
 export const FIELDS:Record<Operation,readonly string[]> = {
  ...NUCLEO_FIELDS,
  'labor.by_lot':['fecha_trabajo'],'inventory.status':[],'climate.rainfall':['fecha'],
- 'application.execution':['fecha_inicio_ejecucion','fecha_inicio_planeada','fecha_movimiento'],
+ 'application.execution':['fecha_inicio_ejecucion','fecha_inicio_planeada','fecha_movimiento','fecha_trabajo'],
  'milk.production':['fecha'],'finance.records':['fecha'],
 };
 const states=['complete','partial','unknown'];
@@ -109,7 +114,7 @@ function hechoInterno(f:Fact,s:Scope,populations:readonly PopulationProof[]):boo
  }else if(f.value.kind==='date'){if(d.unit!=='date'||!fechaValida(f.value.value))return false;}
  else if(f.value.kind==='status'){if(d.unit!=='status'||!((NUCLEO_STATUSES as Partial<Record<Metric,readonly string[]>>)[f.metric]??(f.metric.endsWith('_comparison')?['Iguales','Diferentes']:['Calculada','En ejecución','Cerrada'])).includes(f.value.value))return false;}
  else if(f.value.kind!=='unknown')return false;
- const planned=f.metric==='application.planned_start'||f.metric==='application.planned_end'||(NUCLEO_PLANNED_METRICS as readonly string[]).includes(f.metric);
+ const planned=f.metric==='application.planned_dose'||f.metric==='application.planned_drums'||f.metric==='application.planned_start'||f.metric==='application.planned_end'||(NUCLEO_PLANNED_METRICS as readonly string[]).includes(f.metric);
  if(planned?f.origin!=='planned':f.origin==='planned')return false;
  if(f.value.kind!=='unknown'&&f.assertion==='scoped_total'&&(f.coverage.population!=='complete'||f.coverage.values!=='complete'))return false;
  if(f.value.kind!=='unknown'&&f.assertion==='verified_subtotal'&&(f.coverage.rowsRead===0||f.coverage.missingValues>=f.coverage.rowsRead||f.coverage.values==='unknown'))return false;
@@ -131,6 +136,7 @@ function evidenciaInterna(e:Evidence,expected:Scope[],populations:readonly Popul
     if(JSON.stringify(x.entities)!==JSON.stringify(f.entities))return false;
     if(f.derivation?.operation==='compare_dates'){const prefix=f.metric==='application.start_comparison'?'application.actual_start':f.metric==='application.end_comparison'?'application.actual_end':null;if(!prefix||![prefix,prefix.replace('actual','planned')].includes(x.metric)||x.value.kind!=='date')return false;}
     else if(f.derivation?.operation==='mean'&&f.metric==='milk.mean'){if(!['milk.volume','milk.count'].includes(x.metric)||x.coverage.population!=='complete'||x.coverage.values!=='complete')return false;}
+    else if(f.metric==='application.theoretical_quantity'&&f.derivation?.operation==='multiply'){if(!['application.planned_dose','application.planned_drums'].includes(x.metric)||x.origin!=='planned'||x.coverage.values!=='complete'||x.coverage.population!=='complete'||x.value.kind!=='decimal')return false;}
     else if(Object.prototype.hasOwnProperty.call(NUCLEO_DEFINITIONS,f.metric)){const refs=(NUCLEO_REF_METRICS as Partial<Record<Metric,readonly Metric[]>>)[f.metric];if(!refs?.includes(x.metric)||x.coverage.population!=='complete'||x.coverage.values!=='complete'||x.value.kind!=='decimal'||f.value.kind==='unknown')return false;}
     else if(x.metric!==f.metric||x.definitionId!==f.definitionId||x.value.kind!=='decimal'||f.value.kind!=='decimal'||x.value.unit!==f.value.unit||x.coverage.values!=='complete'||(f.assertion==='scoped_total'&&x.coverage.population!=='complete'))return false;}
    else if(input.populationId!==f.coverage.populationId||input.field!==f.source.field)return false;}
@@ -143,6 +149,12 @@ function evidenciaInterna(e:Evidence,expected:Scope[],populations:readonly Popul
    const inputs=f.derivation.inputs.filter((i):i is {factId:string}=>'factId'in i).map(i=>ids.get(i.factId)!);
    if(!expected||inputs.length!==expected.length||!expected.every(m=>inputs.some(x=>x.metric===m)))return false;
    if(f.derivation.operation==='ratio'){const den=inputs.find(x=>x.metric===expected[1]);if(!den||den.value.kind!=='decimal'||Number(den.value.value)<=0)return false;}
+  }
+  if(f.metric==='application.theoretical_quantity'&&f.value.kind!=='unknown'){
+   if(f.derivation?.operation!=='multiply'||f.origin!=='derived'||f.value.kind!=='decimal')return false;
+   const inputs=f.derivation.inputs.filter((i):i is {factId:string}=>'factId'in i).map(i=>ids.get(i.factId)!);
+   const dose=inputs.find(x=>x.metric==='application.planned_dose'),drums=inputs.find(x=>x.metric==='application.planned_drums');
+   if(inputs.length!==2||!dose||!drums||dose.value.kind!=='decimal'||drums.value.kind!=='decimal'||drums.value.unit!=='caneca'||dose.value.unit!==f.value.unit+'/caneca'||f.value.value!==exactProduct(dose.value.value,drums.value.value))return false;
   }
   if(f.metric==='milk.mean'&&f.derivation?.operation==='mean'&&f.derivation.inputs.some(i=>'factId'in i)){
    const inputs=f.derivation.inputs.filter((i):i is {factId:string}=>'factId'in i).map(i=>ids.get(i.factId)!);
@@ -159,3 +171,11 @@ export function validarScope(s:unknown):s is Scope {try{return scopeInterno(s as
 export function validarCobertura(c:unknown):c is Coverage {try{return coberturaInterna(c as Coverage);}catch{return false;}}
 export function hechoElegible(f:Fact,s:Scope,populations:readonly PopulationProof[]):boolean {try{return hechoInterno(f,s,populations);}catch{return false;}}
 export function validarEvidencia(e:unknown,expected:Scope[],populations:readonly PopulationProof[]):e is Evidence {try{return evidenciaInterna(e as Evidence,expected,populations);}catch{return false;}}
+
+/** Fixed-point product for this closed recipe operation; never a general expression evaluator. */
+function exactProduct(a:string,b:string):string|null {
+ if(!decimalValido(a)||!decimalValido(b)||a.startsWith('-')||b.startsWith('-'))return null;
+ const [ai,af='']=a.split('.'),[bi,bf='']=b.split('.');const scale=af.length+bf.length;
+ const n=BigInt(ai+af)*BigInt(bi+bf),digits=n.toString().padStart(scale+1,'0');
+ return scale?(digits.slice(0,-scale)+'.'+digits.slice(-scale)).replace(/\.?0+$/,''):digits;
+}

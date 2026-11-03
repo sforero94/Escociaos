@@ -76,13 +76,13 @@ function mesCompleto(anio: string, mes: number): { from: string; to: string } {
  * prior year. More specific textual spans consume their contained month/date tokens.
  * Unsupported forms remain absent; distinct recognized periods require clarification.
  */
-export function proponerPeriodoUsuario(question: string, referenceInstant: Date): PropuestaPeriodoUsuario {
+type SpanPeriodo = { start: number; end: number; from: string; to: string };
+function analizarPeriodoUsuario(question: string, referenceInstant: Date, spans: SpanPeriodo[] = []): PropuestaPeriodoUsuario {
   if (typeof question !== 'string' || !(referenceInstant instanceof Date) || !Number.isFinite(referenceInstant.getTime())) return { state: 'invalid' };
   const referenceDay = fechaBogota(referenceInstant);
   if (!fechaValida(referenceDay)) return { state: 'invalid' };
   const anio = referenceDay.substring(0, 4);
   const texto = question.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const spans: Array<{ start: number; end: number; from: string; to: string }> = [];
   let invalid = false;
   let unresolved = false;
   const overlaps = (start: number, end: number) => spans.some(s => start < s.end && end > s.start);
@@ -145,6 +145,47 @@ export function proponerPeriodoUsuario(question: string, referenceInstant: Date)
   if (!periods.length) return { state: 'absent' };
   if (periods.length > 1) return { state: 'ambiguous' };
   return { state: 'resolved', from: periods[0].from, to: periods[0].to, referenceDay };
+}
+
+export function proponerPeriodoUsuario(question: string, referenceInstant: Date): PropuestaPeriodoUsuario {
+  return analizarPeriodoUsuario(question, referenceInstant);
+}
+
+/** Temporal text only. A caller must keep business labels separate from date phrases.
+ * Ambiguous/invalid proposals leave the input intact; they never authorize a merged scope.
+ * Uses the same parser/spans as proponerPeriodoUsuario, including specific range precedence.
+ */
+export function separarPeriodoUsuario(question: string, referenceInstant: Date, protectedSpans: readonly { start: number; end: number }[] = []): { period: PropuestaPeriodoUsuario; remainder: string } {
+  const spans: SpanPeriodo[] = [];
+  if (protectedSpans.some(s => !Number.isSafeInteger(s.start) || !Number.isSafeInteger(s.end) || s.start < 0 || s.start > s.end || s.end > question.length)) return { period: { state: 'invalid' }, remainder: question };
+  let temporalText = question;
+  for (const span of [...protectedSpans].sort((a, b) => b.start - a.start)) temporalText = temporalText.slice(0, span.start) + ' '.repeat(span.end - span.start) + temporalText.slice(span.end);
+  const period = analizarPeriodoUsuario(temporalText, referenceInstant, spans);
+  let remainder = question;
+  if (period.state === 'resolved') for (const span of spans.sort((a, b) => b.start - a.start)) {
+    remainder = remainder.slice(0, span.start) + ' ' + remainder.slice(span.end);
+  }
+  return { period, remainder };
+}
+
+export type RelacionPeriodo = 'inside' | 'outside' | 'unknown' | 'invalid';
+/** Membership by this one date field. Null is unknown, never a fallback to another field. */
+export function relacionFechaPeriodo(value: unknown, range: { from: string; to: string }): RelacionPeriodo {
+  if (!fechaValida(range.from) || !fechaValida(range.to) || range.from > range.to) return 'invalid';
+  if (value === null || value === undefined) return 'unknown';
+  if (!fechaValida(value)) return 'invalid';
+  return value >= range.from && value <= range.to ? 'inside' : 'outside';
+}
+
+/** Inclusive interval overlap, separate from membership by actual/planned start or activity.
+ * A missing endpoint cannot certify overlap; a reversed interval is never swapped/clamped.
+ */
+export function relacionSolapamientoPeriodo(start: unknown, end: unknown, range: { from: string; to: string }): RelacionPeriodo {
+  if (!fechaValida(range.from) || !fechaValida(range.to) || range.from > range.to) return 'invalid';
+  if (start !== null && start !== undefined && !fechaValida(start) || end !== null && end !== undefined && !fechaValida(end)) return 'invalid';
+  if (start === null || start === undefined || end === null || end === undefined) return 'unknown';
+  if (!fechaValida(start) || !fechaValida(end) || start > end) return 'invalid';
+  return start <= range.to && end >= range.from ? 'inside' : 'outside';
 }
 
 export function mismoAlcance(a: Scope, b: Scope): boolean {

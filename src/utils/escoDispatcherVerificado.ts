@@ -1,3 +1,5 @@
+import {applicationMetrics,applicationReaderArguments,requestedApplicationMetrics,OperationFailure,operationFailure,type ApplicationMetric} from './escoOperacionContrato';
+import {particionesMetricasAplicacion,evidenciaMetricaParticion} from './escoAplicacionMetricas';
 import {HERRAMIENTAS_NUCLEO,type ContextoNucleo,type PuertoNucleo} from './escoNucleoComun';
 import {ejecutarNucleoGanado} from './escoNucleoGanado';
 import {ejecutarNucleoCultivos} from './escoNucleoCultivos';
@@ -7,7 +9,6 @@ import {ejecutarNucleoOperaciones} from './escoNucleoOperaciones';
 import {evidenciaTrabajoRegistrado,PROYECCION_HECHOS_TRABAJO,type FilaHechosTrabajo} from './escoHechosTrabajo';
 import {construirHechosInventario,INVENTARIO_PROYECCION,coincidenciaNombreProducto} from './escoHechosInventario';
 import {hechosLluvia,type ObservacionLluvia} from './escoHechosClima';
-import {evidenciaFechasAplicacion,PROYECCION_FECHAS_APLICACION} from './escoAplicacionHechos';
 import {auditarPaginas,type PaginaObservada} from './escoCobertura';
 import {CLOCK_ESCO,validarScope,type Scope,type Evidence,type PopulationProof,type Metric} from './escoEvidencia';
 import {construirHechosRegistros} from './escoHechosRegistros';
@@ -15,14 +16,16 @@ import type {ParteSolicitada} from './escoRespuesta';
 export type TablaFuente='registros_trabajo'|'productos'|'clima_resumen_diario'|'hato_pesajes_leche'|'hato_animales'|'fin_gastos'|'fin_ingresos'|'fin_negocios'|'lotes';
 export interface PaginaFuente {rows:Record<string,unknown>[];total:number|null}
 export interface PuertoFuente {
+ /** Original current USER purpose; resolved scope text cannot grant new theoretical intent. */
+ currentRequestText?:string;
  /** Original current user text supplied by the server, never model arguments. */
  currentUserText?:string;
  selected?:{context:ContextoNucleo;port:PuertoNucleo};
  read(table:TablaFuente,query:string):Promise<PaginaFuente>;
- applications?(args:Record<string,unknown>):Promise<{rows:Record<string,unknown>[];complete:boolean}>;
+ applications?(args:Record<string,unknown>,operation?:{metrics:ApplicationMetric[]}):Promise<{rows:Record<string,unknown>[];complete:boolean}>;
  now():string;
 }
-export interface ResultadoFuente {evidence:Evidence[];scopes:Scope[];populations:PopulationProof[];parts:ParteSolicitada[];labels:Record<string,string>}
+export interface ResultadoFuente {evidence:Evidence[];scopes:Scope[];populations:PopulationProof[];parts:ParteSolicitada[];labels:Record<string,string>;errors?:Array<{partId:string;code:string;stage:string}>}
 const enc=encodeURIComponent;
 const normalized=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const positiveTerm=(text:string,word:RegExp)=>[...text.matchAll(new RegExp(word.source,'g'))].some(m=>!/(?:\bno|\bsin|\bexcepto|\bexcluye)(?: (?:los|las|incluyas|incluir|muestres|mostrar))* $/.test(text.slice(0,m.index)));
@@ -41,7 +44,7 @@ export async function leerFuenteCompleta(port:PuertoFuente,table:TablaFuente,bas
   pages.push({offset,requested:200,identities:page.rows.map(r=>r?.id as string),count:page.total});rows.push(...page.rows);
   if(page.rows.length<200||page.total!==null&&rows.length===page.total)break;
  }
- const audit=auditarPaginas(pages);if(!audit.complete)throw Error('source_error');
+ const audit=auditarPaginas(pages);if(!audit.complete){if(rows.length>=20000&&audit.expectedRows!==rows.length)throw new OperationFailure('budget_exceeded','budget');if(!audit.identityUnique)throw new OperationFailure('source_error','source');throw new OperationFailure('incomplete_population','coverage');}
  return {rows,audit,capturedAt:port.now()};
 }
 /** Known aliases select a registered operation, not a wording-based coverage list. */
@@ -132,9 +135,9 @@ export async function ejecutarFuenteVerificada(tool:string,args:Record<string,un
  }
  const scopes:Scope[]=[],populations:PopulationProof[]=[],evidence:Evidence[]=[],labels:Record<string,string>={};
  const apps=['get_aplicaciones_ejecucion','get_application_summary'].includes(tool),climate=tool==='get_climate_data';
- const allowed=tool==='get_labor_summary'?['date_from','date_to','reference_day','lote_name','metric']:tool==='get_inventory_status'?['reference_day','product_name','category','metric']:climate?['date_from','date_to','reference_day','metric']:['date_from','date_to','reference_day','date_basis','metric','application_name','application_id','estado','lote_name','alcance','type'];
+ const allowed=tool==='get_labor_summary'?['date_from','date_to','reference_day','lote_name','metric']:tool==='get_inventory_status'?['reference_day','product_name','category','metric']:climate?['date_from','date_to','reference_day','metric']:['date_from','date_to','reference_day','date_basis','metric','application_name','application_id','estado','lote_name','alcance','type','selection_basis'];
  if(Object.keys(args).some(k=>!allowed.includes(k)))throw Error('outside_scope');
- if(apps&&args.metric&&!['status','dates','date_comparison'].includes(String(args.metric)))throw Error('unsupported_operation');
+ const appMetrics=apps?applicationMetrics(args.metric):[];
  if(climate&&args.metric&&!['rain','lluvia','precipitation','rainfall','all'].includes(String(args.metric)))throw Error('unsupported_operation');
  const partId=apps?'application':climate?'climate':tool==='get_labor_summary'?'labor':'inventory';
  const operation=apps?'application.execution':climate?'climate.rainfall':tool==='get_labor_summary'?'labor.by_lot':'inventory.status';
@@ -202,21 +205,58 @@ export async function ejecutarFuenteVerificada(tool:string,args:Record<string,un
    scopes.push(scope);populations.push(proof);result.parts[0].scopeIds=[...result.parts[0].scopeIds,scope.id];evidence.push(hechosLluvia(scope,observations,proof));
   }
  }else if(apps){
-  if(!port.applications)throw Error('unsupported_operation');
-  const read=await port.applications(args);if(!read.complete)throw Error('incomplete_population');
-  if(new Set(read.rows.map(r=>r.id)).size!==read.rows.length||read.rows.length>100)throw Error('source_error');
-  if(!read.rows.length){
-   const scope:Scope={id:'application:empty',operation:'application.execution',entities:[],period:args.date_from&&args.date_to?{...dateRange(args)!,basis:args.date_basis==='planned'?'planned':'actual',fieldMeaning:args.date_basis==='planned'?'fecha_inicio_planeada':'fecha_inicio_ejecucion'}:null,filters:args.type?{tipo_aplicacion:String(args.type)}:{}};
-   const proof:PopulationProof={populationId:'application:empty:records',scopeId:scope.id,tool:'get_aplicaciones_ejecucion',fields:['id'],capturedAt:port.now(),population:'complete',rowsRead:0,expectedRows:0,identityUnique:true,consistency:'single_read'};
-   scopes.push(scope);populations.push(proof);result.parts[0].scopeIds=[scope.id];result.parts[0].metrics=args.application_name||args.application_id?['application.count','application.status']:['application.count'];
-   evidence.push({version:1,state:'ok',scopes:[scope],issues:[],facts:[{id:scope.id+':count',scopeId:scope.id,metric:'application.count',definitionId:'application.count.v1',entities:[],origin:'derived',value:{kind:'decimal',value:'0',unit:'registro'},assertion:'bounded_empty',source:{tool:proof.tool,field:'id',capturedAt:proof.capturedAt},coverage:{...proof,values:'complete',missingValues:0,reasons:[]},derivation:{operation:'count',inputs:[{populationId:proof.populationId,field:'id'}]}}]});
-  }
-  for(const row of read.rows){if(typeof row.id!=='string')throw Error('source_error');
-   const period=args.date_from&&args.date_to?{...dateRange(args)!,basis:args.date_basis==='planned'?'planned' as const:'actual' as const,fieldMeaning:args.date_basis==='planned'?'fecha_inicio_planeada':'fecha_inicio_ejecucion'}:null;
-   const scope:Scope={id:'application:'+row.id,operation:'application.execution',entities:[{kind:'application',id:row.id,label:typeof row.nombre_aplicacion==='string'?row.nombre_aplicacion:row.id}],period,filters:{}};
-   const proof:PopulationProof={populationId:scope.id+':record',scopeId:scope.id,tool:'get_aplicaciones_ejecucion',fields:PROYECCION_FECHAS_APLICACION.split(','),capturedAt:port.now(),population:'complete',rowsRead:1,expectedRows:1,identityUnique:true,consistency:'single_read'};
-   scopes.push(scope);populations.push(proof);result.parts[0].scopeIds=[...result.parts[0].scopeIds,scope.id];evidence.push(evidenciaFechasAplicacion(scope,{rows:[row] as Parameters<typeof evidenciaFechasAplicacion>[1]['rows'],proof}));
+  if(!port.applications)throw new OperationFailure('unsupported_operation','arguments');
+  const groups:Array<{metrics:ApplicationMetric[];basis:'start'|'activity'}>=[];
+  const dates=appMetrics.filter(m=>['status','dates','date_comparison'].includes(m));if(dates.length)groups.push({metrics:dates,basis:'start'});
+  for(const metric of appMetrics.filter(m=>m==='quantity'||m==='labor'))groups.push({metrics:[metric],basis:'activity'});
+  if(appMetrics.includes('theoretical'))groups.push({metrics:['theoretical'],basis:'start'});
+  result.parts=[];
+  for(const [gi,group]of groups.entries()){
+   const partId='application:'+gi, metrics:Metric[]=group.metrics.flatMap(m=>m==='status'?['application.status']:m==='dates'?['application.actual_start','application.actual_end','application.planned_start','application.planned_end']:m==='date_comparison'?['application.actual_start','application.actual_end','application.planned_start','application.planned_end','application.start_comparison','application.end_comparison']:m==='quantity'?['application.quantity']:m==='labor'?['application.journals','application.cost']:['application.planned_dose','application.planned_drums','application.theoretical_quantity']);
+   const part:ParteSolicitada={id:partId,operation:'application.execution',scopeIds:[],metrics,label:group.basis==='activity'?'Registros de actividad de la aplicación (no cohorte por fecha de inicio)':group.metrics.includes('theoretical')?'Plan y estimación explícita (no consumo registrado)':'Estado y fechas de la cohorte de inicio registrada'};result.parts.push(part);
+   try{
+    if(group.basis==='activity'&&args.date_basis==='planned')throw new OperationFailure('unsupported_operation','scope');
+    if(group.metrics.includes('theoretical')&&!requestedApplicationMetrics(port.currentRequestText??port.currentUserText??'').includes('theoretical'))throw new OperationFailure('outside_scope','scope');
+    const filters=applicationReaderArguments({...args,selection_basis:group.basis});
+    const read=await port.applications(filters,{metrics:group.metrics});
+    if(args.type){const kind=normalized(String(args.type));if(!['fumigacion','fertilizacion','drench'].includes(kind)||port.currentUserText&&!mentioned(port.currentUserText,String(args.type)))throw new OperationFailure('scope_ambiguous','scope');if(read.rows.some(r=>typeof r.tipo_aplicacion!=='string'))throw new OperationFailure('incomplete_population','coverage');read.rows=read.rows.filter(r=>normalized(String(r.tipo_aplicacion))===kind);}
+    if(!read.complete)throw new OperationFailure('incomplete_population','coverage');
+    if(read.rows.length>100)throw new OperationFailure('budget_exceeded','budget');
+    if(new Set(read.rows.map(r=>r.id)).size!==read.rows.length||read.rows.some(r=>typeof r.id!=='string'))throw new OperationFailure('source_error','source');
+    if(!read.rows.length){
+     const scope:Scope={id:partId+':empty',operation:'application.execution',entities:[],period:args.date_from&&args.date_to?{...dateRange(args)!,basis:group.basis==='activity'?'actual':args.date_basis==='planned'?'planned':'actual',fieldMeaning:group.basis==='activity'?'fecha_movimiento':args.date_basis==='planned'?'fecha_inicio_planeada':'fecha_inicio_ejecucion'}:null,filters:{selection_basis:group.basis,...(args.type?{tipo_aplicacion:String(args.type)}:{})}};
+     const proof:PopulationProof={populationId:scope.id+':records',scopeId:scope.id,tool:'get_aplicaciones_ejecucion',fields:['id'],capturedAt:port.now(),population:'complete',rowsRead:0,expectedRows:0,identityUnique:true,consistency:'stable_count_pages'};
+     scopes.push(scope);populations.push(proof);part.scopeIds=[scope.id];part.metrics=['application.count'];
+     evidence.push({version:1,state:'ok',scopes:[scope],issues:[],facts:[{id:scope.id+':count',scopeId:scope.id,metric:'application.count',definitionId:'application.count.v1',entities:[],origin:'derived',value:{kind:'decimal',value:'0',unit:'registro'},assertion:'bounded_empty',source:{tool:proof.tool,field:'id',capturedAt:proof.capturedAt},coverage:{...proof,values:'complete',missingValues:0,reasons:[]},derivation:{operation:'count',inputs:[{populationId:proof.populationId,field:'id'}]}}]});continue;
+    }
+    result.parts.splice(result.parts.indexOf(part),1);
+    const byKind=new Map<string,ParteSolicitada>();
+    for(const [ri,row]of read.rows.entries()){
+     const scope:Scope={id:partId+':record:'+ri,operation:'application.execution',entities:[{kind:'application',id:String(row.id),label:typeof row.nombre_aplicacion==='string'?row.nombre_aplicacion.length>128?Array.from(row.nombre_aplicacion).slice(0,100).join('')+'… [nombre abreviado]':row.nombre_aplicacion:String(row.id)}],period:args.date_from&&args.date_to?{...dateRange(args)!,basis:group.basis==='activity'?'actual':args.date_basis==='planned'?'planned':'actual',fieldMeaning:group.basis==='activity'?group.metrics.length===1&&group.metrics[0]==='labor'?'fecha_trabajo':'fecha_movimiento':args.date_basis==='planned'?'fecha_inicio_planeada':'fecha_inicio_ejecucion'}:null,filters:group.basis==='activity'?{selection_basis:'activity'}:{}};
+     if((row.membership as Record<string,unknown>|undefined)?.membership_complete===false)scope.filters.membership_complete='false';
+     if(port.currentUserText&&/\b(?:por (?:cada )?lote|cada lote)\b/.test(normalized(port.currentUserText)))scope.filters.group_by='lot';
+     const selectedLots=(row.hechos_ejecucion as {alcance?:{lote_ids?:unknown}}|undefined)?.alcance?.lote_ids;
+     if(Array.isArray(selectedLots)&&selectedLots.every(x=>typeof x==='string'))scope.filters.lote_id=selectedLots;
+     for(const movement of Array.isArray(row.movimientos)?row.movimientos as Record<string,unknown>[]:[]){const lot=movement.lote as Record<string,unknown>|null;if(typeof movement.lote_id==='string'&&typeof lot?.nombre==='string')labels['lot:'+movement.lote_id]=lot.nombre;for(const c of Array.isArray(movement.consumos)?movement.consumos as Record<string,unknown>[]:[]){if(typeof c.producto_id==='string'&&typeof c.producto_nombre==='string')labels['product:'+c.producto_id]=c.producto_nombre;}}
+     for(const planned of Array.isArray(row.plan_por_lote)?row.plan_por_lote as Record<string,unknown>[]:[]){const lot=planned.lote as Record<string,unknown>|null;if(typeof planned.lote_id==='string'&&typeof (planned.lote_nombre??lot?.nombre)==='string')labels['lot:'+planned.lote_id]=String(planned.lote_nombre??lot?.nombre);}
+     for(const recipe of Array.isArray(row.productos_planeados)?row.productos_planeados as Record<string,unknown>[]:[]){if(typeof recipe.producto_id==='string'&&typeof recipe.producto_nombre==='string')labels['product:'+recipe.producto_id]=recipe.producto_nombre;}
+     const partitions=particionesMetricasAplicacion(scope,row,group.metrics);
+     if(partitions.length>100)throw new OperationFailure('budget_exceeded','budget');
+     for(const partition of partitions){
+      const ids=partition.rows.map(r=>r.id),identityUnique=ids.every(x=>typeof x==='string'&&!!x)&&new Set(ids).size===ids.length;
+      const complete=read.complete&&partition.complete&&identityUnique;
+      const proof:PopulationProof={populationId:partition.scope.id+':records',scopeId:partition.scope.id,tool:'get_aplicaciones_ejecucion',fields:[...partition.fields],capturedAt:port.now(),population:complete?'complete':'partial',rowsRead:partition.rows.length,expectedRows:complete?partition.rows.length:null,identityUnique,consistency:'stable_count_pages'};
+      let target=byKind.get(partition.kind);if(!target){const requested:Metric[]=partition.kind==='quantity'?['application.quantity']:partition.kind==='labor'?['application.journals','application.cost']:partition.kind==='theoretical'?['application.planned_dose','application.planned_drums','application.theoretical_quantity']:metrics;target={...part,id:part.id+':'+partition.kind,scopeIds:[],metrics:requested,label:partition.kind==='quantity'?'Consumo registrado por producto y unidad':partition.kind==='labor'?'Jornales y costo laboral registrados':part.label};byKind.set(partition.kind,target);result.parts.push(target);}
+      scopes.push(partition.scope);populations.push(proof);target.scopeIds=[...target.scopeIds,partition.scope.id];
+      evidence.push(evidenciaMetricaParticion(partition,proof));
+     }
+    }
+   }catch(error){if(groups.length===1)throw error;if(!result.parts.includes(part))result.parts.push(part);const failure=operationFailure(error),code=failure.code;result.errors??=[];result.errors.push({partId,...failure});
+    const scope:Scope={id:partId+':unavailable',operation:'application.execution',entities:[],period:null,filters:group.basis==='activity'?{selection_basis:'activity'}:{}};
+    scopes.push(scope);part.scopeIds=[...part.scopeIds,scope.id];evidence.push({version:1,state:'error',scopes:[scope],facts:[],issues:[{partId,code:code==='invalid_arguments'?'invalid_value':code}]});
+   }
   }
  }
+
  return result;
 }

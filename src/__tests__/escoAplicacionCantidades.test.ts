@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { argumentosRespuestaAplicacion, planRespuestaAplicacion, ejecutarConsultaEsco, resumirContexto, type FilaEsco } from '../utils/escoConsultas';
 import type { hechosEjecucionAplicacion } from '../utils/escoAplicacionHechos';
+import type {Evidence,Metric} from '../utils/escoEvidencia';
 interface FuenteCantidadesSintetica {
   error?:unknown;
   _evidencia:{consulta_completa:boolean;detalle_completo:boolean;total_hechos:number;rango:{desde:string|null;hasta:string|null}};
@@ -115,17 +116,36 @@ async function run(options: { missing?: boolean; unavailable?: boolean; answer?:
   const question=options.question ?? options.plannedQuestion ?? '¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?';
   const bound=argumentosRespuestaAplicacion(planRespuestaAplicacion(question,options.plannedQuestion?'2026-10-30':'2032-04-02'),toolArgs);
   // Separate pure-source regression: the actual loop now renders internally and
-  // persists a positive identity/date DTO, never this raw consumption object.
+  // persists bounded validated facts, never this raw consumption object.
   const evidence=await ejecutarConsultaEsco('get_aplicaciones_ejecucion',bound,async(t,q)=>read(db,t,q),options.plannedQuestion?'2026-10-30':'2032-04-02',{pregunta:question}) as unknown as FuenteCantidadesSintetica;
   return {result,bodies,evidence,context:JSON.parse(result.toolInteractions[0].result_summary)};
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+type LoopResult=Awaited<ReturnType<typeof llmToolLoop>>;
+interface Saved {state?:string;error?:string;stage?:string;errors?:Array<{code:string;stage:string;partId?:string}>;evidence?:Evidence;essentialFactsUnavailable?:boolean}
+const savedContexts=(result:LoopResult):Saved[]=>result.toolInteractions.map(h=>JSON.parse(h.result_summary) as Saved);
+function exactFact(result:LoopResult,metric:Metric,value:string,unit:string,period:{from:string;to:string}|null={from:args.date_from,to:args.date_to}){
+ const pair=savedContexts(result).flatMap(c=>(c.evidence?.facts??[]).map(f=>({context:c,fact:f}))).find(({fact:f})=>f.metric===metric&&f.value.kind==='decimal'&&f.value.value===value&&f.value.unit===unit);
+ expect(pair,`${metric}=${value} ${unit} must be persisted as a validated source fact`).toBeDefined();
+ const {context,fact}=pair!;expect(context.state).toBe('validated');expect(fact.entities).toContainEqual({kind:'application',id:'synthetic-app'});
+ expect(fact.source).toMatchObject({tool:'get_aplicaciones_ejecucion'});
+ const scope=context.evidence!.scopes.find(s=>s.id===fact.scopeId)!;expect(scope.entities).toEqual(expect.arrayContaining([expect.objectContaining({kind:'application',id:'synthetic-app'})]));
+ if(period)expect(scope.period).toMatchObject({...period,basis:'actual',fieldMeaning:metric==='application.quantity'?'fecha_movimiento':'fecha_trabajo'});else expect(scope.period).toBeNull();
+ return fact;
+}
+function noRawPersistence(result:LoopResult){expect(JSON.stringify(savedContexts(result))).not.toMatch(/"(?:movimientos|productos_planeados|registros_trabajo|hechos_ejecucion|salario|responsable|observaciones)"\s*:/);}
+function closedFailure(result:LoopResult,code:string,stage:string){
+ const contexts=savedContexts(result),errors=contexts.flatMap(c=>c.errors??(c.error?[{code:c.error,stage:c.stage}]:[]));
+ expect(errors).toEqual(expect.arrayContaining([expect.objectContaining({code,stage})]));
+ expect(contexts.flatMap(c=>c.evidence?.facts??[]).some(f=>f.metric==='application.quantity'&&f.value.kind==='decimal'&&f.assertion==='scoped_total')).toBe(false);
+ expect(result.text).not.toMatch(/(?:no hubo actividad|no se ejecut[oó] ninguna)/i);
+}
 describe('application quantities: evidence versus generation boundary', () => {
   it.each(['missing','wildcard','changing'] as const)('never certifies authoritative application facts with %s count evidence', async countMode => {
-    const { context, result } = await run({countMode});
-    expect(context.error).toBeTruthy();
-    expect(context._evidencia?.consulta_completa).not.toBe(true);
-    expect(result.text).toContain('No pude verificar');
+    const { result } = await run({countMode});
+    // The count gate distinguishes unavailable coverage from transport failure.
+    closedFailure(result,'incomplete_population','coverage');
+    expect(result.text).toMatch(/(?:No pude verificar|Falta evidencia verificable)/);
   });
   it.each(['', 'Solo lectura: ', 'Consulta de solo lectura: '])('allows an explicit planned interrogative through the actual loop without denying date_basis: %s', async prefix => {
     const { evidence, bodies, context } = await run({ plannedQuestion: prefix + '¿Qué aplicaciones están planeadas para noviembre de 2026?' });
@@ -149,36 +169,37 @@ describe('application quantities: evidence versus generation boundary', () => {
   it('renders fresh actual facts and discards a deliberately false final model reply and history', async () => {
     const { result }=await run({question:'¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?',expectedCalls:1,
       answer:'Se consumieron 40 L y el costo fue 1 COP.',history:'Antes dije que se consumieron 40 L y costó 1 COP.'});
-    expect(result.text).toContain('| L | 3.75 |');expect(result.text).toContain('| g | 75 |');
-    expect(result.text).toContain('0.75 jornales');expect(result.text).toContain('33000 COP');
+    exactFact(result,'application.quantity','3.75','L');exactFact(result,'application.quantity','75','g');
+    exactFact(result,'application.journals','0.75','jornal');exactFact(result,'application.cost','33000','COP');
+    expect(result.text).toMatch(/Consumo registrado[^\n]*3\.75 `L`/);expect(result.text).toMatch(/Costo registrado[^\n]*33000 `COP`/);
     expect(result.text).not.toContain('40 L');expect(result.text).not.toContain('1 COP');
   });
   it('does not invent a weekly window when the user asks for the application as a whole', async () => {
     const { result,evidence }=await run({question:'¿Cómo va la aplicación de plaga Z?',expectedCalls:1,answer:'Incorrect prose'});
     expect(evidence._evidencia.rango).toEqual({desde:null,hasta:null});
-    expect(result.text).toContain('| L | 102.75 |');expect(result.text).toContain('132999 COP');
+    exactFact(result,'application.quantity','102.75','L',null);exactFact(result,'application.cost','132999','COP',null);
+    expect(result.text).toMatch(/Consumo registrado[^\n]*102\.75 `L`/);
   });
   it('uses the fresh result even when saved context must drop the large raw detail', async () => {
     const { result }=await run({question:'¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?',expectedCalls:1,largeRows:true,answer:'Wrong 9 L'});
-    expect(result.text).toContain('| L | 103.75 |');
-    const saved=JSON.parse(result.toolInteractions[0].result_summary);
-    expect(saved.solo_descubrimiento).toBe(true);expect(saved.detalle[0].id).toBe('synthetic-app');
-    expect(saved.detalle[0]).not.toHaveProperty('movimientos');expect(saved.detalle[0]).not.toHaveProperty('hechos_ejecucion');
+    exactFact(result,'application.quantity','103.75','L');expect(result.text).toMatch(/Consumo registrado[^\n]*103\.75 `L`/);
+    noRawPersistence(result);expect(new TextEncoder().encode(result.toolInteractions[0].result_summary).length).toBeLessThanOrEqual(24000);
   });
   it('answers verified subparts while distinguishing a missing total from a registered zero', async () => {
     const { result }=await run({question:'¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?',expectedCalls:1,missing:true});
-    expect(result.text).toContain('2.5 (subtotal verificado; total desconocido)');
-    expect(result.text).toContain('33000 COP');expect(result.text).not.toContain('| L | 0 |');
+    expect(exactFact(result,'application.quantity','2.5','L')).toMatchObject({assertion:'verified_subtotal',coverage:{values:'partial',missingValues:1}});
+    exactFact(result,'application.cost','33000','COP');expect(result.text).toMatch(/subtotal verificado, no total completo[^\n]*2\.5 `L`/);expect(result.text).not.toMatch(/Consumo registrado[^\n]*\| 0 `L`/);
   });
   it('keeps an explicit theoretical plan calculation separate from registered consumption', async () => {
     const {result}=await run({question:'Estima el consumo teórico de la aplicación de plaga Z según dosis y canecas planeadas.',expectedCalls:1,estimate:true});
-    expect(result.text).toContain('40 cc/caneca × 3 canecas planeadas = 120 cc estimados');
-    expect(result.text).toContain('no es consumo real');expect(result.text).not.toContain('120 L');
+    const contexts=savedContexts(result),facts=contexts.flatMap(c=>c.evidence?.facts??[]);
+    for(const [metric,value,unit,origin]of [['application.planned_dose','40','cc/caneca','planned'],['application.planned_drums','3','caneca','planned'],['application.theoretical_quantity','120','cc','derived']])expect(facts).toEqual(expect.arrayContaining([expect.objectContaining({metric,origin,entities:expect.arrayContaining([{kind:'application',id:'synthetic-app'},{kind:'product',id:'p1'},{kind:'lot',id:'l1'}]),value:{kind:'decimal',value,unit},source:expect.objectContaining({tool:'get_aplicaciones_ejecucion'})})]));
+    expect(result.text).toMatch(/40 `cc\/caneca` × 3 `caneca` = 120 `cc`/);expect(result.text).toContain('no consumo');expect(result.text).not.toContain('120 L');
   });
   it('does not use model prose or arbitrary identity for an unresolved mixed-domain request', async () => {
     const mixed='Control sintético de aplicación y lluvia; respuesta no cubierta por el renderer.';
     const {result}=await run({question:'¿Cómo va la aplicación y cuál es el pronóstico de lluvia?',expectedCalls:1,answer:mixed});
-    expect(result.text).not.toBe(mixed);expect(result.text).toContain('No pude verificar');
+    expect(result.text).not.toBe(mixed);closedFailure(result,'scope_ambiguous','scope');
     expect(result.text).not.toContain('pronóstico de lluvia confirmado');
   });
   it('keeps the pure scoped consumption/labor source exact without using planned dose', async () => {
@@ -197,7 +218,7 @@ describe('application quantities: evidence versus generation boundary', () => {
       producto_id: 'p1', cantidad_total: null, cantidad_verificada: '2.5', registros_invalidos: 1,
     });
   });
-  it('keeps exact actual quantities and planned dose in the source while persisting only identity/dates', async () => {
+  it('keeps exact actual quantities and planned dose in the source while persisting bounded validated facts', async () => {
     const { evidence, result } = await run();
     expect(evidence._evidencia).toMatchObject({ consulta_completa: true, detalle_completo: true,
       rango: { desde: args.date_from, hasta: args.date_to } });
@@ -207,9 +228,8 @@ describe('application quantities: evidence versus generation boundary', () => {
       ['p1', '1.25', 'L'], ['p1', 2.5, 'L'], ['p2', 75, 'g'],
     ]);
     expect(evidence.detalle[0].productos_planeados[0]).toMatchObject({ dosis_por_caneca: 40, unidad_dosis: 'cc', cantidad_total_necesaria: 9 });
-    const saved=JSON.parse(result.toolInteractions[0].result_summary);
-    expect(saved.detalle[0]).toMatchObject({id:'synthetic-app',estado:'En ejecución'});
-    expect(saved.detalle[0]).not.toHaveProperty('movimientos');expect(saved.detalle[0]).not.toHaveProperty('productos_planeados');
+    exactFact(result,'application.quantity','3.75','L');exactFact(result,'application.cost','33000','COP');noRawPersistence(result);
+    expect(savedContexts(result).flatMap(c=>c.evidence?.facts??[]).find(f=>f.metric==='application.status')).toMatchObject({entities:[{kind:'application',id:'synthetic-app'}],value:{kind:'status',value:'En ejecución'}});
   });
   it('preserves missing consumption as null instead of inferring a planned or zero quantity', async () => {
     const { evidence } = await run({ missing: true });
@@ -217,16 +237,15 @@ describe('application quantities: evidence versus generation boundary', () => {
     expect(evidence.detalle[0].productos_planeados[0].cantidad_total_necesaria).toBe(9);
   });
   it('does not make unavailable consumption into complete evidence', async () => {
-    const { context, result } = await run({ unavailable: true });
-    expect(context.error).toBeTruthy();
-    expect(context._evidencia?.consulta_completa).not.toBe(true);
-    expect(result.text).toContain('No pude verificar');
+    const { result } = await run({ unavailable: true });
+    closedFailure(result,'source_error','source');
+    expect(result.text).toMatch(/(?:No pude verificar|Falta evidencia verificable)/);
   });
   it('replaces invented model prose with registered source facts without a second generation', async () => {
     const wrong = 'Control deliberadamente erróneo: se consumieron 40 L.';
     const { result, evidence } = await run({ answer: wrong });
     expect(evidence.detalle[0].movimientos[0].consumos[0].cantidad_utilizada).toBe('1.25');
-    expect(result.text).not.toBe(wrong);expect(result.text).toContain('| L | 3.75 |');
+    expect(result.text).not.toBe(wrong);expect(result.text).not.toContain('40 L');exactFact(result,'application.quantity','3.75','L');expect(result.text).toMatch(/Consumo registrado[^\n]*3\.75 `L`/);
   });
   it('confirms long saved context loses raw consumption but requires a fresh query', async () => {
     const db = fixture();

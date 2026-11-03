@@ -30,7 +30,7 @@ const eventCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,
 const animalsUrl = `${BASE_SINTETICA}/rest/v1/hato_animales?select=${animalCols}&order=id.asc&limit=200&offset=0`;
 const eventsUrl = `${BASE_SINTETICA}/rest/v1/hato_eventos?select=${eventCols}&order=fecha.asc,id.asc&fecha=gte.2026-09-01&fecha=lte.2026-09-30&tipo=eq.parto&limit=200&offset=0`;
 // Pinned raw request-body hashes. Recompute only after reviewing intentional protocol changes.
-const modelBodyHashes = ['0431e88ee4c2d8d99a840cf47dc4afeca83896938dec3f0517a0dd738c4b5948','8e012b6ecfb76be6054e201754f9813b156ccad4a5db30349e255187d12ef655'];
+const modelBodyHashes = ['659626bc1479f23efbec83ec24820b9db14af6b2a58df6192080b569e32b7030','f7a08e3b566a327fad401918fecbadca98140c441f802e4797f949cfa301b8fc'];
 async function control(options: { followup?: boolean; answer?: string; status?: number; total?: number; sourceMotherNumber?:number } = {}) {
   const c = caso(options.followup);
   const turns: PaqueteFixtures['scenarios'][0]['turns'] = [];

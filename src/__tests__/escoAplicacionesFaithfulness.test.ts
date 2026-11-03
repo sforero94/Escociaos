@@ -1,9 +1,10 @@
 // Test-only proposed application contract. All records and replies are synthetic.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ejecutarConsultaEsco, type ConsultaPagina, type FilaEsco } from '@/utils/escoConsultas';
+import type {Evidence} from '../utils/escoEvidencia';
 const modulePath = '../supabase/functions/server/chat.tsx';
 const { llmToolLoop } = await import(modulePath) as {
-  llmToolLoop: (messages: { role: string; content: string }[]) => Promise<{
+  llmToolLoop: (messages: { role: string; content: string;created_at?:string }[]) => Promise<{
     text: string; toolInteractions: { tool: string; args: Record<string, unknown>; result_summary: string }[];
   }>;
 };
@@ -35,12 +36,12 @@ function database(db: Record<string, FilaEsco[]>): ConsultaPagina {
 }
 const details = (result: FilaEsco) => result.detalle as FilaEsco[];
 const unexpected: string[] = [];
-afterEach(() => { vi.unstubAllGlobals(); expect(unexpected.splice(0)).toEqual([]); });
+afterEach(() => { vi.unstubAllGlobals();vi.useRealTimers();expect(unexpected.splice(0)).toEqual([]); });
 const FIXTURE = 'https://closed-fixture.invalid';
 const MODEL_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const response = (message: unknown) => new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
 const call = (name: string, args: Record<string, unknown>) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'fixture-call', type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
-function install(model: (body: Record<string, unknown>) => unknown, read?: (url: URL) => unknown[]) {
+function install(model: (body: Record<string, unknown>) => unknown, read?: (url: URL) => unknown[], options:{missingCountFor?:string}={}) {
   vi.stubGlobal('Deno', { env: { get: (key: string) => ({ SUPABASE_URL: FIXTURE, SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-key', OPENROUTER_API_KEY: 'synthetic-model-key' } as Record<string, string>)[key] } });
   vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
     if (input === MODEL_URL && init?.method === 'POST') return response(model(JSON.parse(String(init.body))));
@@ -49,7 +50,7 @@ function install(model: (body: Record<string, unknown>) => unknown, read?: (url:
       const rows = read(url);
       const full = new URL(url); full.searchParams.set('limit','20001'); full.searchParams.set('offset','0');
       const total = read(full).length, offset = Number(url.searchParams.get('offset') ?? 0);
-      return new Response(JSON.stringify(rows), { headers: { 'content-range': rows.length ? `${offset}-${offset+rows.length-1}/${total}` : `*/${total}` } });
+      return new Response(JSON.stringify(rows), { headers: options.missingCountFor===url.pathname?{}:{ 'content-range': rows.length ? `${offset}-${offset+rows.length-1}/${total}` : `*/${total}` } });
     }
     unexpected.push(`${init?.method ?? 'GET'} ${url.origin}${url.pathname}`);
     throw Error('Unexpected request; network fallback forbidden');
@@ -113,12 +114,17 @@ describe('synthetic actual-loop application interpretation', () => {
       const unsupported = 'No existe ninguna aplicación oficial de control de plaga Z.';
       install(() => round++ === 0 ? call(tool, PERIOD) : { role: 'assistant', content: unsupported }, url => {
         if (url.pathname === (tool === 'get_tareas' ? '/rest/v1/tareas' : '/rest/v1/aplicaciones')) return [];
+        if(tables.has(url.pathname.split('/').at(-1)!))return [];
         unexpected.push(url.pathname); throw Error('Unexpected table');
-      });
+      },{missingCountFor:tool==='get_application_summary'?'/rest/v1/aplicaciones':undefined});
       const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación de control de plaga Z?' }]);
       const first=JSON.parse(result.toolInteractions[0].result_summary);
       if(tool==='get_tareas')expect(first).toMatchObject({error:'source_unavailable',requiere_reconsulta:true});
-      else expect(first._evidencia.consulta_completa).toBe(false);
+      else {
+        expect(first.errors).toEqual(expect.arrayContaining([expect.objectContaining({code:'incomplete_population',stage:'coverage'})]));
+        const facts=result.toolInteractions.flatMap(h=>(JSON.parse(h.result_summary).evidence?.facts??[]) as Evidence['facts']);
+        expect(facts.some(f=>f.metric==='application.count'&&f.value.kind==='decimal'&&f.value.value==='0')).toBe(false);
+      }
       expect(result.text).not.toBe(unsupported);
     });
   }
@@ -136,17 +142,26 @@ describe('actual-date default and explicit planned date basis', () => {
   it.each([{ application_name: 4 }, { application_name: ' ' }, { estado: 'other' }, { date_basis: 'other' }, { alcance: 'other' }, { date_from: '2031-05-03', date_to: '2031-05-01' }])('fails closed for malformed application controls %j', async args => {
     await expect(ejecutarConsultaEsco('get_aplicaciones_ejecucion', args, database({ aplicaciones: [A] }), '2031-05-10')).rejects.toThrow();
   });
-  it('forces the application execution tool and rejects unsolicited planned basis before any database read', async () => {
+  it('normalizes unsolicited model planned basis to the explicit actual user range before source membership', async () => {
     let round = 0; let first: Record<string, unknown> = {};
+    const reads:URL[]=[],app={...A,nombre_aplicacion:'Aplicación sintética'};
     install(body => {
-      if (round++ === 0) { first = body; return call('get_aplicaciones_ejecucion', { date_basis: 'planned' }); }
+      if (round++ === 0) { first = body; return call('get_aplicaciones_ejecucion', { date_basis: 'planned',date_from:'1900-01-01',date_to:'1900-01-02' }); }
       return { role: 'assistant', content: 'Synthetic unsupported result' };
-    });
-    const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación sintética?' }]);
+    },url=>{reads.push(url);const table=url.pathname.split('/').at(-1)!;if(table==='aplicaciones')return [app];if(tables.has(table))return [];unexpected.push(url.pathname);throw Error('Unexpected table');});
+    const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación sintética del 2031-05-01 al 2031-05-31?' }]);
     expect(first.tool_choice).toBe('required');
     expect((first.tools as {function:{name:string}}[]).some(t=>t.function.name==='get_aplicaciones_ejecucion')).toBe(true);
-    expect(JSON.parse(result.toolInteractions[0].result_summary).error).toBeTruthy();
-    expect(result.text).toContain('No pude verificar');
+    expect(result.toolInteractions[0].args.date_basis).toBe('actual');
+    const saved=JSON.parse(result.toolInteractions[0].result_summary) as {state:string;evidence:Evidence};expect(saved.state).toBe('validated');
+    const start=saved.evidence.facts.find(f=>f.metric==='application.actual_start')!;expect(start).toMatchObject({entities:[{kind:'application',id:app.id}],origin:'recorded',value:{kind:'date',value:'2031-05-04'},source:{tool:'get_aplicaciones_ejecucion',field:'fecha_inicio_ejecucion'}});
+    expect(saved.evidence.scopes.find(s=>s.id===start.scopeId)?.period).toMatchObject({basis:'actual',from:PERIOD.date_from,to:PERIOD.date_to,fieldMeaning:'fecha_inicio_ejecucion'});
+    for(const f of saved.evidence.facts.filter(f=>f.metric==='application.count'&&f.value.kind==='decimal'&&f.value.value==='0')){
+      expect(f).toMatchObject({assertion:'bounded_empty',coverage:{population:'complete',expectedRows:0}});
+      expect(saved.evidence.scopes.find(s=>s.id===f.scopeId)).toMatchObject({filters:{selection_basis:'activity'},period:{basis:'actual',fieldMeaning:'fecha_movimiento'}});
+    }
+    expect(reads.length).toBeGreaterThan(0);for(const u of reads){expect(u.searchParams.has('fecha_inicio_planeada')).toBe(false);expect(u.searchParams.get('fecha_movimiento')??'').not.toContain('1900');}
+    expect(result.text).toContain('2031-05-04');expect(result.text).not.toContain('Synthetic unsupported result');
   });
 });
 
@@ -241,12 +256,17 @@ describe('shared grammar through the closed application loop',()=>{
     const rows:Record<string,unknown[]>={aplicaciones:[app],lotes:[{id:'synthetic-lot',nombre:'Sintético'}],productos:[{id:'synthetic-product',nombre:'Sintético',unidad_medida:'L'}],movimientos_diarios:[{id:'synthetic-move',aplicacion_id:app.id,fecha_movimiento:'2032-05-13',lote_id:'synthetic-lot'}],movimientos_diarios_productos:[{id:'synthetic-consumption',movimiento_diario_id:'synthetic-move',producto_id:'synthetic-product',cantidad_utilizada:'3.2',unidad:'L'}],registros_trabajo:[{id:'synthetic-work',tarea_id:'synthetic-task',fecha_trabajo:'2032-05-13',lote_id:'synthetic-lot',fraccion_jornal:'1.5',costo_jornal:'300'}]};
     const invented='Consumo Real de Productos: 999 L, 999 jornales.';
     install(()=>++calls===1?call('get_aplicaciones_ejecucion',{application_id:'wrong-model-id'}):{role:'assistant',content:invented},url=>rows[url.pathname.split('/').pop()!]??[]);
-    const history=previous?[{role:'user',content:previous},{role:'assistant',content:'La aplicación seleccionada es Otra y gastó 999 L.'}]:[];
+    vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2032-05-15T12:00:00Z'));
+    const history=previous?[{role:'user',content:previous,created_at:'2032-05-14T12:00:00Z'},{role:'assistant',content:'La aplicación seleccionada es Otra y gastó 999 L.'}]:[];
     const result=await llmToolLoop([...history,{role:'user',content:'Consulta de solo lectura: '+question}]);
-    expect(calls).toBe(1);expect(result.text).toContain(app.nombre_aplicacion);expect(result.text).toContain(expected!.replace(' a ','–'));
+    expect(calls).toBe(1);expect(result.text).toContain(app.nombre_aplicacion);
+    const saved=JSON.parse(result.toolInteractions[0].result_summary) as {evidence:Evidence};
+    const metric=_case==='followup'?'application.journals':_case==='numeric-cohort'||_case==='within-month-cohort'?'application.actual_start':'application.quantity';
+    const fact=saved.evidence.facts.find(f=>f.metric===metric)!;
+    expect(fact,JSON.stringify({text:result.text,saved})).toMatchObject({entities:expect.arrayContaining([{kind:'application',id:app.id}]),source:{tool:'get_aplicaciones_ejecucion'},value:_case==='followup'?{kind:'decimal',value:'1.5',unit:'jornal'}:metric==='application.actual_start'?{kind:'date',value:'2032-05-13'}:{kind:'decimal',value:expected,unit:'L'}});
+    if(metric==='application.actual_start')expect(saved.evidence.scopes.find(s=>s.id===fact.scopeId)?.period).toMatchObject({from:'2032-05-12',to:'2032-05-14',basis:'actual',fieldMeaning:'fecha_inicio_ejecucion'});
     expect(result.text).not.toContain('999');expect(result.text).not.toContain('Necesito precisar');
-    const saved=JSON.parse(result.toolInteractions[0].result_summary);
-    const identities=saved.detalle?.map((r:{id:string})=>r.id)??saved.evidence.scopes.flatMap((s:{entities:{id:string}[]})=>s.entities.map(e=>e.id));
+    const identities=saved.evidence.scopes.flatMap(s=>s.entities.map(e=>e.id));
     expect(identities).toContain(app.id);expect(result.toolInteractions[0].args.application_id).toBeUndefined();
   });
 });
