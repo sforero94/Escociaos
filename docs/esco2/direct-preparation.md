@@ -9,6 +9,7 @@ Run:
 ```sh
 python analysis/esco2-design/check_contracts.py
 python analysis/esco2-design/check_direct_boundary.py
+python analysis/esco2-design/check_labor_compatibility.py
 ```
 
 The second suite checks policy requirements using fake authorities and a spy read port. Rejection must leave the read count unchanged. It covers invalid session/channel/operation, absent/inactive/non-Gerencia profile, foreign conversation, client-supplied identity/table/projection/write method, unauthorized lots, empty authorized scope, explicit permission for unassigned records, revocation between operations, owner/scope changes immediately before a read, and two concurrent actors with disjoint scope. A missing ownership check or an empty-filter interpretation of “all lots” causes these cases to fail.
@@ -16,6 +17,8 @@ The second suite checks policy requirements using fake authorities and a spy rea
 Verification after independent review: 4 registry checks and 15 boundary checks passed locally (19 total). New cases cover argument mutation after validation, registry mutation during authorization, malformed authority types and rejection of spy-output propagation. These failed against the reviewed revision before correction. The emitter captures its registry as an immutable serialization/hash, uses a private validated argument snapshot, validates authority types strictly and returns only the request. An earlier in-memory mutation removed ownership enforcement; the owner-change test failed as required. This discriminates the proposed guards; it is not a live authorization test. See [review and baseline reconciliation](review-and-baseline.md).
 
 The probe closes a design ambiguity: `lotes=[]` resolves to the current actor's authorized set, never an unrestricted filter. Unassigned records require a separate server authorization flag. An explicit lot filter excludes unassigned records. A SQL/Data API adapter must implement exactly the conjunction of user RLS AND this scope. The proposal does not assert that current production RLS has a farm/lot policy or that the current authorization schema already supplies that set.
+
+Compatibility follow-up: the request now preserves the validated group, metric list, operation and date-field meaning; projection is limited to registered identity fields plus requested metric columns. Current suites have 5 registry + 17 boundary cases; the earlier 19-case count above describes the independent review checkpoint. See [compatibility disposition](compatibility-disposition.md) for the six separate date-alias cases and the decisions still gated by M2.
 
 Limitations: fake authorities cannot prove JWT signature/expiry/issuer/audience validation, live profile semantics, RLS, grants, column protection, SQL side effects, transport headers, provider retention or database transaction consistency. Revocation between the final application check and the database read is still a race; the authorized database implementation must enforce current role/scope in the read transaction. No offline test substitutes that evidence. There is no planner/composer, model evaluation, web endpoint or capture regression claim.
 

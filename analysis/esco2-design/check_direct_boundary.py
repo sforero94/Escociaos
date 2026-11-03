@@ -41,6 +41,22 @@ class FronteraSintetica(unittest.TestCase):
         self.assertEqual(resultado.lotes, ("lote-a",))  # vacío nunca significa todos los datos
         self.assertTrue(resultado.incluye_sin_lote)
 
+    def test_agrupacion_y_metricas_sobreviven_sin_perdida(self):
+        for grupo, metricas in [("total", ["jornales"]), ("lote", ["costo_registrado"]),
+                                ("lote", ["jornales", "costo_registrado"])]:
+            with self.subTest(grupo=grupo, metricas=metricas):
+                salida = self.ejecutar(argumentos=self.argumentos | {"grupo": grupo, "metricas": metricas})
+                self.assertEqual(salida.grupo, grupo)
+                self.assertEqual(salida.metricas, tuple(metricas))
+                self.assertEqual(salida.operacion, "labores.resumen.v1")
+                self.assertEqual(salida.campo_fecha, "fecha_trabajo")
+
+    def test_proyeccion_depende_solo_de_metricas_pedidas(self):
+        jornales = self.ejecutar(argumentos=self.argumentos | {"metricas": ["jornales"]})
+        costos = self.ejecutar(argumentos=self.argumentos | {"metricas": ["costo_registrado"]})
+        self.assertEqual(jornales.columnas, ("id", "fecha_trabajo", "lote_id", "fraccion_jornal"))
+        self.assertEqual(costos.columnas, ("id", "fecha_trabajo", "lote_id", "costo_jornal"))
+
     def test_identidad_canal_propiedad_invalidos_no_leen(self):
         for cambio in [{"sesion_sintetica": "no-existe"}, {"canal": "telegram"},
                        {"conversacion": "conversacion-b"}, {"conversacion": "no-existe"},

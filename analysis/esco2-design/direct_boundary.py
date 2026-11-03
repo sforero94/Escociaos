@@ -35,6 +35,10 @@ class SolicitudLectura:
     desde: str
     hasta: str
     contrato_hash: str
+    operacion: str
+    grupo: str
+    metricas: tuple[str, ...]
+    campo_fecha: str
     # Es una solicitud cerrada, nunca SQL/URL/headers del modelo.
     metodo: str = "read"
 
@@ -83,9 +87,13 @@ class FronteraDirecta:
         if not lotes and not sin_lote:
             raise Denegado("ambito_denegado")
         fuente = contrato["source"]
+        metricas = tuple(argumentos_validados["metricas"])
+        campos = set(fuente["identityProjection"]) | {contrato["metrics"][metrica]["field"] for metrica in metricas}
+        columnas = tuple(campo for campo in fuente["projection"] if campo in campos)
         solicitud = SolicitudLectura(
-            sujeto, conversacion, fuente["table"], tuple(fuente["projection"]),
+            sujeto, conversacion, fuente["table"], columnas,
             tuple(sorted(lotes)), sin_lote, argumentos_validados["desde"],
-            argumentos_validados["hasta"], self._contrato_hash)
+            argumentos_validados["hasta"], self._contrato_hash, contrato["name"],
+            argumentos_validados["grupo"], metricas, fuente["dateField"])
         self._leer(solicitud)  # Espía de emisión; su salida no es evidencia ni se devuelve.
         return solicitud

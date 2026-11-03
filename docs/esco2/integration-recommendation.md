@@ -10,6 +10,8 @@ After M2's decisions and the specific data/provider gates are satisfied, impleme
 
 ## Concrete incompatibilities and prerequisites
 
+Subsequent local-only disposition: [compatibility follow-up](compatibility-disposition.md) fixes request field loss/projection and demonstrates strict mechanical date-key conversion. It does not select a production interface or change the gate-dependent alternatives below. The 19-case count in this recommendation is its original checkpoint; current local total is 28.
+
 | Surface at exact main | Why direct integration is unsafe/incomplete | Required resolution |
 | --- | --- | --- |
 | `src/utils/escoContratoLabor.ts` advertises date_from/date_to/lote_name; B probe advertises desde/hasta/lotes/grupo/metricas | Names, entity resolution and contract semantics differ; the prototype is not a drop-in tool | Freeze one M2.5 operation and derive model/validator from its production registry. Any temporary adapter must be explicit, narrow and tested for argument loss, ambiguity and scope. |
@@ -29,6 +31,7 @@ After M2's decisions and the specific data/provider gates are satisfied, impleme
 python analysis/esco2-design/check_integration_scope.py --base 43c3e887e503b8cd8c064cddc7085dfb4880d2f6
 python analysis/esco2-design/check_contracts.py
 python analysis/esco2-design/check_direct_boundary.py
+python analysis/esco2-design/check_labor_compatibility.py
 git diff 43c3e887e503b8cd8c064cddc7085dfb4880d2f6 --check
 ```
 

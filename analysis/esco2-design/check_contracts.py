@@ -63,6 +63,17 @@ class ContratoDiseno(unittest.TestCase):
         with self.assertRaises(ValidationError):
             validar(self.argumentos | {"grupo": "tarea"})
 
+    def test_metricas_publicadas_tienen_fuente_y_unidad_cerradas(self):
+        publicadas = set(OPERACION["parameters"]["properties"]["metricas"]["items"]["enum"])
+        self.assertEqual(publicadas, set(OPERACION["metrics"]))
+        fuente = OPERACION["source"]
+        self.assertTrue(set(fuente["identityProjection"]).issubset(fuente["projection"]))
+        self.assertIn(fuente["grain"], fuente["identityProjection"])
+        self.assertIn(fuente["dateField"], fuente["identityProjection"])
+        for metrica in publicadas:
+            self.assertIn(OPERACION["metrics"][metrica]["field"], fuente["projection"])
+            self.assertTrue(OPERACION["metrics"][metrica]["unit"])
+
     def test_oraculo_sintetico_incluye_sin_lote_y_faltantes(self):
         # Oráculo mínimo independiente de lectores del producto; sólo prueba la regla propuesta.
         filas = [("lote-a", "0.5", "100"), (None, "0.25", "40"), ("lote-a", "1", None)]

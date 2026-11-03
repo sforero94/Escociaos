@@ -18,9 +18,10 @@ Deliverables:
 2. [Comparison protocol and eligibility evidence](comparison-protocol.md): route A versus B, external control requirements and measurements.
 3. [Draft operation registry](../../analysis/esco2-design/operations.json): one executable schema source for a narrow labor operation.
 4. [Offline contract checks](../../analysis/esco2-design/check_contracts.py): schema, semantic boundaries and synthetic reconciliation. No network or environment credential access.
-5. [Direct boundary preparation](direct-preparation.md): executable synthetic permission probe and 15 adversarial policy checks (19 checks with registry), with explicit limits and snapshot dependencies.
+5. [Direct boundary preparation](direct-preparation.md): synthetic emitter with 17 boundary and 5 registry checks, with explicit limits and snapshot dependencies.
 6. [Independent review and baseline reconciliation](review-and-baseline.md): four probe findings, corrections, remaining evidence and exact main comparison.
 7. [Integration recommendation](integration-recommendation.md): current-main check, interface/CI incompatibilities, repeatable file-scope audit and M2/M2.5 dependency ledger. No integration performed.
+8. [Compatibility disposition](compatibility-disposition.md): resolved local argument loss/projection and mechanical date aliases, 6 additional compatibility checks, plus alternatives explicitly left for M2. Current total: 28 offline cases.
 
 Run the offline check with `python analysis/esco2-design/check_contracts.py` (Python 3 and jsonschema 4.26.0 in this environment). This is a design probe. It is not a Supabase, JWT, RLS, model, planner, web or acceptance test. Nothing imports it from the application.
 
