@@ -148,10 +148,12 @@ describe('closed-loop fresh application date comparison',()=>{
   const answer=await f.compare();expect(answer.text.match(/no verificable/g)?.length).toBeGreaterThanOrEqual(3);expect(answer.text).toContain('par inicio/final contradictorio');
   expect(f.model()).toBe(1);
  });
- it('never issues a receipt when the original complete list could not be shown',async()=>{
+ it('bounds oversized source labels with canonical identity and still refuses its oversized receipt',async()=>{
   const f=await fixture('web',true);
   expect(f.first.text).toContain('Aplicación sintética 2');expect(f.first.text).toContain('Aplicación sintética 3');
-  expect(f.first.text).toContain('Hay alcances solicitados sin hechos verificables');
+  expect(f.first.text).toContain('[nombre abreviado]');expect(f.first.text).toContain(id(10));
+  expect(f.first.text).not.toContain('Hay alcances solicitados sin hechos verificables');
+  expect(new TextEncoder().encode(f.first.text).byteLength).toBeLessThanOrEqual(24000);
   expect(f.first.text).not.toContain('3 aplicaciones');expect(f.first.cohorteAplicaciones).toBeUndefined();expect(f.kv.size).toBe(0);
   expect((await f.compare()).text).toContain('listado reciente y verificable');expect(f.model()).toBe(1);
  });

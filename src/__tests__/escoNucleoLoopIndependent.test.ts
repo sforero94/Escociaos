@@ -50,7 +50,7 @@ function fixtures():Record<string,Row[]>{return {
  gan_ubicaciones:[{id:uid(101),nombre:'Ubicación segura'}],gan_fincas:[{id:uid(102),nombre:'Finca segura',ubicacion_id:uid(101),hectareas:'10',activa:true}],gan_lotes:[{id:uid(103),nombre:'Lote seguro',finca_id:uid(102),activo:true}],gan_potreros:[{id:uid(104),nombre:'Potrero seguro',finca_id:uid(102),lote_id:uid(103),etapa:'ceba',activo:true}],gan_inventario:[{id:uid(105),potrero_id:uid(104),novillos:4,toros:1,updated_at:'2034-05-08T10:00:00Z'}],gan_pesos_historico:[{id:uid(106),potrero_id:uid(104),fecha:'2034-05-07',peso_promedio_kg:'250.5'}],gan_movimientos:[],
  empleados:[{id:uid(201),nombre:'Ana Sintetica',cargo:'campo',salario:2000,tipo_contrato:'synthetic',activo:true}],
 };}
-async function actual(family:Family,channel:Channel,options:{mixed?:boolean;fail?:boolean;terminal?:boolean;args?:Row;question?:string;previous?:string}={}){
+async function actual(family:Family,channel:Channel,options:{mixed?:boolean;fail?:boolean;terminal?:boolean;args?:Row;question?:string;previous?:string;previousAt?:string|null;clarification?:boolean}={}){
  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(now);vi.spyOn(console,'log').mockImplementation(()=>{});vi.spyOn(console,'error').mockImplementation(()=>{});
  const bodies:Row[]=[],reads:URL[]=[],events:unknown[]=[],rejected:string[]=[];
  const inherited=vi.fn(async()=>{throw Error('Inherited network forbidden');});vi.stubGlobal('fetch',inherited);
@@ -90,11 +90,11 @@ async function actual(family:Family,channel:Channel,options:{mixed?:boolean;fail
  const question=options.question??questions[family];
  // These intentionally contaminated Web/Telegram-shaped builder inputs test the shared
  // boundary; they do not execute the production channel handlers or Telegram Auth.
- const messages=mensajesDesdeHistorial([{role:'user',content:options.previous??SECRET+' old user'},{role:'assistant',content:SECRET+' old assistant',herramientas:[{tool:'get_employee_activity',args:{worker_name:SECRET},result_summary:SECRET}]},{role:'user',content:question}],SECRET+' old memory',channel).map((m,i)=>({...m,...(m.role==='user'?{id:'user-'+i,created_at:'2034-05-08T11:00:00.000Z'}:{})}));
+ const messages=mensajesDesdeHistorial([{role:'user',content:options.previous??SECRET+' old user'},{role:'assistant',content:SECRET+' old assistant',herramientas:[{tool:'get_employee_activity',args:{worker_name:SECRET},result_summary:SECRET}]},{role:'user',content:question}],SECRET+' old memory',channel).map((m,i)=>({...m,...(m.role==='user'?{id:'user-'+i,created_at:m.content===options.previous?(options.previousAt===null?undefined:options.previousAt??'2034-05-08T11:00:00.000Z'):'2034-05-08T11:00:00.000Z'}:{})}));
  const modulePath='../supabase/functions/server/chat.tsx';const {llmToolLoop}=await import(modulePath) as {llmToolLoop:(m:unknown[],user:string,event:(e:unknown)=>void,context?:unknown,current?:{pregunta:string;messageId:string})=>Promise<{text:string;toolInteractions:Array<{tool:string;result_summary:string}>}>};
  const current=messages.at(-1)!;
  const result=await llmToolLoop(messages,'synthetic-user',e=>events.push(e),undefined,{pregunta:question,messageId:current.id!});
- expect(rejected).toEqual([]);expect(inherited).not.toHaveBeenCalled();expect(bodies).toHaveLength(1);
+ expect(rejected).toEqual([]);expect(inherited).not.toHaveBeenCalled();expect(bodies).toHaveLength(options.clarification?0:1);
  expect(JSON.stringify([bodies,result,events]).includes(SECRET)).toBe(false);expect(JSON.stringify([bodies,result,events])).not.toMatch(/987654321|INVENTED_PROSE_9000000/);
  return {result,bodies,reads};
 }
@@ -136,8 +136,28 @@ it('offers only the three unchanged own-memory tools in a memory request',async(
 it('offers the individual tool only after the current named purpose is bound',async()=>{
  const r=await actual('individual','Telegram');expect(catalogue(r.bodies[0])).toEqual([...bounded,'get_employee_activity'].sort());expect(r.result.text).toContain('2000');expect(r.reads.every(u=>u.pathname.endsWith('/empleados'))).toBe(true);
 });
-it.each(['¿Y el promedio?','¿Y el promedio del 2034-05-01 al 2034-05-07?'])('clarifies an unresolved prior lot reference before source reads: %s',async question=>{
- const r=await actual('operations','Web',{question,previous:'Conductividad del lote Norte del 2034-05-01 al 2034-05-07'});expect(r.reads).toEqual([]);expect(r.result.text).toMatch(/precisa|inequívoc|aclar/i);
+it.each(['¿Y el promedio?','¿Y el promedio del 2034-05-01 al 2034-05-07?'])('freshly binds a trusted prior USER lot instead of refusing a resolvable follow-up: %s',async question=>{
+ const r=await actual('operations','Web',{question,previous:'Conductividad del lote Norte del 2034-05-01 al 2034-05-07',args:{}});
+ const source=r.reads.filter(u=>u.pathname.endsWith('/mon_conductividad'));expect(source,JSON.stringify({reads:r.reads.map(u=>u.pathname+u.search),answer:r.result.text})).toHaveLength(1);
+ expect(r.reads.some(u=>u.pathname.endsWith('/lotes'))).toBe(true);
+ expect(source[0].searchParams.get('lote_id')).toBe('eq.'+uid(21));
+ expect(source[0].searchParams.getAll('fecha_monitoreo')).toEqual(['gte.2034-05-01','lte.2034-05-07']);
+ expect(r.result.text).toContain('Norte');expect(r.result.text).toContain('1.25');expect(r.result.text).not.toContain('Sur');expect(r.result.text).not.toContain('3.5');
+});
+it.each(['¿Y el promedio?','¿Y el promedio del 2034-05-01 al 2034-05-07?'])('never uses a contradictory model lot/window as authority over the trusted prior USER scope: %s',async question=>{
+ const r=await actual('operations','Web',{question,previous:'Conductividad del lote Norte del 2034-05-01 al 2034-05-07',args:{lote_name:'Sur',date_from:'1999-01-01',date_to:'2039-12-31'}});
+ const source=r.reads.filter(u=>u.pathname.endsWith('/mon_conductividad'));
+ // Source selectors remain strict. A contradictory proposal may be rejected before
+ // the metric read; only a verified canonical Norte read could produce a useful answer.
+ for(const u of source){expect(u.searchParams.get('lote_id')).toBe('eq.'+uid(21));expect(u.searchParams.getAll('fecha_monitoreo')).toEqual(['gte.2034-05-01','lte.2034-05-07']);}
+ if(source.length){expect(r.result.text).toContain('Norte');expect(r.result.text).toContain('1.25');}
+ else expect(r.result.text).toMatch(/precisa|inequívoc|aclar|alcance|filtro|disponible|verific/i);
+ expect(r.result.text).not.toContain('Sur');expect(r.result.text).not.toContain('3.5');
+});
+it.each([{previous:undefined,previousAt:undefined},{previous:'Conductividad del lote Norte del 2034-05-01 al 2034-05-07',previousAt:null},
+ {previous:'Conductividad del lote Norte del 2034-05-01 al 2034-05-07',previousAt:'2035-05-08T11:00:00.000Z'}])('does not restore an orphan or missing/future prior timestamp before any model/source request: %j',async options=>{
+ const r=await actual('operations','Web',{question:'¿Y el promedio?',...options,clarification:true});
+ expect(r.reads).toEqual([]);expect(r.bodies).toEqual([]);expect(r.result.text).toMatch(/precisa|inequívoc|aclar|referencia|antecedente|identificar|refieres/i);
 });
 
 it.each([

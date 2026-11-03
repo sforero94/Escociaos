@@ -1,7 +1,8 @@
+import {APPLICATION_METRICS,applicationMetrics,applicationReaderArguments,requestedApplicationMetrics,operationFailure,OperationFailure} from './escoOperacionContrato.ts';
+import {resolverReferenciaSolicitud,proponerPeriodoSolicitudUsuario} from './escoReferenciaSolicitud.ts';
 import {crearContextoNucleo} from './escoNucleoSolicitud.ts';
 import {crearPuertoNucleo} from './escoNucleoTransporte.ts';
 import {NUCLEO_EJECUTABLE,LIMITES_NUCLEO,DESCRIPCIONES_NUCLEO,promptPlanificadorNucleo,limiteNucleo} from './escoNucleoCatalogo.ts';
-import { proponerPeriodoUsuario } from './escoAlcance.ts';
 import { ejecutarLlamadasVerificadas } from './escoTurnoVerificado.ts';
 import { construirMensajesModelo, filtrarHerramientasPorPolitica, permitirLlamadaHerramienta, type ServerRequestPolicy } from './escoPoliticaDatos.ts';
 import { detectarPropuestaIndividual, prevalidarSolicitudIndividual, vincularSolicitudIndividual } from './escoSolicitudIndividual.ts';
@@ -177,18 +178,18 @@ async function supabaseQueryPage(table: string, query: string, conteo?: ConteoCo
     const range = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(res.headers.get('content-range') ?? '');
     if (!range || !Array.isArray(rows) || !Number.isSafeInteger(total) || total < 0
       || (conteo.total !== undefined && conteo.total !== total)) {
-      throw new Error(`Cobertura no verificable en ${table}: falta un conteo exacto estable.`);
+      throw new OperationFailure('incomplete_population','coverage');
     }
     const first = Number(range[1]); const last = Number(range[2]);
     if (rows.length > requested || (rows.length > 0
       ? !Number.isSafeInteger(first) || !Number.isSafeInteger(last) || first !== offset || last - first + 1 !== rows.length || last >= total
       : range[1] !== undefined || offset < total)) {
-      throw new Error(`Cobertura no verificable en ${table}: rango de página inconsistente.`);
+      throw new OperationFailure('incomplete_population','coverage');
     }
     conteo.total = total;
   }
   if (Number.isFinite(total) && rows.length < requested && offset + rows.length < total) {
-    throw new Error(`Consulta incompleta en ${table}: el servidor recortó la página.`);
+    throw new OperationFailure('incomplete_population','coverage');
   }
   return rows;
 }
@@ -906,6 +907,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
 
     return result;
   } catch (err: unknown) {
+    if(name==='get_aplicaciones_ejecucion'){const failure=operationFailure(err);return JSON.stringify({error:failure.code,stage:failure.stage});}
     const msg = err instanceof Error ? err.message : 'Error ejecutando tool';
     return JSON.stringify({ error: msg });
   }
@@ -3967,7 +3969,7 @@ function getToolsForAPI(policy?: ServerRequestPolicy) {
     function: {
       name: t.name,
       description: DESCRIPCIONES_NUCLEO[t.name]??t.description,
-      parameters: ['get_aplicaciones_ejecucion','get_application_summary'].includes(t.name)?{...t.parameters,properties:{...(t.parameters.properties as Record<string,unknown>),metric:{type:'string',enum:['status','dates','date_comparison','quantity','labor','theoretical'],description:'Parte pedida: estado registrado, fechas, comparación literal planeado/real o cantidades/trabajo/estimación explícita. No confundir con cumplimiento físico.'}}}:t.parameters,
+      parameters: ['get_aplicaciones_ejecucion','get_application_summary'].includes(t.name)?{...t.parameters,properties:{...(t.parameters.properties as Record<string,unknown>),metric:{oneOf:[{type:'string',enum:APPLICATION_METRICS},{type:'array',items:{type:'string',enum:APPLICATION_METRICS},minItems:1,maxItems:6,uniqueItems:true}],description:'Parte pedida: estado registrado, fechas, comparación literal planeado/real o cantidades/trabajo/estimación explícita. No confundir con cumplimiento físico.'}}}:t.parameters,
     },
   }));
 }
@@ -3986,10 +3988,17 @@ export async function llmToolLoop(
   // Production callers bind the server message ID; equal old wording is not turn identity.
   const previousUserEntry=currentIndex>=0?[...messages.slice(0,currentIndex)].reverse().find(m=>m.role==='user'):undefined;
   const priorUser=previousUserEntry?.content??undefined;
-  const currentPeriod=proponerPeriodoUsuario(preguntaCohorte,new Date(startedAt));
+  const reference=resolverReferenciaSolicitud({question:preguntaCohorte,previousUserText:priorUser,previousUserAt:previousUserEntry?.created_at,now:new Date(startedAt)});
+  if((reference.state==='orphan'||reference.state==='ambiguous')&&reference.independentQuestion){
+    const independent=await llmToolLoop(messages,userId,onEvent,undefined,{pregunta:reference.independentQuestion,messageId:solicitudActual?.messageId});
+    return {...independent,text:independent.text+'\n\nParte pendiente: indica la identidad o el listado de la referencia no resuelta; no lo inferí de otro registro.'};
+  }
+  if((reference.state==='orphan'||reference.state==='ambiguous')&&!(pideComparacionFechasCohorte(preguntaCohorte)&&contextoCohorte?.usuario===userId))return {text:'Necesito identificar a qué aplicación o conjunto te refieres. Indica un nombre o vuelve a consultar el listado; no tomé identidades de una respuesta anterior.',toolInteractions:[]};
+  const effectiveQuestion=reference.effectiveQuestion;
+  const currentPeriod=proponerPeriodoSolicitudUsuario(preguntaCohorte,new Date(startedAt));
   const followsPrior=/^(?:consulta de solo lectura:\s*)?[¿]?\s*(?:y\b|en esas?\b|en esos?\b|para esas?\b|para esos?\b|de esas?\b|de esos?\b)/i.test(preguntaCohorte.trim());
   const priorReference=previousUserEntry?.created_at?new Date(previousUserEntry.created_at):null;
-  const inheritedPeriod=currentPeriod.state==='absent'&&followsPrior&&priorUser&&priorReference?proponerPeriodoUsuario(priorUser,priorReference):null;
+  const inheritedPeriod=currentPeriod.state==='absent'&&followsPrior&&priorUser&&priorReference?proponerPeriodoSolicitudUsuario(priorUser,priorReference):null;
   const resolvedPeriod=currentPeriod.state==='resolved'?currentPeriod:inheritedPeriod?.state==='resolved'?inheritedPeriod:currentPeriod;
   const priorPersonal=priorUser?detectarPropuestaIndividual(priorUser):null;
   const ambiguousPersonContinuation=!!priorPersonal&&followsPrior&&currentPeriod.state==='absent';
@@ -4015,6 +4024,7 @@ export async function llmToolLoop(
   if(!prepared.canRequestModel)throw new Error('Consulta demasiado amplia para enviar de forma segura.');
   messages=prepared.messages;
   const providerBase=messages.map(m=>({...m}));
+  const verifiedRetryProtocol:typeof messages=[];
 
   if(pideComparacionFechasCohorte(preguntaCohorte)) {
     const unavailable='Necesito un listado reciente y verificable de esas aplicaciones. Vuelve a consultar el período; no tomé identidades del texto del modelo ni amplié la cohorte.';
@@ -4028,7 +4038,7 @@ export async function llmToolLoop(
     const result=await executeTool('get_aplicaciones_ejecucion',args,userId,{pregunta:original,cohorteIds:receipt.ids});
     return {text:compararFechasCohorte(receipt,plan,result,args),toolInteractions:[{tool:'get_aplicaciones_ejecucion',args,result_summary:proyectarLecturaLegada('get_aplicaciones_ejecucion',result)}]};
   }
-  const selectedContext=crearContextoNucleo({question:preguntaCohorte,now:new Date(startedAt),previousUserText:ambiguousPersonContinuation?undefined:priorUser,previousUserAt:ambiguousPersonContinuation?undefined:previousUserEntry?.created_at});
+  const selectedContext=crearContextoNucleo({question:effectiveQuestion,now:new Date(startedAt),previousUserText:ambiguousPersonContinuation?undefined:priorUser,previousUserAt:ambiguousPersonContinuation?undefined:previousUserEntry?.created_at});
   const headers = getOpenRouterHeaders();
   const tools = memoryRequest?getToolsForAPI().filter(t=>memoryTools.has(t.function.name)):getToolsForAPI(policy);
   const maxRounds = 3;
@@ -4036,11 +4046,11 @@ export async function llmToolLoop(
   let toolIndex = 0;
   const ultimaPregunta = preguntaCohorte;
   const consultaPartosObligatoria = requiereConsultaPartos(ultimaPregunta);
-  const planAplicacion = planRespuestaAplicacion(ultimaPregunta,fechaBogota(new Date(startedAt)));
+  const planAplicacion = planRespuestaAplicacion(effectiveQuestion,fechaBogota(new Date(startedAt)));
   const aclaracion=aclaracionPlanAplicacion(planAplicacion);
   // Unsupported syntax is not an early whole-question refusal: resolve structured source operations first.
   void aclaracion;
-  const solicitudAplicacion:SolicitudAplicacion={pregunta:ultimaPregunta,anterior:priorUser};
+  const solicitudAplicacion:SolicitudAplicacion={pregunta:preguntaCohorte,anterior:priorUser};
   let descubrimientoAplicacion=false;
   const consultaAplicacionesObligatoria = requiereConsultaAplicaciones(ultimaPregunta) || planAplicacion.tipo === 'aplicacion';
   const fechasPlaneadas = pideFechasPlaneadas(ultimaPregunta);
@@ -4057,7 +4067,7 @@ export async function llmToolLoop(
         headers,
         body: JSON.stringify({
           model: MODEL,
-          messages: [...providerBase,...toolInteractions.map(h=>({role:'user',content:h.result_summary}))],
+          messages: [...providerBase,...verifiedRetryProtocol,...toolInteractions.map(h=>({role:'user',content:h.result_summary}))],
           tools,
           tool_choice: round === 0 ? (consultaPartosObligatoria ? {type:'function',function:{name:'get_hato_partos'}} : 'required') : 'auto',
           temperature: 0.3,
@@ -4100,38 +4110,52 @@ export async function llmToolLoop(
         if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')&&(currentPeriod.state==='ambiguous'||currentPeriod.state==='invalid'||planAplicacion.tipo==='fuera'&&['periodo_invalido','periodo_no_soportado','periodo_requiere_ano','multiples_periodos_no_soportados','referencia_temporal_no_resuelta'].includes(planAplicacion.motivo)))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];
         if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')){try{
           const args=JSON.parse(call.function?.arguments??'{}');
+          if(resolvedPeriod.state==='resolved'){args.date_from=resolvedPeriod.from;args.date_to=resolvedPeriod.to;args.alcance='periodo';}else if(resolvedPeriod.state==='absent'){delete args.date_from;delete args.date_to;args.alcance='actual';}
+          if(args.metric===undefined&&planAplicacion.tipo==='fuera'){const requested=requestedApplicationMetrics(preguntaCohorte);if(requested.length)args.metric=requested;}
+          if(args.metric===undefined&&planAplicacion.tipo==='aplicacion'){const requested=[...(planAplicacion.estado?['status']:[]),...(planAplicacion.fechas?['dates']:[]),...(planAplicacion.consumos?['quantity']:[]),...(planAplicacion.trabajo?['labor']:[]),...(planAplicacion.estimacion?['theoretical']:[])];if(requested.length)args.metric=requested;}
           if(args.type){const kind=normalizarTextoAplicacion(args.type).trim(),q=normalizarTextoAplicacion(preguntaCohorte);const declared=['fumigacion','fertilizacion','drench'].includes(kind)&&q.split(/[^a-z]+/).some(word=>word===kind||word===kind+'es');if(!declared)delete args.type;else if(new RegExp('(?:sin|excepto|no incluyas) (?:las )?(?:aplicaciones de )?'+kind).test(q))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];}
           return [{...call,function:{name:tool,arguments:JSON.stringify(argumentosRespuestaAplicacion(planAplicacion,args))}}];
         }catch{return [call];}}
         return [call];
       });
-      const consumption=planAplicacion.tipo==='aplicacion'&&(planAplicacion.consumos||planAplicacion.trabajo||planAplicacion.estimacion);
-      const exclude=[...(consumption?['get_aplicaciones_ejecucion','get_application_summary']:[]),...(consultaAplicacionesObligatoria&&!/\b(?:tareas?|labores?|tablero)\b/.test(normalizarTextoAplicacion(preguntaCohorte))?['get_tareas']:[])];
+      const exclude=[...(consultaAplicacionesObligatoria&&!/\b(?:tareas?|labores?|tablero)\b/.test(normalizarTextoAplicacion(preguntaCohorte))?['get_tareas']:[])];
       const sourceCounts=new Map<string,ConteoConsulta>();
       const freshApplicationReads:Array<{raw:string;args:Record<string,unknown>}>=[];
       const verified=await ejecutarLlamadasVerificadas({calls:canonicalCalls,policy,referenceDay:fechaBogota(new Date(startedAt)),turnStartedAt:startedAt,excludeTools:exclude,port:{
-        currentUserText:preguntaCohorte,
+        currentUserText:effectiveQuestion,currentRequestText:preguntaCohorte,
         selected:{context:selectedContext,port:crearPuertoNucleo(selectedContext,{now:()=>new Date().toISOString(),page:async(table,query)=>{const params=new URLSearchParams(query);params.delete('limit');params.delete('offset');const key=table+'?'+params.toString();if(!sourceCounts.has(key))sourceCounts.set(key,{});const counter=sourceCounts.get(key)!;const rows=await supabaseQueryPage(table,query,counter);return {rows:rows as FilaEsco[],total:counter.total??null};}})},
         now:()=>new Date().toISOString(),
         read:async(table,query)=>{const key=table+'?'+query.replace(/&limit=200&offset=\d+$/,'');if(!sourceCounts.has(key))sourceCounts.set(key,{});const counter=sourceCounts.get(key)!;const rows=await supabaseQueryPage(table,query,counter);return {rows:rows as FilaEsco[],total:counter.total??null};},
-        applications:async(args)=>{
-          const allowed=['date_from','date_to','date_basis','application_name','application_id','estado','lote_name','alcance'];
-          const clean=Object.fromEntries(Object.entries(args).filter(([key])=>allowed.includes(key)));
+        applications:async(args,operation)=>{
+          const metrics=operation?.metrics??applicationMetrics(args.metric);
+          const clean=applicationReaderArguments(args);
           if(planAplicacion.tipo==='aplicacion')Object.assign(clean,argumentosRespuestaAplicacion(planAplicacion,clean));
-          if(args.metric==='status'&&(clean.application_name||clean.application_id))delete clean.estado;
-          if(clean.date_basis==='planned'&&!pideFechasPlaneadas(preguntaCohorte))throw Error('outside_scope');
-          const raw=JSON.parse(await executeTool('get_aplicaciones_ejecucion',clean,userId,solicitudAplicacion));
-          if(raw.error||raw.seleccion_no_resuelta||raw._evidencia?.consulta_completa!==true||raw._evidencia?.detalle_completo!==true||!Array.isArray(raw.detalle))throw Error('source_error');
+          if(metrics.includes('status')&&(clean.application_name||clean.application_id))delete clean.estado;
+          if(clean.date_basis==='planned'&&!pideFechasPlaneadas(effectiveQuestion))throw new OperationFailure('outside_scope','scope');
+          const raw=JSON.parse(await executeTool('get_aplicaciones_ejecucion',clean,userId,{...solicitudAplicacion,metricas:metrics}));
+          if(raw.seleccion_no_resuelta||raw.error==='seleccion_no_resuelta'||raw.seleccion?.estado==='aclarar')throw new OperationFailure('scope_ambiguous','scope');
+          if(raw.error){const failure=operationFailure(new Error(typeof raw.error==='string'?raw.error:'source_error'));throw new OperationFailure(failure.code,failure.stage);}
+          if(raw._evidencia?.consulta_completa!==true||raw._evidencia?.detalle_completo!==true)throw new OperationFailure('incomplete_population','coverage');
+          if(!Array.isArray(raw.detalle))throw new OperationFailure('source_error','source');
           freshApplicationReads.push({raw:JSON.stringify(raw),args:clean});
           const selected=args.type?raw.detalle.filter((a:FilaEsco)=>normalizarTextoAplicacion(a.tipo_aplicacion)===normalizarTextoAplicacion(args.type)):raw.detalle;
           return {rows:selected,complete:true};
         },
       }});
       if(verified){
+        if(verified.retryable&&round+1<maxRounds){
+          toolInteractions.push(...verified.interactions);
+          // The next existing round receives only the typed, minimized result,
+          // never the model's factual prose or a raw discovery/source object.
+          const safeCalls:Array<{id:string;type:string;function:{name:string;arguments:string}}>=canonicalCalls.map((call:{id?:string;function?:{name?:string}},index:number)=>({id:call.id??'verified-'+round+'-'+index,type:'function',function:{name:call.function?.name??'unknown',arguments:JSON.stringify(verified.interactions[index]?.args??{})}}));
+          verifiedRetryProtocol.push({role:'assistant',content:null,tool_calls:safeCalls});
+          safeCalls.forEach((call,index)=>verifiedRetryProtocol.push({role:'tool',tool_call_id:call.id,name:call.function.name,content:verified.interactions[index]?.result_summary??JSON.stringify({error:'invalid_arguments',stage:'arguments'})}));
+          continue;
+        }
         for(const [i,h] of verified.interactions.entries()){onEvent?.({type:'tool_start',tool:h.tool,index:toolIndex+i,args:h.args});onEvent?.({type:'tool_done',tool:h.tool,index:toolIndex+i,ms:0,ok:!Object.prototype.hasOwnProperty.call(JSON.parse(h.result_summary),'error')});}
         const fresh=freshApplicationReads.length===1?freshApplicationReads[0]:null;
         const cohort=fresh&&verified.parts.every(p=>p.state!=='unavailable')&&JSON.stringify(fresh.raw).length<=24000?capturarCohorteAplicaciones(planAplicacion,fresh.raw,fresh.args,true):null;
-        return {text:verified.text,toolInteractions:verified.interactions,...(cohort?{cohorteAplicaciones:cohort}:{})};
+        return {text:verified.text,toolInteractions:[...toolInteractions,...verified.interactions],...(cohort?{cohorteAplicaciones:cohort}:{})};
       }
       // Legacy operations retain explicit limits. Never forward their raw objects.
       messages.push(msg);

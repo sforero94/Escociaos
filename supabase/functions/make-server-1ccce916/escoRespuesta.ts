@@ -16,7 +16,7 @@ export function componerRespuestaVerificada(input:EntradaComposicion):ResultadoC
  // after the same escaping/truncation used by the renderer.
  const labelFor=(scope:Scope,e:{kind:string;id:string})=>input.labels?.[e.kind+':'+e.id]??scope.entities.find(x=>x.kind===e.kind&&x.id===e.id)?.label??e.id;
  const displayed=new Map<string,Set<string>>();for(const fact of valid.flatMap(e=>e.facts).filter(known)){const scope=input.scopes.find(s=>s.id===fact.scopeId)!;for(const e of fact.entities){const key=e.kind+':'+literal(labelFor(scope,e)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();if(!displayed.has(key))displayed.set(key,new Set());displayed.get(key)!.add(e.id);}}
- const visibleEntity=(scope:Scope,e:{kind:string;id:string})=>{const text=literal(labelFor(scope,e)),key=e.kind+':'+text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return (displayed.get(key)?.size??0)>1?text+' · '+literal(e.id):text;};
+ const visibleEntity=(scope:Scope,e:{kind:string;id:string})=>{const text=literal(labelFor(scope,e)),key=e.kind+':'+text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return ((displayed.get(key)?.size??0)>1||labelFor(scope,e).includes('[nombre abreviado]'))?text+' · '+literal(e.id):text;};
  const candidates=valid.flatMap(e=>e.facts).filter(known);
  const claimKey=(f:Fact)=>{const s=input.scopes.find(x=>x.id===f.scopeId)!;return JSON.stringify([s.operation,s.period,s.filters,[...f.entities].sort((a,b)=>(a.kind+a.id).localeCompare(b.kind+b.id)),f.metric,f.origin]);};
  const values=new Map<string,Set<string>>();for(const f of candidates){const key=claimKey(f);if(!values.has(key))values.set(key,new Set());values.get(key)!.add(JSON.stringify(f.value));}
@@ -37,6 +37,7 @@ export function componerRespuestaVerificada(input:EntradaComposicion):ResultadoC
   const state=!available.length?'unavailable':missing.length||missingScopes.length||unknown.length||incomplete?'partial':'answered';
   parts.push({id:part.id,state,known:available.length,unknown:missing.length+unknown.length});
   lines.push(literal(part.label));
+  if(scopes.some(scope=>scope.filters.membership_complete==='false'))lines.push('Hay aplicaciones cuya pertenencia al período de actividad no pude acreditar por tareas o fechas desconocidas. Sus valores no son cero; los registros verificables de las otras aplicaciones se conservan por separado.');
   if(conflicts.length)lines.push('Las fuentes actuales discrepan para un mismo hecho y alcance; no elegí una cifra ni usé prosa para resolverlo.');
   if(outputOmitted)lines.push('Detalle limitado a 200 hechos por respuesta; hay hechos adicionales no mostrados. El total de fuente no convierte esta tabla en exhaustiva.');
   if(!available.length){lines.push('Falta evidencia verificable para esta parte; no usé cifras del historial ni completé con estimaciones.');continue;}
@@ -46,8 +47,9 @@ export function componerRespuestaVerificada(input:EntradaComposicion):ResultadoC
    const entities=f.entities.map(e=>visibleEntity(scope,e)).join(', ')||'Población consultada';
    const period=scope.period?` (${scope.period.from}–${scope.period.to}; ${literal(scope.period.fieldMeaning)})`:'';
    const v=f.value.kind==='decimal'?`${f.value.value} ${literal(f.value.unit)}${f.value.denominator?' / '+literal(f.value.denominator):''}`:f.value.kind==='status'&&f.value.value==='Calculada'?'Calculada (Planificada en la interfaz)':f.value.kind==='date'||f.value.kind==='status'?literal(f.value.value):'';
+   let formula='';if(f.metric==='application.theoretical_quantity'&&f.value.kind==='decimal'&&f.derivation?.operation==='multiply'){const envelope=valid.find(e=>e.facts.includes(f));const inputs=f.derivation.inputs.flatMap(i=>'factId'in i?envelope?.facts.filter(x=>x.id===i.factId)??[]:[]);const dose=inputs.find(x=>x.metric==='application.planned_dose'),drums=inputs.find(x=>x.metric==='application.planned_drums');if(dose?.value.kind==='decimal'&&drums?.value.kind==='decimal')formula=` (teórico: ${dose.value.value} ${literal(dose.value.unit)} × ${drums.value.value} ${literal(drums.value.unit)} = ${f.value.value} ${literal(f.value.unit)})`;}
    const subtotal=f.assertion==='verified_subtotal'?' — subtotal verificado, no total completo':'';
-   lines.push(`| ${entities}${period} | ${literal(DEFINITIONS[f.metric].label)}${subtotal} | ${v} |`);
+   lines.push(`| ${entities}${period} | ${literal(DEFINITIONS[f.metric].label)}${subtotal} | ${v}${formula} |`);
   }
   lines.push('');
   if(missing.length||unknown.length)lines.push('Datos no verificables: '+[...new Set([...missing,...unknown.map(f=>f.metric)])].map(m=>literal(DEFINITIONS[m].label)).join(', ')+'. Las otras partes conservan sus valores verificados.');

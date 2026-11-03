@@ -16,7 +16,7 @@ it('routes actual full paginated reads through adapters, proof registry and comm
  expect(answer.parts[0].state).toBe('answered');expect(answer.text).toContain('40');expect(answer.text).toContain('210.75');expect(JSON.stringify(r)).not.toMatch(/PERSONA_FICTICIA|987654321|NOTA_PERSONAL_FICTICIA/);
 });
 it.each([null,3])('does not attest missing or inconsistent count %s',async count=>{
- const p=port([{id:'a',fecha_trabajo:'2034-05-03',lote_id:'a',fraccion_jornal:'1',costo_jornal:'1'}],count);await expect(ejecutarFuenteVerificada('get_labor_summary',args,p.source)).rejects.toThrow('source_error');
+ const p=port([{id:'a',fecha_trabajo:'2034-05-03',lote_id:'a',fraccion_jornal:'1',costo_jornal:'1'}],count);await expect(ejecutarFuenteVerificada('get_labor_summary',args,p.source)).rejects.toMatchObject({code:'incomplete_population',stage:'coverage'});
 });
 it('rejects duplicate IDs on later pages rather than losing or doubling their cost',async()=>{
  const rows=Array.from({length:201},(_,i)=>({id:i===200?'r0':'r'+i}));await expect(ejecutarFuenteVerificada('get_inventory_status',{},port(rows).source)).rejects.toThrow('source_error');

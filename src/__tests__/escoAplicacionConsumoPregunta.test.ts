@@ -1,4 +1,5 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
+import type {Evidence} from '../utils/escoEvidencia';
 import {mensajesDesdeHistorial} from '../utils/escoEvals/mensajes';
 import {aclaracionPlanAplicacion,argumentosRespuestaAplicacion,ejecutarConsultaEsco,planRespuestaAplicacion,resolverSeleccionAplicacion,respuestaDeterministaAplicacion,type FilaEsco} from '../utils/escoConsultas';
 const question='Consulta de solo lectura: En la aplicación contra plaga Q de mayo de 2033, ¿qué productos se usaron en el lote Río Claro y en qué cantidades?';
@@ -74,9 +75,16 @@ describe('fronted application product/quantity question',()=>{
    const rows=await read(u.pathname.split('/').at(-1)!,u.search.slice(1));return new Response(JSON.stringify(rows),{headers:{'content-range':rows.length?`0-${rows.length-1}/${rows.length}`:'*/0'}});
   });
   const result=await llmToolLoop(mensajesDesdeHistorial([{role:'user',content:question}], 'Synthetic system prompt', channel),'synthetic-user');expect(model).toBe(1);expect(result.toolInteractions).toHaveLength(1);
-  for(let i=0;i<4;i++)expect(result.text).toContain(`| Producto sintético ${i} (p${i}) | ${i%2?'kg':'L'} | ${amounts[i]} |`);
+  for(let i=0;i<4;i++){expect(result.text).toContain('Producto sintético '+i);expect(result.text).toContain(`${amounts[i]} \`${i%2?'kg':'L'}\``);}
   expect(result.text).not.toContain('999');expect(result.toolInteractions[0].args).toMatchObject({date_from:'2033-05-01',date_to:'2033-05-31'});
   const persisted=JSON.parse(result.toolInteractions[0].result_summary);
-  expect(persisted.detalle[0].id).toBe(target.id);expect(persisted.detalle[0]).not.toHaveProperty('movimientos');
+  const evidence=persisted.evidence as Evidence;
+  for(let i=0;i<4;i++){
+   const fact=evidence.facts.find(f=>f.metric==='application.quantity'&&f.entities.some(e=>e.kind==='product'&&e.id==='p'+i));
+   expect(fact).toMatchObject({assertion:'scoped_total',value:{kind:'decimal',value:String(amounts[i]),unit:i%2?'kg':'L'}});
+   expect(fact?.entities).toEqual(expect.arrayContaining([{kind:'application',id:target.id},{kind:'lot',id:'lot-rio'}]));
+   expect(evidence.scopes.find(scope=>scope.id===fact?.scopeId)?.period).toMatchObject({from:'2033-05-01',to:'2033-05-31',basis:'actual',fieldMeaning:'fecha_movimiento'});
+  }
+  expect(persisted).not.toHaveProperty('detalle');expect(JSON.stringify(persisted)).not.toContain('movimientos_diarios_productos');
  });
 });
