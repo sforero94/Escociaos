@@ -22,6 +22,7 @@ Deliverables:
 6. [Independent review and baseline reconciliation](review-and-baseline.md): four probe findings, corrections, remaining evidence and exact main comparison.
 7. [Integration recommendation](integration-recommendation.md): current-main check, interface/CI incompatibilities, repeatable file-scope audit and M2/M2.5 dependency ledger. No integration performed.
 8. [Compatibility disposition](compatibility-disposition.md): resolved local argument loss/projection and mechanical date aliases, 6 additional compatibility checks, plus alternatives explicitly left for M2. Current total: 28 offline cases.
+9. [M2 decision memo](m2-decision-memo.md): alternatives, reasoned recommendations, dependencies and a conditional 24-hour engineering time box for M2.5. Proposal only; no decision or implementation.
 
 Run the offline check with `python analysis/esco2-design/check_contracts.py` (Python 3 and jsonschema 4.26.0 in this environment). This is a design probe. It is not a Supabase, JWT, RLS, model, planner, web or acceptance test. Nothing imports it from the application.
 
