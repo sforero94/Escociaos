@@ -20,6 +20,7 @@ Deliverables:
 4. [Offline contract checks](../../analysis/esco2-design/check_contracts.py): schema, semantic boundaries and synthetic reconciliation. No network or environment credential access.
 5. [Direct boundary preparation](direct-preparation.md): executable synthetic permission probe and 15 adversarial policy checks (19 checks with registry), with explicit limits and snapshot dependencies.
 6. [Independent review and baseline reconciliation](review-and-baseline.md): four probe findings, corrections, remaining evidence and exact main comparison.
+7. [Integration recommendation](integration-recommendation.md): current-main check, interface/CI incompatibilities, repeatable file-scope audit and M2/M2.5 dependency ledger. No integration performed.
 
 Run the offline check with `python analysis/esco2-design/check_contracts.py` (Python 3 and jsonschema 4.26.0 in this environment). This is a design probe. It is not a Supabase, JWT, RLS, model, planner, web or acceptance test. Nothing imports it from the application.
 
