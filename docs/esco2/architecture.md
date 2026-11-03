@@ -77,7 +77,7 @@ A trusted actor/conversation capability stays outside model-visible Plan/Result.
 
 These table/column mappings are candidate repository mappings, not a current catalog attestation. M1 must confirm them before a reader becomes executable. Qualify pure calculation/date helpers independently before reuse. Do not import the old orchestration to reuse a helper. Remaining phase-1 domains get operations only after M2.5/M3: monitoring and conductivity, observed climate, dairy record identity and existing reproductive engine, milk weights and linked fortnight liters without money.
 
-Independent inventory handoff received from coordination, anchored to `main` `43c3e887` (this local worktree remains at baseline `a635a05`). These are qualification candidates, not acceptance or demonstrated causes of v295. Reconcile against the intended integration commit before reuse:
+Independent inventory handoff received from coordination, anchored to `main` `43c3e887`. The local worktree initially used `a635a05` and now descends from the exact inventory target after the reconciliation documented in review-and-baseline.md. These are qualification candidates, not acceptance or demonstrated causes of v295. Requalify against the intended integration commit before reuse:
 
 - Labor reader rejects null lot IDs: a replacement must explicitly preserve and reconcile unassigned groups. Do not qualify the existing reader based on its test count.
 - `application.cost` represents labor cost. Input cost in application closure is per product/application; lot attribution is unproven. Use explicit metric names and do not distribute product costs by lot without an approved source/rule.

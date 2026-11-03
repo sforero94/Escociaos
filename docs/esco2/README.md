@@ -1,7 +1,7 @@
 # Esco 2.0 — E2-03 / E2-17 design handoff
 
 Date: 2026-11-03. Status: reviewable local design, **not production implementation or architecture acceptance**.
-Owner for these deliverables: Codex; coordination: Dotor. Baseline: `a635a05`.
+Owner for these deliverables: Codex; coordination: Dotor. Initial baseline: `a635a05`; reconciled local baseline: `43c3e887` (see review report).
 Branch: `codex/esco2-e203-e217-design`; isolated worktree: `/workspace/esco2-e203-e217`.
 
 Sources, in priority order:
@@ -25,6 +25,6 @@ Run the offline check with `python analysis/esco2-design/check_contracts.py` (Py
 
 Current gates: the standard route A tool **fails eligibility** (see protocol v0.2 evidence); route B preparation continues, with controls **unverified against an authorized database**. E2-17 is in review for documented incapacity, and M2 remains open. M1 references/snapshot, E2-06 access/data handling, review budget and explicit architecture decision remain necessary. No production route activated.
 
-The independent inventory received from coordination uses `main` `43c3e887`; see architecture.md for its qualification candidates. This design's local baseline is older (`a635a05`), so integration requires reconciliation. No claim that the branch reflects latest main.
+The independent inventory received from coordination uses `main` `43c3e887`; see architecture.md for its qualification candidates. The branch now descends from that exact target after a conflict-free local rebase and unchanged range-diff. This is not a claim about any newer main or product integration readiness.
 
 Only `docs/esco2/` and `analysis/esco2-design/` belong to this handoff. Other fronts retain their files and owners. Do not inspect private golden or held-out here. Do not start M2.5 or product wiring from this branch.

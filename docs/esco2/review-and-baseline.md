@@ -39,6 +39,20 @@ Commits between bases:
 
 Confirmed unchanged across the exact bases: root `CLAUDE.md`, `package.json`, `supabase/config.toml`, drift workflow/checker, `escoHechosTrabajo.ts` and Telegram bot. Thus the documented old JWT/health expectations, null-lot qualification candidate and Telegram→chat dependency remain relevant at the target. No legacy code was repaired or retested as an acceptance campaign.
 
+### Local reconciliation result
+
+After review fixes, a local rebase onto the exact target completed without conflicts. `git merge-base --is-ancestor 43c3e887 HEAD` passed. `git range-diff` reported every preparation commit equivalent across the base change:
+
+| Historical commit (retained locally) | Rebased equivalent |
+| --- | --- |
+| `4c12062` | `e22f0be` |
+| `aa4f65e` | `517c9f1` |
+| `c2f4b86` | `a884143` |
+| `ca7f9cc` | `3c3ffb8` |
+| `7eb7cb1` (review corrections) | `fe40d70` |
+
+Recovery/reference branch: `codex/esco2-e203-e217-pre-reconcile`. Current preparation branch: `codex/esco2-e203-e217-design`. After reconciliation, both offline suites pass (19 cases), diff whitespace checks pass, and all differences from the target remain confined to `docs/esco2/` and `analysis/esco2-design/`. No product import, source, workflow, grant or deployment change was added by this preparation. No push or PR was created. Integration on a newer baseline still requires a new comparison.
+
 ## Remaining tests and gates
 
 | Evidence absent | Why the local suite does not supply it |
