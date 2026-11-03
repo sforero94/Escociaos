@@ -87,7 +87,7 @@ it.each([{code:'source_error',stage:'source'},{code:'budget_exceeded',stage:'bud
  const r=await typed([call('get_labor_summary',{date_from:'2034-05-01',date_to:'2034-05-07'}),call('get_aplicaciones_ejecucion',{metric:'status'})],f.port);
  expect(r?.text).toContain('17.5');expect(JSON.parse(r!.interactions[1].result_summary)).toMatchObject({error:code,stage});expect(r?.parts.some(p=>p.state==='unavailable')).toBe(true);
 });
-async function loop(channel:'Web'|'Telegram',question:string,calls:ReturnType<typeof call>[],options:{sourceFailure?:boolean;fallback?:boolean;invalidFirst?:boolean;preModelClarification?:boolean;applications?:Record<string,unknown>[];previousUser?:string}={}){
+async function loop(channel:'Web'|'Telegram',question:string,calls:ReturnType<typeof call>[],options:{sourceFailure?:boolean;fallback?:boolean;invalidFirst?:boolean;preModelClarification?:boolean;applications?:Record<string,unknown>[];previousUser?:string;previousUsers?:string[];callsAfterFirst?:ReturnType<typeof call>[];invalidPriorTime?:boolean;workRows?:Record<string,unknown>[];lots?:Record<string,unknown>[];terminalAfterFirst?:boolean}={}){
  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date(now));vi.spyOn(console,'log').mockImplementation(()=>{});vi.spyOn(console,'error').mockImplementation(()=>{});
  const payloads:Record<string,unknown>[]=[],reads:URL[]=[],events:unknown[]=[],denied:string[]=[];
  const keys:Record<string,string>={SUPABASE_URL:'https://family-fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'synthetic-db',OPENROUTER_API_KEY:'synthetic-provider'};
@@ -97,13 +97,15 @@ async function loop(channel:'Web'|'Telegram',question:string,calls:ReturnType<ty
   if(req.url==='https://openrouter.ai/api/v1/chat/completions'&&req.method==='POST'){
    payloads.push(JSON.parse(await req.text()));if(payloads.length>3){denied.push('excess-model-rounds');throw Error('Excess synthetic rounds');}
    if(options.fallback&&payloads.length===1)return Response.json({choices:[{message:{role:'assistant',content:FALSE}}]});
+   if(options.terminalAfterFirst&&payloads.length>1)return Response.json({choices:[{message:{role:'assistant',content:FALSE}}]});
    if(options.invalidFirst&&payloads.length===1)return Response.json({choices:[{message:{role:'assistant',content:FALSE,tool_calls:[{...call('get_aplicaciones_ejecucion',{application_name:app.nombre_aplicacion,metric:'alien'}),type:'function'}]}}]});
-   return Response.json({choices:[{message:{role:'assistant',content:FALSE,tool_calls:calls.map(c=>({...c,type:'function'}))}}]});
+   const proposed=payloads.length>1&&options.callsAfterFirst?options.callsAfterFirst:calls;
+   return Response.json({choices:[{message:{role:'assistant',content:FALSE,tool_calls:proposed.map(c=>({...c,type:'function'}))}}]});
   }
   if(req.method!=='GET'||url.origin!=='https://family-fixture.invalid'||!url.pathname.startsWith('/rest/v1/')){denied.push(req.method+' '+url.origin);throw Error('Closed transport');}
   const table=url.pathname.split('/').at(-1)!;if(!Object.prototype.hasOwnProperty.call(rows,table)){denied.push(table);throw Error('Unlisted fixture table');}reads.push(url);
   if(options.sourceFailure)return Response.json({code:'PGRST002',message:PRIVATE},{status:503});
-  let out=table==='aplicaciones'&&options.applications?options.applications:rows[table];
+  let out=table==='aplicaciones'&&options.applications?options.applications:table==='registros_trabajo'&&options.workRows?options.workRows:table==='lotes'&&options.lots?options.lots:rows[table];
   for(const [key,filter]of url.searchParams){if(['select','order','limit','offset'].includes(key))continue;const dot=filter.indexOf('.'),op=filter.slice(0,dot),value=filter.slice(dot+1);
    if(!['eq','in','gte','lte','lt','ilike'].includes(op)){denied.push('operator:'+op);throw Error('Unlisted operator');}
    out=out.filter(r=>op==='eq'?String(r[key])===value:op==='in'?value.slice(1,-1).split(',').map(x=>x.replace(/"/g,'')).includes(String(r[key])):op==='ilike'?String(r[key]).toLowerCase()===value.replace(/\*/g,'').toLowerCase():r[key]!=null&&(op==='gte'?String(r[key])>=value:op==='lte'?String(r[key])<=value:String(r[key])<value));
@@ -112,7 +114,9 @@ async function loop(channel:'Web'|'Telegram',question:string,calls:ReturnType<ty
   const select=url.searchParams.get('select');expect(select).toBeTruthy();
   return Response.json(page.map(row=>project(row,select!)),{headers:{'content-range':page.length?`${offset}-${offset+page.length-1}/${total}`:`*/${total}`}});
  });
- const messages=mensajesDesdeHistorial([{role:'user',content:options.previousUser??PRIVATE+' old user'},{role:'assistant',content:PRIVATE+' old answer',herramientas:[{tool:'get_employee_activity',args:{worker_name:PRIVATE},result_summary:PRIVATE}]},{role:'user',content:question}],PRIVATE+' old memory',channel).map((m,i)=>({...m,...(m.role==='user'?{id:'family-user-'+i,created_at:'2034-05-08T11:50:00.000Z'}:{})}));
+ const history=(options.previousUsers??[options.previousUser??PRIVATE+' old user']).flatMap(content=>[{role:'user' as const,content},{role:'assistant' as const,content:PRIVATE+' old answer',herramientas:[{tool:'get_employee_activity',args:{worker_name:PRIVATE},result_summary:PRIVATE}]}]);
+ let userOrdinal=0;
+ const messages=mensajesDesdeHistorial([...history,{role:'user',content:question}],PRIVATE+' old memory',channel).map((m,i)=>{if(m.role==='user')userOrdinal++;return {...m,...(m.role==='user'?{id:'family-user-'+i,...(options.invalidPriorTime&&userOrdinal===history.length/2?{}:{created_at:'2034-05-08T11:50:00.000Z'})}:{})};});
  const path='../supabase/functions/server/chat.tsx';const {llmToolLoop}=await import(path) as {llmToolLoop:(m:unknown[],u:string,e:(x:unknown)=>void)=>Promise<{text:string;toolInteractions:{tool:string;args:unknown;result_summary:string}[]}>};
  const result=await llmToolLoop(messages,'synthetic-user',e=>events.push(e));
  const diagnostics=vi.mocked(console.error).mock.calls;
@@ -156,6 +160,96 @@ const metricCases=[
  {metric:'labor',question:'Trabajo registrado de la aplicación plaga Q',expected:'17.5'},
  {metric:'theoretical',question:'Cálculo teórico dosis por canecas de la aplicación plaga Q',expected:'10'},
 ];
+it.each((['Web','Telegram'] as const).flatMap(channel=>['status','dates','labor',['status','dates']].map(metric=>({channel,metric}))))('keeps USER quantity task when a valid $metric proposal selects another part on $channel',async({channel,metric})=>{
+ const r=await loop(channel,'¿Qué productos se usaron en la aplicación plaga Q?',[call('get_aplicaciones_ejecucion',{application_name:app.nombre_aplicacion,metric})]);
+ expect(storedFacts(r.result.toolInteractions)).toEqual(expect.arrayContaining([expect.objectContaining({metric:'application.quantity',value:expect.objectContaining({kind:'decimal',value:'189'})})]));
+ expect(r.result.text).toContain('Producto Q');expect(r.result.text).toContain('189');
+ expect(r.reads.some(u=>u.pathname.endsWith('/movimientos_diarios_productos'))).toBe(true);
+ expect(storedFacts(r.result.toolInteractions).some(f=>f.metric==='application.journals')).toBe(false);
+});
+it.each(['Web','Telegram'] as const)('repairs a valid wrong-domain proposal before it can read general labor for application labor on %s',async channel=>{
+ const r=await loop(channel,'Trabajo registrado de la aplicación plaga Q',[call('get_labor_summary',{date_from:'2034-05-01',date_to:'2034-05-07'})],{callsAfterFirst:[call('get_aplicaciones_ejecucion',{application_name:app.nombre_aplicacion,metric:'status'})]});
+ expect(r.payloads).toHaveLength(2);expect(r.result.text).toContain('17.5');
+ const work=r.reads.filter(u=>u.pathname.endsWith('/registros_trabajo'));
+ expect(work.length).toBeGreaterThan(0);expect(work.every(u=>u.searchParams.has('tarea_id'))).toBe(true);
+ expect(r.result.toolInteractions.some(h=>JSON.parse(h.result_summary).reason==='operation_mismatch')).toBe(true);
+});
+it.each((['Web','Telegram'] as const).flatMap(channel=>['Explica el estado Cerrada de una aplicación','¿Qué implica que una aplicación figure Cerrada?'].map(question=>({channel,question}))))('keeps semantic definition useful without record identity: $question / $channel',async({channel,question})=>{
+ const r=await loop(channel,question,[call('get_recorded_state_definition',{domain:'application',state:'Cerrada'})]);
+ expect(r.reads).toEqual([]);expect(r.result.text).toContain('Cerrada');expect(r.result.text).toMatch(/no (?:prueba|demuestra|garantiza)|no implica/i);
+ expect(r.result.text).not.toContain('precisar la identidad');
+});
+it.each(['Web','Telegram'] as const)('preserves a nonprefix USER reference and chained scope without prior assistant facts on %s',async channel=>{
+ const r=await loop(channel,'¿Cuántos jornales llevamos en esa aplicación?',[call('get_aplicaciones_ejecucion',{application_name:'Otra inventada',metric:'status',date_from:'1900-01-01',date_to:'1900-01-02'})],{previousUsers:['Trabajo registrado de la aplicación plaga Q del 2034-05-01 al 2034-05-07','¿Cuáles fueron las fechas de esa aplicación?'],workRows:[...rows.registros_trabajo,{...rows.registros_trabajo[0],id:'outside-period',fecha_trabajo:'2034-04-30',costo_jornal:'999',fraccion_jornal:'30'}]});
+ expect(r.result.text,JSON.stringify(r.result.toolInteractions)).toContain('17.5');
+ expect(r.result.text).not.toContain('Otra inventada');
+ const payload=JSON.stringify(r.payloads[0]);expect(payload).toContain('2034-05-01');expect(payload).toContain('referencia USER resuelta');expect(payload).not.toContain('plaga q');
+ const work=r.reads.find(u=>u.pathname.endsWith('/registros_trabajo'));expect(work).toBeDefined();
+ const context=r.result.toolInteractions.map(h=>JSON.parse(h.result_summary)).find(c=>c.evidence?.facts?.some((f:{metric:string})=>f.metric==='application.cost'));
+ expect(context.evidence.scopes.every((s:{period:{from:string;to:string}})=>s.period.from==='2034-05-01'&&s.period.to==='2034-05-07')).toBe(true);
+ expect(r.result.text).not.toContain('999');
+});
+it.each(['Web','Telegram'] as const)('offers only aggregate labor arguments and corrects personal null before source on %s',async channel=>{
+ const r=await loop(channel,'Jornales y costos por lote desglosados la semana pasada',[call('get_labor_summary',{employee_name:null})],{callsAfterFirst:[call('get_labor_summary',{lote_name:null})]});
+ expect(r.payloads).toHaveLength(2);expect(r.result.text).toContain('17.5');
+ const tools=r.payloads[0].tools as Array<{function:{name:string;parameters:{properties:Record<string,unknown>}}}>;
+ const labor=tools.find(t=>t.function.name==='get_labor_summary')!;
+ expect(Object.keys(labor.function.parameters.properties).sort()).toEqual(['date_from','date_to','lote_name']);
+ expect(r.reads.every(u=>!u.search.includes('empleado')&&!u.search.includes('salario'))).toBe(true);
+});
+it.each(['Web','Telegram'] as const)('keeps definition and obtains the separate requested facts on %s',async channel=>{
+ const r=await loop(channel,'Qué significa Cerrada; muestra consumo registrado de la aplicación plaga Q',[call('get_recorded_state_definition',{domain:'application',state:'Cerrada'})],{callsAfterFirst:[call('get_aplicaciones_ejecucion',{metric:'status',application_name:app.nombre_aplicacion})]});
+ expect(r.payloads).toHaveLength(2);expect(r.result.text).toContain('Cerrada');expect(r.result.text).toContain('189');
+ expect(r.result.text).not.toContain('Queda pendiente la consulta de la aplicación');
+});
+it.each(['Web','Telegram'] as const)('retains a verified definition if the missing-data retry ends without tools on %s',async channel=>{
+ const r=await loop(channel,'Qué significa Cerrada; muestra consumo registrado de la aplicación plaga Q',[call('get_recorded_state_definition',{domain:'application',state:'Cerrada'})],{terminalAfterFirst:true});
+ expect(r.payloads).toHaveLength(2);expect(r.reads).toEqual([]);expect(r.result.text).toContain('Cerrada');expect(r.result.text).toMatch(/pendiente|no pude verificar/i);expect(r.result.text).not.toContain('189');
+});
+it.each(['Web','Telegram'] as const)('does not restore explicitly excluded application fields from valid model metadata on %s',async channel=>{
+ const r=await loop(channel,'No muestres estado; no incluyas fechas de la aplicación plaga Q',[call('get_aplicaciones_ejecucion',{metric:'status',application_name:app.nombre_aplicacion})]);
+ expect(r.reads).toEqual([]);expect(r.result.text).not.toContain('Cerrada');expect(r.result.text).toMatch(/excluye|precisa/);
+});
+it.each(['Web','Telegram'] as const)('never reinserts a historical USER note as a model selector on %s',async channel=>{
+ const r=await loop(channel,'¿Y las fechas de esa aplicación?',[call('get_aplicaciones_ejecucion',{metric:'dates'})],{previousUser:'Estado de la aplicación plaga Q observaciones '+PRIVATE});
+ expect(JSON.stringify(r.payloads)).not.toContain(PRIVATE);expect(r.result.text).not.toContain(PRIVATE);
+ expect(r.reads.some(u=>u.pathname.endsWith('/registros_trabajo'))).toBe(false);
+});
+it.each(['Web','Telegram'] as const)('does not skip an invalid latest USER link to reuse an older identity on %s',async channel=>{
+ const r=await loop(channel,'¿Y las fechas de esa aplicación?',[call('get_aplicaciones_ejecucion',{metric:'dates'})],{previousUsers:['Estado de la aplicación Sol','Estado de la aplicación Luna'],invalidPriorTime:true,preModelClarification:true});
+ expect(r.payloads).toEqual([]);expect(r.reads).toEqual([]);expect(r.result.text).toMatch(/identificar|nombre/);
+});
+it.each(['Web','Telegram'] as const)('keeps an aggregate continuation with explicit personal exclusions useful on %s',async channel=>{
+ const r=await loop(channel,'¿Y el costo registrado por lote?',[call('get_labor_summary',{})],{previousUser:'Jornales y costo por lote la semana pasada, sin salarios individuales'});
+ expect(r.result.text,JSON.stringify(r.result.toolInteractions)).toContain('17.5');
+ expect(r.reads.every(u=>!u.search.includes('empleado')&&!u.search.includes('salario'))).toBe(true);
+});
+it.each(['Web','Telegram'] as const)('does not borrow a sibling labor period or metric for application status on %s',async channel=>{
+ const r=await loop(channel,'Estado de la aplicación plaga Q; por separado, jornales y costo de todas las labores por lote la semana pasada',[call('get_aplicaciones_ejecucion',{metric:['status','labor'],date_from:'1900-01-01',date_to:'1900-01-02'}),call('get_labor_summary',{})]);
+ const facts=storedFacts(r.result.toolInteractions);expect(facts.some(f=>f.metric==='application.status'&&f.value.value==='Cerrada')).toBe(true);
+ expect(facts.some(f=>f.metric==='labor.cost'&&f.value.value==='17.5')).toBe(true);expect(facts.some(f=>f.metric==='application.cost')).toBe(false);
+ const appContext=r.result.toolInteractions.map(h=>JSON.parse(h.result_summary)).find(c=>c.evidence?.facts?.some((f:{metric:string})=>f.metric==='application.status'));
+ expect(appContext.evidence.scopes.every((s:{period:unknown})=>s.period===null)).toBe(true);
+});
+it.each(['Web','Telegram'] as const)('keeps two explicit periods bound to their own requested domains on %s',async channel=>{
+ const r=await loop(channel,'Estado de la aplicación plaga Q del 2034-04-01 al 2034-04-30; por separado, jornales y costo de todas las labores por lote del 2034-05-01 al 2034-05-07',[call('get_aplicaciones_ejecucion',{metric:'labor'}),call('get_labor_summary',{})]);
+ const contexts=r.result.toolInteractions.map(h=>JSON.parse(h.result_summary));
+ const appContext=contexts.find(c=>c.evidence?.facts?.some((f:{metric:string})=>f.metric==='application.status'));
+ const laborContext=contexts.find(c=>c.evidence?.facts?.some((f:{metric:string})=>f.metric==='labor.cost'));
+ expect(appContext.evidence.scopes.every((s:{period:{from:string;to:string}})=>s.period.from==='2034-04-01'&&s.period.to==='2034-04-30')).toBe(true);
+ expect(laborContext.evidence.scopes.every((s:{period:{from:string;to:string}})=>s.period.from==='2034-05-01'&&s.period.to==='2034-05-07')).toBe(true);
+ expect(r.result.text).toContain('Cerrada');expect(r.result.text).toContain('17.5');
+});
+it.each(['Web','Telegram'] as const)('does not apply a purchase activity word as an application type filter on %s',async channel=>{
+ const r=await loop(channel,'Estado de la aplicación plaga Q; consulta las compras de fertilización de abril de 2034',[call('get_aplicaciones_ejecucion',{metric:'status',type:'Fertilizacion'})]);
+ expect(r.result.text).toContain('Cerrada');expect(r.result.text).toMatch(/pendientes.*fuente.*compras/i);
+ expect(storedFacts(r.result.toolInteractions).some(f=>f.metric==='application.status'&&f.value.value==='Cerrada')).toBe(true);
+});
+it.each(['Web','Telegram'] as const)('binds a new explicit lot on a reference before partitioning registered work on %s',async channel=>{
+ const r=await loop(channel,'¿Cuántos jornales llevamos en esa aplicación en el lote Sur del 2034-05-01 al 2034-05-07?',[call('get_aplicaciones_ejecucion',{metric:'status',lote_name:'Río Claro'})],{previousUser:'Trabajo registrado de la aplicación plaga Q en el lote Río Claro',lots:[...rows.lotes,{id:'lot-south',nombre:'Sur'}],workRows:[...rows.registros_trabajo,{...rows.registros_trabajo[0],id:'work-south',lote_id:'lot-south',lote:{nombre:'Sur'},fraccion_jornal:'2',costo_jornal:'73'}]});
+ expect(r.result.text,JSON.stringify(r.result.toolInteractions)).toContain('73');expect(r.result.text).not.toContain('17.5');
+ expect(storedFacts(r.result.toolInteractions).some(f=>f.metric==='application.cost'&&f.value.value==='73')).toBe(true);
+});
 it.each(metricCases.flatMap(c=>(['Web','Telegram'] as const).map(channel=>({...c,channel}))))('keeps actual application utility for announced $metric on $channel through real loop',async({metric,question,expected,channel})=>{
  const r=await loop(channel,question,[call('get_aplicaciones_ejecucion',{application_name:app.nombre_aplicacion,metric})]);
  expect(r.result.text).toContain(expected);expect(r.reads.some(u=>u.pathname.endsWith('/aplicaciones'))).toBe(true);

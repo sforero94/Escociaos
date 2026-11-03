@@ -177,7 +177,12 @@ export function pideFechasPlaneadas(pregunta: string): boolean {
   return requested === 'planned';
 }
 
-export interface SolicitudAplicacion { pregunta: string; anterior?: string; cohorteIds?: string[]; metricas?:readonly ApplicationMetric[] }
+export interface SolicitudAplicacion { pregunta: string; anterior?: string; cohorteIds?: string[]; metricas?:readonly ApplicationMetric[];
+  /** Server-read USER scope only; never tool arguments or assistant prose. */
+  referenciaUsuario?:{anchorQuestion:string;currentQuestion:string};
+  /** Original USER identity assertions retained across a server-only binding step. */
+  identityAssertions?:string;
+}
 type SeleccionAplicacion = { estado:'verificada'; version:'aplicacion_selector_v1'; aplicacion_ids:string[]|null; lote_ids:string[]|null; referencia:'actual'|'usuario_anterior' } | { estado:'aclarar'; mensaje:string };
 const normalizarSelector = (v:unknown) => normalizarTextoAplicacion(v).replace(/[«»"'()[\],:;!?¿¡—–]/g,' ').replace(/\s+/g,' ').trim();
 const palabrasNombre = (v:unknown) => normalizarSelector(v).split(' ').filter(w=>!['el','la','los','las','de','del','contra','control','aplicacion','fumigacion','fertilizacion'].includes(w)).join(' ');
@@ -196,6 +201,26 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
     const end=boundaries.find(m=>!(!lot && preguntaEstadoInicial(question) && /^de (?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/.test(m[0]) && /\bmes $/.test(selector.slice(0,m.index))));
     return selector.slice(0,end?.index??selector.length).trim();
   };
+  if(s.referenciaUsuario){
+    const {anchorQuestion,currentQuestion}=s.referenciaUsuario;
+    if(typeof anchorQuestion!=='string'||typeof currentQuestion!=='string'||!anchorQuestion.trim()||anchorQuestion.length>16000||currentQuestion.length>16000)return fail('No pude validar el antecedente de esta selección.');
+    const assertions=anchorQuestion+'; '+currentQuestion,assertionText=normalizarSelector(assertions);
+    // Negative identity selection is not an inclusion filter. Do not erase it
+    // while resolving an otherwise useful named reference.
+    if(/\b(?:sin|excepto|excluye|excluir|no incluyas|no incluir|no muestres)\s+(?:(?:el|la|los|las|esa|ese)\s+)?(?:lotes?|aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?)\b/.test(assertionText))return fail('La referencia contiene una exclusión de aplicación o lote que esta selección no puede aplicar; precisa el alcance positivo.');
+    const escaped=(v:string)=>normalizarSelector(v).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    if([...apps.map(a=>[a.id,a.nombre_aplicacion]),...lotes.map(l=>[l.id,l.nombre])].flat().some(value=>typeof value==='string'&&value.trim()&&new RegExp('\\b(?:sin|excepto|excluye|no incluyas|no muestres) (?:el |la |los |las )?'+escaped(value)+'(?: |$)').test(assertionText)))return fail('La referencia excluye una identidad del catálogo; precisa el alcance positivo antes de consultar.');
+    const anchor=resolverSeleccionAplicacion({pregunta:anchorQuestion,identityAssertions:assertions},apps,lotes,plural);
+    if(anchor.estado==='aclarar')return anchor;
+    const current=normalizarSelector(normalizarPreguntaAplicacion(currentQuestion).texto);
+    const currentLot=extract(current,true);
+    const explicitCurrentLot=/\b(?:en|del|para) (?:el |la )?lote\b|^lote\b/.test(current)&&!/^\s*(?:ese|este|anterior)\b/.test(currentLot);
+    if(!explicitCurrentLot)return {...anchor,referencia:'usuario_anterior'};
+    if(!currentLot)return fail('Precisa el lote actual de la referencia.');
+    const identity=anchor.aplicacion_ids?.length===1?'la aplicación '+anchor.aplicacion_ids[0]:'las aplicaciones';
+    const selected=resolverSeleccionAplicacion({pregunta:'Estado de '+identity+' en el lote '+currentLot,identityAssertions:assertions},apps,lotes,plural);
+    return selected.estado==='verificada'?{...selected,referencia:'usuario_anterior'}:selected;
+  }
   let reference:'actual'|'usuario_anterior'='actual', appSelector=extract(q), lotSelector=extract(q,true);
   if(!appSelector && /\b(?:esa|esta|anterior) aplicacion\b|\baplicacion anterior\b/.test(q)) {
     const previous=normalizarSelector(normalizarPreguntaAplicacion(s.anterior ?? '').texto);
@@ -206,7 +231,12 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
   }
 
   const identityRaw=reference==='usuario_anterior'?s.anterior??'':s.pregunta;
-  const identityQuestion=normalizarSelector(identityRaw);
+  const identityQuestion=normalizarSelector(identityRaw+' '+(s.identityAssertions??''));
+  const explicitIds=[...identityQuestion.matchAll(/\b(?:con (?:el )?(?:id|uuid)|(?:id|uuid)\s*[:#])\s+([a-z0-9][a-z0-9_-]{2,127})\b/g)].map(m=>{
+    const nouns=[...identityQuestion.slice(0,m.index).matchAll(/\b(aplicacion|fumigacion|fertilizacion|lote)\b/g)];
+    return {id:m[1],kind:nouns.at(-1)?.[1]==='lote'?'lot':'application'};
+  });
+  if(explicitIds.some(({id,kind})=>!(kind==='application'?apps:lotes).some(row=>normalizarSelector(row.id)===id)))return fail('No pude acreditar un ID explícito del usuario en el catálogo de su tipo solicitado.');
   // A named month in the user's application selector is identity evidence,
   // not permission to choose the model's ID or substitute planned dates.
   const monthlyNames=(rows:FilaEsco[],raw:string):{rows:FilaEsco[];uncertain:Set<FilaEsco>}=>{
@@ -234,7 +264,7 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
   if(!plural) {
     // An explicit user ID and name must agree. Model IDs are deliberately absent.
     if(idsMentioned.length>1)return fail('Hay varios IDs de aplicación en la petición; precisa uno.');
-    const selectorWithoutId=idsMentioned.length===1 ? appSelector.replace(new RegExp(normalizarSelector(idsMentioned[0].id).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g'),'').replace(/\bid\b/g,'').trim():appSelector;
+    const selectorWithoutId=idsMentioned.length===1 ? appSelector.replace(new RegExp(normalizarSelector(idsMentioned[0].id).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g'),'').replace(/\b(?:con(?: el)? )?(?:id|uuid)\b/g,'').trim():appSelector;
     const selector=palabrasNombre(selectorWithoutId);
     if(selector)candidates=apps.filter(a=>(' '+palabrasNombre(a.nombre_aplicacion)+' ').includes(' '+selector+' '));
     const monthly=monthlyNames(candidates,identityRaw);candidates=monthly.rows;
@@ -259,6 +289,7 @@ export function resolverSeleccionAplicacion(s:SolicitudAplicacion, apps:FilaEsco
     selectedLots=exactIds.length?exactIds:lotes.filter(l=>(' '+palabrasNombre(l.nombre)+' ').includes(' '+name+' '));
     if(selectedLots.length!==1)return fail('Precisa un lote inequívoco del catálogo consultado; no sustituí el lote solicitado por el del modelo.');
   } else if(/\blote\b/.test(q))return fail('Precisa el nombre o ID del lote solicitado.');
+  if(explicitIds.some(({id,kind})=>kind==='lot'&&!selectedLots?.some(l=>normalizarSelector(l.id)===id)))return fail('El nombre y el ID de lote indicados no corresponden al mismo lote.');
   return {estado:'verificada',version:'aplicacion_selector_v1',aplicacion_ids:plural?null:candidates.map(a=>texto(a.id)),lote_ids:selectedLots?.map(l=>texto(l.id))??null,referencia:reference};
 }
 
