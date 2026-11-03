@@ -23,4 +23,6 @@ Run the offline check with `python analysis/esco2-design/check_contracts.py` (Py
 
 Current gates: route A eligibility **unproven**, route B controls designed but **unverified against an authorized database**; E2-17 and M2 remain open. M1 references/snapshot, E2-06 access/data handling, review budget and explicit architecture decision remain necessary. No route selected.
 
+The independent inventory received from coordination uses `main` `43c3e887`; see architecture.md for its qualification candidates. This design's local baseline is older (`a635a05`), so integration requires reconciliation. No claim that the branch reflects latest main.
+
 Only `docs/esco2/` and `analysis/esco2-design/` belong to this handoff. Other fronts retain their files and owners. Do not inspect private golden or held-out here. Do not start M2.5 or product wiring from this branch.

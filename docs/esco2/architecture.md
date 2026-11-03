@@ -77,6 +77,16 @@ A trusted actor/conversation capability stays outside model-visible Plan/Result.
 
 These table/column mappings are candidate repository mappings, not a current catalog attestation. M1 must confirm them before a reader becomes executable. Qualify pure calculation/date helpers independently before reuse. Do not import the old orchestration to reuse a helper. Remaining phase-1 domains get operations only after M2.5/M3: monitoring and conductivity, observed climate, dairy record identity and existing reproductive engine, milk weights and linked fortnight liters without money.
 
+Independent inventory handoff received from coordination, anchored to `main` `43c3e887` (this local worktree remains at baseline `a635a05`). These are qualification candidates, not acceptance or demonstrated causes of v295. Reconcile against the intended integration commit before reuse:
+
+- Labor reader rejects null lot IDs: a replacement must explicitly preserve and reconcile unassigned groups. Do not qualify the existing reader based on its test count.
+- `application.cost` represents labor cost. Input cost in application closure is per product/application; lot attribution is unproven. Use explicit metric names and do not distribute product costs by lot without an approved source/rule.
+- Monitoring must distinguish no observation from zero incidence. Soil conductivity color criteria conflict between Esco and UI; agree one definition/version before exposing a derived classification.
+- The verified climate contract covers rain only. Temperature, humidity and other observed variables require separate qualification; their PRD inclusion is not evidence of reader coverage.
+- Fortnight dairy liters exist in a legacy reader but the operation is marked unsupported. The current DTO includes money. Qualify a minimal liters-only projection through the linked income record; never pass the financial DTO to the model.
+
+This handoff authorizes no legacy repair, production inspection or widening of query scope. Remaining domains do not become implementation fronts before their plan gates.
+
 ## Context, time and limits
 
 Structured context version 1 contains resolved entity references, effective period/date basis, completed part IDs and evidence references. Bind it to actor and conversation. Expired, foreign or incompatible context cannot become authority. Explicit entity/period changes replace the relevant prior filters; a new turn re-resolves access and stale references.
