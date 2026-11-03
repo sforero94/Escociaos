@@ -930,6 +930,26 @@ the web exercise of 30 questions completed on stable v282. Functional Faithfulne
 acceptance remains open because exploratory findings require separate review. See
 `docs/security-review/technical-closeout.md`; this receipt authorizes no action.
 
+## Migration ledger update — 2026-11-03
+
+Migration `189_aplicaciones_productos_alternativos` (ESCO-169, part F2 of ESCO-165)
+was applied to production (`ywhtjwawnkeqlwxbvgup`) in an attended session, on
+Santiago's live approval. Live ledger version `20261103001246`. File transferred
+verbatim from PR #399, SHA256
+`f9b060968656165db608b34594eaf0573a7989692cbf641abfad8c386cc7440b`, through Composio
+`SUPABASE_APPLY_A_MIGRATION` (account `supabase_bitis-coward`). Do not reapply.
+New table `aplicaciones_productos_alternativos`: alternative products of one plan line
+(`aplicaciones_productos.id`, `ON DELETE CASCADE`), each with the same five dose columns,
+unique per (line, product), at least one dose required. RLS pattern 044: SELECT
+`authenticated`; INSERT/UPDATE/DELETE Gerencia + Administrador via
+`(SELECT get_user_role())`; `anon` and `PUBLIC` without privileges. `po_sonda` rehearsal
+repeated before applying (guards pass, Administrador insert works, no-role user and
+`anon` get `42501`). Post-state verified: RLS on, 4 policies `TO authenticated`, 0 rows,
+205 plan lines untouched, no new security advisor finding. Zero domain rows changed.
+Consequence for ESCO-170: the calculadora saves by delete-and-reinsert of lines, so the
+cascade deletes the alternatives and the save must reinsert them with the new line id.
+Rollback: `DROP TABLE public.aplicaciones_productos_alternativos;`.
+
 ## Deployment
 
 The app is deployed on **Vercel** with:
