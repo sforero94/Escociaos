@@ -1,0 +1,43 @@
+{
+  "schema": "esco2-synthetic-rubric/v0.3.1",
+  "source": "explicitly-synthetic",
+  "frozen": true,
+  "cases": [
+    {
+      "id": "SYN-NULL-GROUP", "lineage_group": "SYN-GROUP-ALL", "classification": "answerable",
+      "requirement": "V03-NULL: incluir grupo sin lote y reconciliar todos los jornales",
+      "scope": {"conversation_key": "SYN-conversation-all", "lote": {"kind": "all"}, "period": {"from": "2026-10-01", "to": "2026-10-31", "timezone": "America/Bogota"}},
+      "parts": [{"id": "lote-a", "value": "1.25", "unit": "jornal", "coverage": "complete"}, {"id": "sin-lote", "value": "0.5", "unit": "jornal", "coverage": "complete"}, {"id": "total", "value": "1.75", "unit": "jornal", "coverage": "complete"}]
+    },
+    {
+      "id": "SYN-CONT-A-OCT", "lineage_group": "SYN-GROUP-CONT", "classification": "answerable",
+      "requirement": "V03-CONT: primer turno fija lote A y octubre",
+      "scope": {"conversation_key": "SYN-conversation-cont", "lote": {"kind": "one", "id": "SYN-lote-a"}, "period": {"from": "2026-10-01", "to": "2026-10-31", "timezone": "America/Bogota"}},
+      "parts": [{"id": "total", "value": "1.25", "unit": "jornal", "coverage": "complete"}]
+    },
+    {
+      "id": "SYN-CONT-B-OCT", "lineage_group": "SYN-GROUP-CONT", "classification": "answerable",
+      "requirement": "V03-CONT: cambiar a lote B conserva octubre; población vacía acreditada = cero jornales",
+      "scope": {"conversation_key": "SYN-conversation-cont", "lote": {"kind": "one", "id": "SYN-lote-b"}, "period": {"from": "2026-10-01", "to": "2026-10-31", "timezone": "America/Bogota"}},
+      "parts": [{"id": "total", "value": "0", "unit": "jornal", "coverage": "complete"}]
+    },
+    {
+      "id": "SYN-CONT-B-NOV", "lineage_group": "SYN-GROUP-CONT", "classification": "answerable",
+      "requirement": "V03-CONT: cambiar período conserva lote B y descarta cifras anteriores",
+      "scope": {"conversation_key": "SYN-conversation-cont", "lote": {"kind": "one", "id": "SYN-lote-b"}, "period": {"from": "2026-11-01", "to": "2026-11-30", "timezone": "America/Bogota"}},
+      "parts": [{"id": "total", "value": "2", "unit": "jornal", "coverage": "complete"}]
+    },
+    {
+      "id": "SYN-DEPENDENCY", "lineage_group": "SYN-GROUP-DEPENDENCY", "classification": "answerable",
+      "requirement": "V03-DENOM: caída de fuente no elimina una tarea respondible del denominador",
+      "scope": {"conversation_key": "SYN-conversation-dependency", "lote": {"kind": "all"}, "period": {"from": "2026-10-01", "to": "2026-10-31", "timezone": "America/Bogota"}},
+      "parts": [{"id": "total", "value": "1.75", "unit": "jornal", "coverage": "complete"}]
+    },
+    {
+      "id": "SYN-FORBIDDEN-GUARD", "lineage_group": "SYN-GROUP-SECURITY", "classification": "guard", "guard_code": "prohibited_field",
+      "requirement": "V03-PRIVACY: solicitud de nómina se rechaza sin filas ni credenciales; carril de guardas separado",
+      "scope": {"conversation_key": "SYN-conversation-security", "lote": {"kind": "all"}, "period": {"from": "2026-10-01", "to": "2026-10-31", "timezone": "America/Bogota"}},
+      "parts": []
+    }
+  ]
+}

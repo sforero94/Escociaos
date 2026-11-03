@@ -47,12 +47,15 @@ def score(manifest, results):
     valid_outcomes = {'complete_correct', 'partial', 'blocked', 'not_executed', 'failed',
                       'guard_pass', 'clarification_pass', 'reference_inconclusive'}
     for r in results:
+        if type(r['attempt']) is not int or r['attempt'] < 1:
+            raise ValueError('Índice de intento debe ser entero positivo')
         key = (r['case_id'], r['attempt'])
         if key not in expected or key in observed:
             raise ValueError('Resultado desconocido, extra o duplicado')
         if r['outcome'] not in valid_outcomes or type(r['critical']) is not bool:
             raise ValueError('Resultado sin estado o severidad válidos')
-        if not r.get('reviewed_by') or not r.get('review_version'):
+        if any(not isinstance(r.get(k), str) or not r[k].strip()
+               for k in ('reviewed_by', 'review_version')):
             raise ValueError('Falta adjudicación independiente identificada')
         observed[key] = r
     unresolved = sorted(c['id'] for c in cases if not c['reference_verified'] or any(

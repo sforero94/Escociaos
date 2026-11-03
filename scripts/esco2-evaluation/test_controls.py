@@ -79,6 +79,26 @@ class ScoringControls(unittest.TestCase):
         self.assertFalse(report['product_accepted'])
         self.assertLess(report['partitions']['development']['wilson95_cases'][0], .9)
 
+    def test_attempt_boolean_cannot_impersonate_attempt_one(self):
+        for attempt in (True, 1.0, '1'):
+            with self.subTest(attempt=attempt), self.assertRaises(ValueError):
+                score(manifest(case('SYN-a')), [result('SYN-a', attempt=attempt)])
+
+    def test_adjudicator_requires_nonblank_text(self):
+        for value in ('  ', ['SYN-reviewer'], {'name': 'SYN-reviewer'}, True):
+            r = result('SYN-a')
+            r['reviewed_by'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                score(manifest(case('SYN-a')), [r])
+
+    def test_inconclusive_reference_blocks_even_at_threshold_without_mandatory(self):
+        m = manifest(*(case('SYN-' + str(i)) for i in range(10)))
+        m['cases'][9].update(reference_verified=False, mandatory=False)
+        report = score(m, [result('SYN-' + str(i)) for i in range(10)])
+        self.assertEqual(report['partitions']['development']['rate'], .9)
+        self.assertEqual(report['partitions']['development']['mandatory_failed'], [])
+        self.assertFalse(report['scoring_gate_pass'])
+
 
 class OracleControls(unittest.TestCase):
     def setUp(self):
