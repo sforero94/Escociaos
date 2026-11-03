@@ -78,4 +78,3 @@ E2-18 queda Bloqueado por controles técnicos no acreditados, no por falta de
 autorización de copia. El siguiente paso es obtener evidencia administrativa
 de acceso/TTL del destino dedicado; si no es posible, acordar otro destino.
 No se contactó a terceros ni se modificó la configuración del entorno.
-
