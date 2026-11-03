@@ -1,6 +1,14 @@
 // Synthetic boundary probes. A mocked model cannot establish answer quality.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ejecutarConsultaEsco, resumirContexto, type FilaEsco } from '../utils/escoConsultas';
+import { argumentosRespuestaAplicacion, planRespuestaAplicacion, ejecutarConsultaEsco, resumirContexto, type FilaEsco } from '../utils/escoConsultas';
+import type { hechosEjecucionAplicacion } from '../utils/escoAplicacionHechos';
+interface FuenteCantidadesSintetica {
+  error?:unknown;
+  _evidencia:{consulta_completa:boolean;detalle_completo:boolean;total_hechos:number;rango:{desde:string|null;hasta:string|null}};
+  detalle:Array<{id:string;base_fecha_consultada:string;fecha_inicio_planeada:string;
+    hechos_ejecucion:ReturnType<typeof hechosEjecucionAplicacion>;
+    movimientos:Array<FilaEsco&{id:string;consumos:FilaEsco[]}>;productos_planeados:FilaEsco[]}>;
+}
 const modulePath = '../supabase/functions/server/chat.tsx';
 const { llmToolLoop, getSystemPrompt } = await import(modulePath) as {
   llmToolLoop: (messages: { role: string; content: string }[]) => Promise<{
@@ -102,30 +110,40 @@ async function run(options: { missing?: boolean; unavailable?: boolean; answer?:
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(options.plannedQuestion?'2026-10-30T17:00:00Z':'2032-04-02T17:00:00Z'));
   const result = await llmToolLoop([{ role: 'system', content: getSystemPrompt() },
     ...(options.history?[{role:'assistant',content:options.history}]:[]),
-    { role: 'user', content: options.question ?? options.plannedQuestion ?? '¿Cómo va la aplicación de plaga Z y cuál es el pronóstico de lluvia?' }]);
-  expect(rejected).toEqual([]); expect(bodies).toHaveLength(options.expectedCalls ?? (options.plannedQuestion?1:2));
-  return { result, bodies, evidence: JSON.parse(bodies[1]?.messages.find(m => m.role === 'tool')?.content ?? result.toolInteractions[0].result_summary) };
+    { role: 'user', content: options.question ?? options.plannedQuestion ?? '¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?' }]);
+  expect(rejected).toEqual([]); expect(bodies).toHaveLength(options.expectedCalls ?? 1);
+  const question=options.question ?? options.plannedQuestion ?? '¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?';
+  const bound=argumentosRespuestaAplicacion(planRespuestaAplicacion(question,options.plannedQuestion?'2026-10-30':'2032-04-02'),toolArgs);
+  // Separate pure-source regression: the actual loop now renders internally and
+  // persists a positive identity/date DTO, never this raw consumption object.
+  const evidence=await ejecutarConsultaEsco('get_aplicaciones_ejecucion',bound,async(t,q)=>read(db,t,q),options.plannedQuestion?'2026-10-30':'2032-04-02',{pregunta:question}) as unknown as FuenteCantidadesSintetica;
+  return {result,bodies,evidence,context:JSON.parse(result.toolInteractions[0].result_summary)};
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('application quantities: evidence versus generation boundary', () => {
   it.each(['missing','wildcard','changing'] as const)('never certifies authoritative application facts with %s count evidence', async countMode => {
-    const { evidence, result } = await run({countMode});
-    expect(evidence.error).toBeTruthy();
-    expect(evidence._evidencia?.consulta_completa).not.toBe(true);
+    const { context, result } = await run({countMode});
+    expect(context.error).toBeTruthy();
+    expect(context._evidencia?.consulta_completa).not.toBe(true);
     expect(result.text).toContain('No pude verificar');
   });
   it.each(['', 'Solo lectura: ', 'Consulta de solo lectura: '])('allows an explicit planned interrogative through the actual loop without denying date_basis: %s', async prefix => {
-    const { evidence, bodies } = await run({ plannedQuestion: prefix + '¿Qué aplicaciones están planeadas para noviembre de 2026?' });
+    const { evidence, bodies, context } = await run({ plannedQuestion: prefix + '¿Qué aplicaciones están planeadas para noviembre de 2026?' });
     expect(evidence.error).toBeUndefined();
     expect(evidence.detalle[0]).toMatchObject({ id: 'synthetic-app', base_fecha_consultada: 'planned', fecha_inicio_planeada: '2026-11-05' });
-    expect(bodies[0].tool_choice).toEqual({type:'function',function:{name:'get_aplicaciones_ejecucion'}});
+    expect(bodies[0].tool_choice).toBe('required');
+    expect(context.state).toBe('validated');
+    expect(context.evidence.scopes[0].period).toMatchObject({basis:'planned',from:'2026-11-01',to:'2026-11-30'});
+    expect(context.evidence.facts.find((f:{metric:string})=>f.metric==='application.planned_start')).toMatchObject({origin:'planned',value:{kind:'date',value:'2026-11-05'}});
   });
   it.each(['Consulta de solo lectura: ¿Qué aplicaciones están planeadas para noviembre de 2026?', '¿Qué aplicaciones están planeadas para noviembre de 2026?'])('renders a verified empty planned-start cohort, not activity absence or a tasks fallback: %s', async plannedQuestion => {
-    const { result, evidence }=await run({plannedQuestion,emptyPlanned:true,answer:''});
+    const { result, evidence, context }=await run({plannedQuestion,emptyPlanned:true,answer:''});
     expect(evidence._evidencia).toMatchObject({consulta_completa:true,detalle_completo:true,total_hechos:0});
-    expect(result.text).toContain('No encontré registros');
-    expect(result.text).toContain('inicio planeado: 2026-11-01 a 2026-11-30');
-    expect(result.text).toContain('no demuestra ausencia de actividad física');
+    expect(context.evidence.facts.find((f:{metric:string})=>f.metric==='application.count')).toMatchObject({assertion:'bounded_empty',value:{kind:'decimal',value:'0',unit:'registro'},coverage:{population:'complete',expectedRows:0}});
+    expect(result.text).toContain('Aplicaciones coincidentes en registros');
+    expect(result.text).toContain('0');
+    expect(result.text).toContain('2026-11-01–2026-11-30');
+    expect(result.text).not.toMatch(/no hubo actividad|no se ejecut[oó] ninguna/i);
     expect(result.toolInteractions.map(t=>t.tool)).toEqual(['get_aplicaciones_ejecucion']);
   });
   it('renders fresh actual facts and discards a deliberately false final model reply and history', async () => {
@@ -143,7 +161,9 @@ describe('application quantities: evidence versus generation boundary', () => {
   it('uses the fresh result even when saved context must drop the large raw detail', async () => {
     const { result }=await run({question:'¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?',expectedCalls:1,largeRows:true,answer:'Wrong 9 L'});
     expect(result.text).toContain('| L | 103.75 |');
-    expect(JSON.parse(result.toolInteractions[0].result_summary).contexto_recortado).toBe(true);
+    const saved=JSON.parse(result.toolInteractions[0].result_summary);
+    expect(saved.solo_descubrimiento).toBe(true);expect(saved.detalle[0].id).toBe('synthetic-app');
+    expect(saved.detalle[0]).not.toHaveProperty('movimientos');expect(saved.detalle[0]).not.toHaveProperty('hechos_ejecucion');
   });
   it('answers verified subparts while distinguishing a missing total from a registered zero', async () => {
     const { result }=await run({question:'¿Cómo va la aplicación de plaga Z del 2032-04-01 al 2032-04-02?',expectedCalls:1,missing:true});
@@ -155,12 +175,13 @@ describe('application quantities: evidence versus generation boundary', () => {
     expect(result.text).toContain('40 cc/caneca × 3 canecas planeadas = 120 cc estimados');
     expect(result.text).toContain('no es consumo real');expect(result.text).not.toContain('120 L');
   });
-  it('does not hijack a mixed-domain request with a generic application report', async () => {
+  it('does not use model prose or arbitrary identity for an unresolved mixed-domain request', async () => {
     const mixed='Control sintético de aplicación y lluvia; respuesta no cubierta por el renderer.';
-    const {result}=await run({question:'¿Cómo va la aplicación y cuál es el pronóstico de lluvia?',expectedCalls:2,answer:mixed});
-    expect(result.text).toBe(mixed);expect(result.text).not.toContain('Costo laboral registrado');
+    const {result}=await run({question:'¿Cómo va la aplicación y cuál es el pronóstico de lluvia?',expectedCalls:1,answer:mixed});
+    expect(result.text).not.toBe(mixed);expect(result.text).toContain('No pude verificar');
+    expect(result.text).not.toContain('pronóstico de lluvia confirmado');
   });
-  it('computes authoritative scoped quantities and labor before generation without using planned dose', async () => {
+  it('keeps the pure scoped consumption/labor source exact without using planned dose', async () => {
     const { evidence } = await run();
     const facts = evidence.detalle[0].hechos_ejecucion;
     expect(facts.consumos.productos).toEqual(expect.arrayContaining([
@@ -176,7 +197,7 @@ describe('application quantities: evidence versus generation boundary', () => {
       producto_id: 'p1', cantidad_total: null, cantidad_verificada: '2.5', registros_invalidos: 1,
     });
   });
-  it('delivers exact actual quantities, planned dose and independent units to the model', async () => {
+  it('keeps exact actual quantities and planned dose in the source while persisting only identity/dates', async () => {
     const { evidence, result } = await run();
     expect(evidence._evidencia).toMatchObject({ consulta_completa: true, detalle_completo: true,
       rango: { desde: args.date_from, hasta: args.date_to } });
@@ -186,7 +207,9 @@ describe('application quantities: evidence versus generation boundary', () => {
       ['p1', '1.25', 'L'], ['p1', 2.5, 'L'], ['p2', 75, 'g'],
     ]);
     expect(evidence.detalle[0].productos_planeados[0]).toMatchObject({ dosis_por_caneca: 40, unidad_dosis: 'cc', cantidad_total_necesaria: 9 });
-    expect(JSON.parse(result.toolInteractions[0].result_summary)).toEqual(evidence);
+    const saved=JSON.parse(result.toolInteractions[0].result_summary);
+    expect(saved.detalle[0]).toMatchObject({id:'synthetic-app',estado:'En ejecución'});
+    expect(saved.detalle[0]).not.toHaveProperty('movimientos');expect(saved.detalle[0]).not.toHaveProperty('productos_planeados');
   });
   it('preserves missing consumption as null instead of inferring a planned or zero quantity', async () => {
     const { evidence } = await run({ missing: true });
@@ -194,16 +217,16 @@ describe('application quantities: evidence versus generation boundary', () => {
     expect(evidence.detalle[0].productos_planeados[0].cantidad_total_necesaria).toBe(9);
   });
   it('does not make unavailable consumption into complete evidence', async () => {
-    const { evidence, result } = await run({ unavailable: true });
-    expect(evidence.error).toBeTruthy();
-    expect(evidence._evidencia?.consulta_completa).not.toBe(true);
+    const { context, result } = await run({ unavailable: true });
+    expect(context.error).toBeTruthy();
+    expect(context._evidencia?.consulta_completa).not.toBe(true);
     expect(result.text).toContain('No pude verificar');
   });
-  it('documents the limit: an invented nonempty mocked answer still passes the current final path', async () => {
+  it('replaces invented model prose with registered source facts without a second generation', async () => {
     const wrong = 'Control deliberadamente erróneo: se consumieron 40 L.';
     const { result, evidence } = await run({ answer: wrong });
     expect(evidence.detalle[0].movimientos[0].consumos[0].cantidad_utilizada).toBe('1.25');
-    expect(result.text).toBe(wrong); // This is not a model-quality pass.
+    expect(result.text).not.toBe(wrong);expect(result.text).toContain('| L | 3.75 |');
   });
   it('confirms long saved context loses raw consumption but requires a fresh query', async () => {
     const db = fixture();
@@ -215,7 +238,7 @@ describe('application quantities: evidence versus generation boundary', () => {
     expect(compact.resumen).not.toHaveProperty('consumos');
     expect(compact.instruccion).toContain('Vuelve a consultar');
   });
-  it('carries explicit consumption-versus-plan policy in both generation requests', async () => {
+  it('carries consumption-versus-plan policy in the minimized planning request', async () => {
     const { bodies } = await run();
     for (const body of bodies) {
       const system = body.messages.find(m => m.role === 'system')!.content;

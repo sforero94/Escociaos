@@ -15,7 +15,7 @@ const contiene = (v: unknown, filtro: unknown): boolean => !filtro || texto(v).t
 const identidad = (f?: FilaEsco) => f ? { id: f.id, numero: f.numero, nombre: f.nombre, estado: f.estado, sexo: f.sexo, fecha_nacimiento: f.fecha_nacimiento, fecha_nacimiento_confianza: f.fecha_nacimiento_confianza, numero_es_provisional: Number(f.numero) >= 800 && Number(f.numero) <= 999 } : null;
 const mapa = (filas: FilaEsco[]) => new Map(filas.map(f => [texto(f.id), f]));
 const animalCols = 'id,numero,nombre,sexo,etapa,estado,fecha_estado,fecha_nacimiento,fecha_nacimiento_confianza,madre_id,padre_id,padre_toro_id,raza';
-const eventoCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,transaccion_ganado_id,fin_ingreso_id,fuente,datos';
+const eventoCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,transaccion_ganado_id,fin_ingreso_id,fuente';
 const gastoCols = 'id,fecha,negocio_id,categoria_id,concepto_id,nombre,proveedor_id,valor,estado,compra_id,url_factura,observaciones';
 const ingresoCols = 'id,fecha,negocio_id,categoria_id,nombre,comprador_id,valor,cantidad,precio_unitario,url_factura,observaciones';
 const transCols = 'id,fecha,tipo,finca,cliente_proveedor,cantidad_cabezas,kilos_pagados,precio_kilo,valor_total,es_hato,hato_animal_id,peso_total_kg,destare_kg_cabeza';
@@ -591,8 +591,8 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     let selected = eventos.filter(e => seleccionAnimal(am.get(texto(e.animal_id)) ?? {}));
     if (nombre === 'get_hato_eventos' && args.tipo) selected = selected.filter(e => e.tipo === args.tipo);
     if (nombre === 'get_hato_salidas_finanzas') selected = selected.filter(e => ['venta', 'muerte', 'descarte', 'salida'].includes(texto(e.tipo)) || e.transaccion_ganado_id || e.fin_ingreso_id || e.cria_destino === 'macho_vendido');
-    const tm = mapa(await related('fin_transacciones_ganado', transCols, 'id', selected.map(e => e.transaccion_ganado_id)));
-    const im = mapa(await related('fin_ingresos', ingresoCols, 'id', selected.map(e => e.fin_ingreso_id)));
+    const tm = mapa(nombre==='get_hato_salidas_finanzas'?await related('fin_transacciones_ganado', transCols, 'id', selected.map(e => e.transaccion_ganado_id)):[]);
+    const im = mapa(nombre==='get_hato_salidas_finanzas'?await related('fin_ingresos', ingresoCols, 'id', selected.map(e => e.fin_ingreso_id)):[]);
     const transaccionesHato = nombre === 'get_hato_salidas_finanzas' ? await read('fin_transacciones_ganado', transCols, 'fecha', '&es_hato=eq.true') : [];
     const detalle = selected.map(ev => {
       const vinculada = am.get(texto(ev.cria_id));
@@ -680,7 +680,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     // Carencia necesita toda la historia anterior, no solo un rango corto arbitrario.
     const [apps, movimientos, productos, lotes] = await Promise.all([
       read('aplicaciones', 'id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id'),
-      read('movimientos_diarios', 'id,aplicacion_id,lote_id,fecha_movimiento,numero_canecas,numero_bultos,responsable,notas', carencia ? undefined : 'fecha_movimiento', carencia ? `&fecha_movimiento=lte.${fechaCosecha}` : ''),
+      read('movimientos_diarios', 'id,aplicacion_id,lote_id,fecha_movimiento,numero_canecas,numero_bultos', carencia ? undefined : 'fecha_movimiento', carencia ? `&fecha_movimiento=lte.${fechaCosecha}` : ''),
       read('productos', 'id,nombre,unidad_medida,periodo_carencia_dias'), read('lotes', 'id,nombre'),
     ]);
     const seleccion = nombre==='get_aplicaciones_ejecucion' && solicitud ? resolverSeleccionAplicacion(solicitud,apps,lotes,planRespuestaAplicacion(solicitud.pregunta,hoy).tipo==='aplicacion' && /\b(?:aplicaciones|fumigaciones|fertilizaciones)\b/.test(normalizarTextoAplicacion(solicitud.pregunta))) : null;
@@ -851,7 +851,7 @@ export async function ejecutarConsultaEsco(nombre: string, args: FilaEsco, q: Co
     const [tareas, lotes] = await Promise.all([read('vista_tareas_resumen', 'id,nombre,estado,prioridad,lote_id,lote_ids,lote_nombres,responsable_nombre,fecha_estimada_inicio,fecha_estimada_fin,jornales_estimados,jornales_reales,costo_total', 'fecha_estimada_inicio'), read('lotes', 'id,nombre')]);
     const lotesFiltro = new Set(lotes.filter(l => contiene(l.nombre, args.lote_name)).map(l => l.id));
     const ts = tareas.filter(t => (!args.tarea_id || t.id === args.tarea_id) && (!args.lote_name || lotesFiltro.has(t.lote_id) || (Array.isArray(t.lote_ids) && t.lote_ids.some(id => lotesFiltro.has(id)))));
-    const regs = await related('registros_trabajo', 'id,tarea_id,empleado_id,contratista_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal,observaciones', 'tarea_id', ts.map(t => t.id));
+    const regs = await related('registros_trabajo', 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal', 'tarea_id', ts.map(t => t.id));
     return finish(ts.map(t => { const r = regs.filter(x => x.tarea_id === t.id); const real = suma(r, 'fraccion_jornal'); const est = numero(t.jornales_estimados); return { ...t, registros: r, jornales_registrados: real, diferencia_jornales: real == null || est == null ? null : real - est, ejecucion_capturada: r.length > 0 }; }));
   }
   if (nombre === 'get_clima_cobertura') {

@@ -9,25 +9,75 @@ import { casoBase, herramienta } from './escoEvalsFixtures';
 
 const fuente = (ruta: string) => readFileSync(resolve(__dirname, ruta), 'utf8');
 
-describe('paridad estática de mensajes: ambos árboles actuales', () => {
+// The pure offline builder intentionally preserves untrusted legacy fixtures. It
+// is not the production model boundary; current server builders are checked here.
+async function assertUserOnlyHistory(builder: string, variable: string) {
+  const ts = await import('typescript');
+  const ast = ts.createSourceFile('builder.ts', builder, ts.ScriptTarget.Latest, true);
+  let pushes = 0;
+  function visit(node: import('typescript').Node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) && node.expression.expression.text === variable && node.expression.name.text === 'push') {
+      pushes++;
+      let guarded = false;
+      let child: import('typescript').Node = node;
+      for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+        if (!ts.isIfStatement(parent) || child !== parent.thenStatement) continue;
+        const condition = parent.expression;
+        if (ts.isBinaryExpression(condition) && condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+          ts.isPropertyAccessExpression(condition.left) && ts.isIdentifier(condition.left.expression) && condition.left.expression.text === 'm' &&
+          condition.left.name.text === 'role' && ts.isStringLiteral(condition.right) && condition.right.text === 'user') guarded = true;
+      }
+      expect(guarded, 'every reconstructed history message is guarded by USER role').toBe(true);
+      const value = node.arguments[0];
+      expect(value && ts.isObjectLiteralExpression(value)).toBe(true);
+      if (value && ts.isObjectLiteralExpression(value)) for (const key of ['id', 'role', 'content', 'created_at']) {
+        const field = value.properties.find(p => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === key);
+        expect(field && ts.isPropertyAssignment(field) && ts.isPropertyAccessExpression(field.initializer) &&
+          ts.isIdentifier(field.initializer.expression) && field.initializer.expression.text === 'm' && field.initializer.name.text === key, `trusted source field ${key}`).toBe(true);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  expect(pushes, 'history reconstruction path actually inspected').toBeGreaterThan(0);
+}
+
+describe('server builders minimize model context in both runtime trees', () => {
   for (const root of ['../supabase/functions/server', '../../supabase/functions/make-server-1ccce916']) {
-    it(`verifica el formato Web/Telegram en ${root}`, () => {
+    it(`preserves user IDs/timestamps and opaque cohort binding without old prose in ${root}`, async () => {
       const web = fuente(root + '/chat.tsx');
       const bot = fuente(root + '/telegram/bot.ts');
-      expect(web).toContain(ENCABEZADO_CONTEXTO_WEB);
-      expect(bot).toContain(ENCABEZADO_CONTEXTO_TELEGRAM);
+      const handler = web.slice(web.indexOf('export async function handleChatMessage'));
+      const webBuilder = handler.slice(handler.indexOf('const llmMessages:'), handler.indexOf('// SSE response'));
+      const botStart = bot.indexOf('async function buildTelegramLlmMessages');
+      const botBuilder = bot.slice(botStart, bot.indexOf('\n  // ============================================================================', botStart));
+      expect(webBuilder.length).toBeGreaterThan(0); expect(botBuilder.length).toBeGreaterThan(0);
+      await assertUserOnlyHistory(webBuilder, 'llmMessages');
+      await assertUserOnlyHistory(botBuilder, 'messages');
+      for (const builder of [webBuilder, botBuilder]) {
+        expect(builder).toMatch(/getSystemPrompt\(\s*\[\s*\]\s*\)/);
+        expect(builder).not.toMatch(/(?:metadata|meta)\??\.tool_interactions|\.result_summary|JSON\.stringify\(t\.args\)/);
+        expect(builder).not.toContain(ENCABEZADO_CONTEXTO_WEB);
+        expect(builder).not.toContain(ENCABEZADO_CONTEXTO_TELEGRAM);
+      }
+      expect(handler).not.toContain('fetchActiveMemorias(');
+      expect(botBuilder).not.toMatch(/\.from\(\s*['"]esco_memorias['"]\s*\)/);
+      expect(webBuilder).toContain("contextoDesdeHistorial(userId,conversationId,'web',history)");
+      expect(botBuilder).toContain("contextoDesdeHistorial(userId,conversationId,'telegram',chronological)");
+      for (const source of [handler, bot]) {
+        expect(source).toContain('messageId:usuarioMensajeId');
+        expect(source).toMatch(/application_cohort\s*:\s*cohortHandle/);
+      }
       for (const frase of AJUSTES_TELEGRAM.trim().split('. ').map((s) => s.replace(/\.$/, ''))) expect(bot).toContain(frase);
-      const plantilla = '[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]';
-      expect(web).toContain(plantilla);
-      expect(bot).toContain(plantilla);
       expect(web).toContain('order=created_at.desc,id.desc&limit=20');
-      expect(bot).toMatch(/\.order\("created_at", \{ ascending: false \}\)\s*\.order\("id", \{ ascending: false \}\)\s*\.limit\(20\)/);
+      expect(botBuilder).toMatch(/\.order\(\s*"created_at"\s*,\s*\{\s*ascending\s*:\s*false\s*\}\s*\)\s*\.order\(\s*"id"\s*,\s*\{\s*ascending\s*:\s*false\s*\}\s*\)\s*\.limit\(20\)/);
       // Solo lee fuentes locales; no importa ni ejecuta handlers de producción.
     });
   }
 });
 
-describe('historia inicial sintética', () => {
+describe('constructor offline: historia sintética legada antes de privacidad', () => {
   it.each(['Web', 'Telegram'] as const)('preserva roles, respuestas originales y orden para %s', (channel) => {
     const caso = casoBase({ channel, prior_context: [{ rn: 1, user: 'Pregunta sintética anterior', assistant_original: 'Respuesta original sintética' }] });
     const antes = structuredClone(caso);
@@ -52,7 +102,7 @@ describe('historia inicial sintética', () => {
   });
 });
 
-describe('siguiente turno sin reproducir el protocolo de llamadas', () => {
+describe('constructor offline: siguiente turno sintético antes de privacidad', () => {
   const previos: MensajeHistorial[] = [{ role: 'user', content: 'q1' }];
   it.each(['Web', 'Telegram'] as const)('agrega evidencia antes de la respuesta y pregunta en %s', (canal) => {
     const h = herramienta('synthetic_read', { args: { id: 'synthetic' }, result_summary: 'RES' });
@@ -65,7 +115,7 @@ describe('siguiente turno sin reproducir el protocolo de llamadas', () => {
     expect(m.every((x) => !('tool_calls' in x) && !('tool_call_id' in x))).toBe(true);
     expect({ previos, h }).toEqual(antes);
   });
-  it.each(['Web', 'Telegram'] as const)('conserva ausencias como en producción para %s', (canal) => {
+  it.each(['Web', 'Telegram'] as const)('conserva ausencias literales de fixtures para %s', (canal) => {
     const h = { tool: 'synthetic_missing', error: true };
     const m = mensajesParaSiguienteTurno(previos, 'S', 'r', [h], 'q', canal);
     expect(m[2].content).toContain('[synthetic_missing(undefined): undefined]');
@@ -122,9 +172,9 @@ describe('siguiente turno sin reproducir el protocolo de llamadas', () => {
   });
 });
 
-describe('ventana de filas antes de expandir evidencia', () => {
+describe('constructor offline: ventana de filas sintéticas legadas antes de privacidad', () => {
   for (const canal of ['Web', 'Telegram'] as const) {
-    it.each([19, 20, 21])(`${canal}: selecciona %s filas con su ventana actual`, (cantidad) => {
+    it.each([19, 20, 21])(`${canal}: selecciona %s filas según el formato legado`, (cantidad) => {
       const historial: MensajeHistorial[] = Array.from({ length: cantidad }, (_, i) => ({
         role: i % 2 === 0 ? 'assistant' : 'user', content: `row-${i}`,
         herramientas: [herramienta(`evidence-${i}`)],
@@ -139,7 +189,7 @@ describe('ventana de filas antes de expandir evidencia', () => {
       }
     });
   }
-  it('reproduce la omisión actual de preguntas nuevas en Telegram después de 20 filas', () => {
+  it('conserva el fixture legado Telegram sin pregunta nueva para probar la frontera del turno actual', () => {
     const caso = casoBase({ prior_context: Array.from({ length: 10 }, (_, i) => ({ rn: i, user: `q${i}`, assistant_original: `r${i}` })) });
     const web = mensajesIniciales(caso, 'BASE', 'NEW_QUESTION');
     const telegram = mensajesIniciales({ ...caso, channel: 'Telegram' }, 'BASE', 'NEW_QUESTION');

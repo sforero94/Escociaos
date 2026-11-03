@@ -64,6 +64,11 @@ const leer = (rel: string) => readFileSync(join(RAIZ, rel), 'utf-8');
 type Papel = 'declara' | 'otro';
 
 const INVENTARIO: Record<string, Papel> = {
+  // Selected monitoring aggregates the maximum already-recorded categorical label.
+  // It never classifies a numeric severity using a new threshold.
+  'src/utils/escoNucleoCultivos.ts': 'otro',
+  'src/supabase/functions/server/escoNucleoCultivos.ts': 'otro',
+  'supabase/functions/make-server-1ccce916/escoNucleoCultivos.ts': 'otro',
   // La fuente de verdad.
   'src/utils/calculosMonitoreo.ts': 'declara',
   // Puerto Deno + su copia desplegada. `priorizacion-scouting.ts` no tiene NI UN

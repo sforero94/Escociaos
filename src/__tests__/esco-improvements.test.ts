@@ -50,8 +50,19 @@ describe('Fase 1.1: Memoria de Tool Calls', () => {
     expect(chatSource).toMatch(/select=id,role,content,metadata/);
   });
 
-  it('debe inyectar contexto de tools previos como mensajes del sistema', () => {
-    expect(chatSource).toContain('Datos consultados en la respuesta anterior');
+  it('debe minimizar historial antes del loop y conservar solo el handle opaco de cohorte', () => {
+    const handler = chatSource.slice(chatSource.indexOf('export async function handleChatMessage'));
+    const builder = handler.slice(handler.indexOf('const llmMessages:'), handler.indexOf('// SSE response'));
+    expect(builder).toMatch(/getSystemPrompt\(\s*\[\s*\]\s*\)/);
+    expect(builder).toMatch(/if\s*\(\s*m\.role\s*===\s*['"]user['"]\s*\)\s*llmMessages\.push/);
+    expect(builder).toMatch(/id\s*:\s*m\.id/);
+    expect(builder).toMatch(/created_at\s*:\s*m\.created_at/);
+    expect(builder).toContain("contextoDesdeHistorial(userId,conversationId,'web',history)");
+    expect(builder).not.toMatch(/(?:metadata|meta)\??\.tool_interactions|\.result_summary|JSON\.stringify\(t\.args\)/);
+    expect(builder).not.toContain('Datos consultados en la respuesta anterior');
+    expect(handler).not.toContain('fetchActiveMemorias(');
+    expect(handler).toContain('messageId:usuarioMensajeId');
+    expect(handler).toMatch(/application_cohort\s*:\s*cohortHandle/);
   });
 });
 

@@ -57,11 +57,12 @@ function install(model: (body: Record<string, unknown>) => unknown, read?: (url:
 }
 
 describe('synthetic application faithfulness — existing source inventory', () => {
-  it('exposes the execution-history tool and all application routes to the actual loop', async () => {
+  it('exposes bounded application routes and hides explicitly excluded application detail operations', async () => {
     let tools: { function: { name: string; parameters: unknown } }[] = [];
     install(body => { tools = body.tools as typeof tools; return { role: 'assistant', content: 'Synthetic inventory only' }; });
     await llmToolLoop([{ role: 'user', content: 'Inventario sintético de herramientas' }]);
-    const wanted = ['get_aplicaciones_ejecucion', 'get_application_summary', 'get_application_details', 'get_application_cost_by_lote', 'get_cost_by_lote', 'get_weekly_overview'];
+    const wanted = ['get_aplicaciones_ejecucion', 'get_application_summary', 'get_weekly_overview'];
+    for(const excluded of ['get_application_details','get_application_cost_by_lote','get_cost_by_lote'])expect(tools.map(t=>t.function.name)).not.toContain(excluded);
     expect(tools.map(t => t.function.name)).toEqual(expect.arrayContaining(wanted));
     console.log('PUBLIC_SOURCE_TOOL_SCHEMAS', JSON.stringify(tools.filter(t => wanted.includes(t.function.name)).map(t => t.function)));
   });
@@ -98,11 +99,13 @@ describe('synthetic actual-loop application interpretation', () => {
     let round = 0;
     install(() => round++ === 0 ? call('get_application_summary', { type: '  fumigacion  ' }) : { role: 'assistant', content: 'Synthetic answer' }, url => {
       if (url.pathname === '/rest/v1/aplicaciones') return [A];
-      if (['aplicaciones_lotes', 'aplicaciones_lotes_planificado', 'aplicaciones_calculos', 'aplicaciones_mezclas', 'movimientos_diarios'].some(t => url.pathname === `/rest/v1/${t}`)) return [];
+      if (tables.has(url.pathname.split('/').pop()!)) return [];
       unexpected.push(url.pathname); throw Error('Unexpected table');
     });
     const result = await llmToolLoop([{ role: 'user', content: 'Consulta sintética de fumigación' }]);
-    expect(JSON.parse(result.toolInteractions[0].result_summary).total_aplicaciones).toBe(1);
+    const saved=JSON.parse(result.toolInteractions[0].result_summary);
+    expect(saved.evidence.scopes.flatMap((s:{entities:{id:string}[]})=>s.entities.map(e=>e.id))).toEqual([A.id]);
+    expect(saved.evidence.facts.find((f:{metric:string})=>f.metric==='application.status').value).toEqual({kind:'status',value:'En ejecución'});
   });
   for (const tool of ['get_application_summary', 'get_tareas']) {
     it(`does not accept global application absence from incomplete ${tool} results`, async () => {
@@ -114,7 +117,7 @@ describe('synthetic actual-loop application interpretation', () => {
       });
       const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación de control de plaga Z?' }]);
       const first=JSON.parse(result.toolInteractions[0].result_summary);
-      if(tool==='get_tareas')expect(first.error).toContain('solo permite');
+      if(tool==='get_tareas')expect(first).toMatchObject({error:'source_unavailable',requiere_reconsulta:true});
       else expect(first._evidencia.consulta_completa).toBe(false);
       expect(result.text).not.toBe(unsupported);
     });
@@ -140,8 +143,9 @@ describe('actual-date default and explicit planned date basis', () => {
       return { role: 'assistant', content: 'Synthetic unsupported result' };
     });
     const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación sintética?' }]);
-    expect(first.tool_choice).toEqual({ type: 'function', function: { name: 'get_aplicaciones_ejecucion' } });
-    expect(JSON.parse(result.toolInteractions[0].result_summary).error).toContain('no pidió');
+    expect(first.tool_choice).toBe('required');
+    expect((first.tools as {function:{name:string}}[]).some(t=>t.function.name==='get_aplicaciones_ejecucion')).toBe(true);
+    expect(JSON.parse(result.toolInteractions[0].result_summary).error).toBeTruthy();
     expect(result.text).toContain('No pude verificar');
   });
 });
@@ -192,22 +196,23 @@ describe('review regressions: identity and collections retain their scope', () =
     const result = await llmToolLoop([{ role: 'user', content: 'Dame el estado de las aplicaciones de mayo de 2031' }]);
     expect(result.text).toContain('Fumigación plága Z');
     expect(result.text).toContain('Fertilización sintética');
-    expect(result.text).toContain('Estado registrado: En ejecución');
+    expect(result.text).toMatch(/Estado registrado.*En ejecución/);
     expect(result.text).not.toContain('Synthetic two-application state summary');
     expect(result.text).not.toContain('Precisa cuál');
     expect(round).toBe(1);
-    expect(JSON.parse(result.toolInteractions[0].result_summary).detalle).toHaveLength(2);
+    expect(JSON.parse(result.toolInteractions[0].result_summary).evidence.scopes).toHaveLength(2);
   });
 });
 
 
 describe('routing regressions — closed actual loop',()=>{
-  it('leaves a comma-bearing labor-only question with its normal domain flow',async()=>{
+  it('does not turn a comma-bearing labor question into an application report or unverified model facts',async()=>{
     let modelCalls=0;
     const marker='Respuesta sintética de trabajo; esto no prueba su exactitud factual.';
     install(()=>{modelCalls++;return {role:'assistant',content:marker};});
     const result=await llmToolLoop([{role:'user',content:'Solo lectura: ¿Cuántas jornadas y qué costo laboral hubo por lote la semana pasada, sin detalle individual?'}]);
-    expect(result.text).toBe(marker);expect(modelCalls).toBe(1);expect(result.toolInteractions).toEqual([]);
+    expect(result.text).not.toBe(marker);expect(result.text).toContain('No pude verificar');
+    expect(result.text).not.toContain('Aplicaciones registradas');expect(modelCalls).toBe(1);expect(result.toolInteractions).toEqual([]);
   });
   it('renders an actual execution cohort using the asked month, not model-selected dates or identity',async()=>{
     vi.useFakeTimers();vi.setSystemTime(new Date('2032-05-18T17:00:00Z'));
@@ -217,8 +222,8 @@ describe('routing regressions — closed actual loop',()=>{
       install(()=>{modelCalls++;return call('get_aplicaciones_ejecucion',{application_id:'wrong-model-id',date_from:'2030-01-01',date_to:'2030-01-02',estado:'Cerrada'});},url=>url.pathname==='/rest/v1/aplicaciones'?[app]:[]);
       const result=await llmToolLoop([{role:'user',content:'Consulta de solo lectura: ¿Qué aplicaciones realizamos en mayo?'}]);
       expect(modelCalls).toBe(1);expect(result.text).toContain('Fumigación sintética de mayo');
-      expect(result.text).toContain('2032-05-01 a 2032-05-31');expect(result.text).not.toContain('Necesito precisar');
-      expect(result.toolInteractions[0].args).toEqual({date_basis:'actual',alcance:'periodo',date_from:'2032-05-01',date_to:'2032-05-31'});
+      expect(result.text).toMatch(/2032-05-01(?: a |–)2032-05-31/);expect(result.text).not.toContain('Necesito precisar');
+      expect(result.toolInteractions[0].args).toEqual({date_basis:'actual',date_from:'2032-05-01',date_to:'2032-05-31'});
     } finally {vi.useRealTimers();}
   });
 });
@@ -238,8 +243,10 @@ describe('shared grammar through the closed application loop',()=>{
     install(()=>++calls===1?call('get_aplicaciones_ejecucion',{application_id:'wrong-model-id'}):{role:'assistant',content:invented},url=>rows[url.pathname.split('/').pop()!]??[]);
     const history=previous?[{role:'user',content:previous},{role:'assistant',content:'La aplicación seleccionada es Otra y gastó 999 L.'}]:[];
     const result=await llmToolLoop([...history,{role:'user',content:'Consulta de solo lectura: '+question}]);
-    expect(calls).toBe(1);expect(result.text).toContain(app.nombre_aplicacion);expect(result.text).toContain(expected!);
+    expect(calls).toBe(1);expect(result.text).toContain(app.nombre_aplicacion);expect(result.text).toContain(expected!.replace(' a ','–'));
     expect(result.text).not.toContain('999');expect(result.text).not.toContain('Necesito precisar');
-    expect(result.toolInteractions[0].args.application_id).toBe(previous||_case==='consumption'||_case==='literal-month'?app.id:undefined);
+    const saved=JSON.parse(result.toolInteractions[0].result_summary);
+    const identities=saved.detalle?.map((r:{id:string})=>r.id)??saved.evidence.scopes.flatMap((s:{entities:{id:string}[]})=>s.entities.map(e=>e.id));
+    expect(identities).toContain(app.id);expect(result.toolInteractions[0].args.application_id).toBeUndefined();
   });
 });

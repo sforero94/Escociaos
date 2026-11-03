@@ -110,7 +110,7 @@ export async function resolverUsuarioTelegram(
     .maybeSingle();
 
   if (error) {
-    console.error("[telegram] resolverUsuarioTelegram:", error.message);
+    console.error("[telegram] resolverUsuarioTelegram:", "TELEGRAM_IDENTITY_LOOKUP_FAILED");
     return { ok: false, motivo: "error_db" };
   }
   if (!data) {

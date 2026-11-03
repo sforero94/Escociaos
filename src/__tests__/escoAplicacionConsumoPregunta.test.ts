@@ -75,6 +75,8 @@ describe('fronted application product/quantity question',()=>{
   });
   const result=await llmToolLoop(mensajesDesdeHistorial([{role:'user',content:question}], 'Synthetic system prompt', channel),'synthetic-user');expect(model).toBe(1);expect(result.toolInteractions).toHaveLength(1);
   for(let i=0;i<4;i++)expect(result.text).toContain(`| Producto sintético ${i} (p${i}) | ${i%2?'kg':'L'} | ${amounts[i]} |`);
-  expect(result.text).not.toContain('999');expect(result.toolInteractions[0].args).toMatchObject({application_id:target.id,lote_name:'Río Claro',date_from:'2033-05-01',date_to:'2033-05-31'});
+  expect(result.text).not.toContain('999');expect(result.toolInteractions[0].args).toMatchObject({date_from:'2033-05-01',date_to:'2033-05-31'});
+  const persisted=JSON.parse(result.toolInteractions[0].result_summary);
+  expect(persisted.detalle[0].id).toBe(target.id);expect(persisted.detalle[0]).not.toHaveProperty('movimientos');
  });
 });

@@ -1,5 +1,13 @@
+import {crearContextoNucleo} from './escoNucleoSolicitud.ts';
+import {crearPuertoNucleo} from './escoNucleoTransporte.ts';
+import {NUCLEO_EJECUTABLE,LIMITES_NUCLEO,DESCRIPCIONES_NUCLEO,promptPlanificadorNucleo,limiteNucleo} from './escoNucleoCatalogo.ts';
+import { proponerPeriodoUsuario } from './escoAlcance.ts';
+import { ejecutarLlamadasVerificadas } from './escoTurnoVerificado.ts';
+import { construirMensajesModelo, filtrarHerramientasPorPolitica, permitirLlamadaHerramienta, type ServerRequestPolicy } from './escoPoliticaDatos.ts';
+import { detectarPropuestaIndividual, prevalidarSolicitudIndividual, vincularSolicitudIndividual } from './escoSolicitudIndividual.ts';
+import { proyectarLecturaLegada, CONTEXTO_NO_VERIFICADO, limitarMediosNoVerificados, renderizarLecturasLegadas } from './escoProyeccionLegada.ts';
 import { cargarCohorte, emitirCohorte, contextoDesdeHistorial, type AlmacenCohorte, type CohorteAplicaciones, type ContextoCohorte, type MensajeCohorte } from './escoCohorteAplicaciones.ts';
-import { HERRAMIENTAS_CONSULTA, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, planRespuestaAplicacion, argumentosRespuestaAplicacion, respuestaDeterministaAplicacion, aclaracionPlanAplicacion, pideComparacionFechasCohorte, capturarCohorteAplicaciones, compararFechasCohorte, type FilaEsco, type SolicitudAplicacion } from './esco-consultas.ts';
+import { HERRAMIENTAS_CONSULTA, fechaBogota, ejecutarConsultaEsco, resumirContexto, requiereConsultaPartos, evidenciaPartosSuficiente, normalizarTextoAplicacion, baseFechaAplicacion, validarFecha, requiereConsultaAplicaciones, pideFechasPlaneadas, respuestaSeguraAplicaciones, planRespuestaAplicacion, argumentosRespuestaAplicacion, respuestaDeterministaAplicacion, aclaracionPlanAplicacion, pideComparacionFechasCohorte, capturarCohorteAplicaciones, compararFechasCohorte, type FilaEsco, type SolicitudAplicacion } from './esco-consultas.ts';
 // chat.tsx — Edge Function para "Esco", el agente conversacional de Escocia OS
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
 
@@ -156,9 +164,10 @@ async function supabaseQueryPage(table: string, query: string, conteo?: ConteoCo
   const { url, headers } = getAdminHeaders();
   const res = await fetch(`${url}/rest/v1/${table}?${query}`, { headers: { ...headers, Prefer: 'count=exact' } });
   if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    console.error(`[Esco] Query error on ${table}:`, res.status, errText);
-    throw new Error(`Query failed on ${table} (${res.status}): ${errText.slice(0, 200)}`);
+    let sourceCode='SOURCE_HTTP_ERROR';
+    try{const data=await res.json();if(['42703','42501','PGRST002'].includes(data?.code))sourceCode=data.code;}catch{/* No raw message or payload is retained. */}
+    console.error('[Esco] Source query failed', res.status,sourceCode);
+    throw new Error(`source_error:${res.status}`);
   }
   const rows = await res.json();
   const total = Number(res.headers.get('content-range')?.split('/')[1]);
@@ -234,9 +243,10 @@ async function supabaseInsert(table: string, data: Record<string, unknown>): Pro
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    console.error(`Insert error on ${table}:`, res.status, err);
-    throw new Error(`Insert failed: ${err}`);
+    let code='SOURCE_HTTP_ERROR';
+    try{const data=await res.json();if(['23503','23505','23514','42501','42703','PGRST002','PGRST116'].includes(data?.code))code=data.code;}catch{/* Raw database bodies are not response or log content. */}
+    console.error('[Esco] Persistence failed',res.status,code);
+    throw new Error(`storage_error:${res.status}:${code}`);
   }
   const rows = await res.json();
   return Array.isArray(rows) ? rows[0] : rows;
@@ -322,6 +332,12 @@ async function authenticateUser(c: Context): Promise<{ userId: string } | Respon
 
 const TOOLS: ToolDefinition[] = [
   ...HERRAMIENTAS_CONSULTA,
+  {
+    name: 'get_recorded_state_definition',
+    description: 'Explica el significado y los límites del estado REGISTRADO de una aplicación, sin afirmar el estado de una aplicación concreta ni cumplimiento físico. Úsalo para preguntas de significado; para estado concreto consulta ejecución.',parameters: {
+      type:'object',properties:{domain:{type:'string',enum:['application','capability']},state:{type:'string',enum:['Calculada','En ejecución','Cerrada',...Object.keys(LIMITES_NUCLEO)]}},required:['domain','state']
+    },
+  },
   {
     name: 'get_labor_summary',
     description: 'Obtiene resumen de jornales y trabajo por lote/empleado en un rango de fechas. Incluye fraccion_jornal, costo, tarea y lote.',
@@ -786,17 +802,22 @@ function validateDates(args: Record<string, unknown>): { date_from?: string; dat
 async function executeTool(name: string, args: Record<string, unknown>, userId?: string, solicitud?: SolicitudAplicacion): Promise<string> {
   try {
     let result: string;
+    const canonicalReadStates=new Map<string,{counter:ConteoConsulta;ids:Set<string>}>();
     switch (name) {
       case 'get_aplicaciones_ejecucion': {
         // Only this application facts contract opts into positive stable counts.
         // Keep one attestation per exact generated query across its pages.
         const counts = new Map<string, ConteoConsulta>();
+        const identities=new Map<string,Set<string>>();
         result = JSON.stringify(await ejecutarConsultaEsco(name, args, async (tabla, query) => {
           const base = query.replace(/&limit=200&offset=\d+$/, '');
           if (base === query) throw new Error('Paginación de aplicación no verificable.');
           const key = tabla + '?' + base;
           if (!counts.has(key)) counts.set(key, {});
-          return await supabaseQueryPage(tabla, query, counts.get(key)!) as FilaEsco[];
+          const rows=await supabaseQueryPage(tabla, query, counts.get(key)!) as FilaEsco[];
+          const seen=identities.get(key)??new Set<string>();identities.set(key,seen);
+          for(const row of rows){if(typeof row.id!=='string'||!row.id||seen.has(row.id))throw Error('source_error');seen.add(row.id);}
+          return rows;
         }, undefined, solicitud));
         break;
       }
@@ -821,7 +842,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_tarea_ejecucion':
       case 'get_clima_cobertura':
       case 'get_capturas_estado':
-        result = JSON.stringify(await ejecutarConsultaEsco(name, args, async (tabla, query) => await supabaseQuery(tabla, query) as FilaEsco[])); break;
+        result = JSON.stringify(await ejecutarConsultaEsco(name, args, async (tabla, query) => {const key=tabla+'?'+query.replace(/&limit=200&offset=\d+$/,'');const state=canonicalReadStates.get(key)??{counter:{},ids:new Set<string>()};canonicalReadStates.set(key,state);const rows=await supabaseQueryPage(tabla,query,state.counter) as FilaEsco[];for(const row of rows){const id=tabla==='clima_resumen_diario'?String(row.station_id)+':'+String(row.fecha):row.id;if(typeof id!=='string'||!id||state.ids.has(id))throw Error('source_error');state.ids.add(id);}return rows;})); break;
 
       case 'get_labor_summary': result = await execLaborSummary(args); break;
       case 'get_employee_activity': result = await execEmployeeActivity(args); break;
@@ -1024,12 +1045,15 @@ async function execEmployeeActivity(args: Record<string, unknown>): Promise<stri
     worker_name: string; date_from?: string; date_to?: string;
   };
 
-  // Search employees
-  const empleados = await supabaseQuery('empleados', `select=id,nombre,cargo,salario,tipo_contrato,activo&nombre=ilike.*${e(worker_name)}*&limit=5`);
+  const verified=typeof args._verified_worker_id==='string'&&['empleados','contratistas'].includes(String(args._verified_worker_source));
+  const salary=args._purpose==='salary';
+  const empleados = verified&&args._verified_worker_source!=='empleados'?[]:await supabaseQuery('empleados', `select=id,nombre,cargo,${!verified||salary?'salario,':''}tipo_contrato,activo&${verified?'id=eq.'+e(String(args._verified_worker_id)):'nombre=ilike.*'+e(worker_name)+'*'}&limit=${verified?1:5}`);
   // Search contractors
-  const contratistas = await supabaseQuery('contratistas', `select=id,nombre,tarifa_jornal,tipo_contrato&nombre=ilike.*${e(worker_name)}*&limit=5`);
+  const contratistas = verified&&args._verified_worker_source!=='contratistas'?[]:await supabaseQuery('contratistas', `select=id,nombre,${!verified||salary?'tarifa_jornal,':''}tipo_contrato&${verified?'id=eq.'+e(String(args._verified_worker_id)):'nombre=ilike.*'+e(worker_name)+'*'}&limit=${verified?1:5}`);
 
-  let registrosQuery = `select=fecha_trabajo,fraccion_jornal,costo_jornal,observaciones,tarea:tareas(nombre),lote:lotes(nombre)&order=fecha_trabajo.desc&limit=30`;
+  if(verified&&salary)return JSON.stringify({resultados:[...(empleados as Array<Record<string,unknown>>).map(empleado=>({empleado})),...(contratistas as Array<Record<string,unknown>>).map(contratista=>({contratista}))]});
+
+  let registrosQuery = `select=fecha_trabajo,fraccion_jornal,costo_jornal,tarea:tareas(nombre),lote:lotes(nombre)&order=fecha_trabajo.desc&limit=30`;
   if (date_from) registrosQuery += `&fecha_trabajo=gte.${e(date_from)}`;
   if (date_to) registrosQuery += `&fecha_trabajo=lte.${e(date_to)}`;
 
@@ -2313,14 +2337,6 @@ async function execForgetMemory(args: Record<string, unknown>, userId?: string):
   return JSON.stringify({ archived: candidates.length, items: candidates.map((c) => c.content.slice(0, 100)) });
 }
 
-async function fetchActiveMemorias(userId: string): Promise<PersistedMemory[]> {
-  if (!userId) return [];
-  const rows = (await supabaseQuery(
-    'esco_memorias',
-    `select=id,content,created_at,source_channel&user_id=eq.${e(userId)}&archived_at=is.null&order=created_at.desc&limit=50`,
-  )) as PersistedMemory[];
-  return rows;
-}
 
 async function execWeeklyOverview(args: Record<string, unknown>): Promise<string> {
   const now = new Date();
@@ -3798,10 +3814,10 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
 // SYSTEM PROMPT
 // ============================================================================
 
-export function getSystemPrompt(memorias: PersistedMemory[] = []): string {
-  const hoy = new Date().toISOString().split('T')[0];
+export function getSystemPrompt(memorias: PersistedMemory[] = [], referenceInstant=new Date()): string {
+  const hoy = fechaBogota(referenceInstant);
   const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-  const diaSemana = diasSemana[new Date().getDay()];
+  const diaSemana = diasSemana[new Date(hoy+'T12:00:00Z').getUTCDay()];
   const memoriasBlock = renderMemoriasBlock(memorias);
   return `Eres "Esco", el asistente de datos de Escocia Hass, una finca de aguacate Hass en Colombia.
 Tu rol es consultar datos operativos de la finca y responder preguntas del gerente.
@@ -3944,25 +3960,62 @@ function getOpenRouterHeaders(): Record<string, string> {
 }
 
 // Convert our tools to OpenAI function-calling format
-function getToolsForAPI() {
-  return TOOLS.map((t) => ({
+function getToolsForAPI(policy?: ServerRequestPolicy) {
+  const names=policy?filtrarHerramientasPorPolitica(policy,TOOLS.map(t=>t.name)):TOOLS.map(t=>t.name);
+  return TOOLS.filter(t=>names.includes(t.name)&&NUCLEO_EJECUTABLE.has(t.name)).map((t) => ({
     type: 'function' as const,
     function: {
       name: t.name,
-      description: t.description,
-      parameters: t.parameters,
+      description: DESCRIPCIONES_NUCLEO[t.name]??t.description,
+      parameters: ['get_aplicaciones_ejecucion','get_application_summary'].includes(t.name)?{...t.parameters,properties:{...(t.parameters.properties as Record<string,unknown>),metric:{type:'string',enum:['status','dates','date_comparison','quantity','labor','theoretical'],description:'Parte pedida: estado registrado, fechas, comparación literal planeado/real o cantidades/trabajo/estimación explícita. No confundir con cumplimiento físico.'}}}:t.parameters,
     },
   }));
 }
 
 // Non-streaming call for tool-calling loop
 export async function llmToolLoop(
-  messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>,
+  messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string; created_at?: string; id?:string }>,
   userId?: string,
   onEvent?: (event: ToolLoopEvent) => void,
   contextoCohorte?: ContextoCohorte,
+  solicitudActual?: {pregunta:string;messageId?:string},
 ): Promise<{ text: string; toolInteractions: ToolInteraction[]; cohorteAplicaciones?: CohorteAplicaciones }> {
-  const preguntaCohorte = [...messages].reverse().find(m=>m.role==='user')?.content ?? '';
+  const startedAt=new Date().toISOString();
+  const preguntaCohorte = solicitudActual?.pregunta??[...messages].reverse().find(m=>m.role==='user')?.content ?? '';
+  const currentIndex=solicitudActual?solicitudActual.messageId?messages.findIndex(m=>m.id===solicitudActual.messageId):-1:messages.map(m=>m.role==='user'&&m.content===preguntaCohorte).lastIndexOf(true);
+  // Production callers bind the server message ID; equal old wording is not turn identity.
+  const previousUserEntry=currentIndex>=0?[...messages.slice(0,currentIndex)].reverse().find(m=>m.role==='user'):undefined;
+  const priorUser=previousUserEntry?.content??undefined;
+  const currentPeriod=proponerPeriodoUsuario(preguntaCohorte,new Date(startedAt));
+  const followsPrior=/^(?:consulta de solo lectura:\s*)?[¿]?\s*(?:y\b|en esas?\b|en esos?\b|para esas?\b|para esos?\b|de esas?\b|de esos?\b)/i.test(preguntaCohorte.trim());
+  const priorReference=previousUserEntry?.created_at?new Date(previousUserEntry.created_at):null;
+  const inheritedPeriod=currentPeriod.state==='absent'&&followsPrior&&priorUser&&priorReference?proponerPeriodoUsuario(priorUser,priorReference):null;
+  const resolvedPeriod=currentPeriod.state==='resolved'?currentPeriod:inheritedPeriod?.state==='resolved'?inheritedPeriod:currentPeriod;
+  const priorPersonal=priorUser?detectarPropuestaIndividual(priorUser):null;
+  const ambiguousPersonContinuation=!!priorPersonal&&followsPrior&&currentPeriod.state==='absent';
+  // Preserve explicit own-memory operations separately; never use them as a
+  // reason to forward old tool/assistant history or enable operational reads.
+  const memoryTools=new Set(['propose_memory_save','commit_memory_save','forget_memory']);
+  const memoryRequest=/^\s*(?:recuerda|memoriza|olvida|guarda (?:esta|la) memoria)\b/i.test(preguntaCohorte)&&!/[?¿]/.test(preguntaCohorte)&&!/\by (?:muestra|dime|consulta|cuanto|cuantos|calcula)/i.test(normalizarTextoAplicacion(preguntaCohorte));
+
+  let policy:ServerRequestPolicy={mode:'aggregate'};
+  let workerSource:'empleados'|'contratistas'|undefined;
+  let personalPurpose:'activity'|'history'|'salary'|undefined;
+  const proposal=detectarPropuestaIndividual(preguntaCohorte);
+  if(proposal){
+    const check=prevalidarSolicitudIndividual(preguntaCohorte,proposal.workerName);
+    if(check.state==='selector_explicito'){
+      const candidates=await supabaseQuery(check.sourceTable,`select=id,nombre&nombre=ilike.${e(check.workerName)}&order=id.asc&limit=2`);
+      const binding=vincularSolicitudIndividual({currentQuestion:preguntaCohorte,proposedWorkerName:proposal.workerName,candidates:(candidates as Array<{id:string;nombre:string}>).map(r=>({...r,sourceTable:check.sourceTable}))});
+      if(binding.state!=='vinculado')return {text:'Necesito un nombre individual inequívoco antes de consultar datos personales. No mostré datos de otras personas.',toolInteractions:[]};
+      policy={mode:'individual_explicit',verifiedIndividualSelector:binding.binding};workerSource=binding.binding.sourceTable;personalPurpose=binding.purpose;
+    }
+  }
+  const prepared=construirMensajesModelo({freshSystemWithoutMemories:promptPlanificadorNucleo(fechaBogota(new Date(startedAt)),memoryRequest)+(resolvedPeriod.state==='resolved'?'\nAlcance temporal de la solicitud de usuario validado por el servidor: '+resolvedPeriod.from+' a '+resolvedPeriod.to+'. Vuelve a consultar: no recibiste cifras previas.':''),currentUserText:preguntaCohorte,policy,expected:[],populations:[],maxBytes:64000});
+  if(!prepared.canRequestModel)throw new Error('Consulta demasiado amplia para enviar de forma segura.');
+  messages=prepared.messages;
+  const providerBase=messages.map(m=>({...m}));
+
   if(pideComparacionFechasCohorte(preguntaCohorte)) {
     const unavailable='Necesito un listado reciente y verificable de esas aplicaciones. Vuelve a consultar el período; no tomé identidades del texto del modelo ni amplié la cohorte.';
     if(!contextoCohorte || contextoCohorte.usuario!==userId)return {text:unavailable,toolInteractions:[]};
@@ -3973,19 +4026,21 @@ export async function llmToolLoop(
     if(plan.tipo!=='aplicacion' || !plan.plural || plan.base!=='actual' || plan.rango?.desde!==receipt.desde || plan.rango.hasta!==receipt.hasta || plan.loteSolicitado || plan.estadoFiltro)return {text:unavailable,toolInteractions:[]};
     const args=argumentosRespuestaAplicacion(plan,{});
     const result=await executeTool('get_aplicaciones_ejecucion',args,userId,{pregunta:original,cohorteIds:receipt.ids});
-    return {text:compararFechasCohorte(receipt,plan,result,args),toolInteractions:[{tool:'get_aplicaciones_ejecucion',args,result_summary:resumirContexto(result)}]};
+    return {text:compararFechasCohorte(receipt,plan,result,args),toolInteractions:[{tool:'get_aplicaciones_ejecucion',args,result_summary:proyectarLecturaLegada('get_aplicaciones_ejecucion',result)}]};
   }
+  const selectedContext=crearContextoNucleo({question:preguntaCohorte,now:new Date(startedAt),previousUserText:ambiguousPersonContinuation?undefined:priorUser,previousUserAt:ambiguousPersonContinuation?undefined:previousUserEntry?.created_at});
   const headers = getOpenRouterHeaders();
-  const tools = getToolsForAPI();
+  const tools = memoryRequest?getToolsForAPI().filter(t=>memoryTools.has(t.function.name)):getToolsForAPI(policy);
   const maxRounds = 3;
   const toolInteractions: ToolInteraction[] = [];
   let toolIndex = 0;
-  const ultimaPregunta = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+  const ultimaPregunta = preguntaCohorte;
   const consultaPartosObligatoria = requiereConsultaPartos(ultimaPregunta);
-  const planAplicacion = planRespuestaAplicacion(ultimaPregunta);
+  const planAplicacion = planRespuestaAplicacion(ultimaPregunta,fechaBogota(new Date(startedAt)));
   const aclaracion=aclaracionPlanAplicacion(planAplicacion);
-  if(aclaracion)return {text:aclaracion,toolInteractions};
-  const solicitudAplicacion:SolicitudAplicacion={pregunta:ultimaPregunta,anterior:messages.filter(m=>m.role==='user').slice(-2,-1)[0]?.content??undefined};
+  // Unsupported syntax is not an early whole-question refusal: resolve structured source operations first.
+  void aclaracion;
+  const solicitudAplicacion:SolicitudAplicacion={pregunta:ultimaPregunta,anterior:priorUser};
   let descubrimientoAplicacion=false;
   const consultaAplicacionesObligatoria = requiereConsultaAplicaciones(ultimaPregunta) || planAplicacion.tipo === 'aplicacion';
   const fechasPlaneadas = pideFechasPlaneadas(ultimaPregunta);
@@ -4002,9 +4057,9 @@ export async function llmToolLoop(
         headers,
         body: JSON.stringify({
           model: MODEL,
-          messages,
+          messages: [...providerBase,...toolInteractions.map(h=>({role:'user',content:h.result_summary}))],
           tools,
-          tool_choice: round === 0 ? (consultaPartosObligatoria ? { type: 'function', function: { name: 'get_hato_partos' } } : consultaAplicacionesObligatoria ? { type: 'function', function: { name: 'get_aplicaciones_ejecucion' } } : 'required') : 'auto',
+          tool_choice: round === 0 ? (consultaPartosObligatoria ? {type:'function',function:{name:'get_hato_partos'}} : 'required') : 'auto',
           temperature: 0.3,
           max_tokens: 10000,
         }),
@@ -4020,8 +4075,8 @@ export async function llmToolLoop(
     }
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error('OpenRouter error:', response.status, errText.slice(0, 500));
+      await response.body?.cancel();
+      console.error('OpenRouter error:', response.status);
       throw new Error(`Error OpenRouter: ${response.status}`);
     }
 
@@ -4034,7 +4089,51 @@ export async function llmToolLoop(
 
     // If the model wants to call tools
     if (msg.tool_calls && msg.tool_calls.length > 0) {
-      // Add assistant message with tool calls
+      const canonicalCalls=msg.tool_calls.flatMap((call: {id?:string;function?:{name?:string;arguments?:string}})=>{
+        const tool=call.function?.name==='get_weekly_overview'?'get_labor_summary':call.function?.name;
+        if(['get_labor_summary','get_climate_data','get_hato_produccion','get_financial_summary'].includes(tool??'')){
+          try{const args=JSON.parse(call.function?.arguments??'{}');
+            if(ambiguousPersonContinuation||resolvedPeriod.state!=='resolved')return [{...call,function:{name:tool,arguments:JSON.stringify({...args,__unresolved_request_scope:true})}}];
+            return [{...call,function:{name:tool,arguments:JSON.stringify({...args,date_from:resolvedPeriod.from,date_to:resolvedPeriod.to})}}];
+          }catch{return [call];}
+        }
+        if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')&&(currentPeriod.state==='ambiguous'||currentPeriod.state==='invalid'||planAplicacion.tipo==='fuera'&&['periodo_invalido','periodo_no_soportado','periodo_requiere_ano','multiples_periodos_no_soportados','referencia_temporal_no_resuelta'].includes(planAplicacion.motivo)))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];
+        if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')){try{
+          const args=JSON.parse(call.function?.arguments??'{}');
+          if(args.type){const kind=normalizarTextoAplicacion(args.type).trim(),q=normalizarTextoAplicacion(preguntaCohorte);const declared=['fumigacion','fertilizacion','drench'].includes(kind)&&q.split(/[^a-z]+/).some(word=>word===kind||word===kind+'es');if(!declared)delete args.type;else if(new RegExp('(?:sin|excepto|no incluyas) (?:las )?(?:aplicaciones de )?'+kind).test(q))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];}
+          return [{...call,function:{name:tool,arguments:JSON.stringify(argumentosRespuestaAplicacion(planAplicacion,args))}}];
+        }catch{return [call];}}
+        return [call];
+      });
+      const consumption=planAplicacion.tipo==='aplicacion'&&(planAplicacion.consumos||planAplicacion.trabajo||planAplicacion.estimacion);
+      const exclude=[...(consumption?['get_aplicaciones_ejecucion','get_application_summary']:[]),...(consultaAplicacionesObligatoria&&!/\b(?:tareas?|labores?|tablero)\b/.test(normalizarTextoAplicacion(preguntaCohorte))?['get_tareas']:[])];
+      const sourceCounts=new Map<string,ConteoConsulta>();
+      const freshApplicationReads:Array<{raw:string;args:Record<string,unknown>}>=[];
+      const verified=await ejecutarLlamadasVerificadas({calls:canonicalCalls,policy,referenceDay:fechaBogota(new Date(startedAt)),turnStartedAt:startedAt,excludeTools:exclude,port:{
+        currentUserText:preguntaCohorte,
+        selected:{context:selectedContext,port:crearPuertoNucleo(selectedContext,{now:()=>new Date().toISOString(),page:async(table,query)=>{const params=new URLSearchParams(query);params.delete('limit');params.delete('offset');const key=table+'?'+params.toString();if(!sourceCounts.has(key))sourceCounts.set(key,{});const counter=sourceCounts.get(key)!;const rows=await supabaseQueryPage(table,query,counter);return {rows:rows as FilaEsco[],total:counter.total??null};}})},
+        now:()=>new Date().toISOString(),
+        read:async(table,query)=>{const key=table+'?'+query.replace(/&limit=200&offset=\d+$/,'');if(!sourceCounts.has(key))sourceCounts.set(key,{});const counter=sourceCounts.get(key)!;const rows=await supabaseQueryPage(table,query,counter);return {rows:rows as FilaEsco[],total:counter.total??null};},
+        applications:async(args)=>{
+          const allowed=['date_from','date_to','date_basis','application_name','application_id','estado','lote_name','alcance'];
+          const clean=Object.fromEntries(Object.entries(args).filter(([key])=>allowed.includes(key)));
+          if(planAplicacion.tipo==='aplicacion')Object.assign(clean,argumentosRespuestaAplicacion(planAplicacion,clean));
+          if(args.metric==='status'&&(clean.application_name||clean.application_id))delete clean.estado;
+          if(clean.date_basis==='planned'&&!pideFechasPlaneadas(preguntaCohorte))throw Error('outside_scope');
+          const raw=JSON.parse(await executeTool('get_aplicaciones_ejecucion',clean,userId,solicitudAplicacion));
+          if(raw.error||raw.seleccion_no_resuelta||raw._evidencia?.consulta_completa!==true||raw._evidencia?.detalle_completo!==true||!Array.isArray(raw.detalle))throw Error('source_error');
+          freshApplicationReads.push({raw:JSON.stringify(raw),args:clean});
+          const selected=args.type?raw.detalle.filter((a:FilaEsco)=>normalizarTextoAplicacion(a.tipo_aplicacion)===normalizarTextoAplicacion(args.type)):raw.detalle;
+          return {rows:selected,complete:true};
+        },
+      }});
+      if(verified){
+        for(const [i,h] of verified.interactions.entries()){onEvent?.({type:'tool_start',tool:h.tool,index:toolIndex+i,args:h.args});onEvent?.({type:'tool_done',tool:h.tool,index:toolIndex+i,ms:0,ok:!Object.prototype.hasOwnProperty.call(JSON.parse(h.result_summary),'error')});}
+        const fresh=freshApplicationReads.length===1?freshApplicationReads[0]:null;
+        const cohort=fresh&&verified.parts.every(p=>p.state!=='unavailable')&&JSON.stringify(fresh.raw).length<=24000?capturarCohorteAplicaciones(planAplicacion,fresh.raw,fresh.args,true):null;
+        return {text:verified.text,toolInteractions:verified.interactions,...(cohort?{cohorteAplicaciones:cohort}:{})};
+      }
+      // Legacy operations retain explicit limits. Never forward their raw objects.
       messages.push(msg);
 
       // Execute each tool call
@@ -4043,15 +4142,16 @@ export async function llmToolLoop(
         const fnName = tc.function?.name;
         let fnArgs: Record<string, unknown> = {};
         try {
-          fnArgs = JSON.parse(tc.function?.arguments || '{}');
+          const parsedArgs=JSON.parse(tc.function?.arguments || '{}');
+          fnArgs=parsedArgs&&typeof parsedArgs==='object'&&!Array.isArray(parsedArgs)?parsedArgs:{};
         } catch {
           fnArgs = {};
         }
 
-        console.log(`[Esco] Tool call: ${fnName}`, JSON.stringify(fnArgs).slice(0, 200));
+        console.log(`[Esco] Tool call: ${fnName}`);
 
         const index = toolIndex++;
-        onEvent?.({ type: 'tool_start', tool: fnName, index, args: fnArgs });
+        onEvent?.({ type: 'tool_start', tool: fnName, index, args: {} });
         const iniciadaEn = Date.now();
 
         const consultaAplicacion = ['get_aplicaciones_ejecucion', 'get_application_summary', 'get_application_details', 'get_application_cost_by_lote', 'get_cost_by_lote', 'get_weekly_overview'].includes(fnName);
@@ -4059,8 +4159,16 @@ export async function llmToolLoop(
         if (fnName === 'get_aplicaciones_ejecucion' && !baseNoAutorizada) fnArgs = argumentosRespuestaAplicacion(planAplicacion, fnArgs);
         if (consultaAplicacion && fnArgs.date_basis == null) fnArgs.date_basis = fechasPlaneadas ? 'planned' : 'actual';
         const claveLlamada = `${fnName}:${JSON.stringify(fnArgs)}`;
+        const projectedLegacy=new Set(['get_hato_partos','get_hato_eventos','get_hato_animales','get_aplicaciones_ejecucion','get_application_summary','get_lot_info','get_employee_activity']);
+        const policyDenied=memoryRequest?!memoryTools.has(fnName):!permitirLlamadaHerramienta(policy,fnName,fnArgs)||!projectedLegacy.has(fnName);
         const fueraDeAplicacion=planAplicacion.tipo==='aplicacion' && !['get_aplicaciones_ejecucion','get_application_summary','get_lot_info'].includes(fnName);
-        const toolResult = fueraDeAplicacion ? JSON.stringify({error:'Esta consulta de aplicaciones solo permite ejecución o descubrimiento de aplicación/lote de solo lectura.'}) : baseNoAutorizada ? JSON.stringify({ error: 'El usuario no pidió fechas planeadas. Consulta fechas reales.' }) : llamadas.has(claveLlamada)
+        const temporalLegacy=['get_hato_partos','get_hato_eventos'].includes(fnName);
+        const invalidIndividualPeriod=(fnName==='get_employee_activity'&&personalPurpose!=='salary'||temporalLegacy)&&resolvedPeriod.state!=='resolved';
+        if(temporalLegacy&&resolvedPeriod.state==='resolved')fnArgs={...fnArgs,date_from:resolvedPeriod.from,date_to:resolvedPeriod.to};
+        if(fnName==='get_hato_animales'){if(resolvedPeriod.state==='resolved')fnArgs={...fnArgs,date_from:resolvedPeriod.from,date_to:resolvedPeriod.to};else{delete fnArgs.date_from;delete fnArgs.date_to;}}
+        if(fnName==='get_employee_activity'&&policy.mode==='individual_explicit'){fnArgs={...fnArgs,...(resolvedPeriod.state==='resolved'?{date_from:resolvedPeriod.from,date_to:resolvedPeriod.to}:{}),_verified_worker_id:policy.verifiedIndividualSelector.id,_verified_worker_source:workerSource,_purpose:personalPurpose};}
+
+        const toolResult = policyDenied||invalidIndividualPeriod ? CONTEXTO_NO_VERIFICADO : fueraDeAplicacion ? JSON.stringify({error:'Esta consulta de aplicaciones solo permite ejecución o descubrimiento de aplicación/lote de solo lectura.'}) : baseNoAutorizada ? JSON.stringify({ error: 'El usuario no pidió fechas planeadas. Consulta fechas reales.' }) : llamadas.has(claveLlamada)
           ? JSON.stringify({ error: 'Consulta idéntica ya realizada. Usa el resultado previo o cambia criterio con fundamento; no inventes variantes de nombres.' })
           : await executeTool(fnName, fnArgs, userId, planAplicacion.tipo==='aplicacion'?solicitudAplicacion:undefined);
         llamadas.add(claveLlamada);
@@ -4075,16 +4183,17 @@ export async function llmToolLoop(
         });
         console.log(`[Esco] Tool result length: ${toolResult.length}`);
 
-        // Track tool interaction for context persistence
+        const projected=limiteNucleo(fnName)?JSON.stringify({capability_limit:fnName}):proyectarLecturaLegada(fnName,toolResult,policy.mode==='individual_explicit'?{...policy.verifiedIndividualSelector,purpose:personalPurpose}:undefined);
+        // Persist only positive-projection context; no raw source rows.
         toolInteractions.push({
           tool: fnName,
-          args: fnArgs,
-          result_summary: resumirContexto(toolResult),
+          args: Object.fromEntries(Object.entries(fnArgs).filter(([key])=>['date_from','date_to','date_basis','metric'].includes(key))),
+          result_summary: projected,
         });
 
         messages.push({
           role: 'tool',
-          content: toolResult,
+          content: projected,
           tool_call_id: tc.id,
           name: fnName,
         });
@@ -4102,6 +4211,7 @@ export async function llmToolLoop(
         if (answer.tipo === 'texto') return { text: answer.texto, toolInteractions, cohorteAplicaciones:capturarCohorteAplicaciones(planAplicacion,fresh.resultado,fresh.args,answer.listadoCompleto===true) ?? undefined };
       }
 
+      if(!memoryRequest)return {text:renderizarLecturasLegadas(toolInteractions),toolInteractions};
       continue; // next round
     }
 
@@ -4119,7 +4229,8 @@ export async function llmToolLoop(
     if (typeof msg.content !== 'string' || !msg.content.trim()) {
       throw new Error('No pude completar la consulta: el modelo no devolvió una respuesta de texto. Vuelve a intentar la consulta.');
     }
-    return { text: msg.content, toolInteractions };
+    if(toolInteractions.some(h=>!toolResultOk(h.result_summary)))return {text:'No pude verificar las partes pendientes con las fuentes disponibles. No sustituí los datos con estimaciones o historial.',toolInteractions};
+    return { text: memoryRequest?limitarMediosNoVerificados(msg.content):renderizarLecturasLegadas(toolInteractions), toolInteractions };
   }
 
   if (consultaAplicacionesObligatoria) {
@@ -4139,13 +4250,14 @@ export async function llmToolLoop(
   if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
     return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos.', toolInteractions };
   }
+  if(policy.mode==='aggregate'&&!memoryRequest)return {text:'No pude consolidar evidencia verificable de las partes pendientes. No generé hechos libres al agotar las consultas.',toolInteractions};
   const finalRes = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers,
     body: JSON.stringify({
       model: MODEL,
       messages: [
-        ...messages,
+        ...providerBase,...toolInteractions.map(h=>({role:'user',content:h.result_summary})),
         {
           role: 'system',
           content: 'Ya no puedes llamar mas herramientas. Responde AHORA con los datos que ya consultaste. Si no alcanzan para contestar, di explicitamente que te falto y que dato concreto necesitarias — nunca inventes cifras.',
@@ -4170,7 +4282,7 @@ export async function llmToolLoop(
     throw new Error('No pude completar la consulta: agote los intentos de busqueda sin llegar a una respuesta. Volve a preguntar acotando el periodo o el lote.');
   }
 
-  return { text: finalText, toolInteractions };
+  return { text: limitarMediosNoVerificados(finalText), toolInteractions };
 }
 
 // Auto-generate title
@@ -4202,7 +4314,16 @@ async function generateTitle(userMessage: string): Promise<string> {
 // MAIN HANDLER
 // ============================================================================
 
+/** Public operational errors are fixed codes/messages, never arbitrary API bodies. */
+function errorConsultaPublico(err:unknown):string {
+  const message=err instanceof Error?err.message:'';
+  if(/^storage_error:[1-5]\d{2}:(?:SOURCE_HTTP_ERROR|23503|23505|23514|42501|42703|PGRST002|PGRST116)$/.test(message)||/^(?:Error OpenRouter: [1-5]\d{2}|source_error:[1-5]\d{2})$/.test(message))return message;
+  if(['OPENROUTER_API_KEY no configurada','Timeout en la llamada al LLM','Sin respuesta del LLM','Error en respuesta final del LLM','Consulta demasiado amplia para enviar de forma segura.','No pude recuperar el contexto verificado de aplicaciones. Consulta de nuevo el listado e intenta la comparación otra vez.'].includes(message))return message;
+  return 'No pude completar la consulta. Código: ESCO_QUERY_FAILED';
+}
+
 export async function handleChatMessage(c: Context) {
+  try {
   // Auth
   const authResult = await authenticateUser(c);
   if (authResult instanceof Response) return authResult;
@@ -4216,8 +4337,9 @@ export async function handleChatMessage(c: Context) {
     return c.json({ error: 'Body invalido' }, 400);
   }
 
+  if(!body||typeof body!=='object'||Array.isArray(body)||typeof body.message!=='string')return c.json({error:'Body invalido'},400);
   const { message } = body;
-  if (!message?.trim()) {
+  if (!message.trim()) {
     return c.json({ error: 'Mensaje vacio' }, 400);
   }
 
@@ -4255,27 +4377,21 @@ export async function handleChatMessage(c: Context) {
 
   // Load history (last 20 messages) with metadata for tool context AND
   // long-term memorias to inject into the system prompt.
-  const [history, memorias] = await Promise.all([
+  const history = await (
     supabaseQuery('chat_messages',
-      `select=id,role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.desc,id.desc&limit=20`
-    ) as Promise<Array<MensajeCohorte & { metadata?: { tool_interactions?: ToolInteraction[]; application_cohort?: unknown } }>>,
-    fetchActiveMemorias(userId),
-  ]);
+      `select=id,role,content,metadata,created_at&conversation_id=eq.${conversationId}&order=created_at.desc,id.desc&limit=20`
+    ) as Promise<Array<MensajeCohorte & { created_at?:string; metadata?: { tool_interactions?: ToolInteraction[]; application_cohort?: unknown } }>>
+  );
 
   // Build messages for LLM, injecting tool context from previous turns
-  const llmMessages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> = [
-    { role: 'system', content: getSystemPrompt(memorias) },
+  const llmMessages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string; created_at?:string; id?:string }> = [
+    { role: 'system', content: getSystemPrompt([]) },
   ];
   history.reverse();
   const contextoCohorte=contextoDesdeHistorial(userId,conversationId,'web',history);
   for (const m of history) {
-    if (m.role === 'assistant' && m.metadata?.tool_interactions?.length) {
-      const ctx = m.metadata.tool_interactions
-        .map((t: ToolInteraction) => `[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]`)
-        .join('\n');
-      llmMessages.push({ role: 'system', content: `Datos consultados en la respuesta anterior (pueden estar recortados o desactualizados; vuelve a consultar para afirmar ausencia o cambiar de período):\n${ctx}` });
-    }
-    llmMessages.push({ role: m.role, content: m.content });
+    // Old assistant/tool payloads remain stored, but are not reconstructed as model context.
+    if(m.role==='user')llmMessages.push({id:m.id,role:m.role,content:m.content,created_at:m.created_at});
   }
 
   // SSE response
@@ -4295,6 +4411,7 @@ export async function handleChatMessage(c: Context) {
           userId,
           (event) => send(event as unknown as Record<string, unknown>),
           contextoCohorte,
+          {pregunta:message,messageId:usuarioMensajeId},
         );
 
         const cohortHandle=await conservarCohorteAplicaciones(contextoCohorte,usuarioMensajeId,asistenteMensajeId,message.trim(),cohorteAplicaciones);
@@ -4335,8 +4452,8 @@ export async function handleChatMessage(c: Context) {
           ...(title ? { title } : {}),
         });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Error interno';
-        console.error('[Esco] Error:', msg);
+        const msg = errorConsultaPublico(err);
+        console.error('[Esco] Query failed:', msg);
         send({ type: 'error', message: msg });
       } finally {
         controller.close();
@@ -4352,4 +4469,9 @@ export async function handleChatMessage(c: Context) {
       'Access-Control-Allow-Origin': '*',
     },
   });
+  } catch(err:unknown) {
+    const message=errorConsultaPublico(err);
+    console.error('[Esco] Request preparation failed:',message);
+    return c.json({error:message},500);
+  }
 }

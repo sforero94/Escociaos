@@ -53,9 +53,10 @@ function consultaUltimaLluvia(fuente: string): string {
 
 describe('paridad de la puerta de confianza de lluvia (frontend ⇄ Esco)', () => {
   it('el frontend descarta EXACTAMENTE `contador_congelado` — si esto cambia, hay que mover el espejo', () => {
-    const fuente = leer('src/utils/calculosClima.ts');
+    // The pure canonical helper moved; calculosClima re-exports the same functions.
+    const fuente = leer('src/utils/escoClimaCalidad.ts');
     const m = fuente.match(/const CONFIANZAS_SIN_DATO = new Set\(\[([^\]]*)\]\)/);
-    expect(m, 'calculosClima.ts debe seguir declarando CONFIANZAS_SIN_DATO').not.toBeNull();
+    expect(m, 'escoClimaCalidad.ts debe seguir declarando CONFIANZAS_SIN_DATO').not.toBeNull();
     const etiquetas = (m as RegExpMatchArray)[1]
       .split(',')
       .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))

@@ -1,87 +1,100 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-// Import dinámico para ejecutar Deno bajo Vitest sin incluirlo en tsc del navegador.
+// Dynamic import keeps Deno runtime imports out of frontend TypeScript.
 const chatModulePath = '../supabase/functions/server/chat.tsx';
 const { llmToolLoop } = await import(chatModulePath) as { llmToolLoop: (messages: Array<{ role: string; content: string }>) => Promise<{ text: string; toolInteractions: Array<{ tool: string; result_summary: string }> }> };
-const respuestaModelo = (message: Record<string, unknown>) => new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
-const llamada = (name: string, args: Record<string, unknown>) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
-afterEach(() => vi.unstubAllGlobals());
-describe('Integración del loop de Esco con consulta obligatoria de partos', () => {
-  it('conserva el resultado inmediato completo y rechaza la negación tras perder detalle de contexto', async () => {
-    const database = 'https://fixture.test';
-    const provider = 'https://openrouter.ai/api/v1/chat/completions';
-    const note = 'synthetic-detail-'.repeat(1600);
-    vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? database : 'synthetic-key' } });
-    let round = 0;
-    const requests: string[] = [];
-    const bodies: Record<string, unknown>[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: string, opts?: RequestInit) => {
-      const url = new URL(input); requests.push(input);
-      if (url.origin === database && ['hato_animales', 'hato_eventos'].some(t => url.pathname === `/rest/v1/${t}`)
-        && (opts?.method ?? 'GET') === 'GET') {
-        const rows = url.pathname.endsWith('/hato_eventos')
-          ? [{ id: 'e', animal_id: 'a', tipo: 'parto', fecha: '2026-09-20', datos: { note } }]
-          : [{ id: 'a', numero: 87, nombre: 'MADRE SINTETICA', estado: 'activa' }];
-        return new Response(JSON.stringify(rows), { headers: { 'content-range': '0-0/1' } });
-      }
-      if (input !== provider || opts?.method !== 'POST') throw new Error('Unmatched synthetic request');
-      bodies.push(JSON.parse(String(opts.body)));
-      return round++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' }))
-        : respuestaModelo({ role: 'assistant', content: 'No hay partos registrados.' });
-    }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo en septiembre?' }]);
-    const immediate = JSON.parse((bodies[1].messages as { role: string; content: string }[]).find(m => m.role === 'tool')!.content);
-    expect(immediate.detalle[0].datos.note).toBe(note);
-    expect(immediate._evidencia.consulta_completa).toBe(true);
-    const saved = JSON.parse(r.toolInteractions[0].result_summary);
-    expect(saved).toMatchObject({ contexto_recortado: true, _evidencia: { consulta_completa: false, detalle_completo: false } });
-    expect(saved.detalle).toBeUndefined(); expect(saved.resumen.total_eventos).toBe(1);
-    expect(r.text).toContain('No pude verificar'); expect(r.text).not.toBe('No hay partos registrados.');
-    expect(requests).toHaveLength(4);
-    expect(requests.filter(u => u.startsWith(database))).toHaveLength(2);
+const DB = 'https://birth-source-fixture.invalid';
+const PROVIDER = 'https://openrouter.ai/api/v1/chat/completions';
+const FALSE_ABSENCE = 'No hay partos registrados. SYN_GENERATED_ABSENCE';
+const NOTE = 'synthetic-detail-'.repeat(1600);
+interface ProbeOptions { unavailable?: boolean; capped?: boolean; to?: string }
+function fixture(options: ProbeOptions = {}) {
+  const requests: Request[] = [];
+  const bodies: Array<{ tool_choice?: unknown; messages?: unknown[] }> = [];
+  const rejected: string[] = [];
+  const inherited = vi.fn(async (): Promise<Response> => { throw Error('Inherited network forbidden'); });
+  vi.stubGlobal('fetch', inherited);
+  vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('Deno', { env: { get: (key: string) => {
+    if (key === 'SUPABASE_URL') return DB;
+    if (['SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY'].includes(key)) return 'synthetic-key';
+    rejected.push(`env:${key}`); throw Error('Unlisted synthetic environment key');
+  } } });
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init); requests.push(request);
+    const url = new URL(request.url);
+    if (request.url === PROVIDER && request.method === 'POST') {
+      bodies.push(JSON.parse(await request.text()));
+      return Response.json({ choices: [{ message: bodies.length === 1 ? { role: 'assistant', content: FALSE_ABSENCE, tool_calls: [{
+        id: 'call-birth-source', type: 'function', function: { name: 'get_hato_partos',
+          // Wrong proposal: explicit USER dates must independently bind the source query.
+          arguments: JSON.stringify({ date_from: '1999-01-01', date_to: '2039-12-31' }) },
+      }] } : { role: 'assistant', content: FALSE_ABSENCE } }] });
+    }
+    if (url.origin !== DB || request.method !== 'GET' || !['/rest/v1/hato_animales', '/rest/v1/hato_eventos'].includes(url.pathname)) {
+      rejected.push(`${request.method} ${url.origin}${url.pathname}`); throw Error('Closed synthetic transport');
+    }
+    if (options.unavailable) return Response.json({ message: 'SYN_SOURCE_ERROR_NOT_FOR_CONTEXT' }, { status: 503 });
+    const rows = url.pathname.endsWith('/hato_eventos')
+      ? [{ id: 'synthetic-event', animal_id: 'synthetic-mother', tipo: 'parto', fecha: '2034-09-20', datos: { note: NOTE } }]
+      : [{ id: 'synthetic-mother', numero: 87, nombre: 'MADRE SINTETICA', estado: 'activa' }];
+    if (url.pathname.endsWith('/hato_eventos')) {
+      expect(url.searchParams.get('tipo')).toBe('eq.parto');
+      expect(url.searchParams.getAll('fecha')).toEqual(['gte.2034-09-01', `lte.${options.to ?? '2034-09-30'}`]);
+    }
+    return Response.json(rows, { headers: { 'content-range': options.capped ? '0-0/300' : '0-0/1' } });
   });
-  it('enruta la pregunta original al historial completo y persiste evidencia verificable', async () => {
-    vi.stubGlobal('Deno', { env: { get: (key: string) => key === 'SUPABASE_URL' ? 'https://example.test' : 'fixture-key' } });
-    let ronda = 0;
-    const bodies: Record<string, unknown>[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (url: string, opts: RequestInit) => {
-      if (url.includes('/rest/v1/')) {
-        const u = new URL(url);
-        if (u.pathname.endsWith('/hato_eventos')) {
-          expect(u.searchParams.get('tipo')).toBe('eq.parto');
-          expect(u.searchParams.get('fecha')).toBe('gte.2026-09-01');
-          return new Response(JSON.stringify([{ id: 'e', animal_id: 'a', tipo: 'parto', fecha: '2026-09-20' }]), { headers: { 'content-range': '0-0/1' } });
-        }
-        return new Response(JSON.stringify([{ id: 'a', numero: 1, nombre: 'MADRE A', estado: 'activa' }]), { headers: { 'content-range': '0-0/1' } });
-      }
-      bodies.push(JSON.parse(String(opts.body)));
-      return ronda++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' })) : respuestaModelo({ role: 'assistant', content: 'MADRE A tuvo un parto el 20 de septiembre.' });
-    }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hay en septiembre y octubre?' }]);
-    expect(bodies[0].tool_choice).toEqual({ type: 'function', function: { name: 'get_hato_partos' } });
-    expect(r.text).toContain('MADRE A');
-    expect(JSON.parse(r.toolInteractions[0].result_summary)._evidencia.consulta_completa).toBe(true);
-    expect(JSON.parse(r.toolInteractions[0].result_summary).detalle[0].madre_o_animal.numero).toBe(1);
+  return { requests, bodies, rejected, inherited };
+}
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+function assertClosed(f: ReturnType<typeof fixture>) {
+  expect(f.rejected).toEqual([]); expect(f.inherited).not.toHaveBeenCalled();
+  expect(f.bodies).toHaveLength(1); // Sources/limitations do not need another prose generation.
+  expect(f.bodies[0].tool_choice).toEqual({ type: 'function', function: { name: 'get_hato_partos' } });
+}
+
+describe('Shared loop birth evidence and positive context projection', () => {
+  it('preserves complete identities/dates while removing a huge note before context persistence', async () => {
+    const f = fixture();
+    const result = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo del 2034-09-01 al 2034-09-30?' }]);
+    const saved = JSON.parse(result.toolInteractions[0].result_summary);
+    expect(saved._evidencia).toMatchObject({ consulta_completa: true, detalle_completo: true, rango: { desde: '2034-09-01', hasta: '2034-09-30' } });
+    expect(saved.resumen.total_eventos).toBe(1);
+    expect(saved.detalle[0]).toMatchObject({ fecha: '2034-09-20', madre_o_animal: { numero: 87, nombre: 'MADRE SINTETICA' } });
+    expect(saved.detalle[0].datos).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain('synthetic-detail-');
+    expect(JSON.stringify(f.bodies)).not.toContain('synthetic-detail-');
+    expect(result.text).toContain('MADRE SINTETICA'); expect(result.text).toContain('2034-09-20');
+    expect(result.text).not.toContain(FALSE_ABSENCE);
+    expect(f.requests).toHaveLength(3); assertClosed(f);
   });
-  it('si la consulta falla, reemplaza una negación fabricada por falta de verificación', async () => {
-    vi.stubGlobal('Deno', { env: { get: () => 'fixture-key' } });
-    let ronda = 0;
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url.includes('/rest/v1/')) return new Response('fallo de consulta', { status: 503 });
-      return ronda++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' })) : respuestaModelo({ role: 'assistant', content: 'No hay partos registrados.' });
-    }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué nuevos partos tenemos?' }]);
-    expect(r.text).toContain('No pude verificar');
-    expect(r.text).not.toBe('No hay partos registrados.');
+  it('forces the birth tool, binds the explicit USER range, and renders fresh facts instead of model absence', async () => {
+    const f = fixture({ to: '2034-10-07' });
+    const result = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo del 2034-09-01 al 2034-10-07?' }]);
+    expect(result.text).toContain('MADRE SINTETICA');
+    expect(result.text).toContain('Total de registros verificados: 1');
+    expect(result.text).not.toContain(FALSE_ABSENCE);
+    const saved = JSON.parse(result.toolInteractions[0].result_summary);
+    expect(saved._evidencia.consulta_completa).toBe(true);
+    expect(saved.detalle[0].madre_o_animal.numero).toBe(87); assertClosed(f);
   });
-  it('servidor con max_rows menor que la página no se considera consulta completa', async () => {
-    vi.stubGlobal('Deno', { env: { get: () => 'fixture-key' } });
-    let ronda = 0;
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url.includes('/rest/v1/')) return new Response(JSON.stringify([{ id: 'e' }]), { headers: { 'content-range': '0-0/300' } });
-      return ronda++ === 0 ? respuestaModelo(llamada('get_hato_partos', { date_from: '2026-09-01', date_to: '2026-10-07' })) : respuestaModelo({ role: 'assistant', content: 'Solo hubo un parto.' });
-    }));
-    const r = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo?' }]);
-    expect(r.text).toContain('No pude verificar');
-    expect(JSON.parse(r.toolInteractions[0].result_summary).error).toContain('recortó');
+  it('returns an explicit limit on failed fresh reads without raw errors or invented absence', async () => {
+    const f = fixture({ unavailable: true });
+    const result = await llmToolLoop([{ role: 'user', content: '¿Qué nuevos partos hubo del 2034-09-01 al 2034-09-30?' }]);
+    expect(result.text).toContain('No pude verificar'); expect(result.text).not.toContain(FALSE_ABSENCE);
+    expect(f.requests.some(request => request.url.startsWith(DB))).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('SYN_SOURCE_ERROR_NOT_FOR_CONTEXT');
+    expect(JSON.parse(result.toolInteractions[0].result_summary)).toMatchObject({ error: 'source_unavailable', _evidencia: { consulta_completa: false }, requiere_reconsulta: true });
+    assertClosed(f);
+  });
+  it('never certifies a short capped page as complete; persistence keeps only safe unavailable evidence', async () => {
+    const f = fixture({ capped: true });
+    const result = await llmToolLoop([{ role: 'user', content: '¿Qué partos hubo del 2034-09-01 al 2034-09-30?' }]);
+    expect(result.text).toContain('No pude verificar');
+    expect(result.text).not.toContain('Total de registros verificados: 1');
+    const saved = JSON.parse(result.toolInteractions[0].result_summary);
+    expect(saved).toMatchObject({ error: 'source_unavailable', _evidencia: { consulta_completa: false }, requiere_reconsulta: true });
+    expect(saved.detalle).toBeUndefined();
+    expect(f.requests.some(request => request.url.startsWith(DB))).toBe(true); assertClosed(f);
   });
 });
