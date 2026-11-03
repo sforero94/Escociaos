@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BASE_SINTETICA, MODELO_URL, correrCasoCongelado, firmaHttp, instalarHttpCongelado } from '../../evals/esco/lib/ejecutorCongelado';
 import { hashFixture, type PaqueteFixtures } from '../utils/escoEvals/fixtures';
 import type { CasoDorado } from '../utils/escoEvals/tipos';
+import {historialInicial,historialParaSiguienteTurno,mensajesDesdeHistorial} from '../utils/escoEvals/mensajes';
 
 const PROMPT = 'Control sintético: no uses datos externos.';
 const QUESTION = '¿Qué partos hubo del 2026-09-01 al 2026-09-30?';
@@ -30,7 +31,7 @@ const eventCols = 'id,animal_id,tipo,fecha,fecha_confianza,cria_id,cria_destino,
 const animalsUrl = `${BASE_SINTETICA}/rest/v1/hato_animales?select=${animalCols}&order=id.asc&limit=200&offset=0`;
 const eventsUrl = `${BASE_SINTETICA}/rest/v1/hato_eventos?select=${eventCols}&order=fecha.asc,id.asc&fecha=gte.2026-09-01&fecha=lte.2026-09-30&tipo=eq.parto&limit=200&offset=0`;
 // Pinned raw request-body hashes. Recompute only after reviewing intentional protocol changes.
-const modelBodyHashes = ['659626bc1479f23efbec83ec24820b9db14af6b2a58df6192080b569e32b7030','f7a08e3b566a327fad401918fecbadca98140c441f802e4797f949cfa301b8fc'];
+const modelBodyHashes = ['7ad861f0c74701500b99059f63feb269867af74874c196ab65327f85b756a31a','a5cf7b776a497f787a9b85e486f81f8e029709439629fc734f2341b96b12c6c6'];
 async function control(options: { followup?: boolean; answer?: string; status?: number; total?: number; sourceMotherNumber?:number } = {}) {
   const c = caso(options.followup);
   const turns: PaqueteFixtures['scenarios'][0]['turns'] = [];
@@ -68,6 +69,45 @@ async function directFixture(response: unknown = { status: 200, body: '[]', head
 }
 
 describe('unchanged actual loop under closed HTTP fixtures', () => {
+  it('binds the payload-hash change exclusively to the reviewed aggregate labor schema',async()=>{
+    const {network,sentinel}=redProhibida();const {c,pack}=await control({followup:true});
+    const oldHashes=['659626bc1479f23efbec83ec24820b9db14af6b2a58df6192080b569e32b7030','f7a08e3b566a327fad401918fecbadca98140c441f802e4797f949cfa301b8fc'];
+    const oldLaborParameters={type:'object',properties:{date_from:{type:'string',description:'Fecha inicio YYYY-MM-DD'},date_to:{type:'string',description:'Fecha fin YYYY-MM-DD'},employee_name:{type:'string',description:'Nombre parcial del empleado (opcional)'},lote_name:{type:'string',description:'Nombre parcial del lote (opcional)'}},required:['date_from','date_to']};
+    const g=instalarHttpCongelado(pack,'SYN-http'),closedFetch=globalThis.fetch;
+    const payloads:Array<{raw:string;body:{tools:Array<{function:{name:string;parameters:unknown}}>}}>=[];
+    // Observation only: every request still delegates to the unchanged exact
+    // signature matcher; no unmatched response is supplied by this wrapper.
+    globalThis.fetch=async(input,init)=>{
+      const request=new Request(input,init);
+      if(request.url===MODELO_URL&&request.method==='POST'){
+        const raw=await request.clone().text();payloads.push({raw,body:JSON.parse(raw)});
+      }
+      return closedFetch(input,init);
+    };
+    try{
+      vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-28T17:00:00.000Z'));
+      // Same dynamic edge boundary as the closed executor: the app tsconfig
+      // intentionally excludes Deno/npm modules; this still loads the real loop.
+      const edgePath='../supabase/functions/server/chat.tsx';
+      const {llmToolLoop}=await import(edgePath) as {llmToolLoop:(messages:ReturnType<typeof mensajesDesdeHistorial>,userId:string)=>Promise<{text:string;toolInteractions:Array<{tool:string;args:Record<string,unknown>;result_summary:string}>}>};
+      let history=historialInicial(c,c.question);
+      for(let i=0;i<2;i++){
+        g.iniciarTurno(i);const output=await llmToolLoop(mensajesDesdeHistorial(history,PROMPT,'Web'),'00000000-0000-0000-0000-00000000e5c0');
+        g.comprobar();g.verificarFin();
+        if(i===0)history=historialParaSiguienteTurno(history,output.text,output.toolInteractions,FOLLOWUP);
+      }
+      g.verificarCasoFin();expect(payloads).toHaveLength(2);
+      for(const [i,payload]of payloads.entries()){
+        expect(hashFixture(payload.raw)).toBe(modelBodyHashes[i]);
+        const labor=payload.body.tools.filter(t=>t.function.name==='get_labor_summary');expect(labor).toHaveLength(1);
+        expect(labor[0].function.parameters).not.toHaveProperty('properties.employee_name');
+        labor[0].function.parameters=oldLaborParameters;
+        expect(hashFixture(JSON.stringify(payload.body))).toBe(oldHashes[i]);
+      }
+      expect(g.intentos.every(r=>r.estado==='respondido')).toBe(true);expect(network).not.toHaveBeenCalled();
+    }finally{g.restaurar();vi.useRealTimers();}
+    expect(globalThis.fetch).toBe(sentinel);
+  });
   it('executes the real read-only tool and preserves both follow-up history and zero network', async () => {
     const { network, sentinel } = redProhibida();
     const { c, pack } = await control({ followup: true });

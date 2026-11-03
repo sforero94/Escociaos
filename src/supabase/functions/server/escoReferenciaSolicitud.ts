@@ -26,6 +26,8 @@ const families = (q: string) => {
     !/[;\n]/.test(text) && !/\b(?:labores por lote|resumen (?:de )?labores)\b/.test(text)
     ? found.filter(name => name !== 'labor') : found;
 };
+/** Syntactic USER domain cues only; no permission or source authority. */
+export const familiasSolicitudUsuario = families;
 const kind = (noun: string) => /^(?:aplicaciones|ubicaciones|estaciones|proveedores|animales)$/.test(noun) ? noun.slice(0, -2) : noun.replace(/s$/, '');
 const STOP = new Set(('de del en desde hasta con por sin para y o al el la los las esta este ese esa esas esos mismo misma mismos mismas estado estados fecha fechas costo costos cantidad cantidades actual real planeada planeadas real reales registrada registradas calculada calculadas cerrada cerradas ejecucion planificada planificadas resumen total todos todas periodo semana mes ano hoy ayer ultimos ultima anterior pasado pasada').split(' '));
 interface Selector { kind: string; value: string; start: number; end: number }
@@ -100,13 +102,19 @@ export function resolverReferenciaSolicitud(input: EntradaReferenciaSolicitud): 
   // A current explicit selector for the referenced kind wins; prior labels never join it.
   if (refs.length && refs.every(r => selected.some(s => s.kind === r.kind))) return result('none');
   if (!tieneReferenciaSolicitud(question)) return result('none');
+  if (/\b(?:o bien|una de|cualquiera|alternativamente|o de otr[ao]s?)\b/.test(normal(question).replace(quotes, ' selector '))) return result('ambiguous');
   if (!previousUserText?.trim() || previousUserText.length > 16000 || !previousUserAt ||
     !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(previousUserAt) || !fechaValida(previousUserAt.slice(0, 10))) return result('orphan');
   const previousAt = new Date(previousUserAt);
   if (!Number.isFinite(previousAt.getTime()) || previousAt.getTime() > now.getTime()) return result('orphan');
   if (tieneReferenciaSolicitud(previousUserText)) return result('ambiguous');
   const priorKinds = families(previousUserText), priorSelectors = selectors(previousUserText), prior = normal(previousUserText);
-  if (priorKinds.length > 1 || /\b(?:emplead[ao]s?|contratistas?|trabajador(?:es)?|salarios?|remuneracion)\b/.test(prior)) return result('ambiguous');
+  // Complete, delimited aggregate exclusions are not positive personal purpose.
+  // A name or a positive personal clause remains present and breaks inheritance.
+  const priorPurpose=prior.replace(/\b(?:sin|omite|excluye|no incluyas|no muestres)\s+(?:(?:los|las)\s+)?(?:salarios(?: individuales)?|(?:nombres|identidades|datos personales) de (?:(?:los|las) )?(?:emplead[oa]s|contratistas|trabajadores))(?=$|[;,!.?])/g,' ');
+  if (priorKinds.length > 1 || /\b(?:emplead[ao]s?|contratistas?|trabajador(?:es)?|salarios?|remuneracion)\b/.test(priorPurpose)) return result('ambiguous');
+  const currentKinds=families(question);
+  if(!refs.length&&currentKinds.length&&priorKinds.length&&!currentKinds.some(k=>priorKinds.includes(k))&&!(priorKinds.includes('application')&&currentKinds.every(k=>k==='labor')))return result('none');
   if (!priorKinds.length && !priorSelectors.length) return result('orphan');
   const seen = new Map<string, Set<string>>();
   for (const s of priorSelectors) { if (!seen.has(s.kind)) seen.set(s.kind, new Set()); seen.get(s.kind)!.add(s.value); }
@@ -118,7 +126,7 @@ export function resolverReferenciaSolicitud(input: EntradaReferenciaSolicitud): 
     if (!matching.length && !mentions.length) return result('orphan');
     if (!r.plural && !matching.length && mentions.some(m => m[0].endsWith('s'))) return result('ambiguous');
   }
-  const alternativeLabel = new RegExp(`\\b(?:aplicacion|lote|producto|tarea)\\b[^.;!?]*\\s[yo]\\s(?!(?:${ENTITY}|costo|costos|cantidad|jornales|estado|fechas|consumo|muestra|consulta|dime|resumen)\\b)(?:["'«“]|[a-z])`);
+  const alternativeLabel = new RegExp(`\\b(?:aplicacion|lote|producto|tarea)\\b[^.;!?]*\\s[yo]\\s(?!(?:(?:el|la|los|las)\\s+)?(?:${ENTITY}|costo|costos|cantidad|jornales|estado|fechas|consumo|muestra|consulta|dime|resumen)\\b)(?:["'«“]|[a-z])`);
   if (/\b(?:o bien|una de|cualquiera|alternativamente)\b/.test(prior) || alternativeLabel.test(prior)) return result('ambiguous');
   const currentTime = separarPeriodoSolicitud(question, now), priorTime = separarPeriodoSolicitud(previousUserText, previousAt);
   if (currentTime.period.state === 'ambiguous' || currentTime.period.state === 'invalid' || priorTime.period.state === 'ambiguous' || priorTime.period.state === 'invalid') return result('ambiguous');
@@ -129,6 +137,52 @@ export function resolverReferenciaSolicitud(input: EntradaReferenciaSolicitud): 
   // Keep a grammatical boundary: adjacent fragments must not become a new lot/app label.
   const effectiveQuestion = `${previousScope} y ${current}${chosen.state === 'resolved' ? ` del ${chosen.from} al ${chosen.to}` : ''}`.replace(/\s+/g, ' ').trim();
   return { state: 'resolved', effectiveQuestion, previousUserText };
+}
+
+/** Local, syntactic USER scope. This does not certify records, identities, access or facts.
+ * The caller supplies server-read chronological USER messages only; never assistant metadata.
+ * IDs bind the input sequence only and are never interpreted as business entity IDs.
+ */
+export interface AntecedenteUsuarioSolicitud { id: string; question: string; createdAt: string }
+export interface EntradaContextoSolicitud extends EntradaReferenciaSolicitud { historyUsers?: readonly AntecedenteUsuarioSolicitud[] }
+export interface ContextoSolicitudResuelto {
+  reference: ReferenciaSolicitud;
+  period: PropuestaPeriodoUsuario;
+  selectorProposals: Array<{ kind: string; value: string }>;
+  /** Original server-read USER request anchoring this resolved chain. Not a fact or permission.
+   * Keep raw identity assertions/exclusions for fresh selector validation, not model context. */
+  anchorQuestion?: string;
+}
+export function resolverContextoSolicitudUsuario(input: EntradaContextoSolicitud): ContextoSolicitudResuelto {
+  let previousUserText = input.previousUserText, previousUserAt = input.previousUserAt;
+  let anchorQuestion = input.previousUserText;
+  let invalidHistory = false;
+  if (input.historyUsers !== undefined) {
+    previousUserText = undefined; previousUserAt = undefined; anchorQuestion = undefined;
+    const history = input.historyUsers;
+    const ids = new Set<string>(); let lastTime = -Infinity;
+    invalidHistory = !(input.now instanceof Date) || !Number.isFinite(input.now.getTime()) || !Array.isArray(history) || history.length > 6;
+    if (!invalidHistory) for (const entry of history) {
+      const at = typeof entry?.createdAt === 'string' ? new Date(entry.createdAt) : new Date(NaN);
+      if (!entry || typeof entry.id !== 'string' || !entry.id || entry.id.length > 128 || ids.has(entry.id) ||
+        typeof entry.question !== 'string' || !entry.question.trim() || entry.question.length > 16000 ||
+        !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(entry.createdAt) || !fechaValida(entry.createdAt.slice(0,10)) ||
+        !Number.isFinite(at.getTime()) || at.getTime() < lastTime || at.getTime() > input.now.getTime()) { invalidHistory = true; break; }
+      ids.add(entry.id); lastTime = at.getTime();
+      const resolved = resolverReferenciaSolicitud({ question: entry.question, previousUserText, previousUserAt, now: at });
+      if (resolved.state === 'none') anchorQuestion = entry.question;
+      else if (resolved.state !== 'resolved') anchorQuestion = undefined;
+      // An unresolved link breaks the chain. Do not skip it to recover an older identity.
+      previousUserText = resolved.state === 'none' || resolved.state === 'resolved' ? resolved.effectiveQuestion : undefined;
+      previousUserAt = previousUserText ? entry.createdAt : undefined;
+    }
+  }
+  const reference = resolverReferenciaSolicitud({ ...input, previousUserText: invalidHistory ? undefined : previousUserText,
+    previousUserAt: invalidHistory ? undefined : previousUserAt });
+  const effective = reference.state === 'resolved' ? reference.effectiveQuestion : input.question;
+  return { reference, period: proponerPeriodoSolicitudUsuario(effective, input.now),
+    ...(reference.state === 'resolved' && !invalidHistory && anchorQuestion ? {anchorQuestion} : {}),
+    selectorProposals: reference.state === 'orphan' || reference.state === 'ambiguous' ? [] : selectors(effective).map(({kind,value}) => ({kind,value})) };
 }
 
 export type IntencionSolicitud = 'definition' | 'state_query' | 'capability' | 'data_query';
@@ -148,8 +202,9 @@ export function analizarPropositoUsuario(question: string): PropositoSolicitudUs
   for (const raw of clauses) {
     const clause = raw.replace(quotes, ' objeto ');
     if (!clause.trim() || /\b(?:ejemplo|cita|dijiste|dije|texto anterior|mensaje anterior|respuesta anterior)\b/.test(clause)) continue;
-    const deniedDefinition = /\b(?:no|nunca|sin)\s+(?:(?:quiero|deseo|necesito)\s+)?(?:expli\w*|defin\w*|signific\w*)\b/.test(clause);
-    const definition = !deniedDefinition && /\b(?:que (?:significa[n]?|quiere[n]? decir|representa[n]?|es|son)|como se define[n]?|definicion(?:es)? de|significado de|diferencia[s]? entre|define|explica (?:el |la )?(?:significado|definicion))\b/.test(clause);
+    const deniedDefinition = /\b(?:no|nunca|sin)\s+(?:(?:quiero|deseo|necesito)\s+(?:que\s+)?)?(?:me\s+)?(?:expli\w*|defin\w*|signific\w*)\b/.test(clause);
+    const semanticState = /\b(?:explica(?:me)?|que implica)\b/.test(clause) && /\b(?:explica(?:me)? (?:el )?(?:estado|significado del estado)(?: registrado)?|que implica(?: que)? (?:(?:una|la) aplicacion )?(?:figure|aparezca|este)(?: como)?|que implica (?:el )?estado)\s+(?:["'«“])?(?:cerrada|calculada|planificada|en ejecucion)\b/.test(raw);
+    const definition = !deniedDefinition && (semanticState || /\b(?:que (?:significa[n]?|quiere[n]? decir|representa[n]?|es|son)|como se define[n]?|definicion(?:es)? de|significado de|diferencia[s]? entre|define|explica (?:el |la )?(?:significado|definicion))\b/.test(clause));
     const states: EstadoDefinicionSolicitud[] = [];
     if (/\b(?:calculada|planificada)s?\b/.test(raw)) states.push('Calculada');
     if (/\ben ejecucion\b/.test(raw)) states.push('En ejecución');

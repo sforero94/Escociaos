@@ -119,7 +119,7 @@ describe('synthetic actual-loop application interpretation', () => {
       },{missingCountFor:tool==='get_application_summary'?'/rest/v1/aplicaciones':undefined});
       const result = await llmToolLoop([{ role: 'user', content: '¿Cómo va la aplicación de control de plaga Z?' }]);
       const first=JSON.parse(result.toolInteractions[0].result_summary);
-      if(tool==='get_tareas')expect(first).toMatchObject({error:'source_unavailable',requiere_reconsulta:true});
+      if(tool==='get_tareas')expect(first).toMatchObject({error:'invalid_arguments',stage:'arguments',reason:'operation_mismatch'});
       else {
         expect(first.errors).toEqual(expect.arrayContaining([expect.objectContaining({code:'incomplete_population',stage:'coverage'})]));
         const facts=result.toolInteractions.flatMap(h=>(JSON.parse(h.result_summary).evidence?.facts??[]) as Evidence['facts']);
@@ -257,7 +257,7 @@ describe('shared grammar through the closed application loop',()=>{
     const invented='Consumo Real de Productos: 999 L, 999 jornales.';
     install(()=>++calls===1?call('get_aplicaciones_ejecucion',{application_id:'wrong-model-id'}):{role:'assistant',content:invented},url=>rows[url.pathname.split('/').pop()!]??[]);
     vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2032-05-15T12:00:00Z'));
-    const history=previous?[{role:'user',content:previous,created_at:'2032-05-14T12:00:00Z'},{role:'assistant',content:'La aplicación seleccionada es Otra y gastó 999 L.'}]:[];
+    const history=previous?[{role:'user',id:'synthetic-prior-user',content:previous,created_at:'2032-05-14T12:00:00Z'},{role:'assistant',content:'La aplicación seleccionada es Otra y gastó 999 L.'}]:[];
     const result=await llmToolLoop([...history,{role:'user',content:'Consulta de solo lectura: '+question}]);
     expect(calls).toBe(1);expect(result.text).toContain(app.nombre_aplicacion);
     const saved=JSON.parse(result.toolInteractions[0].result_summary) as {evidence:Evidence};

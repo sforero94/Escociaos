@@ -1,6 +1,7 @@
-import {APPLICATION_METRICS,applicationMetrics,applicationReaderArguments,requestedApplicationMetrics,operationFailure,OperationFailure} from './escoOperacionContrato.ts';
-import {resolverReferenciaSolicitud,proponerPeriodoSolicitudUsuario} from './escoReferenciaSolicitud.ts';
-import {crearContextoNucleo} from './escoNucleoSolicitud.ts';
+import {APPLICATION_METRICS,applicationMetrics,applicationReaderArguments,requestedApplicationMetrics,reconciliarSolicitudAplicacion,textoPartesAplicacion,operationFailure,OperationFailure} from './escoOperacionContrato.ts';
+import {resolverContextoSolicitudUsuario,proponerPeriodoSolicitudUsuario,familiasSolicitudUsuario} from './escoReferenciaSolicitud.ts';
+import {LABOR_PARAMETERS,textoPartesLabor} from './escoContratoLabor.ts';
+import {crearContextoNucleo,analizarPropositoUsuario} from './escoNucleoSolicitud.ts';
 import {crearPuertoNucleo} from './escoNucleoTransporte.ts';
 import {NUCLEO_EJECUTABLE,LIMITES_NUCLEO,DESCRIPCIONES_NUCLEO,promptPlanificadorNucleo,limiteNucleo} from './escoNucleoCatalogo.ts';
 import { ejecutarLlamadasVerificadas } from './escoTurnoVerificado.ts';
@@ -341,17 +342,8 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_labor_summary',
-    description: 'Obtiene resumen de jornales y trabajo por lote/empleado en un rango de fechas. Incluye fraccion_jornal, costo, tarea y lote.',
-    parameters: {
-      type: 'object',
-      properties: {
-        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD' },
-        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD' },
-        employee_name: { type: 'string', description: 'Nombre parcial del empleado (opcional)' },
-        lote_name: { type: 'string', description: 'Nombre parcial del lote (opcional)' },
-      },
-      required: ['date_from', 'date_to'],
-    },
+    description: 'Jornales y costos históricos agregados por lote en un período; sin identidad, salario ni observaciones individuales.',
+    parameters: LABOR_PARAMETERS,
   },
   {
     name: 'get_employee_activity',
@@ -3988,7 +3980,13 @@ export async function llmToolLoop(
   // Production callers bind the server message ID; equal old wording is not turn identity.
   const previousUserEntry=currentIndex>=0?[...messages.slice(0,currentIndex)].reverse().find(m=>m.role==='user'):undefined;
   const priorUser=previousUserEntry?.content??undefined;
-  const reference=resolverReferenciaSolicitud({question:preguntaCohorte,previousUserText:priorUser,previousUserAt:previousUserEntry?.created_at,now:new Date(startedAt)});
+  const historyUsers=currentIndex>=0?messages.slice(0,currentIndex).filter(m=>m.role==='user').slice(-6).map(m=>({id:typeof m.id==='string'?m.id:'',question:typeof m.content==='string'?m.content:'',createdAt:typeof m.created_at==='string'?m.created_at:''})):undefined;
+  const requestContext=resolverContextoSolicitudUsuario({question:preguntaCohorte,previousUserText:priorUser,previousUserAt:previousUserEntry?.created_at,historyUsers,now:new Date(startedAt)});
+  const applicationQuestion=textoPartesAplicacion(preguntaCohorte);
+  const applicationContext=resolverContextoSolicitudUsuario({question:applicationQuestion,previousUserText:priorUser,previousUserAt:previousUserEntry?.created_at,historyUsers,now:new Date(startedAt)});
+  const laborQuestion=textoPartesLabor(preguntaCohorte);
+  const laborContext=resolverContextoSolicitudUsuario({question:laborQuestion,previousUserText:priorUser,previousUserAt:previousUserEntry?.created_at,historyUsers,now:new Date(startedAt)});
+  const reference=requestContext.reference;
   if((reference.state==='orphan'||reference.state==='ambiguous')&&reference.independentQuestion){
     const independent=await llmToolLoop(messages,userId,onEvent,undefined,{pregunta:reference.independentQuestion,messageId:solicitudActual?.messageId});
     return {...independent,text:independent.text+'\n\nParte pendiente: indica la identidad o el listado de la referencia no resuelta; no lo inferí de otro registro.'};
@@ -3997,9 +3995,7 @@ export async function llmToolLoop(
   const effectiveQuestion=reference.effectiveQuestion;
   const currentPeriod=proponerPeriodoSolicitudUsuario(preguntaCohorte,new Date(startedAt));
   const followsPrior=/^(?:consulta de solo lectura:\s*)?[¿]?\s*(?:y\b|en esas?\b|en esos?\b|para esas?\b|para esos?\b|de esas?\b|de esos?\b)/i.test(preguntaCohorte.trim());
-  const priorReference=previousUserEntry?.created_at?new Date(previousUserEntry.created_at):null;
-  const inheritedPeriod=currentPeriod.state==='absent'&&followsPrior&&priorUser&&priorReference?proponerPeriodoSolicitudUsuario(priorUser,priorReference):null;
-  const resolvedPeriod=currentPeriod.state==='resolved'?currentPeriod:inheritedPeriod?.state==='resolved'?inheritedPeriod:currentPeriod;
+  const resolvedPeriod=requestContext.period;
   const priorPersonal=priorUser?detectarPropuestaIndividual(priorUser):null;
   const ambiguousPersonContinuation=!!priorPersonal&&followsPrior&&currentPeriod.state==='absent';
   // Preserve explicit own-memory operations separately; never use them as a
@@ -4020,11 +4016,16 @@ export async function llmToolLoop(
       policy={mode:'individual_explicit',verifiedIndividualSelector:binding.binding};workerSource=binding.binding.sourceTable;personalPurpose=binding.purpose;
     }
   }
-  const prepared=construirMensajesModelo({freshSystemWithoutMemories:promptPlanificadorNucleo(fechaBogota(new Date(startedAt)),memoryRequest)+(resolvedPeriod.state==='resolved'?'\nAlcance temporal de la solicitud de usuario validado por el servidor: '+resolvedPeriod.from+' a '+resolvedPeriod.to+'. Vuelve a consultar: no recibiste cifras previas.':''),currentUserText:preguntaCohorte,policy,expected:[],populations:[],maxBytes:64000});
+  // Selector proposals come only from bounded USER scope resolution. They are not
+  // canonical IDs or source facts; the reader must still bind a fresh catalogue.
+  const selectorContext=reference.state==='resolved'?'\nExiste una referencia USER resuelta por el servidor. Propón la operación solicitada sin inventar nombres ni IDs; el lector vinculará los selectores con un catálogo fresco.':'';
+  const prepared=construirMensajesModelo({freshSystemWithoutMemories:promptPlanificadorNucleo(fechaBogota(new Date(startedAt)),memoryRequest)+(resolvedPeriod.state==='resolved'?'\nAlcance temporal de la solicitud de usuario validado por el servidor: '+resolvedPeriod.from+' a '+resolvedPeriod.to+'. Vuelve a consultar: no recibiste cifras previas.':'')+selectorContext,currentUserText:preguntaCohorte,policy,expected:[],populations:[],maxBytes:64000});
   if(!prepared.canRequestModel)throw new Error('Consulta demasiado amplia para enviar de forma segura.');
   messages=prepared.messages;
   const providerBase=messages.map(m=>({...m}));
   const verifiedRetryProtocol:typeof messages=[];
+  const completedVerifiedTexts=new Set<string>();
+  const withCompleted=(text:string)=>[...[...completedVerifiedTexts].filter(done=>!text.includes(done)),text].filter(Boolean).join('\n\n');
 
   if(pideComparacionFechasCohorte(preguntaCohorte)) {
     const unavailable='Necesito un listado reciente y verificable de esas aplicaciones. Vuelve a consultar el período; no tomé identidades del texto del modelo ni amplié la cohorte.';
@@ -4038,7 +4039,8 @@ export async function llmToolLoop(
     const result=await executeTool('get_aplicaciones_ejecucion',args,userId,{pregunta:original,cohorteIds:receipt.ids});
     return {text:compararFechasCohorte(receipt,plan,result,args),toolInteractions:[{tool:'get_aplicaciones_ejecucion',args,result_summary:proyectarLecturaLegada('get_aplicaciones_ejecucion',result)}]};
   }
-  const selectedContext=crearContextoNucleo({question:effectiveQuestion,now:new Date(startedAt),previousUserText:ambiguousPersonContinuation?undefined:priorUser,previousUserAt:ambiguousPersonContinuation?undefined:previousUserEntry?.created_at});
+  const selectedBase=crearContextoNucleo({question:preguntaCohorte,now:new Date(startedAt),previousUserText:ambiguousPersonContinuation?undefined:priorUser,previousUserAt:ambiguousPersonContinuation?undefined:previousUserEntry?.created_at,...(!ambiguousPersonContinuation?{historyUsers}:{} )});
+  const selectedContext=reference.state==='resolved'?{...selectedBase,currentUserText:effectiveQuestion,referencePending:false}:selectedBase;
   const headers = getOpenRouterHeaders();
   const tools = memoryRequest?getToolsForAPI().filter(t=>memoryTools.has(t.function.name)):getToolsForAPI(policy);
   const maxRounds = 3;
@@ -4047,12 +4049,29 @@ export async function llmToolLoop(
   const ultimaPregunta = preguntaCohorte;
   const consultaPartosObligatoria = requiereConsultaPartos(ultimaPregunta);
   const planAplicacion = planRespuestaAplicacion(effectiveQuestion,fechaBogota(new Date(startedAt)));
+  const applicationScopePlan=planRespuestaAplicacion(applicationContext.reference.effectiveQuestion,fechaBogota(new Date(startedAt)));
   const aclaracion=aclaracionPlanAplicacion(planAplicacion);
   // Unsupported syntax is not an early whole-question refusal: resolve structured source operations first.
   void aclaracion;
-  const solicitudAplicacion:SolicitudAplicacion={pregunta:preguntaCohorte,anterior:priorUser};
+  // Fresh binding receives original USER assertions, not concatenated metric
+  // prose or model IDs. It preserves ID conflicts, exclusions and current lots.
+  const solicitudAplicacion:SolicitudAplicacion={pregunta:applicationQuestion||preguntaCohorte,...(applicationContext.reference.state==='resolved'&&applicationContext.anchorQuestion?{referenciaUsuario:{anchorQuestion:applicationContext.anchorQuestion,currentQuestion:applicationQuestion}}:{anterior:priorUser})};
   let descubrimientoAplicacion=false;
   const consultaAplicacionesObligatoria = requiereConsultaAplicaciones(ultimaPregunta) || planAplicacion.tipo === 'aplicacion';
+  const requestedMetrics=requestedApplicationMetrics(preguntaCohorte);
+  const applicationDomain=/\b(?:aplicacion(?:es)?|fumigacion(?:es)?|fertilizacion(?:es)?|drench)\b/.test(normalizarTextoAplicacion(effectiveQuestion))&&!/\baplicacion(?:es)? (?:(?:de|para) )?(?:movil|web|empleo|software|visa)\b/.test(normalizarTextoAplicacion(effectiveQuestion));
+  const requestPurpose=analizarPropositoUsuario(preguntaCohorte);
+  const requiredApplication=applicationDomain&&requestedMetrics.length&&!(requestPurpose.definitions.length&&!requestPurpose.intents.includes('data_query'))?{metrics:requestedMetrics,exclusive:familiasSolicitudUsuario(effectiveQuestion).every(f=>f==='application')}:undefined;
+  const requestedFamilies=requestPurpose.intents.includes('data_query')?familiasSolicitudUsuario(preguntaCohorte):[];
+  // Coverage notices do not grant tools or reads. They keep an unqueried domain
+  // visible rather than certifying a mixed request from only one useful part.
+  const toolFamilies:Record<string,string[]>={get_aplicaciones_ejecucion:['application'],get_application_summary:['application'],get_labor_summary:['labor'],get_weekly_overview:['labor'],get_purchase_history:['purchase'],get_harvest_shipments:['shipment','harvest'],get_climate_data:['climate'],get_radiation_context:['climate'],get_conductivity_data:['conductivity'],get_monitoring_data:['monitoring'],get_inventory_status:['inventory'],get_inventory_movements:['inventory'],get_tareas:['task']};
+  const familyLabels:Record<string,string>={application:'aplicaciones',labor:'trabajo registrado',purchase:'compras',shipment:'despachos',climate:'clima registrado',conductivity:'conductividad',monitoring:'monitoreo',harvest:'cosechas',inventory:'inventario',task:'tareas'};
+  const withPendingDomains=(text:string,interactions:ToolInteraction[])=>{
+    const attempted=new Set(interactions.flatMap(h=>toolFamilies[h.tool]??[]));
+    const missing=requestedFamilies.filter(f=>!attempted.has(f));
+    return text+(missing.length?'\n\nPartes pendientes sin una consulta de su fuente: '+missing.map(f=>familyLabels[f]??f).join(', ')+'. No las sustituí con los datos de otra operación.':'');
+  };
   const fechasPlaneadas = pideFechasPlaneadas(ultimaPregunta);
   const llamadas = new Set<string>();
 
@@ -4103,25 +4122,30 @@ export async function llmToolLoop(
         const tool=call.function?.name==='get_weekly_overview'?'get_labor_summary':call.function?.name;
         if(['get_labor_summary','get_climate_data','get_hato_produccion','get_financial_summary'].includes(tool??'')){
           try{const args=JSON.parse(call.function?.arguments??'{}');
-            if(ambiguousPersonContinuation||resolvedPeriod.state!=='resolved')return [{...call,function:{name:tool,arguments:JSON.stringify({...args,__unresolved_request_scope:true})}}];
-            return [{...call,function:{name:tool,arguments:JSON.stringify({...args,date_from:resolvedPeriod.from,date_to:resolvedPeriod.to})}}];
+            const period=tool==='get_labor_summary'?laborContext.period:resolvedPeriod;
+            if(ambiguousPersonContinuation||period.state!=='resolved')return [{...call,function:{name:tool,arguments:JSON.stringify({...args,__unresolved_request_scope:true})}}];
+            return [{...call,function:{name:tool,arguments:JSON.stringify({...args,date_from:period.from,date_to:period.to})}}];
           }catch{return [call];}
         }
-        if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')&&(currentPeriod.state==='ambiguous'||currentPeriod.state==='invalid'||planAplicacion.tipo==='fuera'&&['periodo_invalido','periodo_no_soportado','periodo_requiere_ano','multiples_periodos_no_soportados','referencia_temporal_no_resuelta'].includes(planAplicacion.motivo)))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];
+        if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')&&(applicationContext.period.state==='ambiguous'||applicationContext.period.state==='invalid'||applicationScopePlan.tipo==='fuera'&&['periodo_invalido','periodo_no_soportado','periodo_requiere_ano','multiples_periodos_no_soportados','referencia_temporal_no_resuelta'].includes(applicationScopePlan.motivo)))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];
         if(['get_aplicaciones_ejecucion','get_application_summary'].includes(tool??'')){try{
           const args=JSON.parse(call.function?.arguments??'{}');
-          if(resolvedPeriod.state==='resolved'){args.date_from=resolvedPeriod.from;args.date_to=resolvedPeriod.to;args.alcance='periodo';}else if(resolvedPeriod.state==='absent'){delete args.date_from;delete args.date_to;args.alcance='actual';}
-          if(args.metric===undefined&&planAplicacion.tipo==='fuera'){const requested=requestedApplicationMetrics(preguntaCohorte);if(requested.length)args.metric=requested;}
-          if(args.metric===undefined&&planAplicacion.tipo==='aplicacion'){const requested=[...(planAplicacion.estado?['status']:[]),...(planAplicacion.fechas?['dates']:[]),...(planAplicacion.consumos?['quantity']:[]),...(planAplicacion.trabajo?['labor']:[]),...(planAplicacion.estimacion?['theoretical']:[])];if(requested.length)args.metric=requested;}
-          if(args.type){const kind=normalizarTextoAplicacion(args.type).trim(),q=normalizarTextoAplicacion(preguntaCohorte);const declared=['fumigacion','fertilizacion','drench'].includes(kind)&&q.split(/[^a-z]+/).some(word=>word===kind||word===kind+'es');if(!declared)delete args.type;else if(new RegExp('(?:sin|excepto|no incluyas) (?:las )?(?:aplicaciones de )?'+kind).test(q))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];}
-          return [{...call,function:{name:tool,arguments:JSON.stringify(argumentosRespuestaAplicacion(planAplicacion,args))}}];
+          const period=applicationContext.period;
+          if(period.state==='resolved'){args.date_from=period.from;args.date_to=period.to;args.alcance='periodo';}else if(period.state==='absent'){delete args.date_from;delete args.date_to;args.alcance='actual';}
+          const metricRequest=reconciliarSolicitudAplicacion(preguntaCohorte,args.metric);
+          if(metricRequest.intent==='unresolved')return [{...call,function:{name:tool,arguments:JSON.stringify({__unrequested_application_parts:true})}}];
+          if(metricRequest.intent==='explicit_user')args.metric=metricRequest.metricsToExecute;
+          else if(args.metric===undefined&&applicationScopePlan.tipo==='aplicacion'){const requested=[...(applicationScopePlan.estado?['status']:[]),...(applicationScopePlan.fechas?['dates']:[]),...(applicationScopePlan.consumos?['quantity']:[]),...(applicationScopePlan.trabajo?['labor']:[]),...(applicationScopePlan.estimacion?['theoretical']:[])];if(requested.length)args.metric=requested;}
+          if(args.type){const kind=normalizarTextoAplicacion(args.type).trim(),q=normalizarTextoAplicacion(applicationQuestion);const declared=['fumigacion','fertilizacion','drench'].includes(kind)&&q.split(/[^a-z]+/).some(word=>word===kind||word===kind+'es');if(!declared)delete args.type;else if(new RegExp('(?:sin|excepto|no incluyas) (?:las )?(?:aplicaciones de )?'+kind).test(q))return [{...call,function:{name:tool,arguments:JSON.stringify({__unresolved_request_scope:true})}}];}
+          return [{...call,function:{name:tool,arguments:JSON.stringify(argumentosRespuestaAplicacion(applicationScopePlan,args))}}];
         }catch{return [call];}}
         return [call];
       });
       const exclude=[...(consultaAplicacionesObligatoria&&!/\b(?:tareas?|labores?|tablero)\b/.test(normalizarTextoAplicacion(preguntaCohorte))?['get_tareas']:[])];
       const sourceCounts=new Map<string,ConteoConsulta>();
       const freshApplicationReads:Array<{raw:string;args:Record<string,unknown>}>=[];
-      const verified=await ejecutarLlamadasVerificadas({calls:canonicalCalls,policy,referenceDay:fechaBogota(new Date(startedAt)),turnStartedAt:startedAt,excludeTools:exclude,port:{
+      const discoveryOnly=canonicalCalls.length===1&&canonicalCalls[0].function?.name==='get_lot_info';
+      const verified=await ejecutarLlamadasVerificadas({calls:canonicalCalls,policy,referenceDay:fechaBogota(new Date(startedAt)),turnStartedAt:startedAt,excludeTools:exclude,...(!discoveryOnly?{requiredApplication}:{}),laborScope:{currentUserText:laborContext.reference.effectiveQuestion,currentRequestText:laborQuestion},port:{
         currentUserText:effectiveQuestion,currentRequestText:preguntaCohorte,
         selected:{context:selectedContext,port:crearPuertoNucleo(selectedContext,{now:()=>new Date().toISOString(),page:async(table,query)=>{const params=new URLSearchParams(query);params.delete('limit');params.delete('offset');const key=table+'?'+params.toString();if(!sourceCounts.has(key))sourceCounts.set(key,{});const counter=sourceCounts.get(key)!;const rows=await supabaseQueryPage(table,query,counter);return {rows:rows as FilaEsco[],total:counter.total??null};}})},
         now:()=>new Date().toISOString(),
@@ -4129,9 +4153,9 @@ export async function llmToolLoop(
         applications:async(args,operation)=>{
           const metrics=operation?.metrics??applicationMetrics(args.metric);
           const clean=applicationReaderArguments(args);
-          if(planAplicacion.tipo==='aplicacion')Object.assign(clean,argumentosRespuestaAplicacion(planAplicacion,clean));
+          if(applicationScopePlan.tipo==='aplicacion')Object.assign(clean,argumentosRespuestaAplicacion(applicationScopePlan,clean));
           if(metrics.includes('status')&&(clean.application_name||clean.application_id))delete clean.estado;
-          if(clean.date_basis==='planned'&&!pideFechasPlaneadas(effectiveQuestion))throw new OperationFailure('outside_scope','scope');
+          if(clean.date_basis==='planned'&&!pideFechasPlaneadas(applicationContext.reference.effectiveQuestion))throw new OperationFailure('outside_scope','scope');
           const raw=JSON.parse(await executeTool('get_aplicaciones_ejecucion',clean,userId,{...solicitudAplicacion,metricas:metrics}));
           if(raw.seleccion_no_resuelta||raw.error==='seleccion_no_resuelta'||raw.seleccion?.estado==='aclarar')throw new OperationFailure('scope_ambiguous','scope');
           if(raw.error){const failure=operationFailure(new Error(typeof raw.error==='string'?raw.error:'source_error'));throw new OperationFailure(failure.code,failure.stage);}
@@ -4144,6 +4168,7 @@ export async function llmToolLoop(
       }});
       if(verified){
         if(verified.retryable&&round+1<maxRounds){
+          if(verified.completedText)completedVerifiedTexts.add(verified.completedText);
           toolInteractions.push(...verified.interactions);
           // The next existing round receives only the typed, minimized result,
           // never the model's factual prose or a raw discovery/source object.
@@ -4155,7 +4180,8 @@ export async function llmToolLoop(
         for(const [i,h] of verified.interactions.entries()){onEvent?.({type:'tool_start',tool:h.tool,index:toolIndex+i,args:h.args});onEvent?.({type:'tool_done',tool:h.tool,index:toolIndex+i,ms:0,ok:!Object.prototype.hasOwnProperty.call(JSON.parse(h.result_summary),'error')});}
         const fresh=freshApplicationReads.length===1?freshApplicationReads[0]:null;
         const cohort=fresh&&verified.parts.every(p=>p.state!=='unavailable')&&JSON.stringify(fresh.raw).length<=24000?capturarCohorteAplicaciones(planAplicacion,fresh.raw,fresh.args,true):null;
-        return {text:verified.text,toolInteractions:[...toolInteractions,...verified.interactions],...(cohort?{cohorteAplicaciones:cohort}:{})};
+        const allInteractions=[...toolInteractions,...verified.interactions];
+        return {text:withPendingDomains(withCompleted(verified.text),allInteractions),toolInteractions:allInteractions,...(cohort?{cohorteAplicaciones:cohort}:{})};
       }
       // Legacy operations retain explicit limits. Never forward their raw objects.
       messages.push(msg);
@@ -4240,10 +4266,10 @@ export async function llmToolLoop(
     }
 
     // No tool calls — return the final text
-    if (planAplicacion.tipo === 'aplicacion') return { text: 'No recibí una consulta fresca verificable de aplicaciones. No puedo responder con cifras del historial o del modelo.', toolInteractions };
+    if (planAplicacion.tipo === 'aplicacion') return { text: withCompleted('No recibí una consulta fresca verificable de aplicaciones. No puedo responder con cifras del historial o del modelo.'), toolInteractions };
     if (consultaAplicacionesObligatoria) {
       const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
-      if (segura) return { text: segura, toolInteractions };
+      if (segura) return { text: withCompleted(segura), toolInteractions };
     }
     if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
       return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos. Precisa el rango de fechas o vuelve a intentar la consulta.', toolInteractions };
@@ -4253,13 +4279,13 @@ export async function llmToolLoop(
     if (typeof msg.content !== 'string' || !msg.content.trim()) {
       throw new Error('No pude completar la consulta: el modelo no devolvió una respuesta de texto. Vuelve a intentar la consulta.');
     }
-    if(toolInteractions.some(h=>!toolResultOk(h.result_summary)))return {text:'No pude verificar las partes pendientes con las fuentes disponibles. No sustituí los datos con estimaciones o historial.',toolInteractions};
-    return { text: memoryRequest?limitarMediosNoVerificados(msg.content):renderizarLecturasLegadas(toolInteractions), toolInteractions };
+    if(toolInteractions.some(h=>!toolResultOk(h.result_summary)))return {text:withCompleted('No pude verificar las partes pendientes con las fuentes disponibles. No sustituí los datos con estimaciones o historial.'),toolInteractions};
+    return { text: withCompleted(memoryRequest?limitarMediosNoVerificados(msg.content):renderizarLecturasLegadas(toolInteractions)), toolInteractions };
   }
 
   if (consultaAplicacionesObligatoria) {
     const segura = respuestaSeguraAplicaciones(toolInteractions, ultimaPregunta);
-    if (segura) return { text: segura, toolInteractions };
+    if (segura) return { text: withCompleted(segura), toolInteractions };
   }
 
   // Fallback: se agotaron las rondas y el modelo sigue pidiendo herramientas.
@@ -4274,7 +4300,7 @@ export async function llmToolLoop(
   if (consultaPartosObligatoria && !evidenciaPartosSuficiente(toolInteractions)) {
     return { text: 'No pude verificar los partos del período solicitado con una consulta completa. No puedo afirmar que no hubo partos.', toolInteractions };
   }
-  if(policy.mode==='aggregate'&&!memoryRequest)return {text:'No pude consolidar evidencia verificable de las partes pendientes. No generé hechos libres al agotar las consultas.',toolInteractions};
+  if(policy.mode==='aggregate'&&!memoryRequest)return {text:withCompleted('No pude consolidar evidencia verificable de las partes pendientes. No generé hechos libres al agotar las consultas.'),toolInteractions};
   const finalRes = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers,

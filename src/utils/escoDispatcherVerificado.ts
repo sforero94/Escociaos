@@ -1,3 +1,4 @@
+import {normalizarArgumentosLabor,requiereCatalogoLabor,resolverLotesLabor,type LoteLabor} from './escoContratoLabor';
 import {applicationMetrics,applicationReaderArguments,requestedApplicationMetrics,OperationFailure,operationFailure,type ApplicationMetric} from './escoOperacionContrato';
 import {particionesMetricasAplicacion,evidenciaMetricaParticion} from './escoAplicacionMetricas';
 import {HERRAMIENTAS_NUCLEO,type ContextoNucleo,type PuertoNucleo} from './escoNucleoComun';
@@ -135,7 +136,8 @@ export async function ejecutarFuenteVerificada(tool:string,args:Record<string,un
  }
  const scopes:Scope[]=[],populations:PopulationProof[]=[],evidence:Evidence[]=[],labels:Record<string,string>={};
  const apps=['get_aplicaciones_ejecucion','get_application_summary'].includes(tool),climate=tool==='get_climate_data';
- const allowed=tool==='get_labor_summary'?['date_from','date_to','reference_day','lote_name','metric']:tool==='get_inventory_status'?['reference_day','product_name','category','metric']:climate?['date_from','date_to','reference_day','metric']:['date_from','date_to','reference_day','date_basis','metric','application_name','application_id','estado','lote_name','alcance','type','selection_basis'];
+ if(tool==='get_labor_summary')args=normalizarArgumentosLabor(args);
+ const allowed=tool==='get_labor_summary'?['date_from','date_to','reference_day','lote_name']:tool==='get_inventory_status'?['reference_day','product_name','category','metric']:climate?['date_from','date_to','reference_day','metric']:['date_from','date_to','reference_day','date_basis','metric','application_name','application_id','estado','lote_name','alcance','type','selection_basis'];
  if(Object.keys(args).some(k=>!allowed.includes(k)))throw Error('outside_scope');
  const appMetrics=apps?applicationMetrics(args.metric):[];
  if(climate&&args.metric&&!['rain','lluvia','precipitation','rainfall','all'].includes(String(args.metric)))throw Error('unsupported_operation');
@@ -144,23 +146,13 @@ export async function ejecutarFuenteVerificada(tool:string,args:Record<string,un
  const requested:Metric[]=apps?args.metric==='status'?['application.status']:args.metric==='date_comparison'?['application.actual_start','application.actual_end','application.planned_start','application.planned_end','application.start_comparison','application.end_comparison']:['application.status','application.actual_start','application.actual_end','application.planned_start','application.planned_end']:climate?['climate.rain','climate.missing_days']:tool==='get_labor_summary'?['labor.journals','labor.cost']:['inventory.count','inventory.stock','inventory.minimum'];
  const result:ResultadoFuente={scopes,populations,evidence,parts:[{id:partId,operation,scopeIds:[],metrics:requested,label:apps?'Aplicaciones registradas':climate?'Lluvia observada por estación':tool==='get_labor_summary'?'Mano de obra registrada por lote':'Inventario registrado'}],labels};
  if(tool==='get_labor_summary'){
-  // No employee filters, compensation, names or observations are requested by this aggregate port.
-  if(args.employee_name||args.worker_name)throw Error('scope_ambiguous');
+  // The aggregate argument contract rejects individual selectors, including null ones.
   const period=dateRange(args);const baseScope:Scope={id:'labor:all',operation:'labor.by_lot',entities:[],period,filters:{}};
   if(!period||!validarScope(baseScope))throw Error('scope_ambiguous');
-  let chosenLots:Array<{id:string;nombre:string}>|null=null;
-  const question=port.currentUserText?normalized(port.currentUserText):'';
-  const explicitLot=/\blotes? (?!del?\b|desde\b|entre\b|en\b|esta\b|este\b|la semana\b|semana\b|hoy\b|ayer\b|anteayer\b|hace\b|mes\b|por\b|sin\b|con\b|y\b|\d)[a-z]/.test(question);
-  if(args.lote_name||explicitLot){
+  let chosenLots:LoteLabor[]|null=null;
+  if(requiereCatalogoLabor(port.currentUserText,args.lote_name)){
    const catalog=await leerFuenteCompleta(port,'lotes','select=id,nombre');
-   if(catalog.rows.some(r=>typeof r.id!=='string'||typeof r.nombre!=='string'))throw Error('scope_ambiguous');
-   const all=catalog.rows as Array<{id:string;nombre:string}>;
-   chosenLots=port.currentUserText?all.filter(l=>mentioned(port.currentUserText!,l.nombre)):[];
-   if(!chosenLots.length&&args.lote_name){
-    if(port.currentUserText&&!mentioned(port.currentUserText,String(args.lote_name)))throw Error('scope_ambiguous');
-    chosenLots=all.filter(l=>normalized(l.nombre)===normalized(String(args.lote_name)));
-   }
-   if(!chosenLots.length||new Set(chosenLots.map(l=>normalized(l.nombre))).size!==chosenLots.length||chosenLots.some(l=>excluded(port.currentUserText??'',l.nombre)))throw Error('scope_ambiguous');
+   chosenLots=resolverLotesLabor(port.currentUserText,args.lote_name,catalog.rows as unknown as LoteLabor[]);
   }
   const lotClause=chosenLots?.length===1?'&lote_id=eq.'+enc(chosenLots[0].id):chosenLots?.length?'&lote_id=in.('+chosenLots.map(l=>enc(l.id)).join(',')+')':'';
   const read=await leerFuenteCompleta(port,'registros_trabajo',`select=${PROYECCION_HECHOS_TRABAJO}&fecha_trabajo=gte.${enc(period.from)}&fecha_trabajo=lte.${enc(period.to)}`+lotClause);

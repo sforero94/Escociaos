@@ -38,5 +38,5 @@ it('accepts exact planned empty zero without inventing physical absence',async()
  const p=port([]);p.source.applications=async()=>({complete:true,rows:[]});const r=await ejecutarFuenteVerificada('get_aplicaciones_ejecucion',{...args,date_basis:'planned'},p.source);const a=componerRespuestaVerificada({...r!,turnStartedAt:now});expect(a.parts[0].state).toBe('answered');expect(a.text).toContain('0');expect(a.text).not.toContain('no hubo actividad');
 });
 it.each(['get_labor_summary','get_climate_data'])('rejects unbound location filters for %s before reading other locations',async tool=>{
- const p=port([]);await expect(ejecutarFuenteVerificada(tool,{...args,finca_name:'Ubicación sintética'},p.source)).rejects.toThrow('outside_scope');expect(p.observed).toEqual([]);
+ const p=port([]);await expect(ejecutarFuenteVerificada(tool,{...args,finca_name:'Ubicación sintética'},p.source)).rejects.toThrow(tool==='get_labor_summary'?'invalid_arguments':'outside_scope');expect(p.observed).toEqual([]);
 });

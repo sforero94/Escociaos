@@ -2,7 +2,7 @@
 import {fechaBogota} from './escoConsultas';
 import {fechaValida} from './escoEvidencia';
 import type {ContextoNucleo} from './escoNucleoComun';
-import {proponerPeriodoSolicitudUsuario,resolverReferenciaSolicitud,tieneReferenciaSolicitud} from './escoReferenciaSolicitud';
+import {proponerPeriodoSolicitudUsuario,resolverContextoSolicitudUsuario,tieneReferenciaSolicitud,type AntecedenteUsuarioSolicitud} from './escoReferenciaSolicitud';
 export {analizarPropositoUsuario} from './escoReferenciaSolicitud';
 const normal=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function proposito(question:string,noun:RegExp,verbs:RegExp):boolean {
@@ -15,12 +15,11 @@ function proposito(question:string,noun:RegExp,verbs:RegExp):boolean {
   return !/(?:sin|omite|excluye|no incluyas|no muestres)\s+(?:(?:mostrar|mencionar|incluir|consultar|listar|revelar|usar)\s+)?(?:(?:los|las|el|la|detalle de|datos de|nombres de|identidades de)\s+)*(?:clientes?|compradores?|proveedor(?:es)?|contrapartes?)/.test(clause);
  });
 }
-export function crearContextoNucleo(input:{question:string;now:Date;previousUserText?:string;previousUserAt?:string;channel?:'web'|'telegram'}):ContextoNucleo {
+export function crearContextoNucleo(input:{question:string;now:Date;previousUserText?:string;previousUserAt?:string;historyUsers?:readonly AntecedenteUsuarioSolicitud[];channel?:'web'|'telegram'}):ContextoNucleo {
  const q=normal(input.question),current=proponerPeriodoSolicitudUsuario(input.question,input.now);
  const follows=tieneReferenciaSolicitud(input.question)||/^\s*[¿]?\s*y\b/i.test(input.question)&&/\b(?:producto|lote|finca|estacion|cliente|proveedor|aplicacion)\s+(?!(?:de|del|en|por|sin)\b)[a-z]/.test(q);
- const previous=input.previousUserText&&input.previousUserAt?proponerPeriodoSolicitudUsuario(input.previousUserText,new Date(input.previousUserAt)):null;
- const reference=resolverReferenciaSolicitud(input);
- const temporal=current.state==='absent'&&follows&&reference.state==='resolved'&&previous?.state==='resolved'?previous:current;
+ const resolved=resolverContextoSolicitudUsuario(input),reference=resolved.reference;
+ const temporal=resolved.period;
  let dateState:ContextoNucleo['dateState']=temporal.state;
  let bounds:ContextoNucleo['bounds'];
  // Preserve the existing one-sided ISO filters. Never invent the opposite bound.
