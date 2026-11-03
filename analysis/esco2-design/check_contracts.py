@@ -18,7 +18,7 @@ OPERACION = REGISTRO["operations"][0]
 
 def esquema_modelo(operacion):
     return {"name": operacion["name"], "description": operacion["description"],
-            "parameters": operacion["parameters"]}
+            "parameters": copy.deepcopy(operacion["parameters"])}
 
 
 def validar(argumentos, operacion=OPERACION):
@@ -38,7 +38,12 @@ class ContratoDiseno(unittest.TestCase):
     def test_argumentos_publicados_validos(self):
         Draft202012Validator.check_schema(OPERACION["parameters"])
         validar(self.argumentos)
-        self.assertIs(esquema_modelo(OPERACION)["parameters"], OPERACION["parameters"])
+        publicado = esquema_modelo(OPERACION)["parameters"]
+        self.assertEqual(publicado, OPERACION["parameters"])
+        self.assertIsNot(publicado, OPERACION["parameters"])
+        publicado["properties"]["grupo"]["enum"].append("empleado")
+        with self.assertRaises(ValidationError):
+            validar(self.argumentos | {"grupo": "empleado"})
 
     def test_fronteras_rechazadas(self):
         variantes = [{"sql": "SELECT * FROM usuarios"}, {"tabla": "fin_gastos"},

@@ -4,6 +4,9 @@ El adaptador de identidad es sintético: sus sujetos NO son tokens verificados.
 No importar desde producto. No acredita RLS ni atomicidad frente a revocaciones.
 """
 from dataclasses import dataclass
+import copy
+import hashlib
+import json
 from typing import Callable
 
 from check_contracts import OPERACION, validar
@@ -31,6 +34,7 @@ class SolicitudLectura:
     incluye_sin_lote: bool
     desde: str
     hasta: str
+    contrato_hash: str
     # Es una solicitud cerrada, nunca SQL/URL/headers del modelo.
     metodo: str = "read"
 
@@ -44,35 +48,44 @@ class FronteraDirecta:
         self._perfil = perfil
         self._propietario = propietario
         self._leer = leer
+        # Serialización inmutable, sin alias al registro global o al esquema del modelo.
+        self._contrato = json.dumps(OPERACION, sort_keys=True, separators=(",", ":"))
+        self._contrato_hash = hashlib.sha256(self._contrato.encode()).hexdigest()
 
-    def _autorizar(self, sujeto, conversacion):
+    def _autorizar(self, sujeto, conversacion, acceso):
         perfil = self._perfil(sujeto)
-        acceso = OPERACION["access"]
-        if (perfil is None or perfil.rol != acceso["role"] or not perfil.activo
+        if (not isinstance(perfil, Perfil) or perfil.rol != acceso["role"]
+                or perfil.activo is not True or type(perfil.permite_sin_lote) is not bool
+                or not isinstance(perfil.lotes, frozenset)
+                or any(type(lote) is not str or not lote.strip() for lote in perfil.lotes)
                 or self._propietario(conversacion) != sujeto):
             raise Denegado("acceso_denegado")
         return perfil
 
     def ejecutar(self, sesion_sintetica, canal, conversacion, operacion, argumentos):
+        contrato = json.loads(self._contrato)
         # Sesión opaca sólo para la prueba; no acepta un subject/role del plan.
         sujeto = self._identidad(sesion_sintetica)
-        if sujeto is None or canal != OPERACION["access"]["channel"]:
+        if type(sujeto) is not str or not sujeto or canal != contrato["access"]["channel"]:
             raise Denegado("acceso_denegado")
-        self._autorizar(sujeto, conversacion)
-        if operacion != OPERACION["name"]:
+        self._autorizar(sujeto, conversacion, contrato["access"])
+        if operacion != contrato["name"]:
             raise Denegado("operacion_no_permitida")
-        validar(argumentos)
+        argumentos_validados = copy.deepcopy(argumentos)
+        validar(argumentos_validados, contrato)
         # El perfil y dueño vigentes se consultan otra vez antes de cada lectura.
-        perfil = self._autorizar(sujeto, conversacion)
-        pedidos = frozenset(argumentos["lotes"])
+        perfil = self._autorizar(sujeto, conversacion, contrato["access"])
+        pedidos = frozenset(argumentos_validados["lotes"])
         if not pedidos.issubset(perfil.lotes):
             raise Denegado("ambito_denegado")
         lotes = pedidos or perfil.lotes
         sin_lote = not pedidos and perfil.permite_sin_lote
         if not lotes and not sin_lote:
             raise Denegado("ambito_denegado")
-        fuente = OPERACION["source"]
+        fuente = contrato["source"]
         solicitud = SolicitudLectura(
             sujeto, conversacion, fuente["table"], tuple(fuente["projection"]),
-            tuple(sorted(lotes)), sin_lote, argumentos["desde"], argumentos["hasta"])
-        return self._leer(solicitud)
+            tuple(sorted(lotes)), sin_lote, argumentos_validados["desde"],
+            argumentos_validados["hasta"], self._contrato_hash)
+        self._leer(solicitud)  # Espía de emisión; su salida no es evidencia ni se devuelve.
+        return solicitud

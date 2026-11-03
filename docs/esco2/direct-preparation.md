@@ -2,7 +2,7 @@
 
 2026-11-03. Scope: independent local synthetic work only. Coordination reports that the real snapshot is blocked because its promised isolation and retention could not be verified. Do not unblock it by copying data, trying another destination, reading credentials or calling a provider. M2/M2.5 remain gated and route acceptance remains explicit.
 
-`analysis/esco2-design/direct_boundary.py` is a disposable design probe, not production code. It builds a fixed read request from the operation registry after synthetic session, current profile, conversation owner and scope checks. It has no JWT parser, service client, SQL, HTTP, database connection, environment-variable access or persistence. The application does not import it.
+`analysis/esco2-design/direct_boundary.py` is a disposable design probe, not production code. It builds a fixed read request from the operation registry after synthetic session, current profile, conversation owner and scope checks. It emits and returns only frozen `SolicitudLectura`; any output from the spy port is discarded, never treated as source evidence. It has no JWT parser, service client, SQL, HTTP, database connection, environment-variable access or persistence. The application does not import it.
 
 Run:
 
@@ -13,7 +13,7 @@ python analysis/esco2-design/check_direct_boundary.py
 
 The second suite checks policy requirements using fake authorities and a spy read port. Rejection must leave the read count unchanged. It covers invalid session/channel/operation, absent/inactive/non-Gerencia profile, foreign conversation, client-supplied identity/table/projection/write method, unauthorized lots, empty authorized scope, explicit permission for unassigned records, revocation between operations, owner/scope changes immediately before a read, and two concurrent actors with disjoint scope. A missing ownership check or an empty-filter interpretation of “all lots” causes these cases to fail.
 
-Verification: 4 registry checks and 11 boundary checks passed locally. An in-memory mutation removed ownership enforcement; the owner-change test failed as required. The original implementation was restored after the mutation, without changing the source file. This discriminates the proposed guard; it is not a live authorization test.
+Verification after independent review: 4 registry checks and 15 boundary checks passed locally (19 total). New cases cover argument mutation after validation, registry mutation during authorization, malformed authority types and rejection of spy-output propagation. These failed against the reviewed revision before correction. The emitter captures its registry as an immutable serialization/hash, uses a private validated argument snapshot, validates authority types strictly and returns only the request. An earlier in-memory mutation removed ownership enforcement; the owner-change test failed as required. This discriminates the proposed guards; it is not a live authorization test. See [review and baseline reconciliation](review-and-baseline.md).
 
 The probe closes a design ambiguity: `lotes=[]` resolves to the current actor's authorized set, never an unrestricted filter. Unassigned records require a separate server authorization flag. An explicit lot filter excludes unassigned records. A SQL/Data API adapter must implement exactly the conjunction of user RLS AND this scope. The proposal does not assert that current production RLS has a farm/lot policy or that the current authorization schema already supplies that set.
 

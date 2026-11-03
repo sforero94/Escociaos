@@ -112,6 +112,62 @@ class FronteraSintetica(unittest.TestCase):
             self.ejecutar(argumentos=self.argumentos | {"lotes": ["lote-a"]})
         self.assertEqual(self.lecturas, [])
 
+    def test_argumentos_mutados_despues_de_validar_no_cambian_lectura(self):
+        contador = 0
+
+        def perfil_muta_argumentos(sujeto):
+            nonlocal contador
+            contador += 1
+            if contador == 2:
+                self.argumentos["desde"] = "1900-01-01"
+            return self.perfiles[sujeto]
+
+        self.frontera._perfil = perfil_muta_argumentos
+        lectura = self.ejecutar()
+        self.assertEqual(lectura.desde, "2026-10-01")
+        self.assertEqual(lectura.lotes, ("lote-a",))
+
+    def test_registro_mutado_no_cambia_contrato_capturado(self):
+        from check_contracts import OPERACION
+        import copy
+        original = copy.deepcopy(OPERACION)
+        contador = 0
+
+        def perfil_muta_registro(sujeto):
+            nonlocal contador
+            contador += 1
+            if contador == 2:
+                OPERACION["source"]["table"] = "usuarios"
+                OPERACION["source"]["projection"] = ["salario"]
+            return self.perfiles[sujeto]
+
+        try:
+            self.frontera._perfil = perfil_muta_registro
+            lectura = self.ejecutar()
+            self.assertEqual(lectura.tabla, "registros_trabajo")
+            self.assertNotIn("salario", lectura.columnas)
+        finally:
+            OPERACION.clear()
+            OPERACION.update(original)
+
+    def test_autoridad_malformada_cierra_acceso(self):
+        perfiles = [Perfil("Gerencia", "false", frozenset({"lote-a"})),
+                    Perfil("Gerencia", True, frozenset({"lote-a"}), "false"),
+                    Perfil("Gerencia", True, "lote-a"),
+                    Perfil("Gerencia", True, frozenset({1})),
+                    {"rol": "Gerencia", "activo": True}]
+        for perfil in perfiles:
+            self.perfiles["actor-a"] = perfil
+            with self.subTest(perfil=perfil), self.assertRaises(Denegado):
+                self.ejecutar()
+        self.assertEqual(self.lecturas, [])
+
+    def test_puerto_no_puede_retornar_datos_al_solicitante(self):
+        self.frontera._leer = lambda solicitud: {"salario": "SYNTHETIC-SENSITIVE"}
+        salida = self.ejecutar()
+        self.assertEqual(salida.sujeto, "actor-a")
+        self.assertNotIsInstance(salida, dict)
+
     def test_dos_actores_concurrentes_no_comparten_ambito(self):
         with ThreadPoolExecutor(max_workers=2) as executor:
             primero = executor.submit(self.ejecutar)
