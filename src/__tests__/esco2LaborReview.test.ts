@@ -55,11 +55,11 @@ describe('labor review: D30 with no registered work', () => {
   it('renders the category estimate even when there are no work rows', () => {
     expect(resultado.estado).toBe('sin_registros');
     const texto = renderDeterminista([resultado]);
-    expect(texto).toContain('no hay registros de trabajo');
+    expect(texto).toContain('No hay registros de trabajo');
     expect(texto).toContain('Jornales estimados');
     expect(texto).toContain('50');
     expect(texto).toContain('plan completo');
-    expect(texto).toContain('1 tarea(s) sin estimado');
+    expect(texto).toContain('Falta el estimado de 1 tarea');
     expect(verificarCifrasObligatorias(texto, [resultado])).toEqual([]);
     expect(verificarNumeros(texto, evidenciaNumerica([resultado], '2026-06-01', '')).ok).toBe(true);
   });
@@ -68,7 +68,7 @@ describe('labor review: D30 with no registered work', () => {
     expect(verificarCifrasObligatorias('No hay registros de trabajo en ese alcance.', [resultado])).toEqual(['jornales estimados (p1): 50']);
   });
 
-  it('recomposes omissions and falls back to an answer with the estimate', async () => {
+  it('P2 renders all estimates directly without composition', async () => {
     const respuesta = (p: Partial<RespuestaLLM>): RespuestaLLM => ({
       texto: '', llamadas: [], uso: { entrada: 1, salida: 1, razonamiento: 0, costoUsd: 0 },
       ms: 0, modelo: 'fake', finishReason: 'stop', ...p,
@@ -86,7 +86,7 @@ describe('labor review: D30 with no registered work', () => {
       config: { nombre: 'test', planificador: { modelo: 'fake', esfuerzo: 'none' }, compositor: { modelo: 'fake', esfuerzo: 'none' } },
     });
     expect(t.origen).toBe('determinista');
-    expect(t.llamadas).toHaveLength(3);
+    expect(t.llamadas).toHaveLength(1);
     expect(t.respuesta).toContain('Jornales estimados');
     expect(t.respuesta).toContain('50');
     expect(verificarCifrasObligatorias(t.respuesta, t.resultados)).toEqual([]);

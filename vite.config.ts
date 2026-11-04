@@ -92,6 +92,9 @@
       // `src/`. Preservados tal cual para restaurar, nunca corridos por la
       // suite activa. Sin este exclude, `vitest run` (sin `test.include`
       // propio) los recoge con su glob por defecto y falla al resolver imports.
-      exclude: [...configDefaults.exclude, 'archive/**'],
+      // P0/P1 is frozen historical evidence. Its runners overwrite result files
+      // and characterize the old runtime; P2 regressions live in src/__tests__.
+      // Private/generated documents are never test discovery inputs.
+      exclude: [...configDefaults.exclude, 'archive/**', 'scripts/esco2/recovery/**', 'docs/**', 'build/**'],
     },
   });

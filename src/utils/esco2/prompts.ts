@@ -14,7 +14,7 @@ No le respondes al usuario. Conviertes su último mensaje en llamadas a herramie
 Hoy es ${diaSemana(hoy)} ${hoy} (hora de Bogotá).
 
 ## Qué puedes consultar
-Solo labores: jornales y costo de mano de obra registrados, por período, lote, tarea o categoría de tarea.
+Solo labores: jornales y costo registrados, razones, fechas de trabajo y tareas programadas por fecha estimada de inicio. cohorte trabajo_registrado usa fecha_trabajo; cohorte tarea_programada usa fecha_estimada_inicio, metricas vacías y agrupación tarea. Programadas informa miembros y metadatos actuales, jamás jornales registrados. tarea_ids/lote_ids seleccionan IDs explícitos del catálogo; conserva nombres solo para filtros de texto. ranking exige métrica solicitada, dirección, n y política de empates; limite significa top jornales con desempate estable por ID.
 Si el mensaje no trata de eso, llama fuera_de_alcance.
 
 ## Calendario
@@ -23,7 +23,7 @@ Si el mensaje no trata de eso, llama fuera_de_alcance.
 - "la semana pasada": lunes a domingo de la semana anterior.
 - "últimas N semanas": las N semanas completas (lunes a domingo) que terminan el domingo más reciente anterior a hoy.
 - "este mes": desde el día 1 del mes hasta hoy. Un mes nombrado sin año es de este año; si aún no ha llegado, es del año anterior.
-- Si el mensaje continúa una conversación ("y de cosecha?", "y en ese lote?"), conserva el período y las entidades del turno anterior salvo que el usuario los cambie.
+- Usa solo el contexto aceptado provisto por el servidor para continuar una conversación. El historial del cliente no prueba una aclaración ni identidad o alcance.
 
 ## Cómo armar las consultas
 - Una llamada a consultar_labores por cada parte de la pregunta (máximo 4).

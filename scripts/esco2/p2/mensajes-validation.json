@@ -1,0 +1,128 @@
+{
+  "version": "p2-mensajes-v1.3",
+  "verifiedAt": "2026-11-04T19:42:26.304580+00:00",
+  "base": "9d3ed18d172108ef7e12f9694bbcf321aa477152",
+  "branch": "codex/esco2-p2-mensajes",
+  "fullTests": {
+    "passed": 7399,
+    "files": 306,
+    "newMessages": 91,
+    "independentMessageQA": 79,
+    "backendMessageUnit": 12,
+    "evidenceWriteGuard": 10,
+    "previousP2": 108
+  },
+  "checks": {
+    "npmTest": 0,
+    "tscNoEmit": 0,
+    "npmRunLint": {
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 907
+    },
+    "productionBuild": 0,
+    "freshDiagnosticPruning": true,
+    "gitDiffCheck": 0
+  },
+  "finalText": {
+    "literalStateExamples": 13,
+    "mutationClassesRejected": 8,
+    "positiveMutationControls": 8,
+    "numberBindingAudit": "exhaustive numeric spans for complete known/table/ranking/D30/multipart outputs, with entity/field/unit/period bindings and independent literals",
+    "freeFormModelComposition": false,
+    "fixturesSha256": "da87f3f57c27c38efd3643161e9153844fa17f2af88be93db7d1b0194a4b1ed8"
+  },
+  "p1Preservation": {
+    "unchangedJsonFiles": 14,
+    "qaEvidenceJsonFiles": 13,
+    "additionalUnchangedFile": "scripts/esco2/recovery/tsconfig.json",
+    "frozenManifestMatchingFiles": 5,
+    "sha256": {
+      "scripts/esco2/recovery/tsconfig.json": "68a25b74b5ff6570d00c663c603c8475939eafd469f2b24d968fae0e37859528",
+      "scripts/esco2/recovery/qa/measurements.json": "62f2d291bf4830cf8ca29683f9b56e424000b0e1521d01210a1c82d8a06f82c9",
+      "scripts/esco2/recovery/qa/results.json": "fae07d00242e75fd6f4dc5eef72d35a6159fdcbf1ede2e957ed7e96d73e3a0bb",
+      "scripts/esco2/recovery/qa/baseline-diagnostics.json": "8a18aa561f06936dcd6988106566f821a7cc90211389aede8ef231ef44d332ad",
+      "scripts/esco2/recovery/qa/final-validation.json": "9ac83da03449e1bc23fd4dc0ec1f7f632b5f4ceb586e39414ae4c95b302bce9c",
+      "scripts/esco2/recovery/qa/freeze.json": "640441a6aa642ed24ceeede099f2ef504e83cd07b6c465e21779208f68a2ebf5",
+      "scripts/esco2/recovery/qa/rls-results.json": "5b949d8b9e26aecd604aca0bfb98f77cf2434a0046e2550c5243fa8c8c45450c",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-16-51-093Z.json": "8b1ad9012ee714ce70aa08056c5854d3bcd3a531f8973c0c8094fe215da83f84",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-18-08-911Z.json": "c0467af8d339b214949539385f10f83527e29648320bdc9ad0e3fa8e2c2ca9a1",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-20-21-208Z.json": "fae07d00242e75fd6f4dc5eef72d35a6159fdcbf1ede2e957ed7e96d73e3a0bb",
+      "scripts/esco2/recovery/qa/iterations/rls-2026-11-04T18-16-51-109Z.json": "37a4f52135c00cc920b2628fbcfd02c8aafdba944403ba7c6ccbd724eb27242e",
+      "scripts/esco2/recovery/qa/iterations/rls-2026-11-04T18-20-21-229Z.json": "5b949d8b9e26aecd604aca0bfb98f77cf2434a0046e2550c5243fa8c8c45450c",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-10-59-230Z.json": "3595af41478cd603e4597d8c39d60d73fa5f23952e36641200c02030c42dfce3",
+      "scripts/esco2/recovery/qa/iterations/rls-2026-11-04T18-18-08-950Z.json": "ebc82d217c4d94442302c1a49cb824eeb7d23be8b748b244275b1a7b849debca"
+    },
+    "intentionalRunnerChanges": [
+      "scripts/esco2/recovery/qa/experiment.test.ts",
+      "scripts/esco2/recovery/qa/rls.test.ts"
+    ],
+    "writeOptIn": "ESCO2_RECOVERY_WRITE=1",
+    "actualEvidenceWritersExecuted": false,
+    "teardownCallbacksTestedWithMockedFilesystem": true
+  },
+  "sourceHashes": {
+    "src/utils/esco2/fuente.ts": "6cf5a30f9836e5b499615223a733495e54c0b8390be767d4ffb83bf2eb23df5e",
+    "src/utils/esco2/ejecutor.ts": "c966b3cef04d8289ab7b827ea8862cc14d56d5dee717b35813dee44919c3bd2e",
+    "src/utils/esco2/mensajes.ts": "741c9b1c9e2c6f40e68be7a96ce14d7b4625f2e1d27dc8c00547d5ee7b76daa7",
+    "src/utils/esco2/estado.ts": "dcd89fde01103cc9dcd1c2de7e224f65899b01a20f7451ad2d6038bf8352c7d4",
+    "src/utils/esco2/guardaNumerica.ts": "95d1d035f54b8287dbe8662ef7e799b1120e78c937012a5625d70df0c6c42044",
+    "src/utils/esco2/evaluacion.ts": "7fb1814f01679180c41ae1d7e640522fec8d8b1242707d36b8e8c90f31e50a5e",
+    "src/utils/esco2/prompts.ts": "216cc715d440012c2a991ec5c44e552a331ad1a0639418dfa349a48038f11a66",
+    "src/utils/esco2/llm.ts": "ac8e5053a133ffa0b3a0f71242810f87acf8c0f5aa16bd3c3f4005254907023e",
+    "src/utils/esco2/fechaCalendario.ts": "fe4645459ee854e2985be705be942bb96354f99e56ff0d32111e499b2bf4310c",
+    "src/utils/esco2/ruteo.ts": "c5f21aeac99fe7f5145ac48ab4d505b4490a109fc4253563ec97b177a367ce6a",
+    "src/utils/esco2/catalogo.ts": "f31d2b786364ebb8de9f78e691d23e633688dba73bea58e0e5d40830bfe24f2e",
+    "src/utils/esco2/nucleo.ts": "35a695d713bd3bd37402d99145907d1cc98fd070e8840add41cd6a32a6d1a1e4",
+    "src/utils/esco2/ambiguedad.ts": "dbefdfc6d63f68fd9bc77daf64cd6015727f3f5f2c5901077a7155d27315cc02",
+    "src/utils/esco2/tipos.ts": "3753125f2d4f4b09ebdf632bfa0299036704fbf68ef136444ab0547eee1416b0",
+    "src/utils/esco2/fechasTexto.ts": "3bd3da16222ac6e0211a40ebdfd0b0a3c066d70c918b0fed817bf6269c209f24",
+    "src/utils/esco2/registro.ts": "1e8d2c5682cad00571799ce2f28c7d130d994c2b45dfd0d84ca0db9ce567f262",
+    "src/utils/esco2/semantica.ts": "46822af8cc88f50983a8214c05066c32bf319cfec6ca1932f9fc2ee4509523eb",
+    "src/utils/format.ts": "ecd0e650713daf157493084a9401f27ec9c101b055504d72e8f8917a3b00d50e",
+    "src/utils/formatPuro.ts": "1335eeecd6c283d651e2ba211cbfbdb47480d3004e8f0363d88d2653591f7756",
+    "src/__tests__/esco2Nucleo.test.ts": "e37b3a5ef61238950cb2de0e4b90e5bdc988747a51d78df3903223234c893af1",
+    "src/__tests__/esco2Mensajes.test.ts": "33beb98bfa9c66c7043e9c32f4949b2e7d20af14467d52ea458c50c85d8955e7",
+    "src/__tests__/esco2P2Security.test.ts": "503426edf9a6b2c29cfe8aa9f6fbb21941f873101d194f897f379632a5f7d45a",
+    "src/__tests__/esco2P2Backend.test.ts": "c58c2b0d5e9ff7cf39729158c2169d37b089bb80fa146740122120a7f422e8cd",
+    "src/__tests__/esco2P2Mutation.test.ts": "f1ade3fdb5378d515b34a38df21692efcac3e51658b70f34df6d97e8a2cbfa0c",
+    "src/__tests__/esco2M3Planificador.test.ts": "a7958e6b59e1fc948b56db89b1c93b5d30dcd3b131dbc0dcfd96d1c784bdfbf5",
+    "src/__tests__/esco2LaborReview.test.ts": "d94b80a017406e720f29f06b58b253786d9694dcfcb50d675879e7d96fe12d49",
+    "src/__tests__/esco2EscoConsultas.test.ts": "27d74e2d90d42b81c46bb69e269c0dae7d7b7bebcccfcded0799e9bc2f28dcf5",
+    "src/__tests__/esco2ArnesRls.ts": "9a63a2b2d1e8891dc1005c3a240d2f3c1693a2f6e1cec8dbed4014ee297cd51e",
+    "src/__tests__/esco2MensajesBackend.test.ts": "465aea2054d0261d2313b695a533f1d1b3e6c349c931892caacdcf1ee1dcb8a9",
+    "src/__tests__/esco2M4Labores.test.ts": "874b667111cb812043f89be58601f6338e9e6b68984569d71fc23a51f21036ea",
+    "src/__tests__/esco2MensajesFixtures.ts": "da87f3f57c27c38efd3643161e9153844fa17f2af88be93db7d1b0194a4b1ed8",
+    "src/__tests__/esco2PostgrestFalso.ts": "6d7784bff31286346c98a0521ee3f3819933c72dc7ccb29b6ac909d67c818632",
+    "src/__tests__/esco2ClientePrueba.test.ts": "5a9517c0414ce944ee0f1ef6fd47b5e8a990093085a6ea3704d5b10b5f513ac9",
+    "src/__tests__/esco2P2Source.test.ts": "95f7395bbac2fac94553880bf6ef02f4c293c18e7e60b3838988d41d049dafc8",
+    "src/__tests__/esco2P2Integration.test.ts": "d01aa2b2cd6af4bd850982309e92f7bed3c4d468974cb71d60e3bbaac0ed3d17",
+    "src/__tests__/esco2MensajesFormato.test.ts": "8ec2b3193020db616b4eaeebd0f91e2cde274c59f8ea21d1d546ef75ac66bdd9",
+    "src/__tests__/esco2MensajesMutaciones.test.ts": "27817a7780ac37981f165b08fe748a9d10e98ee286fb4a3428327928e0456f86",
+    "src/__tests__/esco2RecoveryEvidence.test.ts": "67e02b478ad20a3d7001491b1e3810ece1ae355adcce275e5683db577b7c9ae0",
+    "src/__tests__/esco2P2Harness.ts": "9752d64e7c714d0a2803a90bfef6356089ca81815502937edd015b30c055fa1d",
+    "supabase/functions/esco-consultas/manejador.ts": "e3d86734e3501fff475cef535c425d4eea5847798a4ff86273af4d7d14d0d8c5",
+    "vite.config.ts": "f2cca3397f2ea50f0de0ab940873e19b17a40d77ce5b9c2077af3b7d48304e71",
+    "scripts/esco2/recovery/qa/experiment.test.ts": "4f91cfa4eae29cc87f65d6a89f910189f12728e64fa3f2983e55f47b61da78a6",
+    "scripts/esco2/recovery/qa/rls.test.ts": "9ed0aa343feeff32230e670aca49d81a1704c9b9472a6af0c2168b5bc95360cc"
+  },
+  "developmentFailureResolved": {
+    "check": "hatoFechaLocalGuard",
+    "cause": "unnecessary new timezone conversion literals for already-calendar result dates",
+    "fix": "reuse shared calendar date formatting; no new whitelist or conversion helper"
+  },
+  "authorization": {
+    "publishFeatureBranchAndPR": true,
+    "pushMain": false,
+    "merge": false,
+    "productionPaidCallsMigrationsSecretsDeploy": false,
+    "P3": false
+  },
+  "limits": [
+    "synthetic scripted development regression, not natural-language/product acceptance",
+    "canonical validation does not independently prove arithmetic or planner intent",
+    "ephemeral per-process follow-up state and independent source reads remain explicit",
+    "no production data/model calls, heldout/evaluator access, migration or manual deployment"
+  ],
+  "postCheckWhitespaceOnly": "Removed one trailing space from QA test; token/statement content unchanged."
+}

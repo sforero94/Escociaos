@@ -155,9 +155,9 @@ export function resolverCategorias(textos: string[], datos: DatosLabores): Resol
 /** Resumen del catálogo para el planificador: nombres, sin cifras. */
 export function resumenCatalogo(datos: DatosLabores): { lotes: string[]; categorias: string[]; tipos: string[]; tareas: string[] } {
   return {
-    lotes: datos.lotes.map((l) => l.nombre).sort(),
+    lotes: datos.lotes.map((l) => `${l.nombre} [id:${l.id}]`).sort(),
     categorias: [...new Set(datos.tiposTareas.map((t) => t.categoria).filter((c): c is string => !!c))].sort(),
     tipos: [...new Set(datos.tiposTareas.map((t) => t.nombre.trim()))].sort(),
-    tareas: [...new Set(datos.tareas.map((t) => t.nombre.trim()))].sort(),
+    tareas: datos.tareas.map((t) => `${t.nombre.trim()} [id:${t.id}]`).sort(),
   };
 }

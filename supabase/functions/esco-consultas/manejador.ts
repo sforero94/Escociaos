@@ -13,174 +13,225 @@
 //     tiene políticas `USING (true)` y no excluye sesiones desactivadas.
 //  5. Todas las lecturas de datos usan ese mismo cliente: la RLS aplica a cada una.
 //
-// Conversación: sin estado en el servidor. El cliente envía el historial reciente de
-// su propia conversación; el servidor no guarda nada (persistencia diferida, ver
-// docs/esco2/m3-funcion.md).
-
+// Conversación P2: token opaco ligado al usuario autenticado. El estado efímero
+// vive en un almacén acotado de esta instancia; expirar o cambiar de instancia
+// exige reiniciar el contexto. El historial del cliente no autoriza alcance ni elecciones.
 import { crearClienteOpenRouter, type ClienteLLM } from '../../../src/utils/esco2/llm.ts';
 import { fuenteSupabase, type ClienteDatos, type RespuestaPostgrest } from '../../../src/utils/esco2/fuente.ts';
 import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } from '../../../src/utils/esco2/nucleo.ts';
+import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
+import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
-
 export const NOMBRE_FUNCION = 'esco-consultas';
-
 /** D25: Luna sin razonamiento es la ruta habitual; Sol solo compone planes de varias partes. */
 export const CONFIG_M3: ConfigModelos = {
-  nombre: 'm3',
-  planificador: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
-  compositor: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
-  compositorReforzado: { modelo: 'openai/gpt-6-sol', esfuerzo: 'low' },
+    nombre: 'm3',
+    planificador: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
+    compositor: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
+    compositorReforzado: { modelo: 'openai/gpt-6-sol', esfuerzo: 'low' },
 };
-
 export const MAX_PREGUNTA = 1000;
 export const MAX_HISTORIAL = 12;
 export const MAX_TEXTO_HISTORIAL = 4000;
-
 export interface ClienteUsuario extends ClienteDatos {
-  auth: { getUser(jwt: string): Promise<{ data: { user: { id: string } | null }; error: unknown }> };
+    auth: {
+        getUser(jwt: string): Promise<{
+            data: {
+                user: {
+                    id: string;
+                } | null;
+            };
+            error: unknown;
+        }>;
+    };
 }
-
 export interface Dependencias {
-  env(nombre: string): string | undefined;
-  /** Cliente de Supabase que actúa como el usuario dueño del JWT. */
-  crearClienteUsuario(jwt: string): ClienteUsuario;
-  crearLLM?(apiKey: string): ClienteLLM;
-  ahora?(): Date;
-  registrar?(evento: Record<string, unknown>): void;
+    env(nombre: string): string | undefined;
+    /** Cliente de Supabase que actúa como el usuario dueño del JWT. */
+    crearClienteUsuario(jwt: string): ClienteUsuario;
+    crearLLM?(apiKey: string): ClienteLLM;
+    ahora?(): Date;
+    registrar?(evento: Record<string, unknown>): void;
 }
-
 export const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
 };
-
 function json(estado: number, cuerpo: unknown): Response {
-  return new Response(JSON.stringify(cuerpo), { status: estado, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } });
+    return new Response(JSON.stringify(cuerpo), { status: estado, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } });
 }
-
 /** Fecha calendario de Bogotá (UTC-5, sin horario de verano). Nunca el día UTC. */
 export function fechaBogota(ahora: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
 }
-
 export interface Solicitud {
-  pregunta: string;
-  historial: MensajeHistorial[];
+    pregunta: string;
+    historial: MensajeHistorial[];
+    estadoToken?: string;
+    respuestaAclaracion?: string;
 }
-
-export class ErrorSolicitud extends Error {}
-
+export class ErrorSolicitud extends Error {
+}
 export function validarSolicitud(cuerpo: unknown): Solicitud {
-  if (typeof cuerpo !== 'object' || cuerpo === null || Array.isArray(cuerpo)) throw new ErrorSolicitud('el cuerpo debe ser un objeto JSON');
-  const c = cuerpo as Record<string, unknown>;
-  for (const k of Object.keys(c)) if (k !== 'pregunta' && k !== 'historial') throw new ErrorSolicitud(`campo no admitido: ${k}`);
-  if (typeof c.pregunta !== 'string' || !c.pregunta.trim()) throw new ErrorSolicitud('falta la pregunta');
-  if (c.pregunta.length > MAX_PREGUNTA) throw new ErrorSolicitud(`la pregunta supera ${MAX_PREGUNTA} caracteres`);
-  const historial: MensajeHistorial[] = [];
-  if (c.historial !== undefined) {
-    if (!Array.isArray(c.historial) || c.historial.length > MAX_HISTORIAL) throw new ErrorSolicitud(`historial: lista de máximo ${MAX_HISTORIAL} mensajes`);
-    for (const m of c.historial) {
-      const r = m as Record<string, unknown>;
-      if (typeof m !== 'object' || m === null || (r.rol !== 'user' && r.rol !== 'assistant') || typeof r.texto !== 'string' || r.texto.length > MAX_TEXTO_HISTORIAL) {
-        throw new ErrorSolicitud('historial: cada mensaje es { rol: "user" | "assistant", texto }');
-      }
-      historial.push({ rol: r.rol, texto: r.texto });
+    if (typeof cuerpo !== 'object' || cuerpo === null || Array.isArray(cuerpo))
+        throw new ErrorSolicitud('el cuerpo debe ser un objeto JSON');
+    const c = cuerpo as Record<string, unknown>;
+    for (const k of Object.keys(c))
+        if (!['pregunta', 'historial', 'estadoToken', 'respuestaAclaracion'].includes(k))
+            throw new ErrorSolicitud(`campo no admitido: ${k}`);
+    if (typeof c.pregunta !== 'string' || !c.pregunta.trim())
+        throw new ErrorSolicitud('falta la pregunta');
+    if (c.pregunta.length > MAX_PREGUNTA)
+        throw new ErrorSolicitud(`la pregunta supera ${MAX_PREGUNTA} caracteres`);
+    const historial: MensajeHistorial[] = [];
+    if (c.historial !== undefined) {
+        if (!Array.isArray(c.historial) || c.historial.length > MAX_HISTORIAL)
+            throw new ErrorSolicitud(`historial: lista de máximo ${MAX_HISTORIAL} mensajes`);
+        for (const m of c.historial) {
+            const r = m as Record<string, unknown>;
+            if (typeof m !== 'object' || m === null || (r.rol !== 'user' && r.rol !== 'assistant') || typeof r.texto !== 'string' || r.texto.length > MAX_TEXTO_HISTORIAL) {
+                throw new ErrorSolicitud('historial: cada mensaje es { rol: "user" | "assistant", texto }');
+            }
+            historial.push({ rol: r.rol, texto: r.texto });
+        }
     }
-  }
-  return { pregunta: c.pregunta.trim(), historial };
+    if (c.estadoToken !== undefined && (typeof c.estadoToken !== 'string' || !/^[0-9a-f-]{36}$/.test(c.estadoToken)))
+        throw new ErrorSolicitud('estadoToken inválido');
+    if (c.respuestaAclaracion !== undefined && (typeof c.respuestaAclaracion !== 'string' || c.respuestaAclaracion.length > 80))
+        throw new ErrorSolicitud('respuestaAclaracion inválida');
+    if (c.respuestaAclaracion !== undefined && !c.estadoToken)
+        throw new ErrorSolicitud('la aclaración requiere estadoToken');
+    return { pregunta: c.pregunta.trim(), historial, estadoToken: c.estadoToken as string | undefined, respuestaAclaracion: c.respuestaAclaracion as string | undefined };
 }
-
 function claveAnonima(env: Dependencias['env']): string | undefined {
-  const anon = env('SUPABASE_ANON_KEY');
-  if (anon) return anon;
-  try {
-    const llaves = JSON.parse(env('SUPABASE_PUBLISHABLE_KEYS') ?? '{}') as Record<string, string>;
-    return llaves.default;
-  } catch {
-    return undefined;
-  }
+    const anon = env('SUPABASE_ANON_KEY');
+    if (anon)
+        return anon;
+    try {
+        const llaves = JSON.parse(env('SUPABASE_PUBLISHABLE_KEYS') ?? '{}') as Record<string, string>;
+        return llaves.default;
+    }
+    catch {
+        return undefined;
+    }
 }
-
 /** Exige rol Gerencia y cuenta activa sobre la fila propia, leída con el JWT del usuario. */
-export async function autorizarGerencia(cliente: ClienteUsuario, jwt: string): Promise<{ ok: true; usuarioId: string } | { ok: false; estado: 401 | 403; motivo: string }> {
-  const { data, error } = await cliente.auth.getUser(jwt);
-  const id = data?.user?.id;
-  if (error || !id) return { ok: false, estado: 401, motivo: 'sesión inválida' };
-  const r: RespuestaPostgrest = await cliente.from('usuarios').select('id,rol,activo').eq('id', id);
-  if (r.error) return { ok: false, estado: 403, motivo: 'no se pudo leer el perfil' };
-  const filas = (r.data ?? []) as Array<{ id?: unknown; rol?: unknown; activo?: unknown }>;
-  if (filas.length !== 1 || filas[0].id !== id) return { ok: false, estado: 403, motivo: 'sin perfil' };
-  if (filas[0].activo !== true) return { ok: false, estado: 403, motivo: 'cuenta desactivada' };
-  if (filas[0].rol !== 'Gerencia') return { ok: false, estado: 403, motivo: 'solo gerencia' };
-  return { ok: true, usuarioId: id };
+export async function autorizarGerencia(cliente: ClienteUsuario, jwt: string): Promise<{
+    ok: true;
+    usuarioId: string;
+} | {
+    ok: false;
+    estado: 401 | 403;
+    motivo: string;
+}> {
+    const { data, error } = await cliente.auth.getUser(jwt);
+    const id = data?.user?.id;
+    if (error || !id)
+        return { ok: false, estado: 401, motivo: 'sesión inválida' };
+    const r: RespuestaPostgrest = await cliente.from('usuarios').select('id,rol,activo').eq('id', id);
+    if (r.error)
+        return { ok: false, estado: 403, motivo: 'no se pudo leer el perfil' };
+    const filas = (r.data ?? []) as Array<{
+        id?: unknown;
+        rol?: unknown;
+        activo?: unknown;
+    }>;
+    if (filas.length !== 1 || filas[0].id !== id)
+        return { ok: false, estado: 403, motivo: 'sin perfil' };
+    if (filas[0].activo !== true)
+        return { ok: false, estado: 403, motivo: 'cuenta desactivada' };
+    if (filas[0].rol !== 'Gerencia')
+        return { ok: false, estado: 403, motivo: 'solo gerencia' };
+    return { ok: true, usuarioId: id };
 }
-
 /** Lo que vuelve al cliente: la respuesta, los resultados estructurados y una traza sin texto del modelo. */
 export function cuerpoRespuesta(t: ResultadoTurno, hoy: string) {
-  return {
-    respuesta: t.respuesta,
-    origen: t.origen,
-    hoy,
-    ruta: t.ruta,
-    ajustes: t.ajustes,
-    plan: t.plan,
-    resultados: t.resultados,
-    llamadas: t.llamadas.map((l) => ({ etapa: l.etapa, modelo: l.modelo, ms: l.ms, entrada: l.entrada, salida: l.salida, costoUsd: l.costoUsd })),
-    ms: t.ms,
-  };
+    return {
+        respuesta: t.respuesta,
+        origen: t.origen,
+        hoy,
+        ruta: t.ruta,
+        ajustes: t.ajustes,
+        plan: t.plan,
+        resultados: t.resultados,
+        llamadas: t.llamadas.map((l) => ({ etapa: l.etapa, modelo: l.modelo, ms: l.ms, entrada: l.entrada, salida: l.salida, costoUsd: l.costoUsd })),
+        ms: t.ms,
+    };
 }
-
 export async function manejar(req: Request, deps: Dependencias): Promise<Response> {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  const ruta = new URL(req.url).pathname.replace(/\/+$/, '');
-  if (req.method === 'GET' && ruta.endsWith('/health')) return json(200, { ok: true, funcion: NOMBRE_FUNCION });
-  if (req.method !== 'POST') return json(405, { error: 'método no admitido' });
-
-  const apiKey = deps.env('OPENROUTER_API_KEY');
-  const url = deps.env('SUPABASE_URL');
-  if (!apiKey || !url || !claveAnonima(deps.env)) return json(503, { error: 'Esco 2.0 no está configurado en este entorno' });
-
-  const m = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '');
-  if (!m) return json(401, { error: 'falta el token de sesión' });
-  const jwt = m[1];
-
-  let solicitud: Solicitud;
-  try {
-    solicitud = validarSolicitud(await req.json());
-  } catch (e) {
-    return json(400, { error: e instanceof ErrorSolicitud ? e.message : 'el cuerpo no es JSON válido' });
-  }
-
-  const cliente = deps.crearClienteUsuario(jwt);
-  const acceso = await autorizarGerencia(cliente, jwt);
-  if (!acceso.ok) {
-    deps.registrar?.({ funcion: NOMBRE_FUNCION, evento: 'acceso_denegado', estado: acceso.estado, motivo: acceso.motivo });
-    return json(acceso.estado, { error: acceso.estado === 401 ? 'sesión inválida' : 'Esco 2.0 está disponible solo para gerencia' });
-  }
-
-  const hoy = fechaBogota(deps.ahora?.() ?? new Date());
-  const llm = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco 2.0 esco-consultas')))(apiKey);
-  const turno = await responderTurnoDesdeFuente({
-    pregunta: solicitud.pregunta,
-    historial: solicitud.historial,
-    hoy,
-    fuente: fuenteSupabase(cliente),
-    llm,
-    config: CONFIG_M3,
-  });
-
-  // Traza mínima: sin la pregunta ni la respuesta (datos de la finca), sin ids de filas.
-  deps.registrar?.({
-    funcion: NOMBRE_FUNCION,
-    evento: 'turno',
-    origen: turno.origen,
-    ruta: turno.ruta,
-    partes: turno.plan?.tipo === 'consultas' ? turno.plan.consultas.length : 0,
-    ajustes: turno.ajustes.length,
-    error: turno.errorPlan ? turno.errorPlan.slice(0, 200) : null,
-    ms: turno.ms,
-    costoUsd: turno.llamadas.reduce((s, l) => s + (l.costoUsd ?? 0), 0),
-  });
-  return json(200, cuerpoRespuesta(turno, hoy));
+    if (req.method === 'OPTIONS')
+        return new Response('ok', { headers: CORS });
+    const ruta = new URL(req.url).pathname.replace(/\/+$/, '');
+    if (req.method === 'GET' && ruta.endsWith('/health'))
+        return json(200, { ok: true, funcion: NOMBRE_FUNCION });
+    if (req.method !== 'POST')
+        return json(405, { error: 'método no admitido' });
+    const apiKey = deps.env('OPENROUTER_API_KEY');
+    const url = deps.env('SUPABASE_URL');
+    if (!apiKey || !url || !claveAnonima(deps.env))
+        return json(503, { error: 'Esco 2.0 no está configurado en este entorno' });
+    const m = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '');
+    if (!m)
+        return json(401, { error: 'falta el token de sesión' });
+    const jwt = m[1];
+    let solicitud: Solicitud;
+    try {
+        solicitud = validarSolicitud(await req.json());
+    }
+    catch (e) {
+        return json(400, { error: e instanceof ErrorSolicitud ? e.message : 'el cuerpo no es JSON válido' });
+    }
+    const cliente = deps.crearClienteUsuario(jwt);
+    const acceso = await autorizarGerencia(cliente, jwt);
+    if (!acceso.ok) {
+        deps.registrar?.({ funcion: NOMBRE_FUNCION, evento: 'acceso_denegado', estado: acceso.estado, motivo: acceso.motivo });
+        return json(acceso.estado, { error: acceso.estado === 401 ? 'sesión inválida' : 'Esco 2.0 está disponible solo para gerencia' });
+    }
+    const ahora = deps.ahora?.() ?? new Date();
+    const hoy = fechaBogota(ahora);
+    const estado = solicitud.estadoToken ? leerEstado(solicitud.estadoToken, acceso.usuarioId, ahora.getTime()) : undefined;
+    const avisoEstado: AvisoMensaje | undefined = solicitud.estadoToken && !estado ? 'contexto_no_disponible' : undefined;
+    if (avisoEstado && solicitud.respuestaAclaracion) {
+        const respuestaReset = renderMensaje([], avisoEstado);
+        if (!validarMensajeFinal(respuestaReset, [], avisoEstado))
+            return json(500, { error: mensajeDisposicion('error_datos') });
+        return json(200, { respuesta: respuestaReset, origen: 'aclaracion', hoy, opcionesAclaracion: [], avisoEstado, resultados: [], llamadas: [], ruta: null, ajustes: [], ms: 0, plan: null });
+    }
+    const llm = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco 2.0 esco-consultas')))(apiKey);
+    const turno = await responderTurnoDesdeFuente({
+        pregunta: solicitud.pregunta,
+        estado,
+        respuestaAclaracion: estado ? solicitud.respuestaAclaracion : undefined,
+        historial: solicitud.historial,
+        hoy,
+        fuente: fuenteSupabase(cliente),
+        llm,
+        config: CONFIG_M3,
+    });
+    // Traza mínima: sin la pregunta ni la respuesta (datos de la finca), sin ids de filas.
+    deps.registrar?.({
+        funcion: NOMBRE_FUNCION,
+        evento: 'turno',
+        origen: turno.origen,
+        ruta: turno.ruta,
+        partes: turno.plan?.tipo === 'consultas' ? turno.plan.consultas.length : 0,
+        ajustes: turno.ajustes.length,
+        error: turno.errorPlan ? 'turno_no_completo' : null,
+        ms: turno.ms,
+        costoUsd: turno.llamadas.some(l => l.costoUsd === null) ? null : turno.llamadas.reduce((s, l) => s + (l.costoUsd ?? 0), 0),
+    });
+    const estadoToken = turno.estado ? guardarEstado(acceso.usuarioId, turno.estado, ahora.getTime()) : undefined;
+    const avisoTamano: AvisoMensaje | undefined = turno.estado && !estadoToken ? 'contexto_demasiado_amplio' : undefined;
+    const avisoFinal = avisoTamano ?? avisoEstado;
+    const disposicionesCerradas = ['fuera_de_alcance', 'aclaracion', 'error_plan', 'error_llm', 'error_datos'] as const;
+    const disposicion = disposicionesCerradas.find(d => d === turno.origen);
+    // Factual blocks are canonical for the results. Operational notices and
+    // no-result dispositions are composed only from the two closed registries.
+    const operativa = !turno.resultados.length && avisoFinal && disposicion ? `${mensajeDisposicion(disposicion)}\n\n${renderMensaje([], avisoFinal)}` : undefined;
+    const respuestaFinal = turno.resultados.length ? renderMensaje(turno.resultados, avisoFinal) : operativa ?? turno.respuesta;
+    const valida = turno.resultados.length ? validarMensajeFinal(respuestaFinal, turno.resultados, avisoFinal) : operativa !== undefined ? respuestaFinal === `${mensajeDisposicion(disposicion!)}\n\n${renderMensaje([], avisoFinal)}` : true;
+    if (!valida)
+        return json(500, { error: mensajeDisposicion('error_datos') });
+    return json(200, { ...cuerpoRespuesta(turno, hoy), respuesta: respuestaFinal, estadoToken, opcionesAclaracion: estadoToken ? turno.opcionesAclaracion : undefined, avisoEstado: avisoTamano ?? avisoEstado });
 }

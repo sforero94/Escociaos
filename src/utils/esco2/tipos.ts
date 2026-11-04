@@ -19,6 +19,7 @@ export interface Tarea {
   tipo_tarea_id: string | null;
   jornales_estimados: number | null;
   /** Fechas AAAA-MM-DD planeadas y reales de la tarea. Ausentes (undefined) en snapshots viejos; null = sin fecha. */
+  lote_ids?: string[] | null;
   fecha_estimada_inicio?: string | null;
   fecha_estimada_fin?: string | null;
   fecha_inicio_real?: string | null;
@@ -57,6 +58,7 @@ export interface DatosLabores {
   lotes: Lote[];
   /** Aplicaciones con tarea asociada. Ausente = la fuente no las leyó. */
   aplicaciones?: Aplicacion[];
+  fuente?: { consistencia: 'lecturas_independientes' | 'snapshot_sintetico'; camposNoDisponibles?: string[] };
 }
 
 export type Agrupacion = 'lote' | 'tarea' | 'categoria' | 'tipo_tarea' | 'dia' | 'mes' | 'semana';
@@ -75,6 +77,11 @@ export type SinLote = 'incluir' | 'excluir' | 'solo';
 /** Argumentos validados de la operación `consultar_labores`. */
 export interface ConsultaLabores {
   proposito: string;
+  cohorte?: 'trabajo_registrado' | 'tarea_programada';
+  base_fecha?: 'fecha_trabajo' | 'fecha_estimada_inicio';
+  tarea_ids?: string[];
+  lote_ids?: string[];
+  ranking?: { metrica: Metrica; direccion: 'asc' | 'desc'; n: number; empates: 'incluir' | 'exactamente_n_por_id' };
   desde: string;
   hasta: string;
   lotes: string[];
@@ -124,16 +131,20 @@ export interface DatosTareaFila {
   estado_tarea?: string | null;
   jornales_estimados?: number | null;
   fechas_tarea?: {
-    estimada_inicio: string | null;
-    estimada_fin: string | null;
-    real_inicio: string | null;
-    real_fin: string | null;
+    estimada_inicio?: string | null;
+    estimada_fin?: string | null;
+    real_inicio?: string | null;
+    real_fin?: string | null;
   };
   /** null = la tarea no pertenece a ninguna aplicación (o no es visible para el usuario). */
   aplicacion?: { codigo: string | null; nombre: string | null; estado: string | null } | null;
 }
 
 export interface FilaResultado extends ValoresMetricas, DatosTareaFila {
+  grupo_ids?: Partial<Record<Agrupacion, string>>;
+  fuentes?: string[];
+  asociaciones?: { estado: 'conocido' | 'vacio_verificado' | 'no_disponible'; aplicaciones: { id: string; codigo: string | null; nombre: string | null; estado: string | null }[] };
+  campos_no_disponibles?: string[];
   grupo: Partial<Record<Agrupacion, string>>;
 }
 
@@ -145,6 +156,7 @@ export interface EstimadosCategoria {
   jornales_estimados: number;
   tareas_en_alcance: number;
   tareas_sin_estimado: number;
+  tareas_estimado_no_disponible?: number;
   /** 'toda_la_categoria' o, con filtro de lote, 'tareas_con_registros_en_los_lotes'. */
   base: 'toda_la_categoria' | 'tareas_con_registros_en_los_lotes';
 }
@@ -153,10 +165,14 @@ export interface EstimadosCategoria {
 export interface ResultadoParte {
   id: string;
   proposito: string;
-  estado: 'ok' | 'sin_registros' | 'no_resuelto';
+  aclaracion?: {tipo:'categoria_o_tareas';categoria:string;tareas:string[]};
+  estado: 'ok' | 'sin_registros' | 'no_resuelto' | 'no_disponible';
+  semantica?: { cohorte: 'trabajo_registrado' | 'tarea_programada'; base_fecha: 'fecha_trabajo' | 'fecha_estimada_inicio'; disposicion: 'respondida' | 'fuente_no_disponible' | 'no_soportada' | 'aclaracion'; motivo?: string; miembros: string[]; fuentes: string[]; calificadores: string[] };
   alcance: {
     desde: string;
     hasta: string;
+    lote_ids?: string[];
+    tarea_ids?: string[];
     hasta_recortado_a_hoy: boolean;
     lotes: string[] | 'todos';
     tareas: string[] | 'todas';
@@ -167,6 +183,7 @@ export interface ResultadoParte {
   no_resueltos: NoResuelto[];
   filas: FilaResultado[];
   total: ValoresMetricas;
+  particiones?: {con_lote:ValoresMetricas;sin_lote:ValoresMetricas};
   /** D30: presente siempre que la consulta filtra por categoría de tarea. */
   estimados?: EstimadosCategoria;
   /** Por qué una métrica del total o de una fila es null, en palabras del sistema. */

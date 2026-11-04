@@ -142,7 +142,7 @@ export function puntuarIntento(turno: ResultadoTurno, anclas: Ancla[], opciones:
 
 /** ¿Este turno es la pregunta D26 («puede ser la categoría … o las tareas …»)? */
 export function esAclaracionD26(turno: ResultadoTurno): boolean {
-  return turno.origen === 'aclaracion' && turno.respuesta.includes(MARCA);
+  return turno.origen === 'aclaracion' && (turno.respuesta.includes(MARCA)||turno.respuesta.includes('¿Quieres consultar las tareas')||turno.respuesta.includes('¿Quieres consultar la tarea'));
 }
 
 /**

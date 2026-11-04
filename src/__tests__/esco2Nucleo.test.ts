@@ -162,9 +162,8 @@ describe('registro', () => {
     expect(() => validarPlan(Array.from({ length: 5 }, () => llamada(valido)))).toThrow(/más de 4/);
   });
 
-  it('una aclaración gana sobre las consultas', () => {
-    const p = validarPlan([llamada(valido), { nombre: 'pedir_aclaracion', argumentos: JSON.stringify({ pregunta: '¿Cuál lote?', motivo: 'ambiguo' }) }]);
-    expect(p.tipo).toBe('aclaracion');
+  it('P2 rechaza operaciones mezcladas que omitirían consultas', () => {
+    expect(()=>validarPlan([llamada(valido), { nombre: 'pedir_aclaracion', argumentos: JSON.stringify({ pregunta: '¿Cuál lote?', motivo: 'ambiguo' }) }])).toThrow(ErrorPlan);
   });
 });
 
@@ -213,20 +212,21 @@ describe('recorrido del turno', () => {
   }
   const planValido = { llamadas: [{ nombre: 'consultar_labores', argumentos: JSON.stringify({ proposito: 'total', desde: '2026-05-01', hasta: '2026-05-10', agrupar_por: [], metricas: ['jornales'] }) }] };
 
-  it('publica la respuesta del compositor cuando pasa la guarda', async () => {
+  it('P2 publica hechos deterministas sin llamar al compositor', async () => {
     const llm = falso([planValido, { texto: 'Del 1 al 10 de mayo hubo 3,5 jornales.' }]);
     const t = await responderTurno({ pregunta: 'jornales', historial: [], hoy: '2026-12-31', datos, llm, config });
-    expect(t.origen).toBe('compositor');
-    expect(t.llamadas).toHaveLength(2);
+    expect(t.origen).toBe('determinista');
+    expect(t.llamadas).toHaveLength(1);
   });
 
-  it('tras dos fallos de la guarda publica el resumen determinista, con tres llamadas como máximo', async () => {
+  it('P2 no solicita composición ni recomposición factual', async () => {
     const llm = falso([planValido, { texto: 'Hubo 99 jornales.' }, { texto: 'Fueron 98 jornales.' }]);
     const t = await responderTurno({ pregunta: 'jornales', historial: [], hoy: '2026-12-31', datos, llm, config });
     expect(t.origen).toBe('determinista');
     expect(t.respuesta).toContain('3,5 jornales');
-    expect(t.llamadas).toHaveLength(3);
-    expect(t.guarda).toEqual({ primera: ['99', 'falta: jornales del total (p1): 3.5'], segunda: ['98', 'falta: jornales del total (p1): 3.5'] });
+    expect(t.llamadas).toHaveLength(1);
+    expect(t.guarda).toEqual({ primera: null, segunda: null });
+    expect(t.respuesta).not.toContain('99');
   });
 
   it('un plan inválido no ejecuta nada ni llama al compositor', async () => {
