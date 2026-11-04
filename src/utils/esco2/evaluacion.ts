@@ -14,7 +14,7 @@
 // límites del período consultado). Sin esta regla, una respuesta con el conjunto de fechas
 // equivocado pasaba mientras los números sueltos coincidieran.
 
-import { extraerNumeros, fechaPresente, numeroCerca } from '../escoEvals/numeros.ts';
+import { extraerNumeros, numeroCerca } from '../escoEvals/numeros.ts';
 import { MARCA } from './ambiguedad.ts';
 import { extraerFechas } from './fechasTexto.ts';
 import { normalizar } from './catalogo.ts';
@@ -77,11 +77,16 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
   return f;
 }
 
+/** Yearless dates need the supplied calendar context, never the evaluator's clock. */
+function anioDeContexto(turno: ResultadoTurno, hoy: string | undefined): number {
+  return Number.parseInt((hoy ?? turno.resultados[0]?.alcance.hasta ?? '').slice(0, 4), 10);
+}
+
 /** Fechas que la respuesta afirma y que ninguna ancla de fecha o conjunto cubre. */
 export function fechasDeMas(respuesta: string, anclas: Ancla[], turno: ResultadoTurno, hoy: string | undefined): string[] {
   const anclasFecha = anclas.filter((a) => a.tipo === 'fecha' || a.tipo === 'conjunto');
   if (anclasFecha.length === 0) return [];
-  const anio = hoy ? Number(hoy.slice(0, 4)) : new Date().getUTCFullYear();
+  const anio = anioDeContexto(turno, hoy);
   const aceptadas = fechasDeContexto(turno, hoy);
   for (const a of anclasFecha) {
     for (const m of miembros(a)) if (ES_ISO.test(m)) aceptadas.add(m);
@@ -105,10 +110,13 @@ export function puntuarIntento(turno: ResultadoTurno, anclas: Ancla[], opciones:
     return miembros(a).every((m) => (ES_ISO.test(m) ? textos.includes(m) : textos.some((t) => normalizar(t) === normalizar(m))));
   });
   const numsRespuesta = extraerNumeros(turno.respuesta);
+  // Presence and extra-date checks must interpret dates identically, including both
+  // endpoints of a range. The numeric-anchor helper also accepts bare quantity ranges.
+  const fechasRespuesta = extraerFechas(turno.respuesta, anioDeContexto(turno, opciones.hoy));
   const deMas = fechasDeMas(turno.respuesta, anclas, turno, opciones.hoy);
   const enRespuesta = anclas.map((a) => {
     if (a.tipo === 'numero') return numeroCerca(Number(a.valor), a.tol, numsRespuesta);
-    const todos = miembros(a).every((m) => (ES_ISO.test(m) ? fechaPresente(m, turno.respuesta) : nombrePresente(m, turno.respuesta)));
+    const todos = miembros(a).every((m) => (ES_ISO.test(m) ? fechasRespuesta.has(m) : nombrePresente(m, turno.respuesta)));
     if (!todos) return false;
     if (a.tipo === 'conjunto' && a.universo) {
       const propios = new Set(miembros(a).map(normalizar));

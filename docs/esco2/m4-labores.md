@@ -25,10 +25,9 @@ Sin cambio en `chat.tsx`, `src/supabase/functions/server/`, el bot ni la base de
   (regla 13); la guarda obliga a decirlos. Con filtro de lote, solo cuentan las tareas con registros en
   esos lotes. Las tareas sin estimado se cuentan (`tareas_sin_estimado`), no se vuelven 0.
 - **D29.** «Cosecha» sola se resuelve con la pregunta D26; la cifra llega en el seguimiento.
-  El caso L04 pasó a modo `aclaracion_d26`: turno 1 debe ser esa pregunta, las anclas se puntúan en el
-  último turno. Las anclas son las originales del caso (43,75 / 25,75 / 18, período heredado
-  18–31 de mayo). El «Total ≈ 52,75» de la rúbrica anterior era de mayo completo y no coincidía con
-  sus anclas.
+  La evaluación de desarrollo usa el modo `aclaracion_d26`: turno 1 debe ser esa pregunta, las anclas se puntúan en el
+  último turno. Las anclas y el período heredado permanecen en los archivos privados de desarrollo.
+  La rúbrica anterior usaba un período distinto del de sus anclas; la referencia privada corrige esa diferencia.
 
 ## Scorer exacto (`evaluacion.ts`, `fechasTexto.ts`)
 
@@ -51,13 +50,12 @@ Costo: ninguna llamada nueva; el tope de tres llamadas no cambia.
 
 ## Evidencia
 
-- Suite completa: 293 archivos, 7.152 pruebas verdes. `esco2M4Labores.test.ts`: 51 pruebas nuevas, una por brecha y regla.
+- PR #412, head `4629b033`: 293 archivos, 7.153 pruebas verdes; lint sin errores.
+  `esco2M4Labores.test.ts`: 52 pruebas sintéticas.
 - Runner `m25.ts`, config `m3`, 10 casos × 3 repeticiones, snapshot congelado: **selección 29/30 (97 %),
-  respuesta 29/30**, 0 cifras fuera de evidencia, 0 recomposiciones. El único fallo es L07 (un intento donde el
-  planificador pide aclaración; fallo conocido y seguro de M2.5). Sin regresión por caso: las dos corridas
-  previas del núcleo M3, con las rúbricas anteriores, dieron 23/30 y 24/30 (L04 siempre 0/3 porque su rúbrica
-  premiaba la cifra y no la pregunta D26; L01 y L07 variables). Con las rúbricas nuevas, L04 pasa 3/3 y L06
-  3/3 (ancla nueva de 170 estimados, D30); las otras 8 quedan igual o mejor.
+  respuesta 29/30**, 0 cifras fuera de evidencia, 0 recomposiciones. El único fallo fue una aclaración
+  innecesaria del planificador. Las dos corridas previas del núcleo M3 dieron 23/30 y 24/30 con rúbricas
+  distintas; estos totales no demuestran una mejora pareada bajo la misma rúbrica.
 - `scripts/esco2/m4-sintetico.ts` (datos sintéticos, planificador real): 8 preguntas × 3 = 24/24 con el
   argumento nuevo correcto y la respuesta con las cifras y fechas esperadas.
 - Gasto total: USD 0,065 de 0,50.
@@ -70,3 +68,25 @@ Costo: ninguna llamada nueva; el tope de tres llamadas no cambia.
   no los traen y el campo simplemente no aparece.
 - El snapshot congelado no tiene fechas, aplicaciones ni árboles: las capacidades nuevas se prueban con
   datos sintéticos, no con ese snapshot.
+
+## Revisión local — 2026-11-04
+
+Revisión del head `4629b033` de PR #412, fusionado en `main` como `b075fea`.
+La rama de correcciones parte de ese `main`. Sin cambios en producción.
+
+- **Fechas:** el scorer usaba parsers distintos para presencia y fechas de más. Rechazaba rangos
+  correctos dentro del mismo mes y podía acreditar rangos de cantidades como fechas. Ahora usa
+  `extraerFechas` para ambas comprobaciones, reconoce guiones tipográficos y toma el año del contexto
+  explícito, nunca del reloj del evaluador.
+- **D30 sin registros:** la guarda omitía el estimado de categoría y la respuesta determinista lo
+  descartaba. Ahora la guarda, el prompt y la respuesta determinista conservan el estimado del plan
+  completo aunque no haya registros de trabajo en el período.
+- **Custodia:** este documento y la descripción pública de PR #412 contenían valores de referencia
+  de desarrollo por caso. Las versiones actuales conservan solo agregados; esta corrección no borra
+  los valores ya publicados en el historial de Git.
+- **Evidencia:** las 12 pruebas sintéticas de `esco2LaborReview.test.ts` fallaron antes de las
+  correcciones y pasaron después. Suite final: 294 archivos, 7.165 pruebas; `npm run lint`: 0 errores,
+  907 advertencias preexistentes (idénticas al head revisado); `npm run typecheck`: correcto.
+- **Límites:** sin llamadas a modelos, lecturas de producción ni prueba web/JWT real. No se abrió ni
+  ejecutó el held-out. Tras un despliegue autorizado, el evaluador independiente debe repetir los
+  mismos 50 escenarios (D31) y comunicar solo agregados. Esta revisión no autoriza merge ni deploy.

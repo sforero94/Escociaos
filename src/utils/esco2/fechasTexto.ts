@@ -44,7 +44,7 @@ export function extraerFechas(texto: string, anioPorDefecto: number): Set<string
 
   // «18 de mayo», «18 al 31 de mayo», «22-may», «27 abr», con año opcional.
   const re = new RegExp(
-    `(?<!\\d)(\\d{1,2})(?:\\s*(?:al|a|y|-)\\s*(\\d{1,2}))?\\s*(?:de\\s+|-|/)?\\s*(${MES_RE})\\b\\.?(?:\\s*(?:de(?:l)?\\s+|,\\s*|-)?\\s*(\\d{4})(?!\\d))?`,
+    `(?<!\\d)(\\d{1,2})(?:\\s*(?:al|a|y|[-–—])\\s*(\\d{1,2}))?\\s*(?:de\\s+|-|/)?\\s*(${MES_RE})\\b\\.?(?:\\s*(?:de(?:l)?\\s+|,\\s*|-)?\\s*(\\d{4})(?!\\d))?`,
     'g',
   );
   for (const m of sinIso.matchAll(re)) {

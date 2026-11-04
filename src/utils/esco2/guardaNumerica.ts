@@ -75,7 +75,7 @@ export function verificarNumeros(texto: string, evidencia: EvidenciaNumerica): R
 // lista, desde los resultados, lo que la respuesta tiene que decir como mínimo:
 //   - de cada parte con estado ok: el total de jornales y cada métrica pedida del total que
 //     tenga valor (costo, razones, días, primer y último registro);
-//   - de una consulta por categoría: los jornales estimados.
+//   - de una consulta por categoría: los jornales estimados, incluso sin registros.
 // Un valor null no se exige (no hay cifra que decir; la razón va en `notas`). Un 0 tampoco:
 // "0" y "ninguno" son formas equivalentes de decirlo y no se pueden distinguir con fiabilidad.
 
@@ -89,8 +89,8 @@ export interface CifraObligatoria {
 export function cifrasObligatorias(resultados: ResultadoParte[]): CifraObligatoria[] {
   const cifras: CifraObligatoria[] = [];
   for (const r of resultados) {
-    if (r.estado !== 'ok') continue;
-    const total = r.total as Record<string, unknown>;
+    if (r.estado === 'no_resuelto') continue;
+    const total = (r.estado === 'ok' ? r.total : {}) as Record<string, unknown>;
     for (const [clave, valor] of Object.entries(total)) {
       if (clave === 'porcentaje_jornales') continue;
       if (typeof valor === 'number' && Number.isFinite(valor) && valor !== 0) cifras.push({ parte: r.id, etiqueta: `${clave} del total`, tipo: 'numero', valor });
