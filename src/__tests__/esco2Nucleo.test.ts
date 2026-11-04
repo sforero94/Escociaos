@@ -226,7 +226,7 @@ describe('recorrido del turno', () => {
     expect(t.origen).toBe('determinista');
     expect(t.respuesta).toContain('3,5 jornales');
     expect(t.llamadas).toHaveLength(3);
-    expect(t.guarda).toEqual({ primera: ['99'], segunda: ['98'] });
+    expect(t.guarda).toEqual({ primera: ['99', 'falta: jornales del total (p1): 3.5'], segunda: ['98', 'falta: jornales del total (p1): 3.5'] });
   });
 
   it('un plan inválido no ejecuta nada ni llama al compositor', async () => {

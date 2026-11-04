@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { aplicarReglaDoble, terminoDoble } from '../utils/esco2/ambiguedad.ts';
 import { ErrorDatos, fuenteSupabase } from '../utils/esco2/fuente.ts';
 import type { ClienteLLM, RespuestaLLM, SolicitudLLM } from '../utils/esco2/llm.ts';
-import { rangoDelPlan, responderTurno, responderTurnoDesdeFuente, type ConfigModelos } from '../utils/esco2/nucleo.ts';
+import { rangoDelPlan, renderDeterminista, responderTurno, responderTurnoDesdeFuente, type ConfigModelos } from '../utils/esco2/nucleo.ts';
 import { elegirRuta } from '../utils/esco2/ruteo.ts';
-import type { ConsultaLabores, DatosLabores, Plan } from '../utils/esco2/tipos.ts';
+import type { ConsultaLabores, DatosLabores, Plan, ResultadoParte } from '../utils/esco2/tipos.ts';
 import { clientePostgrestFalso } from './esco2PostgrestFalso.ts';
 
 // Datos 100 % sintéticos.
@@ -136,8 +136,8 @@ function respuesta(p: Partial<RespuestaLLM>, modelo: string): RespuestaLLM {
   return { texto: '', llamadas: [], uso: { entrada: 1, salida: 1, razonamiento: 0, costoUsd: 0 }, ms: 1, modelo, finishReason: 'stop', ...p };
 }
 
-/** El planificador devuelve las consultas dadas; el compositor responde un texto sin cifras. */
-function llmFalso(planes: Array<Array<Partial<ConsultaLabores>>>, textoCompositor = 'Listo.'): ClienteLLM & { solicitudes: SolicitudLLM[] } {
+/** El planificador devuelve las consultas dadas; el compositor responde `textoCompositor` o, sin él, un texto que dice todo lo obligatorio. */
+function llmFalso(planes: Array<Array<Partial<ConsultaLabores>>>, textoCompositor?: string): ClienteLLM & { solicitudes: SolicitudLLM[] } {
   const solicitudes: SolicitudLLM[] = [];
   let i = 0;
   return {
@@ -156,7 +156,9 @@ function llmFalso(planes: Array<Array<Partial<ConsultaLabores>>>, textoComposito
           s.modelo,
         );
       }
-      return respuesta({ texto: textoCompositor }, s.modelo);
+      const ultimo = s.mensajes[s.mensajes.length - 1].content;
+      const resultados = JSON.parse(ultimo.slice(ultimo.indexOf('RESULTADOS:\n') + 'RESULTADOS:\n'.length)) as ResultadoParte[];
+      return respuesta({ texto: textoCompositor ?? renderDeterminista(resultados) }, s.modelo);
     },
   };
 }
@@ -211,6 +213,7 @@ function tablasSinteticas(nRegistros: number): Record<string, Record<string, unk
     tareas: datos.tareas.map((t) => ({ ...t, jornales_estimados: t.jornales_estimados === null ? null : String(t.jornales_estimados) })),
     tipos_tareas: datos.tiposTareas.map((t) => ({ ...t })),
     lotes: datos.lotes.map((l) => ({ ...l })),
+    aplicaciones: [],
   };
 }
 

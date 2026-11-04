@@ -37,6 +37,10 @@ Si el mensaje no trata de eso, llama fuera_de_alcance.
 - Duración o fechas de una labor: métricas primer_registro, ultimo_registro y dias_con_registro.
 - Si preguntan si una tarea terminó o se cerró: agrupa por tarea con incluir_estado_tarea=true y métrica ultimo_registro.
 - Si preguntan cuánto se ha usado frente a lo estimado: agrupa por tarea con incluir_estado_tarea=true.
+- Si preguntan cuándo empezó, terminó o estaba planeada una tarea, o de qué aplicación viene: agrupa por tarea con incluir_estado_tarea=true. Ese modo entrega estado, fechas planeadas y reales, jornales estimados y la aplicación de origen.
+- "Por día" → agrupar_por dia. "Por tipo de tarea" → tipo_tarea (el tipo, ej. Guadaña); "por categoría" → categoria.
+- Jornales por árbol, por hectárea o costo por jornal: pide las métricas jornales_por_arbol, jornales_por_hectarea o costo_por_jornal (el sistema las calcula; tú nunca divides). Las dos primeras son por lote: agrupa por lote o nombra los lotes. Incluye también jornales, y costo si pides costo_por_jornal.
+- En consultas por categoría de tarea el sistema agrega solo los jornales estimados de esas tareas; no los pidas aparte.
 - Pide costo solo si el usuario habla de costo, plata o resumen.
 - Usa pedir_aclaracion solo si no hay forma razonable de armar la consulta sin adivinar.
 
@@ -60,13 +64,20 @@ Recibes la pregunta y RESULTADOS calculados por el sistema. Reglas obligatorias:
 8. No inventes causas que no estén en los datos. Puedes señalar qué tareas concentran los jornales.
 9. Formato colombiano: jornales con coma decimal (239,5); dinero en pesos con punto de miles ($23.904.292). Fechas como "18 de mayo de 2026".
 10. Si cobertura.grupos_mostrados < cobertura.grupos_totales, di que muestras solo los principales.
-11. En cada parte con estado ok, di siempre los jornales del total, aunque la pregunta se centre en otra cosa (fechas, estado).
+11. En cada parte con estado ok, di siempre los jornales del total, aunque la pregunta se centre en otra cosa (fechas, estado). Si el total trae costo, razones o fechas de primer y último registro, di también esas cifras. El sistema revisa que no falte ninguna.
+12. Razones (jornales_por_arbol, jornales_por_hectarea, costo_por_jornal): úsalas tal como vienen, sin recalcular. Si son null, di que no se pueden calcular y explica por qué con notas; nunca pongas 0.
+13. Si hay estimados (consulta por categoría de tarea), di siempre dos cifras rotuladas aparte: «jornales registrados» (el total) y «jornales estimados». El estimado es el plan completo de esas tareas, no solo del período consultado: acláralo. Nunca sumes ni restes un número con el otro, ni uses el estimado para decir que una tarea se pasó o le falta. El estimado no reemplaza al registrado. Si tareas_sin_estimado > 0, dilo.
+14. Fechas de una tarea (fechas_tarea): rotula cada una como planeada (inicio, fin) o real (inicio, fin). null = «sin fecha registrada». No uses los registros de trabajo como fecha de inicio o fin real de la tarea.
+15. aplicacion: si trae datos, di de qué aplicación viene la tarea (nombre, código, estado). Si es null, di que no está asociada a una aplicación.
 Puedes usar una tabla markdown corta. No uses encabezados grandes.`;
 
 export function mensajeCompositor(pregunta: string, hoy: string, resultados: unknown): string {
   return `Hoy: ${hoy}\nPregunta del usuario: ${pregunta}\n\nRESULTADOS:\n${JSON.stringify(resultados)}`;
 }
 
-export function mensajeRecomposicion(noSoportados: string[]): string {
-  return `Tu respuesta contiene cifras que no están en RESULTADOS: ${noSoportados.join(', ')}. Reescríbela usando solo cifras de RESULTADOS, sin calcular cifras nuevas. Si una idea necesita una cifra que no está, quítala.`;
+export function mensajeRecomposicion(noSoportados: string[], faltantes: string[] = []): string {
+  const partes: string[] = [];
+  if (noSoportados.length) partes.push(`Tu respuesta contiene cifras que no están en RESULTADOS: ${noSoportados.join(', ')}. Reescríbela usando solo cifras de RESULTADOS, sin calcular cifras nuevas. Si una idea necesita una cifra que no está, quítala.`);
+  if (faltantes.length) partes.push(`A tu respuesta le faltan cifras obligatorias de RESULTADOS: ${faltantes.join('; ')}. Inclúyelas, rotuladas, sin calcular cifras nuevas.`);
+  return partes.join(' ');
 }
