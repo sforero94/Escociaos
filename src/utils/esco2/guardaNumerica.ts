@@ -3,7 +3,7 @@
 // hoy o la propia pregunta). Un número que no aparece ahí no se publica.
 // Reutiliza el parser de `escoEvals/numeros.ts` (formato colombiano y ambigüedades).
 
-import { extraerTokensNumericos } from '../escoEvals/numeros.ts';
+import { extraerTokensNumericos, fechaPresente } from '../escoEvals/numeros.ts';
 import type { ResultadoParte } from './tipos.ts';
 
 const ISO_GLOBAL = /\b\d{4}-\d{2}-\d{2}\b/g;
@@ -67,4 +67,50 @@ export function verificarNumeros(texto: string, evidencia: EvidenciaNumerica): R
     if (!t.valores.some((v) => soportado(v, evidencia.numeros))) noSoportados.push(t.texto.trim());
   }
   return { ok: noSoportados.length === 0, noSoportados };
+}
+
+// --- Cifras obligatorias ---------------------------------------------------------------
+// La guarda de arriba solo atrapa cifras de más. Una respuesta que omite el total de una
+// parte, o los jornales estimados de una categoría (D30), no inventa nada y pasaba. Aquí se
+// lista, desde los resultados, lo que la respuesta tiene que decir como mínimo:
+//   - de cada parte con estado ok: el total de jornales y cada métrica pedida del total que
+//     tenga valor (costo, razones, días, primer y último registro);
+//   - de una consulta por categoría: los jornales estimados.
+// Un valor null no se exige (no hay cifra que decir; la razón va en `notas`). Un 0 tampoco:
+// "0" y "ninguno" son formas equivalentes de decirlo y no se pueden distinguir con fiabilidad.
+
+export interface CifraObligatoria {
+  parte: string;
+  etiqueta: string;
+  tipo: 'numero' | 'fecha';
+  valor: number | string;
+}
+
+export function cifrasObligatorias(resultados: ResultadoParte[]): CifraObligatoria[] {
+  const cifras: CifraObligatoria[] = [];
+  for (const r of resultados) {
+    if (r.estado !== 'ok') continue;
+    const total = r.total as Record<string, unknown>;
+    for (const [clave, valor] of Object.entries(total)) {
+      if (clave === 'porcentaje_jornales') continue;
+      if (typeof valor === 'number' && Number.isFinite(valor) && valor !== 0) cifras.push({ parte: r.id, etiqueta: `${clave} del total`, tipo: 'numero', valor });
+      if ((clave === 'primer_registro' || clave === 'ultimo_registro') && typeof valor === 'string') cifras.push({ parte: r.id, etiqueta: `${clave} del total`, tipo: 'fecha', valor });
+    }
+    if (r.estimados && r.estimados.jornales_estimados !== 0) {
+      cifras.push({ parte: r.id, etiqueta: 'jornales estimados', tipo: 'numero', valor: r.estimados.jornales_estimados });
+    }
+  }
+  return cifras;
+}
+
+/** Cifras obligatorias que la respuesta no dice. Vacío = no falta ninguna. */
+export function verificarCifrasObligatorias(texto: string, resultados: ResultadoParte[]): string[] {
+  const limpio = texto.replace(ISO_GLOBAL, ' ').replace(/^(\s*)\d{1,2}[.)]\s+/gm, '$1');
+  const dichos = extraerTokensNumericos(limpio).flatMap((t) => t.valores.map((v) => Math.abs(v)));
+  const faltan: string[] = [];
+  for (const c of cifrasObligatorias(resultados)) {
+    const dicho = c.tipo === 'fecha' ? fechaPresente(String(c.valor), texto) : soportado(Number(c.valor), dichos);
+    if (!dicho) faltan.push(`${c.etiqueta} (${c.parte}): ${c.valor}`);
+  }
+  return faltan;
 }

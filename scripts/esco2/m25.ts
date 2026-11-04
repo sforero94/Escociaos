@@ -7,7 +7,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from 'node:path';
 import { crearClienteOpenRouter } from '../../src/utils/esco2/llm.ts';
 import { responderTurno, type ConfigModelos } from '../../src/utils/esco2/nucleo.ts';
-import { puntuarIntento, type Ancla } from '../../src/utils/esco2/evaluacion.ts';
+import { puntuarCaso, type Ancla, type ModoCaso } from '../../src/utils/esco2/evaluacion.ts';
 import type { DatosLabores, MensajeHistorial } from '../../src/utils/esco2/tipos.ts';
 import { leerClaveOpenRouter } from './clave.ts';
 
@@ -33,6 +33,8 @@ interface Caso {
   historial: MensajeHistorial[];
   seguimientos: string[];
   anclas: Ancla[];
+  /** Cómo se puntúa. Sin él: cifras (y alias_inexistente para L09, por compatibilidad). */
+  modo?: ModoCaso;
 }
 
 function arg(nombre: string, porDefecto: string): string {
@@ -90,7 +92,8 @@ async function main(): Promise<void> {
         historial.push({ rol: 'user', texto: pregunta }, { rol: 'assistant', texto: t.respuesta });
         gasto += t.llamadas.reduce((s, l) => s + (l.costoUsd ?? 0), 0);
       }
-      const puntaje = puntuarIntento(turnos[0], caso.anclas, caso.key === 'L09');
+      const modo = caso.modo ?? (caso.key === 'L09' ? 'alias_inexistente' : 'cifras');
+      const puntaje = puntuarCaso(turnos, caso.anclas, { modo, hoy });
       const fila = { etiqueta, config: config.nombre, rep, caso: caso.key, hoy, puntaje, turnos };
       appendFileSync(archivo, JSON.stringify(fila) + '\n');
       const llam = turnos[0].llamadas;
