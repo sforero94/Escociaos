@@ -102,11 +102,9 @@ export function renderDeterminista(resultados: ResultadoParte[]): string {
       );
       continue;
     }
-    if (r.estado === 'sin_registros') {
-      partes.push(`${enc}: no hay registros de trabajo en ese alcance.`);
-      continue;
-    }
-    const lineas = [
+    // D30 estimates describe the full task plan, so they remain relevant even
+    // when this period contains no registered work.
+    const lineas = r.estado === 'sin_registros' ? [`${enc}: no hay registros de trabajo en ese alcance.`] : [
       `${enc}: ${fmtNum(r.total.jornales)} jornales registrados` + (r.total.costo !== undefined ? `, ${fmtNum(r.total.costo, true)}` : '') + fmtRazones(r.total) + '.',
     ];
     if (r.estimados) {
