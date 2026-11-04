@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useMatch } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SafeModeProvider } from './contexts/SafeModeContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -9,6 +9,11 @@ import { RouteErrorBoundary } from './components/shared/RouteErrorBoundary';
 import { Toaster } from './components/ui/sonner';
 import { ChatFAB } from './components/chat/ChatFAB';
 import { Loader2 } from 'lucide-react';
+
+// Local access checks must not ship in the production bundle.
+const Esco2AccessCheck = import.meta.env.DEV
+  ? lazy(() => import('./components/esco2/Esco2AccessCheck').then(m => ({ default: m.Esco2AccessCheck })))
+  : null;
 
 // Route-level lazy imports — named exports
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -229,6 +234,15 @@ function AppContent() {
 
   return (
     <Routes>
+      {import.meta.env.DEV && Esco2AccessCheck ? (
+        <Route path="/esco2-prueba" element={
+          <Suspense fallback={<RouteSpinner />}>
+            <ProtectedRoute fallback={<Login onLoginSuccess={() => { }} />}>
+              <Esco2AccessCheck />
+            </ProtectedRoute>
+          </Suspense>
+        } />
+      ) : null}
       <Route
         path="/login"
         element={
@@ -251,13 +265,20 @@ function AppContent() {
   );
 }
 
+const AppChat = import.meta.env.DEV
+  ? function AppChatLocal() {
+    const pruebaLocal = useMatch('/esco2-prueba');
+    return pruebaLocal ? null : <ChatFAB />;
+  }
+  : ChatFAB;
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <SafeModeProvider>
           <AppContent />
-          <ChatFAB />
+          <AppChat />
           <Toaster />
         </SafeModeProvider>
       </AuthProvider>

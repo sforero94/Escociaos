@@ -933,7 +933,16 @@ acceptance remains open because exploratory findings require separate review. Se
 ## Esco 2.0 update — 2026-11-03
 
 - **New edge function `esco-consultas`** (Esco 2.0 M3, D27), deployed 2026-11-03 as version 1
-  from commit `cc407600`, with `verify_jwt = true` (`supabase/config.toml`). It is separate from
+  from commit `cc407600`; redeployed with Santiago's explicit chat approval on 2026-11-04 as
+  version 2 from clean HEAD `30fb26e5` (deployable source identical to `main` `05963526`, PRs
+  #412/#413). Live metadata: `ACTIVE`, `verify_jwt = true`; anonymous `GET /health` returned
+  401. A real active-Gerencia session returned HTTP 200 with a composed answer through the
+  local test screen on 2026-11-04; a real Administrador session returned HTTP 403 with the
+  function's Gerencia-only message. Independent D31 completed on 2026-11-04 against `05963526`:
+  50 scenarios, 300 attempts; 26 full-rubric passes and 23 attempts with critical failures.
+  Acceptance was rejected. Aggregate report: `docs/esco2/d31-result-2026-11-04.md`.
+  The local `/esco2-prueba` screen is excluded from the production build.
+  The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
   copy), serves only active Gerencia (403 for anyone else), and reads with the caller's JWT so
   RLS applies. It does not import `chat.tsx`, and Telegram does not import it. Contract:
