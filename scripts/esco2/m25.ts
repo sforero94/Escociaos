@@ -9,6 +9,7 @@ import { crearClienteOpenRouter } from '../../src/utils/esco2/llm.ts';
 import { responderTurno, type ConfigModelos } from '../../src/utils/esco2/nucleo.ts';
 import { puntuarIntento, type Ancla } from '../../src/utils/esco2/evaluacion.ts';
 import type { DatosLabores, MensajeHistorial } from '../../src/utils/esco2/tipos.ts';
+import { leerClaveOpenRouter } from './clave.ts';
 
 const PRIVADO = process.env.ESCO2_PRIVADO ?? '/Users/santiagoforero/Codigo/Escociaos/docs/Esco 2.0';
 
@@ -30,13 +31,6 @@ interface Caso {
 function arg(nombre: string, porDefecto: string): string {
   const i = process.argv.indexOf(`--${nombre}`);
   return i >= 0 ? process.argv[i + 1] : porDefecto;
-}
-
-function leerClave(): string {
-  const env = readFileSync(join(PRIVADO, '.env'), 'utf8');
-  const m = /^OPENROUTER_API_KEY\s*=\s*(\S+)/m.exec(env);
-  if (!m) throw new Error('Falta OPENROUTER_API_KEY en docs/Esco 2.0/.env');
-  return m[1].replace(/^["']|["']$/g, '');
 }
 
 function cargarDatos(): DatosLabores {
@@ -68,7 +62,7 @@ async function main(): Promise<void> {
   const { casos } = JSON.parse(readFileSync(join(PRIVADO, 'm1/cases_m25.json'), 'utf8')) as { casos: Caso[] };
   const seleccion = filtro ? casos.filter((c) => filtro.split(',').includes(c.key)) : casos;
   const datos = cargarDatos();
-  const llm = crearClienteOpenRouter(leerClave());
+  const llm = crearClienteOpenRouter(leerClaveOpenRouter());
   const dir = join(PRIVADO, 'm25');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const archivo = join(dir, `${etiqueta}.jsonl`);

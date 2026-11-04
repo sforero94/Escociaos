@@ -60,6 +60,7 @@ Recibes la pregunta y RESULTADOS calculados por el sistema. Reglas obligatorias:
 8. No inventes causas que no estén en los datos. Puedes señalar qué tareas concentran los jornales.
 9. Formato colombiano: jornales con coma decimal (239,5); dinero en pesos con punto de miles ($23.904.292). Fechas como "18 de mayo de 2026".
 10. Si cobertura.grupos_mostrados < cobertura.grupos_totales, di que muestras solo los principales.
+11. En cada parte con estado ok, di siempre los jornales del total, aunque la pregunta se centre en otra cosa (fechas, estado).
 Puedes usar una tabla markdown corta. No uses encabezados grandes.`;
 
 export function mensajeCompositor(pregunta: string, hoy: string, resultados: unknown): string {

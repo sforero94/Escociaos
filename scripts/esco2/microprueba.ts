@@ -2,14 +2,10 @@
 // el esfuerzo de razonamiento pedido y llaman herramientas. Sin datos reales.
 // Uso: node scripts/esco2/microprueba.ts
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { crearClienteOpenRouter, type Esfuerzo } from '../../src/utils/esco2/llm.ts';
+import { leerClaveOpenRouter } from './clave.ts';
 
-const PRIVADO = process.env.ESCO2_PRIVADO ?? '/Users/santiagoforero/Codigo/Escociaos/docs/Esco 2.0';
-const clave = /^OPENROUTER_API_KEY\s*=\s*(\S+)/m.exec(readFileSync(join(PRIVADO, '.env'), 'utf8'))?.[1]?.replace(/^["']|["']$/g, '');
-if (!clave) throw new Error('Falta OPENROUTER_API_KEY');
-const llm = crearClienteOpenRouter(clave);
+const llm = crearClienteOpenRouter(leerClaveOpenRouter());
 
 const herramienta = [
   {
