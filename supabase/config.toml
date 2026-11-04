@@ -2,3 +2,9 @@
 
 [functions.make-server-1ccce916]
 verify_jwt = false
+
+# Esco 2.0 (M3, D27). Solo sesiones de usuario con JWT válido: el gateway rechaza lo demás
+# antes de que arranque el worker. La función además exige Gerencia activa (manejador.ts).
+# Publicar con:  npx supabase functions deploy esco-consultas
+[functions.esco-consultas]
+verify_jwt = true
