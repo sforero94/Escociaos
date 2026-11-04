@@ -941,6 +941,10 @@ acceptance remains open because exploratory findings require separate review. Se
   function's Gerencia-only message. Independent D31 completed on 2026-11-04 against `05963526`:
   50 scenarios, 300 attempts; 26 full-rubric passes and 23 attempts with critical failures.
   Acceptance was rejected. Aggregate report: `docs/esco2/d31-result-2026-11-04.md`.
+  Redeployed 2026-11-04 as **version 3** from clean `main` `f58d36c8` (P2-A labor recovery
+  plus deterministic Spanish answers, PR #415), with Santiago's approval in chat: `ACTIVE`,
+  `verify_jwt = true`, anonymous `/health` 401. D31 rejection still stands; dev-set check and
+  P3 decisions: `docs/esco2/p2-v3-devcheck-y-decisiones-p3.md`.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
