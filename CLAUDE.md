@@ -930,6 +930,26 @@ the web exercise of 30 questions completed on stable v282. Functional Faithfulne
 acceptance remains open because exploratory findings require separate review. See
 `docs/security-review/technical-closeout.md`; this receipt authorizes no action.
 
+## Esco 2.0 update — 2026-11-03
+
+- **New edge function `esco-consultas`** (Esco 2.0 M3, D27), deployed 2026-11-03 as version 1
+  from commit `cc407600`, with `verify_jwt = true` (`supabase/config.toml`). It is separate from
+  `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
+  copy), serves only active Gerencia (403 for anyone else), and reads with the caller's JWT so
+  RLS applies. It does not import `chat.tsx`, and Telegram does not import it. Contract:
+  `docs/esco2/m3-funcion.md`. Deploy with
+  `npx supabase@2.117.0 functions deploy esco-consultas --project-ref ywhtjwawnkeqlwxbvgup --use-api`:
+  Supabase CLI 3.0.0 hung with no output on 2026-11-03. The drift detector watches it
+  (`verify_jwt` true, anonymous `/health` = 401).
+- **Migration 190** `select_lotes_registros_trabajo_activo` — **ESCRITA, SIN APLICAR** (D28).
+  It changes the always-true SELECT policies on `lotes` and `registros_trabajo` to
+  `(SELECT get_user_role()) IS NOT NULL`, so an inactive or profile-less session stops reading
+  and every active role keeps its access. Rehearsed with `po_sonda` (profile-less: 9/3,377 → 0/0;
+  active Gerencia: unchanged). Apply only with Santiago's approval, then update this entry
+  against the live ledger. Evidence: `docs/esco2/m3-rls.md`.
+- Migration 189 (`aplicaciones_productos_alternativos`) is in the live ledger as
+  `20261103001246`; it was applied outside this work and has no entry above yet.
+
 ## Deployment
 
 The app is deployed on **Vercel** with:

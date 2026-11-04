@@ -82,6 +82,28 @@ the database enum.
   `authenticated`), and migration 133 deliberately left SELECT policies out of scope.
 - Column-level privileges were not changed or tested beyond the column lists above.
 
+## D28 follow-up (2026-11-03): migration 190, written and rehearsed, not applied
+
+Santiago decided to close the two policies (D28). Migration
+`src/sql/migrations/190_select_lotes_registros_trabajo_activo.sql` changes both predicates from
+`true` to `(SELECT public.get_user_role()) IS NOT NULL` with `ALTER POLICY`. Since migration
+137, `get_user_role()` is NULL for an inactive or profile-less session and the role for any
+active one, so no role list is needed: Verificador, which reads `lotes` only through this
+policy, keeps its access.
+
+The browser-dependency risk noted above does not apply to this predicate: every active
+account keeps exactly the access it had. Telegram runs as `service_role`, which bypasses RLS.
+
+Rehearsal with `po_sonda` (all rolled back; live policies verified unchanged afterwards):
+
+| Run | `lotes` | `registros_trabajo` | `get_user_role()` |
+|---|---|---|---|
+| Before, profile-less session | 9 | 3,377 | NULL |
+| After, profile-less session | 0 | 0 | NULL |
+| After, active Gerencia session | 9 | 3,377 | Gerencia |
+
+Apply only with Santiago's approval. Order: migration only; no deploy is needed.
+
 ## How to repeat
 
 ```sql
