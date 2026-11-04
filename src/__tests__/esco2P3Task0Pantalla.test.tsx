@@ -21,9 +21,11 @@ vi.mock('react', async importOriginal => {
   };
 });
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: h.user }, profile: { rol: 'Gerencia' } }) }));
-vi.mock('../utils/esco2ClientePrueba', () => ({
+vi.mock('../utils/esco2ClientePrueba', async importOriginal => ({
   ENDPOINT_PRUEBA_ESCO2: 'https://synthetic.example/esco-consultas',
   ejecutarPruebaEsco2: h.ejecutar, cerrarSesionPruebaEsco2: h.cerrar,
+  // Pure helper: keep the real one so the screen's history is exercised as shipped.
+  agregarTurnoHistorial: (await importOriginal<typeof import('../utils/esco2ClientePrueba')>()).agregarTurnoHistorial,
 }));
 import { Esco2AccessCheck } from '../components/esco2/Esco2AccessCheck';
 type Element = { type: unknown; props: Record<string, unknown>; key: string };
@@ -57,6 +59,9 @@ function submit(tree: ReactNode) {
 }
 const options = [{ id: 'tarea', etiqueta: 'La tarea Cosecha' }, { id: 'categoria', etiqueta: 'La categoría Cosecha' }];
 const pending = { http: 200, valida: true, respuesta: 'Elige una opción.', origen: 'aclaracion', estadoToken: 'opaque-a', opcionesAclaracion: options };
+const PREGUNTA_INICIAL = '¿Cuántos jornales se registraron ayer? Sin desglose por persona.';
+// After one valid turn the screen sends that turn, so a follow-up keeps its period.
+const turnoPrevio = [{ rol: 'user', texto: PREGUNTA_INICIAL }, { rol: 'assistant', texto: 'Elige una opción.' }];
 beforeEach(() => {
   h.slots = []; h.cursor = 0; h.user = 'user-a'; mountedKey = '';
   vi.clearAllMocks();
@@ -71,7 +76,7 @@ describe('pantalla: aclaración por opciones exactas', () => {
     for (const option of options) expect(action(tree, option.etiqueta).props.type).toBe('button');
     h.ejecutar.mockResolvedValue({ http: 200, valida: true, respuesta: 'Listo.', origen: 'determinista' });
     await click(tree, 'La categoría Cosecha');
-    expect(h.ejecutar).toHaveBeenLastCalledWith('La categoría Cosecha', 'user-a', expect.any(AbortSignal), { estadoToken: 'opaque-a', respuestaAclaracion: 'categoria' });
+    expect(h.ejecutar).toHaveBeenLastCalledWith('La categoría Cosecha', 'user-a', expect.any(AbortSignal), { estadoToken: 'opaque-a', respuestaAclaracion: 'categoria', historial: turnoPrevio });
     expect(text(render())).not.toContain('La categoría Cosecha');
   });
   it('envía texto libre pendiente con token sin convertirlo a una opción', async () => {
@@ -80,7 +85,7 @@ describe('pantalla: aclaración por opciones exactas', () => {
     const input = nodes(tree).find(e => e.props.id === 'pregunta-esco2')!;
     (input.props.onChange as (e: unknown) => void)({ target: { value: 'la categoría por favor' } });
     await submit(render());
-    expect(h.ejecutar).toHaveBeenLastCalledWith('la categoría por favor', 'user-a', expect.any(AbortSignal), { estadoToken: 'opaque-a' });
+    expect(h.ejecutar).toHaveBeenLastCalledWith('la categoría por favor', 'user-a', expect.any(AbortSignal), { estadoToken: 'opaque-a', historial: turnoPrevio });
   });
   it('desactiva las opciones durante el envío e impide un segundo clic simultáneo', async () => {
     await submit(render());

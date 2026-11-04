@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { ENDPOINT_PRUEBA_ESCO2, cerrarSesionPruebaEsco2, ejecutarPruebaEsco2, type ResultadoPruebaEsco2 } from '../../utils/esco2ClientePrueba';
+import { ENDPOINT_PRUEBA_ESCO2, agregarTurnoHistorial, cerrarSesionPruebaEsco2, ejecutarPruebaEsco2, type MensajePruebaEsco2, type ResultadoPruebaEsco2 } from '../../utils/esco2ClientePrueba';
 
 const PREGUNTA_INICIAL = '¿Cuántos jornales se registraron ayer? Sin desglose por persona.';
 
@@ -24,6 +24,8 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
   const [pregunta, setPregunta] = useState(PREGUNTA_INICIAL);
   const [estado, setEstado] = useState<EstadoPrueba>({ tipo: 'pendiente' });
   const [conversacion, setConversacion] = useState<Pick<ResultadoPruebaEsco2, 'estadoToken' | 'opcionesAclaracion'>>({});
+  // Prior turns, sent so a follow-up keeps its period, lots and tasks. Cleared with the context.
+  const [historial, setHistorial] = useState<MensajePruebaEsco2[]>([]);
   const [errorPregunta, setErrorPregunta] = useState('');
   const [cambiandoCuenta, setCambiandoCuenta] = useState(false);
   const cambioCuenta = useRef(false);
@@ -44,6 +46,7 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
     peticion.current = null;
     setEstado({ tipo: 'pendiente' });
     setConversacion({});
+    setHistorial([]);
     try {
       await cerrarSesionPruebaEsco2();
     } catch {
@@ -59,6 +62,7 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
     peticion.current = null;
     setEstado({ tipo: 'error', mensaje });
     setConversacion({});
+    setHistorial([]);
   }
 
   async function comprobar(evento: FormEvent<HTMLFormElement>) {
@@ -69,6 +73,7 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
   function nuevaConsulta() {
     if (peticion.current || cambioCuenta.current) return;
     setConversacion({});
+    setHistorial([]);
     setEstado({ tipo: 'pendiente' });
     setErrorPregunta('');
     setPregunta(PREGUNTA_INICIAL);
@@ -92,10 +97,12 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
       const resultado = await ejecutarPruebaEsco2(texto, usuarioId, controlador.signal, {
         ...(conversacion.estadoToken ? { estadoToken: conversacion.estadoToken } : {}),
         ...(respuestaAclaracion ? { respuestaAclaracion } : {}),
+        ...(historial.length ? { historial } : {}),
       });
       if (peticion.current === controlador && !controlador.signal.aborted) {
         setEstado({ tipo: 'respuesta', resultado });
         setConversacion(resultado.valida ? { estadoToken: resultado.estadoToken, opcionesAclaracion: resultado.opcionesAclaracion } : {});
+        if (resultado.valida && resultado.respuesta) setHistorial(previo => agregarTurnoHistorial(previo, texto, resultado.respuesta!));
       }
     } catch {
       if (peticion.current === controlador) {
@@ -135,6 +142,7 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
           <div className="flex flex-wrap gap-3">
             <Button type="submit" className="min-h-11" disabled={enCurso || cambiandoCuenta || !pregunta.trim()}>{enCurso ? 'Comprobando…' : 'Comprobar acceso'}</Button>
             <Button type="button" variant="outline" className="min-h-11" disabled={enCurso || cambiandoCuenta} onClick={nuevaConsulta}>Nueva consulta</Button>
+            {historial.length ? <p className="self-center text-sm text-muted-foreground">Conversación en curso: {historial.length / 2} turno(s). «Nueva consulta» la reinicia.</p> : null}
             {enCurso ? <Button type="button" variant="outline" className="min-h-11" onClick={() => cancelar()}>Cancelar</Button> : null}
           </div>
         </form>

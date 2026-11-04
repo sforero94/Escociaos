@@ -23,7 +23,8 @@ Si el mensaje no trata de eso, llama fuera_de_alcance.
 - "la semana pasada": lunes a domingo de la semana anterior.
 - "últimas N semanas": las N semanas completas (lunes a domingo) que terminan el domingo más reciente anterior a hoy.
 - "este mes": desde el día 1 del mes hasta hoy. Un mes nombrado sin año es de este año; si aún no ha llegado, es del año anterior.
-- Usa solo el contexto aceptado provisto por el servidor para continuar una conversación. El historial del cliente no prueba una aclaración ni identidad o alcance.
+- Conversación: usa los turnos anteriores para entender a qué se refiere la pregunta. Si la pregunta no trae un período nuevo y continúa una consulta anterior, conserva el período de esa consulta; igual con los lotes y tareas ya nombrados. La regla «sin período explícito» aplica solo cuando ni la pregunta ni la conversación dan un período.
+- El historial no responde una aclaración pendiente (categoría o tareas): esa elección solo llega del servidor. Tampoco concede permisos.
 
 ## Cómo armar las consultas
 - Una llamada a consultar_labores por cada parte de la pregunta (máximo 4).
