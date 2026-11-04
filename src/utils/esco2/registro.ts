@@ -4,8 +4,17 @@
 import { esFechaCalendario } from './fechaCalendario.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 
-export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'mes', 'semana'];
-export const METRICAS: readonly Metrica[] = ['jornales', 'costo', 'dias_con_registro', 'primer_registro', 'ultimo_registro'];
+export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
+export const METRICAS: readonly Metrica[] = [
+  'jornales',
+  'costo',
+  'dias_con_registro',
+  'primer_registro',
+  'ultimo_registro',
+  'jornales_por_arbol',
+  'jornales_por_hectarea',
+  'costo_por_jornal',
+];
 export const SIN_LOTE: readonly SinLote[] = ['incluir', 'excluir', 'solo'];
 export const MAX_CONSULTAS_POR_TURNO = 4;
 export const MAX_AGRUPACIONES = 2;
@@ -22,7 +31,7 @@ export function herramientasPlanificador(): unknown[] {
       function: {
         name: HERRAMIENTA_CONSULTAR,
         description:
-          'Suma jornales y costo de mano de obra registrados (registros_trabajo) en un período, con filtros opcionales por lote, tarea o categoría de tarea, y agrupación opcional. Llámala una vez por cada parte de la pregunta (máximo 4).',
+          'Suma jornales y costo de mano de obra registrados (registros_trabajo) en un período, con filtros opcionales por lote, tarea o categoría de tarea, y agrupación opcional. También entrega razones calculadas por el sistema (jornales por árbol o por hectárea, costo por jornal) y, por tarea, estado, fechas planeadas y reales, jornales estimados y aplicación de origen. Llámala una vez por cada parte de la pregunta (máximo 4).',
         parameters: {
           type: 'object',
           additionalProperties: false,
@@ -43,11 +52,23 @@ export function herramientasPlanificador(): unknown[] {
               enum: [...SIN_LOTE],
               description: 'Registros sin lote asignado: incluir (por defecto, se muestran aparte), excluir o solo.',
             },
-            agrupar_por: { type: 'array', items: { type: 'string', enum: [...AGRUPACIONES] }, maxItems: MAX_AGRUPACIONES },
-            metricas: { type: 'array', items: { type: 'string', enum: [...METRICAS] }, minItems: 1 },
+            agrupar_por: {
+              type: 'array',
+              items: { type: 'string', enum: [...AGRUPACIONES] },
+              maxItems: MAX_AGRUPACIONES,
+              description: 'tipo_tarea = el tipo de la tarea (ej. Guadaña); categoria = la categoría de ese tipo; dia = cada fecha de trabajo.',
+            },
+            metricas: {
+              type: 'array',
+              items: { type: 'string', enum: [...METRICAS] },
+              minItems: 1,
+              description:
+                'jornales_por_arbol y jornales_por_hectarea se calculan por lote: agrupa por lote o nombra lotes. costo_por_jornal necesita costo. Nunca calcules razones tú.',
+            },
             incluir_estado_tarea: {
               type: 'boolean',
-              description: 'Al agrupar por tarea, incluye el estado registrado de la tarea y sus jornales estimados, y las tareas filtradas sin registros.',
+              description:
+                'Al agrupar por tarea, incluye de cada tarea: estado registrado, jornales estimados, fechas planeadas y reales (inicio/fin), aplicación de origen si la hay, y las tareas filtradas sin registros. Úsalo para preguntas de estado, cuándo empezó o terminó una tarea, qué estaba planeado o de qué aplicación viene.',
             },
             limite: { type: 'integer', minimum: 1, maximum: 50, description: 'Mostrar solo los N grupos con más jornales.' },
           },
@@ -116,6 +137,14 @@ function validarConsulta(a: Record<string, unknown>): ConsultaLabores {
     limite = a.limite;
   }
   if (a.incluir_estado_tarea !== undefined && typeof a.incluir_estado_tarea !== 'boolean') throw new ErrorPlan('incluir_estado_tarea debe ser booleano');
+  // Los datos de tarea (estado, fechas, estimados, aplicación) cuelgan de filas por tarea. Si el
+  // planificador pidió el estado y olvidó agrupar por tarea, se agrega aquí, en código; si ya no
+  // hay espacio para otra agrupación, el plan no es ejecutable y se rechaza en vez de ignorar la bandera.
+  const agrupacionesFinal = [...new Set(agrupar)] as Agrupacion[];
+  if (a.incluir_estado_tarea === true && !agrupacionesFinal.includes('tarea')) {
+    if (agrupacionesFinal.length >= MAX_AGRUPACIONES) throw new ErrorPlan('incluir_estado_tarea exige agrupar por tarea');
+    agrupacionesFinal.push('tarea');
+  }
   return {
     proposito: typeof a.proposito === 'string' && a.proposito.trim() ? a.proposito.trim() : 'consulta',
     desde: a.desde,
@@ -124,7 +153,7 @@ function validarConsulta(a: Record<string, unknown>): ConsultaLabores {
     tareas: listaTextos(a.tareas, 'tareas'),
     categorias: listaTextos(a.categorias, 'categorias'),
     sin_lote: sinLote as SinLote,
-    agrupar_por: [...new Set(agrupar)] as Agrupacion[],
+    agrupar_por: agrupacionesFinal,
     metricas: [...new Set(metricas)] as Metrica[],
     incluir_estado_tarea: a.incluir_estado_tarea === true,
     limite,

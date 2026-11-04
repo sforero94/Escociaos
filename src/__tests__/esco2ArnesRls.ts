@@ -42,9 +42,13 @@ create type estado_tarea as enum ('Banco', 'Programada', 'En Proceso', 'Completa
 create type categoria_tarea as enum ('Mantenimiento del cultivo', 'Cosecha', 'Proyectos Especiales', 'Otras');
 
 create table usuarios (id uuid primary key, rol rol_usuario, activo boolean not null default true);
-create table lotes (id uuid primary key, nombre text not null, activo boolean);
+create table lotes (id uuid primary key, nombre text not null, activo boolean, total_arboles integer, area_hectareas numeric);
 create table tipos_tareas (id uuid primary key, nombre text not null, categoria categoria_tarea, activo boolean);
-create table tareas (id uuid primary key, nombre text not null, estado estado_tarea, tipo_tarea_id uuid, jornales_estimados numeric, lote_id uuid);
+create table tareas (
+  id uuid primary key, nombre text not null, estado estado_tarea, tipo_tarea_id uuid, jornales_estimados numeric, lote_id uuid,
+  fecha_estimada_inicio date, fecha_estimada_fin date, fecha_inicio_real date, fecha_fin_real date
+);
+create table aplicaciones (id uuid primary key, tarea_id uuid, codigo_aplicacion text, nombre_aplicacion text, estado text);
 create table registros_trabajo (
   id uuid primary key, tarea_id uuid not null, lote_id uuid, fecha_trabajo date not null,
   fraccion_jornal fraccion_jornal not null, costo_jornal numeric
@@ -57,13 +61,14 @@ create function public.get_user_role() returns rol_usuario language sql security
 $$;
 grant execute on function public.get_user_role() to anon, authenticated;
 grant usage on schema public to anon, authenticated;
-grant select on usuarios, lotes, tipos_tareas, tareas, registros_trabajo to anon, authenticated;
+grant select on usuarios, lotes, tipos_tareas, tareas, registros_trabajo, aplicaciones to anon, authenticated;
 
 alter table usuarios enable row level security;
 alter table lotes enable row level security;
 alter table tipos_tareas enable row level security;
 alter table tareas enable row level security;
 alter table registros_trabajo enable row level security;
+alter table aplicaciones enable row level security;
 
 -- Políticas SELECT/ALL de producción (2026-11-03), predicados literales.
 create policy "Gerencia acceso total" on usuarios for all to public using ((( SELECT get_user_role() AS get_user_role) = 'Gerencia'::rol_usuario));
@@ -82,6 +87,10 @@ create policy "Administrador read tareas" on tareas for select to authenticated 
 create policy "Gerencia full access on tareas" on tareas for all to authenticated using ((EXISTS ( SELECT 1 FROM usuarios WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = 'Gerencia'::rol_usuario) AND (usuarios.activo = true)))));
 create policy "Verificador read tareas" on tareas for select to authenticated using ((EXISTS ( SELECT 1 FROM usuarios WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = 'Verificador'::rol_usuario) AND (usuarios.activo = true)))));
 
+-- Producción (2026-11-03): aplicaciones solo la lee Administrador o Gerencia; el Verificador no.
+create policy "Administrador puede todo en aplicaciones" on aplicaciones for all to public using ((( SELECT get_user_role() AS get_user_role) = 'Administrador'::rol_usuario));
+create policy "Gerencia acceso total" on aplicaciones for all to public using ((( SELECT get_user_role() AS get_user_role) = 'Gerencia'::rol_usuario));
+
 create policy "Administrador read tipos_tareas" on tipos_tareas for select to authenticated using ((EXISTS ( SELECT 1 FROM usuarios WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = ANY (ARRAY['Administrador'::rol_usuario, 'Gerencia'::rol_usuario])) AND (usuarios.activo = true)))));
 create policy "Gerencia full access on tipos_tareas" on tipos_tareas for all to authenticated using ((EXISTS ( SELECT 1 FROM usuarios WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = 'Gerencia'::rol_usuario) AND (usuarios.activo = true)))));
 create policy "Verificador read tipos_tareas" on tipos_tareas for select to authenticated using ((EXISTS ( SELECT 1 FROM usuarios WHERE ((usuarios.id = ( SELECT auth.uid() AS uid)) AND (usuarios.rol = 'Verificador'::rol_usuario) AND (usuarios.activo = true)))));
@@ -94,14 +103,16 @@ insert into usuarios values
   ('${USUARIOS.verificador}', 'Verificador', true),
   ('${USUARIOS.gerenciaDesactivada}', 'Gerencia', false);
 insert into lotes values
-  ('a0000000-0000-4000-8000-000000000001', '1. Lote Norte', true),
-  ('a0000000-0000-4000-8000-000000000002', '2. Lote Sur', true);
+  ('a0000000-0000-4000-8000-000000000001', '1. Lote Norte', true, 1000, 5),
+  ('a0000000-0000-4000-8000-000000000002', '2. Lote Sur', true, null, null);
 insert into tipos_tareas values
   ('b0000000-0000-4000-8000-000000000001', 'Cosecha', 'Cosecha', true),
   ('b0000000-0000-4000-8000-000000000002', 'Guadaña', 'Mantenimiento del cultivo', true);
 insert into tareas values
-  ('c0000000-0000-4000-8000-000000000001', 'Cosecha fruta temprana', 'En Proceso', 'b0000000-0000-4000-8000-000000000001', 40, null),
-  ('c0000000-0000-4000-8000-000000000002', 'Guadaña general', 'En Proceso', 'b0000000-0000-4000-8000-000000000002', null, null);
+  ('c0000000-0000-4000-8000-000000000001', 'Cosecha fruta temprana', 'En Proceso', 'b0000000-0000-4000-8000-000000000001', 40, null, '2026-05-01', '2026-05-31', '2026-05-02', null),
+  ('c0000000-0000-4000-8000-000000000002', 'Guadaña general', 'En Proceso', 'b0000000-0000-4000-8000-000000000002', null, null, null, null, null, null);
+insert into aplicaciones values
+  ('e0000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-000000000001', 'APL-1', 'Aplicación de prueba', 'Cerrada');
 insert into registros_trabajo
   select
     ('d0000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid,

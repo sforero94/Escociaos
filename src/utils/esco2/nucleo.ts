@@ -6,13 +6,13 @@
 import { aplicarReglaDoble } from './ambiguedad.ts';
 import { resumenCatalogo } from './catalogo.ts';
 import { ejecutarConsulta, SIN_LOTE_ETIQUETA } from './ejecutor.ts';
-import { evidenciaNumerica, verificarNumeros } from './guardaNumerica.ts';
+import { evidenciaNumerica, verificarCifrasObligatorias, verificarNumeros } from './guardaNumerica.ts';
 import type { ClienteLLM, Esfuerzo, MensajeLLM, RespuestaLLM } from './llm.ts';
 import { mensajeCompositor, mensajeRecomposicion, PROMPT_COMPOSITOR, promptPlanificador } from './prompts.ts';
 import { fuenteEnMemoria, type FuenteLabores } from './fuente.ts';
 import { ErrorPlan, herramientasPlanificador, validarPlan } from './registro.ts';
 import { elegirRuta, modeloCompositor, type ModeloEtapa, type Ruta } from './ruteo.ts';
-import type { DatosLabores, MensajeHistorial, Plan, ResultadoParte } from './tipos.ts';
+import type { DatosLabores, MensajeHistorial, Plan, ResultadoParte, ValoresMetricas } from './tipos.ts';
 
 export interface ConfigModelos {
   nombre: string;
@@ -58,17 +58,39 @@ export interface ResultadoTurno {
 
 const MAX_HISTORIAL = 6;
 
+/** Las dos mitades de la guarda: nada de más (cifras sin evidencia) y nada de menos (cifras obligatorias). */
+function verificarRespuesta(texto: string, evidencia: ReturnType<typeof evidenciaNumerica>, resultados: ResultadoParte[]) {
+  const { noSoportados } = verificarNumeros(texto, evidencia);
+  const faltantes = verificarCifrasObligatorias(texto, resultados);
+  return { ok: noSoportados.length === 0 && faltantes.length === 0, noSoportados, faltantes, motivos: [...noSoportados, ...faltantes.map((f) => `falta: ${f}`)] };
+}
+
 function registrar(etapa: RegistroLlamada['etapa'], r: RespuestaLLM): RegistroLlamada {
   return { etapa, modelo: r.modelo, ms: r.ms, ...r.uso };
 }
 
-function fmtNum(n: number | null | undefined, dinero = false): string {
+function fmtNum(n: number | null | undefined, dinero = false, decimales = 2): string {
   if (n === null || n === undefined) return 'sin dato';
-  const s = n.toLocaleString('es-CO', { maximumFractionDigits: dinero ? 0 : 2 });
+  const s = n.toLocaleString('es-CO', { maximumFractionDigits: dinero ? 0 : decimales });
   return dinero ? `$${s}` : s;
 }
 
-/** Respuesta determinista a partir de los resultados. Solo cifras calculadas. */
+function fmtFecha(f: string | null | undefined): string {
+  return f ? f : 'sin fecha registrada';
+}
+
+function fmtRazones(v: ValoresMetricas): string {
+  const p: string[] = [];
+  if (v.jornales_por_arbol !== undefined) p.push(`${fmtNum(v.jornales_por_arbol, false, 4)} jornales por árbol`);
+  if (v.jornales_por_hectarea !== undefined) p.push(`${fmtNum(v.jornales_por_hectarea, false, 3)} jornales por hectárea`);
+  if (v.costo_por_jornal !== undefined) p.push(`${fmtNum(v.costo_por_jornal, true)} por jornal`);
+  if (v.dias_con_registro !== undefined) p.push(`${v.dias_con_registro} días con registro`);
+  if (v.primer_registro !== undefined) p.push(`primer registro ${fmtFecha(v.primer_registro)}`);
+  if (v.ultimo_registro !== undefined) p.push(`último registro ${fmtFecha(v.ultimo_registro)}`);
+  return p.length ? `; ${p.join('; ')}` : '';
+}
+
+/** Respuesta determinista a partir de los resultados. Solo cifras calculadas; dice todo lo obligatorio. */
 export function renderDeterminista(resultados: ResultadoParte[]): string {
   const partes: string[] = [];
   for (const r of resultados) {
@@ -84,11 +106,27 @@ export function renderDeterminista(resultados: ResultadoParte[]): string {
       partes.push(`${enc}: no hay registros de trabajo en ese alcance.`);
       continue;
     }
-    const lineas = [`${enc}: ${fmtNum(r.total.jornales)} jornales` + (r.total.costo !== undefined ? `, ${fmtNum(r.total.costo, true)}` : '') + '.'];
+    const lineas = [
+      `${enc}: ${fmtNum(r.total.jornales)} jornales registrados` + (r.total.costo !== undefined ? `, ${fmtNum(r.total.costo, true)}` : '') + fmtRazones(r.total) + '.',
+    ];
+    if (r.estimados) {
+      lineas.push(
+        `Jornales estimados de esas tareas (plan completo, no solo el período): ${fmtNum(r.estimados.jornales_estimados)}` +
+          (r.estimados.tareas_sin_estimado ? `; ${r.estimados.tareas_sin_estimado} tarea(s) sin estimado.` : '.'),
+      );
+    }
     for (const f of r.filas) {
       const nombre = Object.values(f.grupo).join(' · ');
-      lineas.push(`- ${nombre}: ${fmtNum(f.jornales)} jornales` + (f.costo !== undefined ? `, ${fmtNum(f.costo, true)}` : '') + (f.estado_tarea ? ` (estado: ${f.estado_tarea})` : ''));
+      let linea = `- ${nombre}: ${fmtNum(f.jornales)} jornales registrados` + (f.costo !== undefined ? `, ${fmtNum(f.costo, true)}` : '') + fmtRazones(f);
+      if (f.jornales_estimados !== undefined) linea += `; estimados ${fmtNum(f.jornales_estimados)}`;
+      if (f.estado_tarea) linea += ` (estado: ${f.estado_tarea})`;
+      if (f.fechas_tarea) {
+        linea += `; planeada ${fmtFecha(f.fechas_tarea.estimada_inicio)} a ${fmtFecha(f.fechas_tarea.estimada_fin)}; real ${fmtFecha(f.fechas_tarea.real_inicio)} a ${fmtFecha(f.fechas_tarea.real_fin)}`;
+      }
+      if (f.aplicacion !== undefined) linea += f.aplicacion ? `; aplicación ${[f.aplicacion.nombre, f.aplicacion.codigo].filter(Boolean).join(' ')}` : '; sin aplicación asociada';
+      lineas.push(linea);
     }
+    for (const n of r.notas) lineas.push(`Nota: ${n}.`);
     partes.push(lineas.join('\n'));
   }
   return partes.join('\n\n');
@@ -203,7 +241,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & { fuente: Fuen
     return salida({ ...base, plan, resultados, respuesta: renderDeterminista(resultados), origen: 'determinista', errorPlan: `compositor: ${String(e)}` });
   }
   llamadas.push(registrar('compositor', rComp));
-  const g1 = verificarNumeros(rComp.texto, evidencia);
+  const g1 = verificarRespuesta(rComp.texto, evidencia, resultados);
   if (g1.ok && rComp.texto.trim()) {
     return salida({ ...base, plan, resultados, respuesta: rComp.texto, origen: 'compositor', guarda: { primera: [], segunda: null } });
   }
@@ -213,16 +251,16 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & { fuente: Fuen
     rRe = await llm.completar({
       modelo: compositor.modelo,
       esfuerzo: compositor.esfuerzo,
-      mensajes: [...msgsComp, { role: 'assistant', content: rComp.texto }, { role: 'user', content: mensajeRecomposicion(g1.noSoportados) }],
+      mensajes: [...msgsComp, { role: 'assistant', content: rComp.texto }, { role: 'user', content: mensajeRecomposicion(g1.noSoportados, g1.faltantes) }],
       maxTokens: 1500,
     });
   } catch {
-    return salida({ ...base, plan, resultados, respuesta: renderDeterminista(resultados), origen: 'determinista', guarda: { primera: g1.noSoportados, segunda: null } });
+    return salida({ ...base, plan, resultados, respuesta: renderDeterminista(resultados), origen: 'determinista', guarda: { primera: g1.motivos, segunda: null } });
   }
   llamadas.push(registrar('recomposicion', rRe));
-  const g2 = verificarNumeros(rRe.texto, evidencia);
+  const g2 = verificarRespuesta(rRe.texto, evidencia, resultados);
   if (g2.ok && rRe.texto.trim()) {
-    return salida({ ...base, plan, resultados, respuesta: rRe.texto, origen: 'recomposicion', guarda: { primera: g1.noSoportados, segunda: [] } });
+    return salida({ ...base, plan, resultados, respuesta: rRe.texto, origen: 'recomposicion', guarda: { primera: g1.motivos, segunda: [] } });
   }
   return salida({
     ...base,
@@ -230,7 +268,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & { fuente: Fuen
     resultados,
     respuesta: renderDeterminista(resultados),
     origen: 'determinista',
-    guarda: { primera: g1.noSoportados, segunda: g2.noSoportados },
+    guarda: { primera: g1.motivos, segunda: g2.motivos },
   });
 }
 

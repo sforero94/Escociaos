@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fuenteSupabase } from '../utils/esco2/fuente.ts';
 import type { ClienteLLM, RespuestaLLM, SolicitudLLM } from '../utils/esco2/llm.ts';
+import { renderDeterminista } from '../utils/esco2/nucleo.ts';
+import type { ResultadoParte } from '../utils/esco2/tipos.ts';
 import { fechaBogota, manejar, validarSolicitud, type Dependencias } from '../../supabase/functions/esco-consultas/manejador.ts';
 import { clienteRls, crearBaseRls, jwtSintetico, N_REGISTROS, USUARIOS, type Traza } from './esco2ArnesRls.ts';
 
@@ -47,7 +49,10 @@ function llmFalso(): ClienteLLM & { solicitudes: SolicitudLLM[] } {
           s.modelo,
         );
       }
-      return r({ texto: 'Listo.' }, s.modelo);
+      // Un compositor honesto: dice lo que RESULTADOS trae (la guarda exige las cifras obligatorias).
+      const ultimo = s.mensajes[s.mensajes.length - 1].content;
+      const resultados = JSON.parse(ultimo.slice(ultimo.indexOf('RESULTADOS:\n') + 'RESULTADOS:\n'.length)) as ResultadoParte[];
+      return r({ texto: renderDeterminista(resultados) }, s.modelo);
     },
   };
 }

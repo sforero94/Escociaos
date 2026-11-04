@@ -12,9 +12,9 @@
 //    con datos recortados.
 //  - El cliente se crea con el JWT del usuario: RLS aplica a cada lectura.
 
-import type { DatosLabores, Lote, RegistroTrabajo, Tarea, TipoTarea } from './tipos.ts';
+import type { Aplicacion, DatosLabores, Lote, RegistroTrabajo, Tarea, TipoTarea } from './tipos.ts';
 
-export type CatalogoLabores = Pick<DatosLabores, 'tareas' | 'tiposTareas' | 'lotes'>;
+export type CatalogoLabores = Pick<DatosLabores, 'tareas' | 'tiposTareas' | 'lotes' | 'aplicaciones'>;
 
 export interface FuenteLabores {
   catalogo(): Promise<CatalogoLabores>;
@@ -27,7 +27,7 @@ export class ErrorDatos extends Error {}
 export function fuenteEnMemoria(datos: DatosLabores): FuenteLabores {
   return {
     async catalogo() {
-      return { tareas: datos.tareas, tiposTareas: datos.tiposTareas, lotes: datos.lotes };
+      return { tareas: datos.tareas, tiposTareas: datos.tiposTareas, lotes: datos.lotes, aplicaciones: datos.aplicaciones ?? [] };
     },
     async registros(desde, hasta) {
       return datos.registros.filter((r) => r.fecha_trabajo >= desde && r.fecha_trabajo <= hasta);
@@ -58,9 +58,10 @@ export interface ClienteDatos {
 
 export const COLUMNAS = {
   registros_trabajo: 'id,tarea_id,lote_id,fecha_trabajo,fraccion_jornal,costo_jornal',
-  tareas: 'id,nombre,estado,tipo_tarea_id,jornales_estimados',
+  tareas: 'id,nombre,estado,tipo_tarea_id,jornales_estimados,fecha_estimada_inicio,fecha_estimada_fin,fecha_inicio_real,fecha_fin_real',
   tipos_tareas: 'id,nombre,categoria',
-  lotes: 'id,nombre,activo',
+  lotes: 'id,nombre,activo,total_arboles,area_hectareas',
+  aplicaciones: 'id,tarea_id,codigo_aplicacion,nombre_aplicacion,estado',
 } as const;
 
 export const TAMANO_PAGINA = 1000;
@@ -107,6 +108,11 @@ function textoONulo(v: unknown, campo: string): string | null {
   return v === null || v === undefined ? null : texto(v, campo);
 }
 
+function fechaONula(v: unknown, campo: string): string | null {
+  const t = textoONulo(v, campo);
+  return t === null ? null : t.slice(0, 10);
+}
+
 function numero(v: unknown, campo: string): number {
   const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
   if (!Number.isFinite(n)) throw new ErrorDatos(`${campo} no es número: ${String(v)}`);
@@ -137,6 +143,20 @@ function aTarea(f: Record<string, unknown>): Tarea {
     estado: textoONulo(f.estado, 'tareas.estado'),
     tipo_tarea_id: textoONulo(f.tipo_tarea_id, 'tareas.tipo_tarea_id'),
     jornales_estimados: numeroONulo(f.jornales_estimados, 'tareas.jornales_estimados'),
+    fecha_estimada_inicio: fechaONula(f.fecha_estimada_inicio, 'tareas.fecha_estimada_inicio'),
+    fecha_estimada_fin: fechaONula(f.fecha_estimada_fin, 'tareas.fecha_estimada_fin'),
+    fecha_inicio_real: fechaONula(f.fecha_inicio_real, 'tareas.fecha_inicio_real'),
+    fecha_fin_real: fechaONula(f.fecha_fin_real, 'tareas.fecha_fin_real'),
+  };
+}
+
+function aAplicacion(f: Record<string, unknown>): Aplicacion {
+  return {
+    id: texto(f.id, 'aplicaciones.id'),
+    tarea_id: texto(f.tarea_id, 'aplicaciones.tarea_id'),
+    codigo_aplicacion: textoONulo(f.codigo_aplicacion, 'aplicaciones.codigo_aplicacion'),
+    nombre_aplicacion: textoONulo(f.nombre_aplicacion, 'aplicaciones.nombre_aplicacion')?.trim() ?? null,
+    estado: textoONulo(f.estado, 'aplicaciones.estado'),
   };
 }
 
@@ -145,19 +165,27 @@ function aTipo(f: Record<string, unknown>): TipoTarea {
 }
 
 function aLote(f: Record<string, unknown>): Lote {
-  return { id: texto(f.id, 'lotes.id'), nombre: texto(f.nombre, 'lotes.nombre'), activo: f.activo === null || f.activo === undefined ? null : f.activo === true };
+  return {
+    id: texto(f.id, 'lotes.id'),
+    nombre: texto(f.nombre, 'lotes.nombre'),
+    activo: f.activo === null || f.activo === undefined ? null : f.activo === true,
+    // NULL ≠ 0: un lote sin árboles o sin área registrados no tiene razón por árbol/hectárea.
+    total_arboles: numeroONulo(f.total_arboles, 'lotes.total_arboles'),
+    area_hectareas: numeroONulo(f.area_hectareas, 'lotes.area_hectareas'),
+  };
 }
 
 export function fuenteSupabase(cliente: ClienteDatos, opciones: { tamanoPagina?: number } = {}): FuenteLabores {
   const tp = opciones.tamanoPagina ?? TAMANO_PAGINA;
   return {
     async catalogo() {
-      const [tareas, tipos, lotes] = await Promise.all([
+      const [tareas, tipos, lotes, aplicaciones] = await Promise.all([
         leerTodo(cliente, 'tareas', undefined, tp),
         leerTodo(cliente, 'tipos_tareas', undefined, tp),
         leerTodo(cliente, 'lotes', undefined, tp),
+        leerTodo(cliente, 'aplicaciones', undefined, tp),
       ]);
-      return { tareas: tareas.map(aTarea), tiposTareas: tipos.map(aTipo), lotes: lotes.map(aLote) };
+      return { tareas: tareas.map(aTarea), tiposTareas: tipos.map(aTipo), lotes: lotes.map(aLote), aplicaciones: aplicaciones.map(aAplicacion) };
     },
     async registros(desde, hasta) {
       const filas = await leerTodo(cliente, 'registros_trabajo', (q) => q.gte('fecha_trabajo', desde).lte('fecha_trabajo', hasta), tp);

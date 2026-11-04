@@ -30,7 +30,7 @@ export function terminoDoble(texto: string, catalogo: Catalogo): TerminoDoble | 
   return { texto, categoria: cat.nombres[0], tareas: tar.nombres };
 }
 
-const MARCA = 'puede ser la categoría';
+export const MARCA = 'puede ser la categoría';
 
 export function preguntaDoble(d: TerminoDoble): string {
   const muestra = d.tareas.slice(0, 6).join(', ') + (d.tareas.length > 6 ? ' y otras' : '');
