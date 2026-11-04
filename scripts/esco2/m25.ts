@@ -1,5 +1,5 @@
 // Runner de la campaña M2.5 (Esco 2.0, familia de labores).
-// Uso: node scripts/esco2/m25.ts --config luna|sol --reps 3 [--cases L01,L02] [--budget 5]
+// Uso: node scripts/esco2/m25.ts --config luna|sol|m3 --reps 3 [--cases L01,L02] [--budget 5]
 // Lee datos privados de "docs/Esco 2.0/" (excluida de git) y escribe ahí mismo los resultados.
 // Nunca escribe en producción: el ejecutor lee el snapshot congelado.
 
@@ -16,6 +16,13 @@ const PRIVADO = process.env.ESCO2_PRIVADO ?? '/Users/santiagoforero/Codigo/Escoc
 const CONFIGS: Record<string, ConfigModelos> = {
   luna: { nombre: 'luna', planificador: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' }, compositor: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' } },
   sol: { nombre: 'sol', planificador: { modelo: 'openai/gpt-6-sol', esfuerzo: 'low' }, compositor: { modelo: 'openai/gpt-6-sol', esfuerzo: 'low' } },
+  // M3: la configuración de esco-consultas (D25: Sol solo compone planes de varias partes).
+  m3: {
+    nombre: 'm3',
+    planificador: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
+    compositor: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
+    compositorReforzado: { modelo: 'openai/gpt-6-sol', esfuerzo: 'low' },
+  },
 };
 
 interface Caso {
