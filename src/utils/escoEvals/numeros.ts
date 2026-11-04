@@ -53,9 +53,16 @@ function valoresDeToken(token: string): number[] {
   return salida.filter((n) => Number.isFinite(n)).map((n) => n * signo);
 }
 
-/** Todos los valores numéricos candidatos que aparecen en el texto. */
-export function extraerNumeros(texto: string): number[] {
-  const encontrados = new Set<number>();
+export interface TokenNumerico {
+  /** Texto tal como aparece, con su multiplicador si lo tiene. */
+  texto: string;
+  /** Valores candidatos: un token ambiguo ("1.234") produce más de uno. */
+  valores: number[];
+}
+
+/** Cada número del texto con sus valores candidatos, en orden de aparición. */
+export function extraerTokensNumericos(texto: string): TokenNumerico[] {
+  const salida: TokenNumerico[] = [];
   // Un número (con separadores) seguido de un posible multiplicador: "M" / "millones" / "mil".
   const re = /(?<![\d\w])([-−]?\$?\d[\d.,]*)(\s?(?:millones|M\b|mil\b))?/g;
   let m: RegExpExecArray | null;
@@ -63,8 +70,15 @@ export function extraerNumeros(texto: string): number[] {
     const token = m[1].replace(/[.,]+$/, '');
     const sufijo = (m[2] ?? '').trim().toLowerCase();
     const mult = sufijo === 'millones' || sufijo === 'm' ? 1e6 : sufijo === 'mil' ? 1e3 : 1;
-    for (const v of valoresDeToken(token)) encontrados.add(v * mult);
+    salida.push({ texto: m[0], valores: valoresDeToken(token).map((v) => v * mult) });
   }
+  return salida;
+}
+
+/** Todos los valores numéricos candidatos que aparecen en el texto. */
+export function extraerNumeros(texto: string): number[] {
+  const encontrados = new Set<number>();
+  for (const t of extraerTokensNumericos(texto)) for (const v of t.valores) encontrados.add(v);
   return [...encontrados];
 }
 

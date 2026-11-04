@@ -41,6 +41,15 @@ jobs:
         include:
           - slug: make-server-1ccce916
             path: supabase/functions/make-server-1ccce916
+            verify_jwt: 'false'
+            health_anon: '200'
+          # Esco 2.0 (M3, D27). Importa el nucleo de src/utils/esco2 y el parser de
+          # src/utils/escoEvals/numeros.ts: un commit ahi tambien exige redesplegar.
+          # verify_jwt=true, asi que el GET anonimo a /health debe dar 401 del gateway.
+          - slug: esco-consultas
+            path: supabase/functions/esco-consultas src/utils/esco2 src/utils/escoEvals/numeros.ts
+            verify_jwt: 'true'
+            health_anon: '401'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +71,8 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           EDGE_FUNCTION_SLUG: ${{ matrix.slug }}
           EDGE_FUNCTION_PATH: ${{ matrix.path }}
+          EDGE_FUNCTION_VERIFY_JWT: ${{ matrix.verify_jwt }}
+          EDGE_FUNCTION_HEALTH_ANON: ${{ matrix.health_anon }}
         # Sin tuberia a `tee`: el shell por defecto de Actions es `bash -e`, SIN
         # pipefail, asi que el codigo de salida de una tuberia es el de `tee` (0)
         # y un fallo del script no tumbaria el job. Se guarda la salida, se
