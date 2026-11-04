@@ -14,6 +14,16 @@
 // Uso:
 //   SUPABASE_ACCESS_TOKEN=sbp_... node scripts/check-deploy-drift.mjs
 //
+// Variables por funcion (la matriz del workflow las fija):
+//   EDGE_FUNCTION_SLUG         slug desplegado.
+//   EDGE_FUNCTION_PATH         rutas del arbol desplegado, separadas por espacio. Una
+//                              funcion que importa codigo de src/ (esco-consultas) lista
+//                              tambien esas carpetas: un commit ahi tambien es deriva.
+//   EDGE_FUNCTION_VERIFY_JWT   'false' (por defecto) o 'true': el valor esperado.
+//   EDGE_FUNCTION_HEALTH_ANON  estado esperado del GET /health anonimo (por defecto 200).
+//                              Con verify_jwt=true el gateway responde 401, y ese 401
+//                              es la prueba de que la puerta del gateway esta puesta.
+//
 // Salida: 0 = sin deriva. 1 = hay deriva, produccion rota (verify_jwt != false
 // o GET /health anonimo != 200, ESCO-148), o no se pudo comprobar.
 
@@ -192,6 +202,12 @@ export function resumenFalloParaTelegram(log) {
       'No es deriva de reloj ni de hash.'
     );
   }
+  if (texto.includes(FRASE_VERIFY_JWT_APAGADO)) {
+    return (
+      'producción rota: verify_jwt quedó apagado en una función que exige sesión. ' +
+      'Publicar solo con la CLI (npx supabase functions deploy). No es un fallo de autenticación del detector.'
+    );
+  }
   if (texto.includes(FRASE_VERIFY_JWT)) {
     return (
       'producción rota: verify_jwt quedó activo en la edge function. ' +
@@ -225,6 +241,7 @@ export function resumenFalloParaTelegram(log) {
  * secreto, para que el aviso de Telegram no los confunda.
  */
 export const FRASE_VERIFY_JWT = 'PRODUCCION ROTA: verify_jwt activo';
+export const FRASE_VERIFY_JWT_APAGADO = 'PRODUCCION ROTA: verify_jwt apagado';
 export const FRASE_HEALTH = 'PRODUCCION ROTA: health anónimo caído';
 
 /**
@@ -234,8 +251,17 @@ export const FRASE_HEALTH = 'PRODUCCION ROTA: health anónimo caído';
  * @param {unknown} valor
  * @returns {{ ok: boolean, motivo: string }}
  */
-export function evaluarVerifyJwt(valor) {
-  if (valor === false) return { ok: true, motivo: 'verify_jwt=false' };
+export function evaluarVerifyJwt(valor, esperado = false) {
+  if (valor === esperado) return { ok: true, motivo: `verify_jwt=${esperado}` };
+  if (esperado === true) {
+    return {
+      ok: false,
+      motivo:
+        `${FRASE_VERIFY_JWT_APAGADO} (la Management API reporta verify_jwt=${JSON.stringify(valor)}). ` +
+        `El gateway deja pasar peticiones sin JWT hasta el worker. ` +
+        `Publicar con:  npx supabase functions deploy <slug> (lee verify_jwt=true de supabase/config.toml)`,
+    };
+  }
   return {
     ok: false,
     motivo:
@@ -257,14 +283,16 @@ export function urlHealth({ proyecto, funcion }) {
  * @param {{ status?: number, error?: string }} resultado
  * @returns {{ ok: boolean, motivo: string }}
  */
-export function evaluarHealth({ status, error }) {
-  if (error === undefined && status === 200) return { ok: true, motivo: 'GET /health anonimo = 200' };
+export function evaluarHealth({ status, error }, esperado = 200) {
+  if (error === undefined && status === esperado) return { ok: true, motivo: `GET /health anonimo = ${esperado}` };
   const causa = error !== undefined ? `error de red: ${error}` : `HTTP ${status}`;
   return {
     ok: false,
     motivo:
-      `${FRASE_HEALTH} (GET /health sin credenciales: ${causa}; se espera 200). ` +
-      `401 = verify_jwt activo en el gateway; 5xx = el worker no arranca`,
+      `${FRASE_HEALTH} (GET /health sin credenciales: ${causa}; se espera ${esperado}). ` +
+      (esperado === 401
+        ? `200 = el gateway ya no exige JWT; 5xx o red = la funcion no responde`
+        : `401 = verify_jwt activo en el gateway; 5xx = el worker no arranca`),
   };
 }
 
@@ -273,13 +301,32 @@ export function evaluarHealth({ status, error }) {
  * @param {{ proyecto: string, funcion: string }} opciones
  * @returns {Promise<{ ok: boolean, motivo: string }>}
  */
-export async function comprobarHealth({ proyecto, funcion }) {
+export async function comprobarHealth({ proyecto, funcion, esperado = 200 }) {
   try {
     const respuesta = await fetch(urlHealth({ proyecto, funcion }), { method: 'GET', headers: {} });
-    return evaluarHealth({ status: respuesta.status });
+    return evaluarHealth({ status: respuesta.status }, esperado);
   } catch (e) {
-    return evaluarHealth({ error: e instanceof Error ? e.message : String(e) });
+    return evaluarHealth({ error: e instanceof Error ? e.message : String(e) }, esperado);
   }
+}
+
+/**
+ * EDGE_FUNCTION_PATH admite varias rutas separadas por espacio.
+ * @param {string} ruta
+ * @returns {string[]}
+ */
+export function rutasDesplegadas(ruta) {
+  return ruta.split(/\s+/).filter(Boolean);
+}
+
+/**
+ * @param {string | undefined} valor
+ * @returns {boolean}
+ */
+export function verifyJwtEsperado(valor) {
+  if (valor === undefined || valor === '' || valor === 'false') return false;
+  if (valor === 'true') return true;
+  throw new Error(`EDGE_FUNCTION_VERIFY_JWT debe ser 'true' o 'false', no ${JSON.stringify(valor)}`);
 }
 
 /**
@@ -331,7 +378,7 @@ function escribirEstadoActual(ruta, estado) {
  * @param {string} ruta
  */
 export function fechaUltimoCommit(ruta) {
-  const salida = execFileSync('git', ['log', '-1', '--format=%cI', '--', ruta], {
+  const salida = execFileSync('git', ['log', '-1', '--format=%cI', '--', ...rutasDesplegadas(ruta)], {
     encoding: 'utf8',
   }).trim();
   if (!salida) {
@@ -398,7 +445,7 @@ async function main() {
 
   const { updatedAt, hash, verifyJwt } = await datosDelDespliegue({ proyecto, funcion, token });
   const commitISO = fechaUltimoCommit(ruta);
-  const commitSha = execFileSync('git', ['log', '-1', '--format=%H', '--', ruta], {
+  const commitSha = execFileSync('git', ['log', '-1', '--format=%H', '--', ...rutasDesplegadas(ruta)], {
     encoding: 'utf8',
   }).trim();
   const { hayDeriva, desplegado, commit, horasDeDeriva } = evaluarDeriva({
@@ -423,8 +470,10 @@ async function main() {
   console.log(`chequeo hash  : ${motivo}`);
 
   // ESCO-148: produccion puede estar rota aunque reloj y hash esten al dia.
-  const jwt = evaluarVerifyJwt(verifyJwt);
-  const health = await comprobarHealth({ proyecto, funcion });
+  const jwtEsperado = verifyJwtEsperado(process.env.EDGE_FUNCTION_VERIFY_JWT);
+  const healthEsperado = Number(process.env.EDGE_FUNCTION_HEALTH_ANON || '200');
+  const jwt = evaluarVerifyJwt(verifyJwt, jwtEsperado);
+  const health = await comprobarHealth({ proyecto, funcion, esperado: healthEsperado });
   console.log(`verify_jwt    : ${JSON.stringify(verifyJwt)}`);
   console.log(`health anonimo: ${health.motivo}`);
   if (!jwt.ok) console.error(`\n${jwt.motivo}.`);
@@ -436,7 +485,7 @@ async function main() {
       console.warn(`\n${motivo}.`);
     }
     if (produccionRota) process.exit(1);
-    console.log('\nOK: sin deriva de reloj, sin deriva de contenido, verify_jwt=false y health 200.');
+    console.log(`\nOK: sin deriva de reloj, sin deriva de contenido, verify_jwt=${jwtEsperado} y health ${healthEsperado}.`);
     return;
   }
 

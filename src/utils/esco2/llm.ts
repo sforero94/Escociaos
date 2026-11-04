@@ -59,7 +59,7 @@ interface RespuestaOpenRouter {
   error?: { message?: string };
 }
 
-export function crearClienteOpenRouter(apiKey: string, fetchImpl: typeof fetch = fetch): ClienteLLM {
+export function crearClienteOpenRouter(apiKey: string, fetchImpl: typeof fetch = fetch, titulo = 'Esco 2.0 M2.5'): ClienteLLM {
   return {
     async completar(s: SolicitudLLM): Promise<RespuestaLLM> {
       const cuerpo: Record<string, unknown> = {
@@ -78,7 +78,7 @@ export function crearClienteOpenRouter(apiKey: string, fetchImpl: typeof fetch =
       const inicio = Date.now();
       const res = await fetchImpl('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-Title': 'Esco 2.0 M2.5' },
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-Title': titulo },
         body: JSON.stringify(cuerpo),
       });
       const datos = (await res.json()) as RespuestaOpenRouter;
