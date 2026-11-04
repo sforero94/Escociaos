@@ -186,7 +186,7 @@ function renderParte(r: ResultadoParte): string {
     if (r.semantica?.disposicion === 'no_soportada')
         return 'Esa consulta todavía no está disponible. Por ahora puedo responder sobre labores registradas y tareas programadas.';
     if (r.semantica?.disposicion === 'aclaracion')
-        return r.aclaracion?.tipo === 'categoria_o_tareas' ? mensajeAclaracion(r.aclaracion.categoria, r.aclaracion.tareas) : 'Esta parte necesita que elijas entre la categoría y las tareas con ese nombre.';
+        return r.aclaracion?.tipo === 'categoria_o_tareas' ? mensajeAclaracion(r.aclaracion.categoria, r.aclaracion.tareas) + (r.aclaracion.requiere_eleccion ? '\nElige una de las dos opciones para continuar.' : '') : 'Esta parte necesita que elijas entre la categoría y las tareas con ese nombre.';
     if (r.estado === 'no_disponible')
         return `${fuenteNoDisponible(r)}\n${periodo(r)}`;
     if (r.estado === 'no_resuelto') {
