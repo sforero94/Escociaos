@@ -21,14 +21,38 @@ export interface ResultadoPruebaEsco2 {
   origen?: string;
   ruta?: string;
   ms?: number;
+  estadoToken?: string;
+  opcionesAclaracion?: { id: string; etiqueta: string }[];
+}
+
+export interface ContextoPruebaEsco2 {
+  estadoToken?: string;
+  respuestaAclaracion?: string;
 }
 
 const ORIGENES = new Set(['compositor', 'recomposicion', 'determinista', 'aclaracion', 'fuera_de_alcance', 'error_plan', 'error_llm', 'error_datos']);
+const TOKEN_ESTADO = /^[0-9a-f-]{36}$/;
+
+function opcionesValidas(valor: unknown): valor is NonNullable<ResultadoPruebaEsco2['opcionesAclaracion']> {
+  if (!Array.isArray(valor)) return false;
+  const ids = new Set<string>();
+  return valor.every(opcion => {
+    if (!opcion || typeof opcion !== 'object' || Array.isArray(opcion)
+      || typeof opcion.id !== 'string' || !opcion.id.trim() || opcion.id.length > 80
+      || typeof opcion.etiqueta !== 'string' || !opcion.etiqueta.trim() || ids.has(opcion.id)) return false;
+    ids.add(opcion.id);
+    return true;
+  });
+}
 
 /** Use only the session that owns the visible screen; no role substitution or fallback. */
-export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, signal?: AbortSignal): Promise<ResultadoPruebaEsco2> {
+export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, signal?: AbortSignal, contexto: ContextoPruebaEsco2 = {}): Promise<ResultadoPruebaEsco2> {
   const texto = pregunta.trim();
   if (!texto || texto.length > 1000) throw new Error('La pregunta debe tener entre 1 y 1000 caracteres.');
+  if ((contexto.estadoToken !== undefined && !TOKEN_ESTADO.test(contexto.estadoToken))
+    || (contexto.respuestaAclaracion !== undefined && (!contexto.estadoToken || !contexto.respuestaAclaracion.trim() || contexto.respuestaAclaracion.length > 80))) {
+    throw new Error('La aclaración requiere una opción y un contexto válidos.');
+  }
   let sesion;
   try {
     const { data, error } = await getSupabase().auth.getSession();
@@ -45,7 +69,7 @@ export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, s
     respuesta = await fetch(ENDPOINT_PRUEBA_ESCO2, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sesion.access_token}`, apikey: publicAnonKey },
-      body: JSON.stringify({ pregunta: texto, historial: [] }),
+      body: JSON.stringify({ pregunta: texto, historial: [], estadoToken: contexto.estadoToken, respuestaAclaracion: contexto.respuestaAclaracion }),
       signal,
     });
   } catch {
@@ -71,6 +95,9 @@ export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, s
     && typeof datos.hoy === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(datos.hoy)
     && (datos.ruta === null || datos.ruta === 'habitual' || datos.ruta === 'reforzada')
     && typeof datos.ms === 'number' && Number.isFinite(datos.ms) && datos.ms >= 0
+    && (datos.estadoToken === undefined || (typeof datos.estadoToken === 'string' && TOKEN_ESTADO.test(datos.estadoToken)))
+    && (datos.opcionesAclaracion === undefined || (opcionesValidas(datos.opcionesAclaracion)
+      && (datos.opcionesAclaracion.length === 0 || typeof datos.estadoToken === 'string')))
     && Array.isArray(datos.ajustes) && Array.isArray(datos.resultados) && Array.isArray(datos.llamadas)
     && (datos.plan === null || (typeof datos.plan === 'object' && !Array.isArray(datos.plan)));
   if (!formaValida) return { http: respuesta.status, valida: false, error: 'La respuesta no cumple el contrato de Esco 2.0.' };
@@ -82,6 +109,9 @@ export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, s
     origen,
     ruta: typeof datos.ruta === 'string' ? datos.ruta : undefined,
     ms: datos.ms as number,
+    estadoToken: datos.estadoToken as string | undefined,
+    opcionesAclaracion: datos.opcionesAclaracion === undefined ? undefined
+      : (datos.opcionesAclaracion as NonNullable<ResultadoPruebaEsco2['opcionesAclaracion']>).map(opcion => ({ id: opcion.id, etiqueta: limpiar(opcion.etiqueta) })),
     ...(origen.startsWith('error_') ? { error: 'El servidor respondió, pero el turno terminó con un error.' } : {}),
   };
 }

@@ -229,12 +229,12 @@ describe('recorrido del turno', () => {
     expect(t.respuesta).not.toContain('99');
   });
 
-  it('un plan inválido no ejecuta nada ni llama al compositor', async () => {
+  it('dos planes inválidos no ejecutan nada ni llaman al compositor', async () => {
     const llm = falso([{ llamadas: [{ nombre: 'run_sql', argumentos: '{}' }] }]);
     const t = await responderTurno({ pregunta: 'x', historial: [], hoy: '2026-12-31', datos, llm, config });
     expect(t.origen).toBe('error_plan');
     expect(t.resultados).toEqual([]);
-    expect(llm.solicitudes).toHaveLength(1);
+    expect(llm.solicitudes).toHaveLength(2);
   });
 });
 

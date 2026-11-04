@@ -165,7 +165,7 @@ export interface EstimadosCategoria {
 export interface ResultadoParte {
   id: string;
   proposito: string;
-  aclaracion?: {tipo:'categoria_o_tareas';categoria:string;tareas:string[]};
+  aclaracion?: {tipo:'categoria_o_tareas';categoria:string;tareas:string[];requiere_eleccion?:boolean};
   estado: 'ok' | 'sin_registros' | 'no_resuelto' | 'no_disponible';
   semantica?: { cohorte: 'trabajo_registrado' | 'tarea_programada'; base_fecha: 'fecha_trabajo' | 'fecha_estimada_inicio'; disposicion: 'respondida' | 'fuente_no_disponible' | 'no_soportada' | 'aclaracion'; motivo?: string; miembros: string[]; fuentes: string[]; calificadores: string[] };
   alcance: {

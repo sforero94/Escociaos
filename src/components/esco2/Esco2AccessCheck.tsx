@@ -23,6 +23,7 @@ export function Esco2AccessCheck() {
 function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
   const [pregunta, setPregunta] = useState(PREGUNTA_INICIAL);
   const [estado, setEstado] = useState<EstadoPrueba>({ tipo: 'pendiente' });
+  const [conversacion, setConversacion] = useState<Pick<ResultadoPruebaEsco2, 'estadoToken' | 'opcionesAclaracion'>>({});
   const [errorPregunta, setErrorPregunta] = useState('');
   const [cambiandoCuenta, setCambiandoCuenta] = useState(false);
   const cambioCuenta = useRef(false);
@@ -42,6 +43,7 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
     peticion.current?.abort();
     peticion.current = null;
     setEstado({ tipo: 'pendiente' });
+    setConversacion({});
     try {
       await cerrarSesionPruebaEsco2();
     } catch {
@@ -56,12 +58,25 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
     peticion.current?.abort();
     peticion.current = null;
     setEstado({ tipo: 'error', mensaje });
+    setConversacion({});
   }
 
   async function comprobar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    await enviar(pregunta);
+  }
+
+  function nuevaConsulta() {
     if (peticion.current || cambioCuenta.current) return;
-    const texto = pregunta.trim();
+    setConversacion({});
+    setEstado({ tipo: 'pendiente' });
+    setErrorPregunta('');
+    setPregunta(PREGUNTA_INICIAL);
+  }
+
+  async function enviar(preguntaTurno: string, respuestaAclaracion?: string) {
+    if (peticion.current || cambioCuenta.current) return;
+    const texto = preguntaTurno.trim();
     if (!texto || texto.length > 1000) {
       setErrorPregunta('Escribe una pregunta de entre 1 y 1000 caracteres.');
       return;
@@ -74,8 +89,14 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
       if (peticion.current === controlador) cancelar('La solicitud superó 45 segundos. El resultado del servidor queda sin confirmar. No se reintenta automáticamente.');
     }, 45000);
     try {
-      const resultado = await ejecutarPruebaEsco2(texto, usuarioId, controlador.signal);
-      if (peticion.current === controlador && !controlador.signal.aborted) setEstado({ tipo: 'respuesta', resultado });
+      const resultado = await ejecutarPruebaEsco2(texto, usuarioId, controlador.signal, {
+        ...(conversacion.estadoToken ? { estadoToken: conversacion.estadoToken } : {}),
+        ...(respuestaAclaracion ? { respuestaAclaracion } : {}),
+      });
+      if (peticion.current === controlador && !controlador.signal.aborted) {
+        setEstado({ tipo: 'respuesta', resultado });
+        setConversacion(resultado.valida ? { estadoToken: resultado.estadoToken, opcionesAclaracion: resultado.opcionesAclaracion } : {});
+      }
     } catch {
       if (peticion.current === controlador) {
         setEstado({ tipo: 'error', mensaje: controlador.signal.aborted
@@ -113,6 +134,7 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button type="submit" className="min-h-11" disabled={enCurso || cambiandoCuenta || !pregunta.trim()}>{enCurso ? 'Comprobando…' : 'Comprobar acceso'}</Button>
+            <Button type="button" variant="outline" className="min-h-11" disabled={enCurso || cambiandoCuenta} onClick={nuevaConsulta}>Nueva consulta</Button>
             {enCurso ? <Button type="button" variant="outline" className="min-h-11" onClick={() => cancelar()}>Cancelar</Button> : null}
           </div>
         </form>
@@ -123,6 +145,16 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
           {enCurso ? <p>Solicitud en curso. No se enviarán reintentos automáticos.</p> : null}
           {estado.tipo === 'error' ? <p role="alert" className="text-destructive">{estado.mensaje}</p> : null}
           {estado.tipo === 'respuesta' ? <Resultado resultado={estado.resultado} /> : null}
+          {conversacion.estadoToken && Boolean(conversacion.opcionesAclaracion?.length) ? (
+            <div className="space-y-3" role="group" aria-label="Opciones de aclaración">
+              <p>Elige una opción para continuar.</p>
+              <div className="flex flex-wrap gap-3">
+                {conversacion.opcionesAclaracion?.map(opcion => (
+                  <Button key={opcion.id} type="button" variant="outline" className="min-h-11 whitespace-normal" disabled={enCurso || cambiandoCuenta} onClick={() => enviar(opcion.etiqueta, opcion.id)}>{opcion.etiqueta}</Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
     </main>

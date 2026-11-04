@@ -1,4 +1,4 @@
-// Turno P2: catálogo → un planificador validado → D26 con estado del servidor
+// Turno P2: catálogo → planificador validado (un reintento si inválido) → D26 con estado del servidor
 // → lectores fijos → cálculo y render factual deterministas. Sin composición factual LLM.
 import { aplicarReglaDoble, terminoDoble } from './ambiguedad.ts';
 import { resumenCatalogo, normalizar, resolverTareas } from './catalogo.ts';
@@ -136,7 +136,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             const nombres = ids.map(id => catalogo.tareas.find(t => t.id === id)?.nombre);
             if (!categoria || nombres.some(n => n === undefined) || !catalogo.tiposTareas.some(t => t.categoria === categoria))
                 return salida({ ...base, respuesta: 'Las opciones anteriores ya no están disponibles. Repite la consulta para revisar las tareas actuales.', origen: 'aclaracion' });
-            const resultados = [resultadoPendiente(args.estado!.plan.consultas[pendiente.indice], `p${pendiente.indice + 1}`, { tipo: 'categoria_o_tareas', categoria, tareas: nombres as string[] })];
+            const resultados = [resultadoPendiente(args.estado!.plan.consultas[pendiente.indice], `p${pendiente.indice + 1}`, { tipo: 'categoria_o_tareas', categoria, tareas: nombres as string[], requiere_eleccion: true })];
             return salida({ ...base, resultados, respuesta: renderMensaje(resultados), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
         }
         decisiones[`${pendiente.indice}:${normalizar(pendiente.termino)}`] = choice.tipo;
@@ -155,20 +155,29 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         plan = saved;
     }
     else {
-        let rPlan: RespuestaLLM;
-        try {
-            rPlan = await llm.completar({ modelo: config.planificador.modelo, esfuerzo: config.planificador.esfuerzo, mensajes: [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] })) }, ...historial, { role: 'user', content: pregunta }], herramientas: herramientasPlanificador(), toolChoice: 'required', maxTokens: 1500 });
-            llamadas.push(registrar('planificador', rPlan));
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] })) }, ...historial, { role: 'user', content: pregunta }];
+        let validado: Plan | undefined;
+        for (let intento = 0; intento < 2; intento++) {
+            let rPlan: RespuestaLLM;
+            try {
+                rPlan = await llm.completar({ modelo: config.planificador.modelo, esfuerzo: config.planificador.esfuerzo, mensajes, herramientas: herramientasPlanificador(), toolChoice: 'required', maxTokens: 1500 });
+                llamadas.push(registrar('planificador', rPlan));
+            }
+            catch {
+                return salida({ ...base, respuesta: mensajeDisposicion('error_llm'), origen: 'error_llm', errorPlan: 'planificador_no_disponible' });
+            }
+            try {
+                validado = validarPlan(rPlan.llamadas);
+                break;
+            }
+            catch (e) {
+                if (!(e instanceof ErrorPlan) || intento === 1)
+                    return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: e instanceof ErrorPlan ? 'plan_no_valido' : 'plan_error' });
+                // Do not promote the rejected output or its error text into context.
+                mensajes.push({ role: 'system', content: 'El plan anterior no cumple el esquema. Reintenta una sola vez la pregunta original con las herramientas y argumentos registrados.' });
+            }
         }
-        catch {
-            return salida({ ...base, respuesta: mensajeDisposicion('error_llm'), origen: 'error_llm', errorPlan: 'planificador_no_disponible' });
-        }
-        try {
-            plan = validarPlan(rPlan.llamadas);
-        }
-        catch (e) {
-            return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: e instanceof ErrorPlan ? 'plan_no_valido' : 'plan_error' });
-        }
+        plan = validado!;
     }
     if (plan.tipo === 'fuera_de_alcance')
         return salida({ ...base, plan, respuesta: mensajeDisposicion('fuera_de_alcance'), origen: 'fuera_de_alcance' });
