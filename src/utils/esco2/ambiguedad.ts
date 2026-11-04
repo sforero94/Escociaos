@@ -6,8 +6,8 @@
 //   - sin señal (o con señales opuestas) → se pregunta al usuario.
 // La señal se toma de todo el plan del turno (todas las partes), porque "cosecha y
 // guadaña" puede llegar como dos consultas de una sola entidad cada una.
-// Si el turno anterior del asistente fue esta misma pregunta, se respeta dónde puso el
-// planificador la palabra: el usuario ya contestó.
+// Una elección exacta del estado validado por el servidor resuelve la ambigüedad.
+// El historial del cliente nunca prueba que el usuario contestó.
 
 import { normalizar, resolverCategorias, resolverTareas } from './catalogo.ts';
 import type { ConsultaLabores, DatosLabores, MensajeHistorial, Plan } from './tipos.ts';
@@ -37,19 +37,13 @@ export function preguntaDoble(d: TerminoDoble): string {
   return `«${d.texto}» ${MARCA} ${d.categoria} o las tareas cuyo nombre contiene «${d.texto}» (${muestra}). ¿Cuál de las dos quieres consultar?`;
 }
 
-function yaPreguntado(historial: MensajeHistorial[], texto: string): boolean {
-  const ultimo = [...historial].reverse().find((m) => m.rol === 'assistant');
-  if (!ultimo || !ultimo.texto.includes(MARCA)) return false;
-  return normalizar(ultimo.texto).includes(normalizar(texto));
-}
-
 export interface ResultadoReglaDoble {
   plan: Plan;
   /** Qué movió la regla, para la traza del turno. */
   ajustes: string[];
 }
 
-export function aplicarReglaDoble(plan: Plan, catalogo: Catalogo, historial: MensajeHistorial[] = []): ResultadoReglaDoble {
+export function aplicarReglaDoble(plan: Plan, catalogo: Catalogo, _historial: MensajeHistorial[] = [], decisiones:Record<string,'tarea'|'categoria'> = {}): ResultadoReglaDoble {
   if (plan.tipo !== 'consultas') return { plan, ajustes: [] };
 
   const cache = new Map<string, TerminoDoble | null>();
@@ -68,7 +62,7 @@ export function aplicarReglaDoble(plan: Plan, catalogo: Catalogo, historial: Men
 
   const sinResolver: TerminoDoble[] = [];
   const ajustes: string[] = [];
-  const consultas: ConsultaLabores[] = plan.consultas.map((c) => {
+  const consultas: ConsultaLabores[] = plan.consultas.map((c, indice) => {
     const tareas: string[] = [];
     const categorias: string[] = [];
     const colocar = (t: string, dondeLoPuso: 'tarea' | 'categoria') => {
@@ -78,7 +72,7 @@ export function aplicarReglaDoble(plan: Plan, catalogo: Catalogo, historial: Men
         return;
       }
       let destino: 'tarea' | 'categoria' | null;
-      if (yaPreguntado(historial, t)) destino = dondeLoPuso;
+      if (decisiones[`${indice}:${normalizar(t)}`]) destino = decisiones[`${indice}:${normalizar(t)}`];
       else if (otrasTareas > 0 && otrasCategorias === 0) destino = 'tarea';
       else if (otrasCategorias > 0 && otrasTareas === 0) destino = 'categoria';
       else destino = null;

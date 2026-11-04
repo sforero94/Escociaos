@@ -27,9 +27,11 @@ afterAll(() => {
   const implementationAfter = hashes();
   expect(implementationAfter, 'candidate files changed during execution').toEqual(implementationBefore);
   const report = { runId, implementationBefore, implementationAfter, stage: 'A/B', independentScenarios: escenarios.length, extraControls: controlesExtra.length, networkCalls: 0, paidCalls: 0, rows, mutationRows };
-  mkdirSync('scripts/esco2/recovery/qa/iterations', {recursive:true});
-  writeFileSync(`scripts/esco2/recovery/qa/iterations/${runId}.json`, JSON.stringify(report,null,2)+'\n');
-  writeFileSync('scripts/esco2/recovery/qa/results.json', JSON.stringify(report, null, 2) + '\n');
+  if (process.env.ESCO2_RECOVERY_WRITE === '1') {
+    mkdirSync('scripts/esco2/recovery/qa/iterations', {recursive:true});
+    writeFileSync(`scripts/esco2/recovery/qa/iterations/${runId}.json`, JSON.stringify(report,null,2)+'\n');
+    writeFileSync('scripts/esco2/recovery/qa/results.json', JSON.stringify(report, null, 2) + '\n');
+  }
   process.stdout.write(JSON.stringify({ scenarioSummary: variants.map(v => ({ variant: v, passes: rows.filter(r => r.variant === v && !r.extraControl && r.passes).length, total: rows.filter(r => r.variant === v && !r.extraControl).length, extraControls: rows.filter(r=>r.variant===v && r.extraControl).map(r=>({scenario:r.scenario,passes:r.passes})), critical: rows.filter(r => r.variant === v && !r.extraControl && r.critical).length })), mutationSummary: variants.map(v => ({ variant: v, runtimeDetected: v==='baseline'?'N/A: no semantic validator':mutationRows.filter(r => r.variant === v && r.runtimeDetected).length, oracleDetected: mutationRows.filter(r => r.variant === v && r.oracleDetected).length, positiveAccepted: mutationRows.filter(r => r.variant === v && r.positiveAccepted).length })) }) + '\n');
 });
 

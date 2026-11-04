@@ -88,7 +88,7 @@ describe('esco-consultas: acceso', () => {
     const res = await manejar(post({ pregunta: '¿jornales de mayo por lote?' }, jwtSintetico(USUARIOS.gerencia)), deps({ traza, llm }));
     expect(res.status).toBe(200);
     const cuerpo = await res.json();
-    expect(cuerpo.origen).toBe('compositor');
+    expect(cuerpo.origen).toBe('determinista');
     expect(cuerpo.hoy).toBe('2026-06-02');
 
     // Oráculo: la misma suma, calculada por Postgres como superusuario.
@@ -105,7 +105,7 @@ describe('esco-consultas: acceso', () => {
     // Paginación real: 2.300 filas con tope de 1.000 por respuesta.
     expect(traza.consultas.filter((c) => c.tabla === 'registros_trabajo').map((c) => c.filas)).toEqual([1000, 1000, 300]);
     expect(traza.consultas.every((c) => c.rol === 'authenticated')).toBe(true);
-    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['openai/gpt-6-luna', 'openai/gpt-6-luna']);
+    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['openai/gpt-6-luna']);
   });
 
   it.each([
@@ -164,7 +164,7 @@ describe('esco-consultas: acceso', () => {
     const d = deps();
     await manejar(post({ pregunta: 'pregunta privada de mayo' }, jwtSintetico(USUARIOS.gerencia)), d);
     expect(JSON.stringify(d.eventos)).not.toContain('pregunta privada');
-    expect(d.eventos[0]).toMatchObject({ evento: 'turno', origen: 'compositor', ruta: 'habitual', partes: 1 });
+    expect(d.eventos[0]).toMatchObject({ evento: 'turno', origen: 'determinista', ruta: null, partes: 1 });
   });
 });
 

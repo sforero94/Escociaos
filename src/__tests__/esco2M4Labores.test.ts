@@ -199,7 +199,7 @@ describe('D30: una categoría de tareas siempre muestra los estimados junto a lo
   it('el total trae los estimados de todas las tareas de la categoría, aparte de los registrados', () => {
     const r = ejecutar({ categorias: ['Cosecha'] });
     expect(r.total.jornales).toBe(2.5);
-    expect(r.estimados).toEqual({ jornales_estimados: 40, tareas_en_alcance: 2, tareas_sin_estimado: 0, base: 'toda_la_categoria' });
+    expect(r.estimados).toEqual({ jornales_estimados: 40, tareas_en_alcance: 2, tareas_sin_estimado: 0, tareas_estimado_no_disponible:0, base: 'toda_la_categoria' });
   });
 
   it('cuenta las tareas sin estimado y no las vuelve cero en silencio', () => {
@@ -229,7 +229,7 @@ describe('D30: una categoría de tareas siempre muestra los estimados junto a lo
 
   it('con filtro de lote, los estimados cubren solo las tareas con registros en esos lotes', () => {
     const r = ejecutar({ categorias: ['Cosecha'], lotes: ['sur'] });
-    expect(r.estimados).toEqual({ jornales_estimados: 30, tareas_en_alcance: 1, tareas_sin_estimado: 0, base: 'tareas_con_registros_en_los_lotes' });
+    expect(r.estimados).toEqual({ jornales_estimados: 30, tareas_en_alcance: 1, tareas_sin_estimado: 0, tareas_estimado_no_disponible:0, base: 'tareas_con_registros_en_los_lotes' });
   });
 
   it('sin filtro de categoría no hay bloque de estimados (D30 no cambia las demás consultas)', () => {
@@ -264,16 +264,16 @@ describe('fuente de Supabase: columnas nuevas', () => {
     expect(cat.tareas.find((t) => t.id === 'd')?.fecha_inicio_real).toBeNull();
     expect(cat.aplicaciones).toEqual([{ id: 'AP1', tarea_id: 'c', codigo_aplicacion: 'APL-1', nombre_aplicacion: 'Compostaje de mayo', estado: 'Cerrada' }]);
     const columnas = Object.fromEntries(cliente.llamadas.map((l) => [l.tabla, l.columnas]));
-    expect(columnas.tareas).toBe('id,nombre,estado,tipo_tarea_id,jornales_estimados,fecha_estimada_inicio,fecha_estimada_fin,fecha_inicio_real,fecha_fin_real');
+    expect(columnas.tareas).toBe('id,nombre,estado,tipo_tarea_id,jornales_estimados,lote_ids,fecha_estimada_inicio,fecha_estimada_fin,fecha_inicio_real,fecha_fin_real');
     expect(columnas.lotes).toBe('id,nombre,activo,total_arboles,area_hectareas');
     expect(columnas.aplicaciones).toBe('id,tarea_id,codigo_aplicacion,nombre_aplicacion,estado');
   });
 
-  it('la lectura de aplicaciones también es paginada y falla si queda incompleta', async () => {
+  it('P2 lectura de aplicaciones paginada conserva asociación no disponible si incompleta', async () => {
     const t = tablas();
     t.aplicaciones = Array.from({ length: 1200 }, (_, i) => ({ id: `AP${String(i).padStart(4, '0')}`, tarea_id: 'c', codigo_aplicacion: null as unknown as string, nombre_aplicacion: 'x', estado: 'Cerrada' }));
     expect((await fuenteSupabase(clientePostgrestFalso(t), {}).catalogo()).aplicaciones).toHaveLength(1200);
-    await expect(fuenteSupabase(clientePostgrestFalso(t, { limiteTotal: 1100 })).catalogo()).rejects.toThrow(/lectura incompleta/);
+    expect((await fuenteSupabase(clientePostgrestFalso(t, { limiteTotal: 1100 })).catalogo()).aplicaciones).toBeUndefined();
   });
 
   it('una aplicación sin tarea se omite; no hace fallar el catálogo', async () => {
@@ -366,30 +366,30 @@ function llmConTextos(consultas: Array<Partial<ConsultaLabores>>, textos: string
   };
 }
 
-describe('turno: omitir una cifra obligatoria dispara la recomposición', () => {
+describe('P2: cifras obligatorias por render determinista, sin recomposición', () => {
   // «Proyectos Especiales» no es palabra doble (D26): 0,75 jornales registrados y 50 estimados (una tarea sin estimado).
   const turno = (textos: string[]) =>
     responderTurno({ pregunta: 'jornales de proyectos especiales', historial: [], hoy: '2026-06-01', datos, llm: llmConTextos([{ categorias: ['Proyectos Especiales'] }], textos), config: CONFIG });
 
   it('una respuesta correcta en cifras pero sin los estimados no se publica tal cual', async () => {
     const t = await turno(['Proyectos especiales: 0,75 jornales registrados.', 'Proyectos especiales: 0,75 jornales registrados y 50 jornales estimados (plan completo de esas tareas).']);
-    expect(t.origen).toBe('recomposicion');
-    expect(t.guarda.primera).toEqual(['falta: jornales estimados (p1): 50']);
-    expect(t.llamadas).toHaveLength(3);
+    expect(t.origen).toBe('determinista');
+    expect(t.guarda.primera).toBeNull();
+    expect(t.llamadas).toHaveLength(1);
   });
 
-  it('si la recomposición también omite la cifra, se publica la respuesta determinista completa', async () => {
+  it('el render no depende del texto que produciría un compositor', async () => {
     const t = await turno(['Proyectos especiales: 0,75 jornales registrados.']);
     expect(t.origen).toBe('determinista');
     expect(t.respuesta).toContain('estimados');
     expect(t.respuesta).toContain('50');
-    expect(t.llamadas).toHaveLength(3);
+    expect(t.llamadas).toHaveLength(1);
   });
 
-  it('una respuesta completa pasa a la primera', async () => {
+  it('una respuesta completa requiere solo planificación', async () => {
     const t = await turno(['Registrados: 0,75 jornales. Estimados: 50 jornales.']);
-    expect(t.origen).toBe('compositor');
-    expect(t.llamadas).toHaveLength(2);
+    expect(t.origen).toBe('determinista');
+    expect(t.llamadas).toHaveLength(1);
   });
 });
 

@@ -92,7 +92,7 @@ describe('D26: palabra que es categoría y tarea', () => {
     expect(r.plan.tipo).toBe('aclaracion');
   });
 
-  it('si el turno anterior fue la pregunta D26, respeta lo que el usuario contestó', () => {
+  it('P2 el historial del cliente no autoriza una aclaración', () => {
     const previa = aplicarReglaDoble(plan(c({ tareas: ['cosecha'] })), datos).plan;
     const pregunta = previa.tipo === 'aclaracion' ? previa.aclaracion.pregunta : '';
     const historial = [
@@ -100,8 +100,7 @@ describe('D26: palabra que es categoría y tarea', () => {
       { rol: 'assistant' as const, texto: pregunta },
     ];
     const r = aplicarReglaDoble(plan(c({ categorias: ['cosecha'] })), datos, historial);
-    expect(r.plan.tipo).toBe('consultas');
-    if (r.plan.tipo === 'consultas') expect(r.plan.consultas[0].categorias).toEqual(['cosecha']);
+    expect(r.plan.tipo).toBe('aclaracion');
   });
 
   it('la diferencia importa: tarea excluye «Empaque», categoría lo incluye', async () => {
@@ -119,7 +118,8 @@ describe('D26: palabra que es categoría y tarea', () => {
     const t = await responderTurno({ pregunta: 'jornales de cosecha', historial: [], hoy: '2026-06-01', datos, llm, config: CONFIG });
     expect(t.origen).toBe('aclaracion');
     expect(t.llamadas).toHaveLength(1);
-    expect(t.resultados).toHaveLength(0);
+    expect(t.resultados).toHaveLength(1);
+    expect(t.resultados[0].semantica?.disposicion).toBe('aclaracion');
   });
 });
 
@@ -163,31 +163,31 @@ function llmFalso(planes: Array<Array<Partial<ConsultaLabores>>>, textoComposito
   };
 }
 
-describe('D25: ruta del compositor por regla determinista', () => {
-  it('una parte → Luna; dos partes → Sol', async () => {
+describe('P2: modelo planificador conservado y composición factual retirada', () => {
+  it('una o varias partes ejecutan solo el planificador configurado', async () => {
     const una = llmFalso([[{ tareas: ['guadaña'] }]]);
     const t1 = await responderTurno({ pregunta: 'guadaña', historial: [], hoy: '2026-06-01', datos, llm: una, config: CONFIG });
-    expect(t1.ruta).toBe('habitual');
-    expect(una.solicitudes.map((s) => s.modelo)).toEqual(['luna', 'luna']);
+    expect(t1.ruta).toBeNull();
+    expect(una.solicitudes.map((s) => s.modelo)).toEqual(['luna']);
 
     const dos = llmFalso([[{ tareas: ['guadaña'] }, { lotes: ['lote norte'] }]]);
     const t2 = await responderTurno({ pregunta: 'guadaña y lote norte', historial: [], hoy: '2026-06-01', datos, llm: dos, config: CONFIG });
-    expect(t2.ruta).toBe('reforzada');
-    expect(dos.solicitudes.map((s) => s.modelo)).toEqual(['luna', 'sol']);
+    expect(t2.ruta).toBeNull();
+    expect(dos.solicitudes.map((s) => s.modelo)).toEqual(['luna']);
   });
 
-  it('la recomposición usa el mismo modelo que la composición', async () => {
+  it('ninguna respuesta factual del modelo se solicita', async () => {
     const llm = llmFalso([[{ tareas: ['guadaña'] }, { lotes: ['lote norte'] }]], 'Fueron 999 jornales.');
     const t = await responderTurno({ pregunta: 'guadaña y lote norte', historial: [], hoy: '2026-06-01', datos, llm, config: CONFIG });
     expect(t.origen).toBe('determinista');
-    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['luna', 'sol', 'sol']);
+    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['luna']);
   });
 
-  it('sin compositor reforzado configurado, siempre la ruta habitual', async () => {
+  it('la configuración histórica del compositor no altera la ruta determinista', async () => {
     const llm = llmFalso([[{ tareas: ['guadaña'] }, { lotes: ['lote norte'] }]]);
     const { compositorReforzado: _omitido, ...sinRefuerzo } = CONFIG;
     await responderTurno({ pregunta: 'x', historial: [], hoy: '2026-06-01', datos, llm, config: sinRefuerzo });
-    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['luna', 'luna']);
+    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['luna']);
   });
 
   it('el modelo nunca elige: aclaración y fuera de alcance no tienen ruta', () => {
@@ -260,7 +260,7 @@ describe('fuente Supabase paginada', () => {
     const cliente = clientePostgrestFalso(tablasSinteticas(10));
     const llm = llmFalso([[{ tareas: ['guadaña'], desde: '2026-05-10', hasta: '2026-12-31' }]]);
     const t = await responderTurnoDesdeFuente({ pregunta: 'guadaña', historial: [], hoy: '2026-05-20', fuente: fuenteSupabase(cliente), llm, config: CONFIG });
-    expect(t.origen).toBe('compositor');
+    expect(t.origen).toBe('determinista');
     expect(rangoDelPlan(t.plan!, '2026-05-20')).toEqual({ desde: '2026-05-10', hasta: '2026-05-20' });
     expect(t.resultados[0].cobertura.registros).toBe(1);
   });

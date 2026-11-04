@@ -46,7 +46,7 @@ create table lotes (id uuid primary key, nombre text not null, activo boolean, t
 create table tipos_tareas (id uuid primary key, nombre text not null, categoria categoria_tarea, activo boolean);
 create table tareas (
   id uuid primary key, nombre text not null, estado estado_tarea, tipo_tarea_id uuid, jornales_estimados numeric, lote_id uuid,
-  fecha_estimada_inicio date, fecha_estimada_fin date, fecha_inicio_real date, fecha_fin_real date
+  fecha_estimada_inicio date, fecha_estimada_fin date, fecha_inicio_real date, fecha_fin_real date, lote_ids uuid[]
 );
 create table aplicaciones (id uuid primary key, tarea_id uuid, codigo_aplicacion text, nombre_aplicacion text, estado text);
 create table registros_trabajo (
@@ -108,7 +108,7 @@ insert into lotes values
 insert into tipos_tareas values
   ('b0000000-0000-4000-8000-000000000001', 'Cosecha', 'Cosecha', true),
   ('b0000000-0000-4000-8000-000000000002', 'Guadaña', 'Mantenimiento del cultivo', true);
-insert into tareas values
+insert into tareas (id,nombre,estado,tipo_tarea_id,jornales_estimados,lote_id,fecha_estimada_inicio,fecha_estimada_fin,fecha_inicio_real,fecha_fin_real) values
   ('c0000000-0000-4000-8000-000000000001', 'Cosecha fruta temprana', 'En Proceso', 'b0000000-0000-4000-8000-000000000001', 40, null, '2026-05-01', '2026-05-31', '2026-05-02', null),
   ('c0000000-0000-4000-8000-000000000002', 'Guadaña general', 'En Proceso', 'b0000000-0000-4000-8000-000000000002', null, null, null, null, null, null);
 insert into aplicaciones values

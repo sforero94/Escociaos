@@ -38,7 +38,19 @@ beforeAll(async () => {
     alter table registros_trabajo alter column tarea_id type text using tarea_id::text;
     alter table registros_trabajo alter column lote_id type text using lote_id::text;`);
 }, 30_000);
-afterAll(async () => { expect(fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals(); await db?.close(); const implementationAfter=implementationHashes(); expect(implementationAfter).toEqual(implementationBefore); const report = {runId,implementationBefore,implementationAfter, label: 'local candidate wrapper using actual gate, fixed reader and synthetic RLS; not deployed HTTP integration', networkCalls: 0, evidence }; mkdirSync('scripts/esco2/recovery/qa/iterations',{recursive:true}); writeFileSync(`scripts/esco2/recovery/qa/iterations/rls-${runId}.json`,JSON.stringify(report,null,2)+'\n'); writeFileSync('scripts/esco2/recovery/qa/rls-results.json',JSON.stringify(report,null,2)+'\n'); });
+afterAll(async () => {
+  expect(fetch).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
+  await db?.close();
+  const implementationAfter = implementationHashes();
+  expect(implementationAfter).toEqual(implementationBefore);
+  const report = {runId,implementationBefore,implementationAfter, label: 'local candidate wrapper using actual gate, fixed reader and synthetic RLS; not deployed HTTP integration', networkCalls: 0, evidence };
+  if (process.env.ESCO2_RECOVERY_WRITE === '1') {
+    mkdirSync('scripts/esco2/recovery/qa/iterations',{recursive:true});
+    writeFileSync(`scripts/esco2/recovery/qa/iterations/rls-${runId}.json`,JSON.stringify(report,null,2)+'\n');
+    writeFileSync('scripts/esco2/recovery/qa/rls-results.json',JSON.stringify(report,null,2)+'\n');
+  }
+});
 
 async function seed(datos: DatosLabores): Promise<void> {
   await db.exec('truncate aplicaciones,registros_trabajo,tareas,tipos_tareas,lotes');

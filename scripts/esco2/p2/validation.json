@@ -1,0 +1,143 @@
+{
+  "version": "p2-a-local-v1",
+  "verifiedAt": "2026-11-04T18:58:39.936780+00:00",
+  "startingHead": "5b9a76be78af7bf3dce11d32e132f599896be91e",
+  "head": "b1eccb8c3648042b189bfc4dcadfc7d9925939b1",
+  "branch": "main",
+  "concurrentChange": "b1eccb8c added only preserved P0/P1 files; runtime starting source unchanged",
+  "p2CommitPush": false,
+  "fullTests": {
+    "passed": 7298,
+    "files": 301,
+    "newP2": 108,
+    "independentQA": 93,
+    "backendUnit": 15,
+    "legacyFocused": 124
+  },
+  "focusedWithinFull": {
+    "passed": 232,
+    "files": 10
+  },
+  "checks": {
+    "repositoryTypecheck": 0,
+    "scopedCoreAndP2Lint": 0,
+    "handlerLintNoIgnore": 0,
+    "repositoryLint": {
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 907
+    },
+    "productionBuild": 0,
+    "freshBundleDiagnosticPruning": true,
+    "gitDiffCheck": 0
+  },
+  "p1Preservation": {
+    "matchingFiles": 34,
+    "frozenManifestMatchingFiles": 5,
+    "sha256": {
+      "scripts/esco2/recovery/redesign.ts": "27bc11a6c8bf6bb13c316e877221033ae8edcb73cbe6e4742c9220e84fb15a05",
+      "scripts/esco2/recovery/contracts.ts": "989e445f4153fa12b36ff9cd8eb103a4f78810b182610caf00dd1afd9448a9b0",
+      "scripts/esco2/recovery/shared.ts": "71fa0f48fc9d41a99c6a0f172759e32b06eba54cf897074bc591d032e8283e01",
+      "scripts/esco2/recovery/backend.test.ts": "21b71ead95de774d0103374b45e65cfa97a02680868e6a054021c372787c1f4c",
+      "scripts/esco2/recovery/README.md": "9060170c03d7f060ad467b4d562a92ba35e59abbcb7e8c60b334800e0b09f2af",
+      "scripts/esco2/recovery/tsconfig.json": "68a25b74b5ff6570d00c663c603c8475939eafd469f2b24d968fae0e37859528",
+      "scripts/esco2/recovery/baseline.ts": "ffe2252c4e13d3d056043a598b6fb83b54eeb8b1a144e42008b42cb097e3a7d7",
+      "scripts/esco2/recovery/measure.ts": "b0a5451ad77062d0678bb4d2a24a045d2c6fd11e2808c3e1cb7fd7fecc3c8d9e",
+      "scripts/esco2/recovery/repair.ts": "7ea063a9b81583079ab020bb4a88a41e8ed8301c8fddd6b8822df0d3865c71d0",
+      "scripts/esco2/recovery/qa/oracle.ts": "64e4e96d0a3a8466883cdbd9719e55772434ab79ffab0a146857ad0644a64fd2",
+      "scripts/esco2/recovery/qa/measurements.json": "62f2d291bf4830cf8ca29683f9b56e424000b0e1521d01210a1c82d8a06f82c9",
+      "scripts/esco2/recovery/qa/results.json": "fae07d00242e75fd6f4dc5eef72d35a6159fdcbf1ede2e957ed7e96d73e3a0bb",
+      "scripts/esco2/recovery/qa/baseline-diagnostics.json": "8a18aa561f06936dcd6988106566f821a7cc90211389aede8ef231ef44d332ad",
+      "scripts/esco2/recovery/qa/experiment.test.ts": "91fef148b6bdae286f84250d6045a54e632e55844521768c6ec53617da41cff7",
+      "scripts/esco2/recovery/qa/final-validation.json": "9ac83da03449e1bc23fd4dc0ec1f7f632b5f4ceb586e39414ae4c95b302bce9c",
+      "scripts/esco2/recovery/qa/baseline-diagnostics.test.ts": "7b27f93cdb3fa4959ae3bf2140d6924c7d948e87905887954f99e11c4181f604",
+      "scripts/esco2/recovery/qa/answer-boundaries.test.ts": "df440ca9bb3956d9cbd75400ee28ee0863c5440a168a9b166df62a03e1afa7cd",
+      "scripts/esco2/recovery/qa/source-boundaries.test.ts": "d8df11d33f1428f375d9947a239e95a3a7042b6a712fe891e67195f8ae5b19f0",
+      "scripts/esco2/recovery/qa/supplemental-findings.md": "7488b019ed671b00d5813a9b66e5c1ca29ed53366e17822c6d118f02c5f9f1c7",
+      "scripts/esco2/recovery/qa/freeze.json": "640441a6aa642ed24ceeede099f2ef504e83cd07b6c465e21779208f68a2ebf5",
+      "scripts/esco2/recovery/qa/rls.test.ts": "ca84dfecd2ca26a60bb2f67bc4440e61d1bc884818d38067ea5d9c0668f98ce8",
+      "scripts/esco2/recovery/qa/rls-results.json": "5b949d8b9e26aecd604aca0bfb98f77cf2434a0046e2550c5243fa8c8c45450c",
+      "scripts/esco2/recovery/qa/scenarios.ts": "476e899d373fe603c211af2c2aa700a41fe84876f2a6c232498b61dde1a1aea3",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-16-51-093Z.json": "8b1ad9012ee714ce70aa08056c5854d3bcd3a531f8973c0c8094fe215da83f84",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-18-08-911Z.json": "c0467af8d339b214949539385f10f83527e29648320bdc9ad0e3fa8e2c2ca9a1",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-20-21-208Z.json": "fae07d00242e75fd6f4dc5eef72d35a6159fdcbf1ede2e957ed7e96d73e3a0bb",
+      "scripts/esco2/recovery/qa/iterations/rls-2026-11-04T18-16-51-109Z.json": "37a4f52135c00cc920b2628fbcfd02c8aafdba944403ba7c6ccbd724eb27242e",
+      "scripts/esco2/recovery/qa/iterations/rls-2026-11-04T18-20-21-229Z.json": "5b949d8b9e26aecd604aca0bfb98f77cf2434a0046e2550c5243fa8c8c45450c",
+      "scripts/esco2/recovery/qa/iterations/2026-11-04T18-10-59-230Z.json": "3595af41478cd603e4597d8c39d60d73fa5f23952e36641200c02030c42dfce3",
+      "scripts/esco2/recovery/qa/iterations/rls-2026-11-04T18-18-08-950Z.json": "ebc82d217c4d94442302c1a49cb824eeb7d23be8b748b244275b1a7b849debca",
+      "docs/esco2/p0-semantic-contract-2026-11-04.md": "ee91a49a3dd69f757e00f674b37b442c3b6cabfb6a738d5caf71ebd11027277a",
+      "docs/esco2/p0-qa-rubric-2026-11-04.md": "024f4ffcc5cf79481c40b67f97e798ebff58cbd7f7404e989933280b2f8598e0",
+      "docs/esco2/p1-experiment-result-2026-11-04.md": "a2bf7ee971f7806382178963d16807b4b8a7ef63df50436414b6d04d12a0596a",
+      "docs/esco2/handoff-2026-11-04-local 2.md": "16e6024f4019f92232e2739617248168e9f151d05aadcaf3b806ae606c95ee63"
+    },
+    "p1RunnersExecuted": false
+  },
+  "sourceHashesStableDuringFinalChecks": true,
+  "sha256": {
+    "src/utils/esco2/fuente.ts": "6cf5a30f9836e5b499615223a733495e54c0b8390be767d4ffb83bf2eb23df5e",
+    "src/utils/esco2/ejecutor.ts": "c966b3cef04d8289ab7b827ea8862cc14d56d5dee717b35813dee44919c3bd2e",
+    "src/utils/esco2/estado.ts": "dcd89fde01103cc9dcd1c2de7e224f65899b01a20f7451ad2d6038bf8352c7d4",
+    "src/utils/esco2/guardaNumerica.ts": "95d1d035f54b8287dbe8662ef7e799b1120e78c937012a5625d70df0c6c42044",
+    "src/utils/esco2/evaluacion.ts": "7b4ca9c97c3dd666a79a52cb94fb68f3b56157615e26b479403d21ab4a98ac1e",
+    "src/utils/esco2/prompts.ts": "216cc715d440012c2a991ec5c44e552a331ad1a0639418dfa349a48038f11a66",
+    "src/utils/esco2/llm.ts": "ac8e5053a133ffa0b3a0f71242810f87acf8c0f5aa16bd3c3f4005254907023e",
+    "src/utils/esco2/fechaCalendario.ts": "fe4645459ee854e2985be705be942bb96354f99e56ff0d32111e499b2bf4310c",
+    "src/utils/esco2/ruteo.ts": "c5f21aeac99fe7f5145ac48ab4d505b4490a109fc4253563ec97b177a367ce6a",
+    "src/utils/esco2/catalogo.ts": "f31d2b786364ebb8de9f78e691d23e633688dba73bea58e0e5d40830bfe24f2e",
+    "src/utils/esco2/nucleo.ts": "7ca373d054087d87585c6157dc728165c3c9344ad959af609b3d9be15d34a7a7",
+    "src/utils/esco2/ambiguedad.ts": "dbefdfc6d63f68fd9bc77daf64cd6015727f3f5f2c5901077a7155d27315cc02",
+    "src/utils/esco2/tipos.ts": "48b6d93ec86cde8eacaafda5d6c11ff00a39c7700f68483d74829b756eba94f8",
+    "src/utils/esco2/fechasTexto.ts": "3bd3da16222ac6e0211a40ebdfd0b0a3c066d70c918b0fed817bf6269c209f24",
+    "src/utils/esco2/registro.ts": "1e8d2c5682cad00571799ce2f28c7d130d994c2b45dfd0d84ca0db9ce567f262",
+    "src/utils/esco2/semantica.ts": "46822af8cc88f50983a8214c05066c32bf319cfec6ca1932f9fc2ee4509523eb",
+    "src/__tests__/esco2Nucleo.test.ts": "e37b3a5ef61238950cb2de0e4b90e5bdc988747a51d78df3903223234c893af1",
+    "src/__tests__/esco2P2Security.test.ts": "e1404b6d9065ff9422fd99d2b20b1d2915641a25101c591ad9e8236befab3790",
+    "src/__tests__/esco2P2Backend.test.ts": "c58c2b0d5e9ff7cf39729158c2169d37b089bb80fa146740122120a7f422e8cd",
+    "src/__tests__/esco2P2Mutation.test.ts": "1203219c132aff7a2fabff0748dfd03438eecacead852b89552a285e978859d6",
+    "src/__tests__/esco2M3Planificador.test.ts": "a7958e6b59e1fc948b56db89b1c93b5d30dcd3b131dbc0dcfd96d1c784bdfbf5",
+    "src/__tests__/esco2LaborReview.test.ts": "862e0f20a1787cfeda63d50ca8adc7e9c23a6e5305623e1e4ba1c98e6a0ec2fb",
+    "src/__tests__/esco2EscoConsultas.test.ts": "27d74e2d90d42b81c46bb69e269c0dae7d7b7bebcccfcded0799e9bc2f28dcf5",
+    "src/__tests__/esco2ArnesRls.ts": "9a63a2b2d1e8891dc1005c3a240d2f3c1693a2f6e1cec8dbed4014ee297cd51e",
+    "src/__tests__/esco2M4Labores.test.ts": "874b667111cb812043f89be58601f6338e9e6b68984569d71fc23a51f21036ea",
+    "src/__tests__/esco2PostgrestFalso.ts": "6d7784bff31286346c98a0521ee3f3819933c72dc7ccb29b6ac909d67c818632",
+    "src/__tests__/esco2ClientePrueba.test.ts": "5a9517c0414ce944ee0f1ef6fd47b5e8a990093085a6ea3704d5b10b5f513ac9",
+    "src/__tests__/esco2P2Source.test.ts": "d77b14424c48c295e1e91dba2ac176bd29ceddf11af6448e7f10c17dadda0f08",
+    "src/__tests__/esco2P2Integration.test.ts": "5e7e6b399c982b70a62aa9d6d1c11397d6abe5f4ae8ab79b0508bb432ea1e805",
+    "src/__tests__/esco2P2Harness.ts": "9752d64e7c714d0a2803a90bfef6356089ca81815502937edd015b30c055fa1d",
+    "supabase/functions/esco-consultas/manejador.ts": "bfaf52fb554ad42ebb0ad5e5d1b575d32afd726436c3254ef486b7c8f946db2a",
+    "vite.config.ts": "f2cca3397f2ea50f0de0ab940873e19b17a40d77ce5b9c2077af3b7d48304e71"
+  },
+  "mutationEvidence": {
+    "qaOracleClassesDetected": 8,
+    "positiveControlsAccepted": 8,
+    "runtimePlannerPublicationAttackChecks": 13,
+    "copiedResponseMutationIsRuntimeRejection": false
+  },
+  "network": {
+    "paidProviderCalls": 0,
+    "providerUsd": 0,
+    "productionReads": 0,
+    "qaFetchDeniedAndUnused": true
+  },
+  "state": {
+    "ttlMinutes": 15,
+    "maxEntries": 200,
+    "maxUtf8Bytes": 65536,
+    "storage": "process-local opaque token bound to verified auth uid"
+  },
+  "excludedActions": [
+    "heldout/private evaluator access",
+    "production/model/source acquisition",
+    "migration/secrets/deployment/pilot",
+    "P3-P6",
+    "P2 commit/push"
+  ],
+  "limits": [
+    "synthetic development regression, not acceptance",
+    "scripted planner, no natural-language accuracy certification",
+    "synthetic JWT signature/Auth and local PGlite RLS only",
+    "no production source completeness or concurrent snapshot guarantee",
+    "ephemeral state can expire, be evicted or disappear across instances",
+    "no browser clarification UX or deployment certification"
+  ]
+}
