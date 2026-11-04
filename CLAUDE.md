@@ -945,6 +945,10 @@ acceptance remains open because exploratory findings require separate review. Se
   plus deterministic Spanish answers, PR #415), with Santiago's approval in chat: `ACTIVE`,
   `verify_jwt = true`, anonymous `/health` 401. D31 rejection still stands; dev-set check and
   P3 decisions: `docs/esco2/p2-v3-devcheck-y-decisiones-p3.md`.
+  Redeployed 2026-11-04 as **version 4** from clean `main` `095a5c50` (PRs #417 clarification
+  buttons + one planner retry, #418 P3 source contract, #419 chat history back for
+  interpretation only), with Santiago's approval in chat: `ACTIVE`, `verify_jwt = true`,
+  anonymous `/health` 401.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
