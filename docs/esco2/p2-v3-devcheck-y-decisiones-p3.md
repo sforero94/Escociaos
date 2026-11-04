@@ -49,3 +49,27 @@ it does not reopen them.
 | D35 | **Plan versus execution.** Plan: `aplicaciones_calculos`, `aplicaciones_productos`, `aplicaciones_mezclas`, with the mix→lote link in `aplicaciones_calculos.mezcla_id`. Execution: `movimientos_diarios` and its child tables. Never read `aplicaciones_lotes_planificado` (empty). Label plan and execution apart and never add them together. |
 | D36 | **Labor↔application link.** Join only on `aplicaciones.tarea_id`. Never join by name or text. An application with no link, or a link that cannot be read, is stated as such, never as zero labor. |
 | D37 | **Shortages.** Compute live: `aplicaciones_productos.cantidad_total_necesaria` summed by `producto_id` against `productos.cantidad_actual`. Never use the frozen `aplicaciones_compras` snapshot. |
+
+## 4. Follow-up questions lost their context (fixed 2026-11-04)
+
+The review of PRs #417/#418 re-ran the development set and found a P2 regression.
+P2 stopped passing the client's chat history to the planner (`nucleo.ts`), and the local
+test screen sent an empty history. So every follow-up started from zero: a question that
+continued an earlier one lost its period and answered from 1 January instead.
+
+Fix: the planner again sees the last 6 client messages, for **interpretation only**
+(period, lots and tasks already under discussion). History still cannot answer a pending
+D26 clarification: the D26 rule ignores it in code, and a choice comes only from the
+server-side `estadoToken`. Every plan still passes `validarPlan` and the caller's RLS.
+The planner prompt says the same, and the test screen now sends its prior turns.
+
+Development-set result with the real planner (3 repetitions, private snapshot, not held-out):
+
+| Run | Passes | Cost USD |
+|---|---|---|
+| After #417, before the fix | 25 of 30 | 0.0058 |
+| After the fix | **29 of 30** | 0.0046 |
+
+The clarification case now passes 3 of 3 and the unknown-name case 3 of 3. The one miss
+is planner variance on a "resumen" question (no per-task breakdown in 1 of 3), seen before
+the fix too. Cumulative P3 model spend: USD 0.0345 of 0.25. The D31 rejection still stands.

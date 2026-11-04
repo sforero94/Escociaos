@@ -11,6 +11,8 @@ import { fuenteEnMemoria, type FuenteLabores } from './fuente.ts';
 import { ErrorPlan, herramientasPlanificador, validarPlan } from './registro.ts';
 import { type ModeloEtapa, type Ruta } from './ruteo.ts';
 import type { ConsultaLabores, DatosLabores, MensajeHistorial, Plan, ResultadoParte } from './tipos.ts';
+/** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
+export const MAX_HISTORIAL_PLANIFICADOR = 6;
 export interface ConfigModelos {
     nombre: string;
     planificador: {
@@ -99,8 +101,14 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
 }): Promise<ResultadoTurno> {
     const inicio = Date.now();
     const { pregunta, hoy, fuente, llm, config } = args;
-    // Client history never proves an accepted clarification or inherited scope.
-    const historial: MensajeLLM[] = args.estado?.plan ? [{ role: 'system', content: `Contexto aceptado por el servidor: ${JSON.stringify(args.estado.plan)}` }] : [];
+    // Client history helps the planner interpret a follow-up (the period, lots or tasks
+    // already under discussion). It never proves a clarification choice or grants scope:
+    // the D26 rule below ignores it in code, choices come only from the server-side
+    // estadoToken, and every plan still passes validarPlan and the caller's RLS.
+    const historial: MensajeLLM[] = [
+        ...args.historial.slice(-MAX_HISTORIAL_PLANIFICADOR).map((m): MensajeLLM => ({ role: m.rol === 'assistant' ? 'assistant' : 'user', content: m.texto })),
+        ...(args.estado?.plan ? [{ role: 'system' as const, content: `Contexto aceptado por el servidor: ${JSON.stringify(args.estado.plan)}` }] : []),
+    ];
     const llamadas: RegistroLlamada[] = [];
     const salida = (o: Omit<ResultadoTurno, 'llamadas' | 'ms'>): ResultadoTurno => ({ ...o, llamadas, ms: Date.now() - inicio });
     const base: Pick<ResultadoTurno, 'plan' | 'errorPlan' | 'resultados' | 'guarda' | 'ruta' | 'ajustes'> = {
