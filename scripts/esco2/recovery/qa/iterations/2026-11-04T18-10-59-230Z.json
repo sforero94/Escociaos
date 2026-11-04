@@ -1,0 +1,958 @@
+{
+  "runId": "2026-11-04T18-10-59-230Z",
+  "implementationBefore": {
+    "shared.ts": "661a0e21f6b21d48aae421d99999f3682ee3318763ca61e3d11133841c33a591",
+    "baseline.ts": "aaba2c25814b1244bc731b449abf976d605731282c9287fb72ae5084d976d873",
+    "repair.ts": "cb9bdaea72a02a37876e1bdc9879800715d365bab01231eb3d7f66fe950534df",
+    "redesign.ts": "ba8a8e8136c4a565f9ab84648efffca7758c03548238e5611adafb9f7a7bdaaf"
+  },
+  "implementationAfter": {
+    "shared.ts": "661a0e21f6b21d48aae421d99999f3682ee3318763ca61e3d11133841c33a591",
+    "baseline.ts": "aaba2c25814b1244bc731b449abf976d605731282c9287fb72ae5084d976d873",
+    "repair.ts": "cb9bdaea72a02a37876e1bdc9879800715d365bab01231eb3d7f66fe950534df",
+    "redesign.ts": "ba8a8e8136c4a565f9ab84648efffca7758c03548238e5611adafb9f7a7bdaaf"
+  },
+  "stage": "A/B",
+  "independentScenarios": 16,
+  "extraControls": 1,
+  "networkCalls": 0,
+  "paidCalls": 0,
+  "rows": [
+    {
+      "variant": "baseline",
+      "scenario": "S01",
+      "family": "source",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "assoc:disposition:respondida",
+        "assoc:missing_claim:[\"assoc\",\"tarea\",\"t1\",\"asociaciones\"]"
+      ],
+      "elapsedMs": 13.666000000000011,
+      "inputBytes": 2209,
+      "outputBytes": 286,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S02",
+      "family": "source",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "assoc:missing_claim:[\"assoc\",\"tarea\",\"t1\",\"asociaciones\"]"
+      ],
+      "elapsedMs": 0.19745799999998326,
+      "inputBytes": 2241,
+      "outputBytes": 286,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S03",
+      "family": "source",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "schedule:false_claim:[\"schedule\",\"total\",\"total\",\"miembros\"]",
+        "schedule:missing_claim:[\"schedule\",\"tarea\",\"t3\",\"estado_actual\"]"
+      ],
+      "elapsedMs": 0.1726250000000107,
+      "inputBytes": 2506,
+      "outputBytes": 653,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S04",
+      "family": "source",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "zero:false_claim:[\"zero\",\"total\",\"total\",\"jornales\"]",
+        "zero:false_claim:[\"zero\",\"total\",\"total\",\"costo\"]"
+      ],
+      "elapsedMs": 0.3199170000000038,
+      "inputBytes": 2842,
+      "outputBytes": 1800,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S05",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.14791700000000674,
+      "inputBytes": 2433,
+      "outputBytes": 617,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S06",
+      "family": "calendar",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "duplicate:duplicate_claim",
+        "duplicate:missing_claim:[\"duplicate\",\"tarea\",\"t2\",\"jornales\"]"
+      ],
+      "elapsedMs": 0.2916669999999897,
+      "inputBytes": 2469,
+      "outputBytes": 1380,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S07",
+      "family": "calendar",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "rank:qualifier:ranking:costo:desc:incluir",
+        "rank:qualifier:ranking_total:3",
+        "rank:qualifier:ranking_mostrados:2",
+        "rank:qualifier:ranking_omitidos:1",
+        "rank:false_claim:[\"rank\",\"total\",\"total\",\"miembros\"]",
+        "rank:ungraded_extra_claim:[\"rank\",\"lote\",\"l3\",\"costo\"]"
+      ],
+      "elapsedMs": 0.6699159999999722,
+      "inputBytes": 2531,
+      "outputBytes": 2085,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S08",
+      "family": "calendar",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "missing-date:disposition:respondida",
+        "missing-date:ungraded_extra_claim:[\"missing-date\",\"total\",\"total\",\"miembros\"]"
+      ],
+      "elapsedMs": 0.11862500000000864,
+      "inputBytes": 2300,
+      "outputBytes": 665,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S09",
+      "family": "claims",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "binding:duplicate_claim",
+        "binding:missing_claim:[\"binding\",\"tarea\",\"t2\",\"jornales\"]",
+        "binding:missing_claim:[\"binding\",\"tarea\",\"t2\",\"costo\"]"
+      ],
+      "elapsedMs": 0.2582079999999962,
+      "inputBytes": 3086,
+      "outputBytes": 2359,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S10",
+      "family": "claims",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "sets:missing_claim:[\"sets\",\"tarea\",\"t1\",\"asociaciones\"]",
+        "sets:missing_claim:[\"sets\",\"tarea\",\"t2\",\"asociaciones\"]",
+        "sets:missing_claim:[\"sets\",\"tarea\",\"t3\",\"asociaciones\"]"
+      ],
+      "elapsedMs": 0.13179099999999266,
+      "inputBytes": 2596,
+      "outputBytes": 285,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S11",
+      "family": "claims",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "reconcile:missing_claim:[\"reconcile\",\"lote\",\"sin_lote\",\"jornales\"]",
+        "reconcile:missing_claim:[\"reconcile\",\"total\",\"total\",\"reconciliacion\"]",
+        "reconcile:ungraded_extra_claim:[\"reconcile\",\"lote\",\"(sin lote)\",\"jornales\"]"
+      ],
+      "elapsedMs": 0.1737500000000125,
+      "inputBytes": 2481,
+      "outputBytes": 2170,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S12",
+      "family": "claims",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "estimates:false_claim:[\"estimates\",\"total\",\"total\",\"jornales_estimados\"]",
+        "estimates:claim_qualifier:estimado_tarea_completa",
+        "estimates:claim_qualifier:estimado_parcial",
+        "estimates:claim_qualifier:estimados_faltantes:1"
+      ],
+      "elapsedMs": 0.5533340000000067,
+      "inputBytes": 2543,
+      "outputBytes": 1102,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S13",
+      "family": "conversation",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "assoc:disposition:respondida",
+        "assoc:missing_claim:[\"assoc\",\"tarea\",\"t1\",\"asociaciones\"]"
+      ],
+      "elapsedMs": 0.17729099999999676,
+      "inputBytes": 2558,
+      "outputBytes": 793,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S14",
+      "family": "conversation",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "pending_state"
+      ],
+      "elapsedMs": 0.07224999999999682,
+      "inputBytes": 2639,
+      "outputBytes": 205,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S15",
+      "family": "conversation",
+      "passes": false,
+      "critical": true,
+      "errors": [
+        "followup:false_claim:[\"followup\",\"total\",\"total\",\"jornales\"]"
+      ],
+      "elapsedMs": 0.10283400000000142,
+      "inputBytes": 2679,
+      "outputBytes": 633,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S16",
+      "family": "conversation",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "followup:disposition:respondida",
+        "followup:ungraded_extra_claim:[\"followup\",\"total\",\"total\",\"jornales\"]",
+        "pending_state"
+      ],
+      "elapsedMs": 0.07408300000000168,
+      "inputBytes": 2661,
+      "outputBytes": 633,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "baseline",
+      "scenario": "X01",
+      "family": "source",
+      "passes": false,
+      "critical": false,
+      "errors": [
+        "schedule:disposition:respondida",
+        "schedule:ungraded_extra_claim:[\"schedule\",\"total\",\"total\",\"miembros\"]"
+      ],
+      "elapsedMs": 0.05787499999999568,
+      "inputBytes": 2419,
+      "outputBytes": 653,
+      "substantive": false,
+      "extraControl": true
+    },
+    {
+      "variant": "repair",
+      "scenario": "S01",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.6338749999999891,
+      "inputBytes": 2209,
+      "outputBytes": 906,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S02",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.09350000000000591,
+      "inputBytes": 2241,
+      "outputBytes": 876,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S03",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.14749999999997954,
+      "inputBytes": 2506,
+      "outputBytes": 1559,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S04",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.16049999999998477,
+      "inputBytes": 2842,
+      "outputBytes": 2600,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S05",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.09429199999999582,
+      "inputBytes": 2433,
+      "outputBytes": 870,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S06",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.19529099999999744,
+      "inputBytes": 2469,
+      "outputBytes": 1961,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S07",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.17183399999998983,
+      "inputBytes": 2531,
+      "outputBytes": 3315,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S08",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06612499999999955,
+      "inputBytes": 2300,
+      "outputBytes": 412,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S09",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.11916700000000446,
+      "inputBytes": 3086,
+      "outputBytes": 3706,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S10",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06987499999999613,
+      "inputBytes": 2596,
+      "outputBytes": 1907,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S11",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.12145799999998985,
+      "inputBytes": 2481,
+      "outputBytes": 3965,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S12",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.11362500000001319,
+      "inputBytes": 2543,
+      "outputBytes": 1878,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S13",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.11608299999997485,
+      "inputBytes": 2558,
+      "outputBytes": 1630,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S14",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.0554170000000056,
+      "inputBytes": 2639,
+      "outputBytes": 622,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S15",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.08150000000000546,
+      "inputBytes": 2679,
+      "outputBytes": 890,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "S16",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.04941700000000537,
+      "inputBytes": 2661,
+      "outputBytes": 546,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "repair",
+      "scenario": "X01",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.05079200000000128,
+      "inputBytes": 2419,
+      "outputBytes": 414,
+      "substantive": false,
+      "extraControl": true
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S01",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.11670900000001438,
+      "inputBytes": 2209,
+      "outputBytes": 908,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S02",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.05116699999999241,
+      "inputBytes": 2241,
+      "outputBytes": 878,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S03",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06595900000002075,
+      "inputBytes": 2506,
+      "outputBytes": 1561,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S04",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.0814590000000237,
+      "inputBytes": 2842,
+      "outputBytes": 2602,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S05",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.056541000000009944,
+      "inputBytes": 2433,
+      "outputBytes": 872,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S06",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.07691700000000878,
+      "inputBytes": 2469,
+      "outputBytes": 1963,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S07",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.0836670000000197,
+      "inputBytes": 2531,
+      "outputBytes": 3317,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S08",
+      "family": "calendar",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.04045800000000099,
+      "inputBytes": 2300,
+      "outputBytes": 414,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S09",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.08883399999999142,
+      "inputBytes": 3086,
+      "outputBytes": 3708,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S10",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06016599999998107,
+      "inputBytes": 2596,
+      "outputBytes": 1909,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S11",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06825000000000614,
+      "inputBytes": 2481,
+      "outputBytes": 3967,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S12",
+      "family": "claims",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06325000000001069,
+      "inputBytes": 2543,
+      "outputBytes": 1880,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S13",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.06575000000000841,
+      "inputBytes": 2558,
+      "outputBytes": 1632,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S14",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.041957999999993945,
+      "inputBytes": 2639,
+      "outputBytes": 624,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S15",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.05720900000000029,
+      "inputBytes": 2679,
+      "outputBytes": 892,
+      "substantive": true,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S16",
+      "family": "conversation",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.03945800000002464,
+      "inputBytes": 2661,
+      "outputBytes": 548,
+      "substantive": false,
+      "extraControl": false
+    },
+    {
+      "variant": "redesign",
+      "scenario": "X01",
+      "family": "source",
+      "passes": true,
+      "critical": false,
+      "errors": [],
+      "elapsedMs": 0.10224999999999795,
+      "inputBytes": 2419,
+      "outputBytes": 416,
+      "substantive": false,
+      "extraControl": true
+    }
+  ],
+  "mutationRows": [
+    {
+      "variant": "baseline",
+      "mutation": "entidad_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": false
+    },
+    {
+      "variant": "baseline",
+      "mutation": "unidad_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": true
+    },
+    {
+      "variant": "baseline",
+      "mutation": "base_fecha_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": true
+    },
+    {
+      "variant": "baseline",
+      "mutation": "miembro_incorrecto",
+      "scenario": "S10",
+      "applicable": false,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": false
+    },
+    {
+      "variant": "baseline",
+      "mutation": "calificador_ausente",
+      "scenario": "S12",
+      "applicable": true,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": true
+    },
+    {
+      "variant": "baseline",
+      "mutation": "numero_solo_pregunta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": true
+    },
+    {
+      "variant": "baseline",
+      "mutation": "obligacion_omitida",
+      "scenario": "S13",
+      "applicable": true,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": true
+    },
+    {
+      "variant": "baseline",
+      "mutation": "desconocido_a_vacio",
+      "scenario": "S01",
+      "applicable": false,
+      "positiveAccepted": false,
+      "runtimeDetected": null,
+      "oracleDetected": false
+    },
+    {
+      "variant": "repair",
+      "mutation": "entidad_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "unidad_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "base_fecha_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "miembro_incorrecto",
+      "scenario": "S10",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "calificador_ausente",
+      "scenario": "S12",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "numero_solo_pregunta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "obligacion_omitida",
+      "scenario": "S13",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "repair",
+      "mutation": "desconocido_a_vacio",
+      "scenario": "S01",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "entidad_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "unidad_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "base_fecha_incorrecta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "miembro_incorrecto",
+      "scenario": "S10",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "calificador_ausente",
+      "scenario": "S12",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "numero_solo_pregunta",
+      "scenario": "S09",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "obligacion_omitida",
+      "scenario": "S13",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    },
+    {
+      "variant": "redesign",
+      "mutation": "desconocido_a_vacio",
+      "scenario": "S01",
+      "applicable": true,
+      "positiveAccepted": true,
+      "runtimeDetected": true,
+      "oracleDetected": true
+    }
+  ]
+}

@@ -1,0 +1,1196 @@
+{
+  "runId": "2026-11-04T18-20-21-229Z",
+  "implementationBefore": {
+    "shared.ts": "71fa0f48fc9d41a99c6a0f172759e32b06eba54cf897074bc591d032e8283e01",
+    "baseline.ts": "ffe2252c4e13d3d056043a598b6fb83b54eeb8b1a144e42008b42cb097e3a7d7",
+    "repair.ts": "7ea063a9b81583079ab020bb4a88a41e8ed8301c8fddd6b8822df0d3865c71d0",
+    "redesign.ts": "27bc11a6c8bf6bb13c316e877221033ae8edcb73cbe6e4742c9220e84fb15a05"
+  },
+  "implementationAfter": {
+    "shared.ts": "71fa0f48fc9d41a99c6a0f172759e32b06eba54cf897074bc591d032e8283e01",
+    "baseline.ts": "ffe2252c4e13d3d056043a598b6fb83b54eeb8b1a144e42008b42cb097e3a7d7",
+    "repair.ts": "7ea063a9b81583079ab020bb4a88a41e8ed8301c8fddd6b8822df0d3865c71d0",
+    "redesign.ts": "27bc11a6c8bf6bb13c316e877221033ae8edcb73cbe6e4742c9220e84fb15a05"
+  },
+  "label": "local candidate wrapper using actual gate, fixed reader and synthetic RLS; not deployed HTTP integration",
+  "networkCalls": 0,
+  "evidence": [
+    {
+      "variant": "baseline",
+      "scenario": "S01",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "assoc:disposition:no_soportada",
+          "assoc:missing_claim:[\"assoc\",\"tarea\",\"t1\",\"asociaciones\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S02",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "assoc:disposition:no_soportada",
+          "assoc:missing_claim:[\"assoc\",\"tarea\",\"t1\",\"asociaciones\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S03",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": true,
+        "errores": [
+          "schedule:false_claim:[\"schedule\",\"total\",\"total\",\"miembros\"]",
+          "schedule:missing_claim:[\"schedule\",\"tarea\",\"t3\",\"estado_actual\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S04",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S05",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S06",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "duplicate:missing_claim:[\"duplicate\",\"tarea\",\"t1\",\"jornales\"]",
+          "duplicate:missing_claim:[\"duplicate\",\"tarea\",\"t2\",\"jornales\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S07",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": true,
+        "errores": [
+          "rank:qualifier:ranking:costo:desc:incluir",
+          "rank:qualifier:ranking_total:3",
+          "rank:qualifier:ranking_mostrados:2",
+          "rank:qualifier:ranking_omitidos:1",
+          "rank:false_claim:[\"rank\",\"total\",\"total\",\"miembros\"]",
+          "rank:ungraded_extra_claim:[\"rank\",\"lote\",\"l3\",\"costo\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S08",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "missing-date:disposition:respondida",
+          "missing-date:ungraded_extra_claim:[\"missing-date\",\"total\",\"total\",\"miembros\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S09",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "binding:missing_claim:[\"binding\",\"tarea\",\"t1\",\"jornales\"]",
+          "binding:missing_claim:[\"binding\",\"tarea\",\"t1\",\"costo\"]",
+          "binding:missing_claim:[\"binding\",\"tarea\",\"t2\",\"jornales\"]",
+          "binding:missing_claim:[\"binding\",\"tarea\",\"t2\",\"costo\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S10",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": true,
+        "errores": [
+          "sets:missing_claim:[\"sets\",\"tarea\",\"t1\",\"asociaciones\"]",
+          "sets:missing_claim:[\"sets\",\"tarea\",\"t2\",\"asociaciones\"]",
+          "sets:claim_qualifier:alcance_visible"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S11",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "reconcile:missing_claim:[\"reconcile\",\"total\",\"total\",\"reconciliacion\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S12",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S13",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "assoc:disposition:no_soportada",
+          "assoc:missing_claim:[\"assoc\",\"tarea\",\"t1\",\"asociaciones\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S14",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "pending_state"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S15",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": true,
+        "errores": [
+          "followup:false_claim:[\"followup\",\"total\",\"total\",\"jornales\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "S16",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "followup:disposition:respondida",
+          "followup:ungraded_extra_claim:[\"followup\",\"total\",\"total\",\"jornales\"]",
+          "pending_state"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "scenario": "X01",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": false,
+        "critico": false,
+        "errores": [
+          "schedule:disposition:respondida",
+          "schedule:ungraded_extra_claim:[\"schedule\",\"total\",\"total\",\"miembros\"]"
+        ]
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S01",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S02",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S03",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S04",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S05",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S06",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S07",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S08",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S09",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S10",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S11",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S12",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S13",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S14",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S15",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "S16",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "repair",
+      "scenario": "X01",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S01",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S02",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S03",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S04",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S05",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S06",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S07",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S08",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S09",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S10",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S11",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S12",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S13",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S14",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S15",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "S16",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "redesign",
+      "scenario": "X01",
+      "status": 200,
+      "plannerCalls": 1,
+      "judgement": {
+        "pasa": true,
+        "critico": false,
+        "errores": []
+      },
+      "readerRoles": [
+        "authenticated"
+      ],
+      "tables": [
+        "usuarios",
+        "tareas",
+        "tipos_tareas",
+        "lotes",
+        "aplicaciones",
+        "registros_trabajo"
+      ]
+    },
+    {
+      "variant": "baseline-real-manejar",
+      "status": 200,
+      "plannerCalls": 1,
+      "composerCalls": 1,
+      "independentSQL": 3,
+      "hoy": "2026-11-04"
+    }
+  ]
+}

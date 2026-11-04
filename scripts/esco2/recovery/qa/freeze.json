@@ -1,0 +1,15 @@
+{
+  "version": "p0-v1",
+  "frozenAt": "2026-11-04T18:07:38.183005+00:00",
+  "scenarioCount": 16,
+  "extraControlCount": 1,
+  "mutationClasses": 8,
+  "source": "fresh synthetic tables and independent literal table arithmetic",
+  "files": {
+    "scripts/esco2/recovery/contracts.ts": "989e445f4153fa12b36ff9cd8eb103a4f78810b182610caf00dd1afd9448a9b0",
+    "scripts/esco2/recovery/qa/scenarios.ts": "476e899d373fe603c211af2c2aa700a41fe84876f2a6c232498b61dde1a1aea3",
+    "scripts/esco2/recovery/qa/oracle.ts": "64e4e96d0a3a8466883cdbd9719e55772434ab79ffab0a146857ad0644a64fd2",
+    "docs/esco2/p0-qa-rubric-2026-11-04.md": "024f4ffcc5cf79481c40b67f97e798ebff58cbd7f7404e989933280b2f8598e0",
+    "docs/esco2/p0-semantic-contract-2026-11-04.md": "ee91a49a3dd69f757e00f674b37b442c3b6cabfb6a738d5caf71ebd11027277a"
+  }
+}

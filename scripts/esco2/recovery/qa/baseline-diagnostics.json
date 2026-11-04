@@ -1,0 +1,19 @@
+{
+  "label": "Known unchanged-baseline defect reproductions; passing is not acceptance",
+  "evidence": [
+    {
+      "mechanism": "unread-to-false-absence",
+      "baselineOrigin": "determinista",
+      "baselineAssertion": "sin aplicación asociada",
+      "candidateBehavior": "unknown/source unavailable"
+    },
+    {
+      "mechanism": "actual composer guard accepts wrong claim binding and question-only777",
+      "baselineOrigin": "compositor",
+      "correctT1Jornales": 2,
+      "assertedT1Jornales": 8,
+      "correctT2Jornales": 8,
+      "assertedT2Jornales": 2
+    }
+  ]
+}

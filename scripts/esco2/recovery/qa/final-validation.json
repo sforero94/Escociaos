@@ -1,0 +1,49 @@
+{
+  "verifiedAt": "2026-11-04T18:22:53.633703+00:00",
+  "head": "5b9a76be78af7bf3dce11d32e132f599896be91e",
+  "branch": "main",
+  "trackedRuntimeChanges": [],
+  "frozenArtifactsMatch": true,
+  "sourceHashesStableDuringABAndRLS": true,
+  "finalCombinedTests": {
+    "passed": 285,
+    "files": 11,
+    "experiment": 161,
+    "existingFocused": 124
+  },
+  "checks": {
+    "experimentTypecheck": 0,
+    "repositoryTypecheck": 0,
+    "scopedLint": 0,
+    "benchmark": 0
+  },
+  "scope": "P0/P1 only; no commit/push, production access, paid inference, migration/deployment or P2",
+  "sha256": {
+    "scripts/esco2/recovery/backend.test.ts": "21b71ead95de774d0103374b45e65cfa97a02680868e6a054021c372787c1f4c",
+    "scripts/esco2/recovery/baseline.ts": "ffe2252c4e13d3d056043a598b6fb83b54eeb8b1a144e42008b42cb097e3a7d7",
+    "scripts/esco2/recovery/contracts.ts": "989e445f4153fa12b36ff9cd8eb103a4f78810b182610caf00dd1afd9448a9b0",
+    "scripts/esco2/recovery/measure.ts": "b0a5451ad77062d0678bb4d2a24a045d2c6fd11e2808c3e1cb7fd7fecc3c8d9e",
+    "scripts/esco2/recovery/qa/answer-boundaries.test.ts": "df440ca9bb3956d9cbd75400ee28ee0863c5440a168a9b166df62a03e1afa7cd",
+    "scripts/esco2/recovery/qa/baseline-diagnostics.test.ts": "7b27f93cdb3fa4959ae3bf2140d6924c7d948e87905887954f99e11c4181f604",
+    "scripts/esco2/recovery/qa/experiment.test.ts": "91fef148b6bdae286f84250d6045a54e632e55844521768c6ec53617da41cff7",
+    "scripts/esco2/recovery/qa/oracle.ts": "64e4e96d0a3a8466883cdbd9719e55772434ab79ffab0a146857ad0644a64fd2",
+    "scripts/esco2/recovery/qa/rls.test.ts": "ca84dfecd2ca26a60bb2f67bc4440e61d1bc884818d38067ea5d9c0668f98ce8",
+    "scripts/esco2/recovery/qa/scenarios.ts": "476e899d373fe603c211af2c2aa700a41fe84876f2a6c232498b61dde1a1aea3",
+    "scripts/esco2/recovery/qa/source-boundaries.test.ts": "d8df11d33f1428f375d9947a239e95a3a7042b6a712fe891e67195f8ae5b19f0",
+    "scripts/esco2/recovery/redesign.ts": "27bc11a6c8bf6bb13c316e877221033ae8edcb73cbe6e4742c9220e84fb15a05",
+    "scripts/esco2/recovery/repair.ts": "7ea063a9b81583079ab020bb4a88a41e8ed8301c8fddd6b8822df0d3865c71d0",
+    "scripts/esco2/recovery/shared.ts": "71fa0f48fc9d41a99c6a0f172759e32b06eba54cf897074bc591d032e8283e01",
+    "scripts/esco2/recovery/qa/results.json": "fae07d00242e75fd6f4dc5eef72d35a6159fdcbf1ede2e957ed7e96d73e3a0bb",
+    "scripts/esco2/recovery/qa/rls-results.json": "5b949d8b9e26aecd604aca0bfb98f77cf2434a0046e2550c5243fa8c8c45450c",
+    "scripts/esco2/recovery/qa/measurements.json": "62f2d291bf4830cf8ca29683f9b56e424000b0e1521d01210a1c82d8a06f82c9",
+    "docs/esco2/p1-experiment-result-2026-11-04.md": "a2bf7ee971f7806382178963d16807b4b8a7ef63df50436414b6d04d12a0596a"
+  },
+  "checkoutAtClose": "5b9a76be78af7bf3dce11d32e132f599896be91e",
+  "concurrentChange": {
+    "paths": [
+      "docs/esco2/astra-recovery-plan-2026-11-04.md"
+    ],
+    "note": "Concurrent documentation-only commit during close-out; not authored or created by this session. Tested runtime unchanged."
+  },
+  "closeVerifiedAt": "2026-11-04T18:25:49.409801+00:00"
+}
