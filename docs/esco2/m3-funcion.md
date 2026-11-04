@@ -115,3 +115,20 @@ PostgREST, CORS preflight through the gateway, and the Deno compile of `index.ts
 5. **D26 relies on client history** to know the user already answered. A forged history only
    changes the caller's own interpretation; it cannot widen access.
 6. **Bundling** verified from CLI source only (see above).
+
+## Regression check on the frozen M2.5 snapshot (2026-11-03)
+
+Config `m3` (Luna; Sol composes plans of 2+ parts), 10 cases × 3. Spend USD 0.058 in total.
+
+| | M2.5 Luna | M3 |
+|---|---|---|
+| Selection correct | 27/30 | 25/30 |
+| L04 («cosecha» alone) | 3/3 | 0/3 — D26 asks, by design |
+| L01 | 3/3 | 1/3 — **model drift**: the unchanged M2.5 code (`f3b87f6a`) also fails 3/3 today |
+| L07 | 1/3 | 2/3 |
+| Without L04 | 24/27 | 25/27 |
+
+A first M3 run added one D26 line to the planner prompt; it made L01 plan one part instead of
+two (0/3). The line was removed (D26 runs in code, so it was not needed); the planner prompt
+is now byte-identical to M2.5. L04's reference assumes the task reading; under D26 the
+golden reference for L04 needs Santiago's decision (ask, or accept the follow-up turn).
