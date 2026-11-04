@@ -209,8 +209,8 @@ function tablasSinteticas(nRegistros: number): Record<string, Record<string, unk
   return {
     registros_trabajo: registros,
     tareas: datos.tareas.map((t) => ({ ...t, jornales_estimados: t.jornales_estimados === null ? null : String(t.jornales_estimados) })),
-    tipos_tareas: datos.tiposTareas,
-    lotes: datos.lotes,
+    tipos_tareas: datos.tiposTareas.map((t) => ({ ...t })),
+    lotes: datos.lotes.map((l) => ({ ...l })),
   };
 }
 
