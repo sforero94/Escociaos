@@ -4,7 +4,7 @@
 
 Cada respuesta abre con las cifras principales y el período efectivo. En consultas con varias partes, cada parte lleva su título y su respuesta en el orden original. Los nombres, cifras, unidades y períodos salen de los resultados calculados. El mensaje omite identificadores internos, códigos y nombres de campos; los diagnósticos estructurados los conservan. No hay composición factual de un modelo.
 
-Los millones no tienen decimales y dicen «aprox.» cuando se redondean. También se señala el redondeo de pesos fraccionarios. Los jornales y las razones conservan su precisión; un valor pequeño distinto de cero no se convierte en un cero exacto.
+Los millones tienen un decimal por debajo de $10M («aprox. $1,4M») y ningún decimal desde $10M («$95M»); dicen «aprox.» cuando se redondean. Revisión posterior al PR #415: cero decimales bajo $10M perdía hasta un 40 % del valor. También se señala el redondeo de pesos fraccionarios. Los jornales y las razones conservan su precisión; un valor pequeño distinto de cero no se convierte en un cero exacto.
 
 ## API y frontera de validación
 

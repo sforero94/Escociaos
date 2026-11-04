@@ -14,7 +14,16 @@ const numero = (n: number) => {
     return decimals > 20 ? String(n).replace('.', ',') : formatNumber(n, decimals);
 };
 const jornal = (n: number, registrado = false) => `${numero(n)} ${n === 1 ? 'jornal' : 'jornales'}${registrado ? n === 1 ? ' registrado' : ' registrados' : ''}`;
-function dinero(n: number): string { return Math.abs(n) >= 1000000 ? `${n % 1000000 === 0 ? '' : 'aprox. '}${formatMillonesCOP(n, 0)}` : `${Number.isInteger(n) ? '' : 'aprox. '}${formatCurrency(n)}`; }
+// Under $10M a whole-million figure can be off by up to 40 %, so one decimal is kept there
+// ("aprox. $1,4M"). From $10M up, whole millions. Any rounding is labeled "aprox.".
+function dinero(n: number): string {
+    const abs = Math.abs(n);
+    if (abs < 1000000)
+        return `${Number.isInteger(n) ? '' : 'aprox. '}${formatCurrency(n)}`;
+    const decimales = n % 1000000 !== 0 && Math.round(abs / 100000) < 100 ? 1 : 0;
+    const exacto = n % (decimales ? 100000 : 1000000) === 0;
+    return `${exacto ? '' : 'aprox. '}${formatMillonesCOP(n, decimales)}`;
+}
 function nombre(text: string | undefined, base = 'Labor'): string {
     const result = (text ?? '').replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&');
     return result || base;

@@ -78,13 +78,15 @@ recorte a hoy, cobertura parcial y límite de lecturas separadas.
 Se reutilizan las utilidades puras existentes de `src/utils/format.ts`. Si hace
 falta precisión opcional en `formatMillonesCOP`, su valor por defecto conserva el
 comportamiento de todos los consumidores existentes. Solo el mensaje nuevo pide
-cero decimales para dinero expresado en millones. No se amplía a una migración de
+un decimal por debajo de $10M y cero decimales desde $10M para dinero expresado en millones. No se amplía a una migración de
 formato del producto.
 
 Los pesos se muestran sin decimales. Los millones se muestran con `M`, sin cambiar
-a billones ni introducir `K`. Si el valor publicado pierde precisión respecto
-del resultado, se marca como aproximado. Por ejemplo, un importe de 5.600.000
-puede decir «aprox. $6M»; no puede afirmar «$6M» como cifra exacta. Los jornales y
+a billones ni introducir `K`: un decimal por debajo de $10M y ninguno desde $10M.
+Si el valor publicado pierde precisión respecto del resultado, se marca como
+aproximado. Por ejemplo, un importe de 5.640.000 dice «aprox. $5,6M» y uno de
+56.400.000 dice «aprox. $56M»; ninguno se afirma como cifra exacta. (Revisión
+posterior: con cero decimales, 1.449.000 se publicaba «aprox. $1M».) Los jornales y
 las razones mantienen los decimales necesarios para representar su resultado.
 La regla de aproximación también aplica a fracciones de peso inferiores al
 millón. Un valor pequeño escrito en notación científica no se transforma en un

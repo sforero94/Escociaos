@@ -13,12 +13,19 @@ describe('Mensajes-v1: formato colombiano visible',()=>{
     {value:1234,expected:'$1.234',approx:false},
     {value:999999,expected:'$999.999',approx:false},
     {value:1000000,expected:'$1M',approx:false},
+    {value:1500000,expected:'$1,5M',approx:false},
+    {value:1449000,expected:'aprox. $1,4M',approx:true},
+    {value:9600000,expected:'$9,6M',approx:false},
+    {value:9960000,expected:'aprox. $10M',approx:true},
     {value:95000000,expected:'$95M',approx:false},
-    {value:95499999,expected:'$95M',approx:true},
+    {value:95499999,expected:'aprox. $95M',approx:true},
     {value:2000000000,expected:'$2.000M',approx:false},
-  ])('costo$value se muestra como$expected sin decimales monetarios',({value,expected,approx})=>{
+  ])('costo$value se muestra como$expected',({value,expected,approx})=>{
     const r=resultadoMensaje({total:{jornales:1,costo:value}});const text=renderMensaje([r]);expect(text).toContain(expected);
-    expect(text).not.toMatch(/\bCOP\b|\$[\d.]+,\d|\dB\b|bill[oó]n/i);if(approx)expect(text).toMatch(/aprox\.|aproximad/i);else expect(text).not.toMatch(/aprox\.|aproximad/i);
+    // One decimal only below $10M; never two decimals, COP or billions.
+    expect(text).not.toMatch(/\bCOP\b|\$[\d.]+,\d\d|\dB\b|bill[oó]n/i);
+    if(value>=9950000)expect(text).not.toMatch(/\$[\d.]+,\d/);
+    if(approx)expect(text).toMatch(/aprox\.|aproximad/i);else expect(text).not.toMatch(/aprox\.|aproximad/i);
   });
   it.each([
     {value:1,expected:'1 jornal'},
