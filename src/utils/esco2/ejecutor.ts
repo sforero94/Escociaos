@@ -7,6 +7,7 @@
 //  - Costo nulo ≠ costo cero: si algún registro del grupo no tiene costo, el costo del grupo es null.
 
 import { resolverCategorias, resolverLotes, resolverTareas } from './catalogo.ts';
+import { lunesDe } from './fechaCalendario.ts';
 import type {
   Agrupacion,
   ConsultaLabores,
@@ -22,13 +23,6 @@ export const SIN_LOTE_ETIQUETA = '(sin lote)';
 /** Redondeo a 2 decimales sin arrastre binario (las fracciones son múltiplos de 0,25). */
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
-}
-
-function lunesDe(fecha: string): string {
-  const d = new Date(`${fecha}T00:00:00Z`);
-  const dia = d.getUTCDay(); // 0 domingo
-  d.setUTCDate(d.getUTCDate() - ((dia + 6) % 7));
-  return d.toISOString().slice(0, 10);
 }
 
 function metricas(registros: RegistroTrabajo[]): ValoresMetricas {

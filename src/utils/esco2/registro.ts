@@ -1,6 +1,7 @@
 // Registro único de operaciones. De aquí salen el esquema que ve el modelo y el
 // validador que corre antes de ejecutar: no hay una lista paralela que se desincronice.
 
+import { esFechaCalendario } from './fechaCalendario.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'mes', 'semana'];
@@ -89,13 +90,7 @@ export interface LlamadaHerramienta {
 
 export class ErrorPlan extends Error {}
 
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
-
-function esFechaValida(s: unknown): s is string {
-  if (typeof s !== 'string' || !ISO.test(s)) return false;
-  const d = new Date(`${s}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-}
+const esFechaValida = esFechaCalendario;
 
 function listaTextos(v: unknown, campo: string): string[] {
   if (v === undefined || v === null) return [];

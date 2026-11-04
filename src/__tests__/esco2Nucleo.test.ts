@@ -237,3 +237,14 @@ describe('recorrido del turno', () => {
     expect(llm.solicitudes).toHaveLength(1);
   });
 });
+
+describe('fecha calendario', () => {
+  it('valida días reales y calcula el lunes sin depender del reloj', async () => {
+    const { esFechaCalendario, lunesDe } = await import('../utils/esco2/fechaCalendario.ts');
+    expect(esFechaCalendario('2024-02-29')).toBe(true);
+    expect(esFechaCalendario('2026-02-29')).toBe(false);
+    expect(lunesDe('2026-08-16')).toBe('2026-08-10'); // domingo
+    expect(lunesDe('2026-08-10')).toBe('2026-08-10'); // lunes
+    expect(lunesDe('2027-01-01')).toBe('2026-12-28'); // cruza de año
+  });
+});
