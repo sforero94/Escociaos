@@ -1,6 +1,6 @@
 # Esco 2.0 M4: alcance de labores
 
-Fecha: 2026-11-03 (Bogotá). Rama `claude/esco2-labores-alcance-1829ea`, sobre `claude/esco2-m25`.
+Fecha: 2026-11-03 (Bogotá). Rama `claude/esco2-m4-labores`, sobre `main` (PR #412; reemplaza a #411).
 Estado: código y pruebas listos. **Sin despliegue, sin migración.** `esco-consultas` importa
 este núcleo, así que el próximo `functions deploy` lo publica.
 

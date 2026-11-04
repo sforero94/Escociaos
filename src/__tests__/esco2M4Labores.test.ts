@@ -275,6 +275,18 @@ describe('fuente de Supabase: columnas nuevas', () => {
     expect((await fuenteSupabase(clientePostgrestFalso(t), {}).catalogo()).aplicaciones).toHaveLength(1200);
     await expect(fuenteSupabase(clientePostgrestFalso(t, { limiteTotal: 1100 })).catalogo()).rejects.toThrow(/lectura incompleta/);
   });
+
+  it('una aplicación sin tarea se omite; no hace fallar el catálogo', async () => {
+    const t = tablas();
+    t.aplicaciones = [
+      ...t.aplicaciones,
+      { id: 'AP2', tarea_id: null, codigo_aplicacion: 'APL-2', nombre_aplicacion: 'Sin tarea', estado: 'Calculada' },
+      { id: 'AP3', codigo_aplicacion: 'APL-3', nombre_aplicacion: 'Sin columna', estado: 'Calculada' },
+    ];
+    const cat = await fuenteSupabase(clientePostgrestFalso(t)).catalogo();
+    expect(cat.aplicaciones?.map((a) => a.id)).toEqual(['AP1']);
+    expect(cat.tareas).toHaveLength(datos.tareas.length);
+  });
 });
 
 // --- Brecha 6: cifras obligatorias ------------------------------------------------------------------------

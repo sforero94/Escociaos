@@ -150,7 +150,11 @@ function aTarea(f: Record<string, unknown>): Tarea {
   };
 }
 
-function aAplicacion(f: Record<string, unknown>): Aplicacion {
+// `aplicaciones.tarea_id` admite NULL en la base. Una aplicación sin tarea no se puede ligar a
+// ninguna fila de labores, así que se omite. Lanzar aquí haría fallar el catálogo entero, y con
+// él todo turno de Esco, por un dato que no cambia ninguna respuesta.
+function aAplicacion(f: Record<string, unknown>): Aplicacion | null {
+  if (f.tarea_id === null || f.tarea_id === undefined) return null;
   return {
     id: texto(f.id, 'aplicaciones.id'),
     tarea_id: texto(f.tarea_id, 'aplicaciones.tarea_id'),
@@ -185,7 +189,7 @@ export function fuenteSupabase(cliente: ClienteDatos, opciones: { tamanoPagina?:
         leerTodo(cliente, 'lotes', undefined, tp),
         leerTodo(cliente, 'aplicaciones', undefined, tp),
       ]);
-      return { tareas: tareas.map(aTarea), tiposTareas: tipos.map(aTipo), lotes: lotes.map(aLote), aplicaciones: aplicaciones.map(aAplicacion) };
+      return { tareas: tareas.map(aTarea), tiposTareas: tipos.map(aTipo), lotes: lotes.map(aLote), aplicaciones: aplicaciones.map(aAplicacion).filter((a): a is Aplicacion => a !== null) };
     },
     async registros(desde, hasta) {
       const filas = await leerTodo(cliente, 'registros_trabajo', (q) => q.gte('fecha_trabajo', desde).lte('fecha_trabajo', hasta), tp);
