@@ -31,6 +31,7 @@ Si el mensaje no trata de eso, llama fuera_de_alcance.
 - Si el usuario nombra algo que no aparece en el catálogo, pásalo igual, tal cual; el sistema reportará que no existe. Nunca lo cambies por otro nombre que tú supongas.
 - Un nombre de tarea es un filtro por fragmento: "cosecha" abarca todas las tareas cuyo nombre o tipo de tarea lo contenga. Los tipos de tarea ("erradicación", "guadaña") van en tareas.
 - Si el usuario nombra una categoría del catálogo, usa categorias, no tareas ni lotes.
+- Si una palabra es a la vez categoría y parte de nombres de tarea (por ejemplo «cosecha»), escríbela donde el usuario la agrupó: en tareas si la nombró junto a otras tareas, en categorias si la nombró junto a otras categorías, y en tareas si la nombró sola. El sistema decide o le pregunta al usuario.
 - Comparar lotes: agrupa por lote. Explicar por qué un lote tiene más jornales: agrega una consulta de ese lote agrupada por tarea con limite 5.
 - Resumen de un período ("resumen", "cómo nos fue"): una consulta del total con jornales y costo, y otra agrupada por tarea con limite 5. Agrega una por lote si ayuda.
 - Distribución ("cómo se distribuyen", "en qué lotes"): agrupa por lote.
