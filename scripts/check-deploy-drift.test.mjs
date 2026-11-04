@@ -16,6 +16,9 @@ import {
   comprobarHealth,
   FRASE_VERIFY_JWT,
   FRASE_HEALTH,
+  FRASE_VERIFY_JWT_APAGADO,
+  rutasDesplegadas,
+  verifyJwtEsperado,
 } from './check-deploy-drift.mjs';
 
 // El caso real: `updated_at` de la Management API llega en epoch MILISEGUNDOS.
@@ -484,5 +487,43 @@ describe('resumenFalloParaTelegram con los modos de ESCO-148', () => {
   it('un 401 de la Management API sigue siendo secreto aunque health tambien falle', () => {
     const log = `${mensajeErrorManagementApi(401, 'Unauthorized', 'u')}`;
     expect(resumenFalloParaTelegram(log)).toMatch(/secret inválido/);
+  });
+});
+
+describe('funciones con verify_jwt=true (esco-consultas, Esco 2.0 M3)', () => {
+  it('verify_jwt esperado true: solo true literal pasa, y el fallo tiene frase propia', () => {
+    expect(evaluarVerifyJwt(true, true).ok).toBe(true);
+    const r = evaluarVerifyJwt(false, true);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain(FRASE_VERIFY_JWT_APAGADO);
+    expect(evaluarVerifyJwt(undefined, true).ok).toBe(false);
+    // El valor por defecto no cambia: make-server sigue exigiendo false.
+    expect(evaluarVerifyJwt(true).ok).toBe(false);
+  });
+
+  it('health anónimo esperado 401: 401 pasa, 200 falla (el gateway dejó de exigir JWT)', () => {
+    expect(evaluarHealth({ status: 401 }, 401).ok).toBe(true);
+    const r = evaluarHealth({ status: 200 }, 401);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain('se espera 401');
+    expect(evaluarHealth({ error: 'fetch failed' }, 401).ok).toBe(false);
+  });
+
+  it('EDGE_FUNCTION_PATH admite varias rutas y EDGE_FUNCTION_VERIFY_JWT solo true/false', () => {
+    expect(rutasDesplegadas('supabase/functions/esco-consultas  src/utils/esco2\n')).toEqual(['supabase/functions/esco-consultas', 'src/utils/esco2']);
+    expect(verifyJwtEsperado(undefined)).toBe(false);
+    expect(verifyJwtEsperado('true')).toBe(true);
+    expect(() => verifyJwtEsperado('si')).toThrow();
+  });
+
+  it('el aviso de Telegram distingue verify_jwt apagado de verify_jwt activo', () => {
+    expect(resumenFalloParaTelegram(`x ${FRASE_VERIFY_JWT_APAGADO} y`)).toContain('quedó apagado');
+    expect(resumenFalloParaTelegram(`x ${FRASE_VERIFY_JWT} y`)).toContain('quedó activo');
+  });
+
+  it('el workflow lista esco-consultas con verify_jwt true, health 401 y las rutas del núcleo', () => {
+    const wf = readFileSync(fileURLToPath(new URL('../.github/workflows/deteccion-deriva-despliegue.yml', import.meta.url)), 'utf8');
+    expect(wf).toMatch(/slug: esco-consultas\n\s+path: supabase\/functions\/esco-consultas src\/utils\/esco2 src\/utils\/escoEvals\/numeros.ts\n\s+verify_jwt: 'true'\n\s+health_anon: '401'/);
+    expect(wf).toContain('EDGE_FUNCTION_VERIFY_JWT: ${{ matrix.verify_jwt }}');
   });
 });
