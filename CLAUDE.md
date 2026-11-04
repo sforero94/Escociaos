@@ -950,12 +950,17 @@ acceptance remains open because exploratory findings require separate review. Se
   `npx supabase@2.117.0 functions deploy esco-consultas --project-ref ywhtjwawnkeqlwxbvgup --use-api`:
   Supabase CLI 3.0.0 hung with no output on 2026-11-03. The drift detector watches it
   (`verify_jwt` true, anonymous `/health` = 401).
-- **Migration 190** `select_lotes_registros_trabajo_activo` — **ESCRITA, SIN APLICAR** (D28).
-  It changes the always-true SELECT policies on `lotes` and `registros_trabajo` to
+- **Migration 190** `select_lotes_registros_trabajo_activo` — **Aplicada a producción
+  2026-11-04**, ledger `20261104182847` (D28, Santiago's approval in session; do not reapply).
+  The file header still says "ESCRITA, SIN APLICAR" and is not edited. It changes the
+  always-true SELECT policies on `lotes` and `registros_trabajo` to
   `(SELECT get_user_role()) IS NOT NULL`, so an inactive or profile-less session stops reading
-  and every active role keeps its access. Rehearsed with `po_sonda` (profile-less: 9/3,377 → 0/0;
-  active Gerencia: unchanged). Apply only with Santiago's approval, then update this entry
-  against the live ledger. Evidence: `docs/esco2/m3-rls.md`.
+  and every active role keeps its access. Preconditions re-checked against the live catalog
+  just before applying (both predicates `true`, 12 policies, 10/10 accounts active, number 190
+  free on every remote branch). Verified after applying with `po_sonda` (all rolled back):
+  active Gerencia and active Administrador 9 lotes / 3,388 registros; profile-less session 0/0;
+  Administrador simulated as inactive 0/0; still 12 policies, 0 inactive accounts.
+  Evidence: `docs/esco2/m3-rls.md`.
 - Migration 189 (`aplicaciones_productos_alternativos`) is in the live ledger as
   `20261103001246`; it was applied outside this work and has no entry above yet.
 

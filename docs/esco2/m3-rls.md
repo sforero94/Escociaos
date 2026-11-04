@@ -104,6 +104,26 @@ Rehearsal with `po_sonda` (all rolled back; live policies verified unchanged aft
 
 Apply only with Santiago's approval. Order: migration only; no deploy is needed.
 
+## Applied (2026-11-04)
+
+Santiago approved the migration on 2026-11-04. It was applied to production with
+`apply_migration`; live ledger version `20261104182847`. Before applying, the preconditions
+were checked against the live catalog: both predicates still `true`, 12 policies on the two
+tables, 10 accounts (6 Gerencia, 4 Administrador), all active, and no other migration
+numbered 190 on any remote branch. The migration's own guards passed.
+
+Verification after applying, with `po_sonda` (all rolled back):
+
+| Persona | `get_user_role()` | `lotes` | `registros_trabajo` |
+|---|---|---|---|
+| Active Gerencia | Gerencia | 9 | 3,388 |
+| Active Administrador | Administrador | 9 | 3,388 |
+| Profile-less session | NULL | 0 | 0 |
+| Administrador simulated as inactive | NULL | 0 | 0 |
+
+Totals as `postgres`: 9 lotes and 3,388 registros. Both policies now read
+`(SELECT get_user_role()) IS NOT NULL`, `TO authenticated`; still 12 policies.
+
 ## How to repeat
 
 ```sql
