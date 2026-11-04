@@ -1,3 +1,4 @@
+import { resultadosLabores } from './esco2ResultadosLabores';
 // P2-v1 source-adapter → orchestration → executor integration. Independent malformed fixtures.
 import type {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
@@ -18,7 +19,7 @@ async function memory(datos:DatosLabores,args=plan()){
   const s=scripted([tool(args)]);return responderTurno({datos,pregunta:'consulta',historial:[],hoy:'2026-11-04',llm:s.llm,config:CONFIG_M3});
 }
 function unavailable(t:Awaited<ReturnType<typeof memory>>){
-  expect(t.resultados[0].estado).toBe('no_disponible');expect(t.resultados[0].total).toEqual({});
+  expect(resultadosLabores(t)[0].estado).toBe('no_disponible');expect(resultadosLabores(t)[0].total).toEqual({});
 }
 
 describe('P2-v1 field completeness and valid references BEFORE filtering',()=>{
@@ -44,7 +45,7 @@ describe('P2-v1 field completeness and valid references BEFORE filtering',()=>{
   it('undefined D30 estimate counts as unavailable instead of a zero contribution with full coverage',async()=>{
     const d=await data();delete (d.tareas[0] as Partial<typeof d.tareas[0]>).jornales_estimados;
     const r=await memory(d,plan({categorias:['Mantenimiento del cultivo']}));
-    const e=r.resultados[0].estimados as {tareas_estimado_no_disponible?:number}|undefined;expect(e?.tareas_estimado_no_disponible===1||r.resultados[0].estado==='no_disponible').toBe(true);
+    const e=resultadosLabores(r)[0].estimados as {tareas_estimado_no_disponible?:number}|undefined;expect(e?.tareas_estimado_no_disponible===1||resultadosLabores(r)[0].estado==='no_disponible').toBe(true);
   });
   it('unread category and dangling type relation cannot be excluded by a category filter',async()=>{
     const d=await data();delete (d.tiposTareas[0] as Partial<typeof d.tiposTareas[0]>).categoria;
@@ -64,7 +65,7 @@ describe('P2-v1 field completeness and valid references BEFORE filtering',()=>{
   });
   it('unread application table keeps available labor but never renders no-association',async()=>{
     const d=await data();delete d.aplicaciones;const r=await memory(d,plan({agrupar_por:['tarea'],incluir_estado_tarea:true}));
-    expect(r.resultados[0].total.jornales).toBe(2.5);expect(r.respuesta).toMatch(/No pude comprobar las aplicaciones asociadas.*no están disponibles/i);expect(r.respuesta).not.toMatch(/sin aplicación asociada/);
+    expect(resultadosLabores(r)[0].total.jornales).toBe(2.5);expect(r.respuesta).toMatch(/No pude comprobar las aplicaciones asociadas.*no están disponibles/i);expect(r.respuesta).not.toMatch(/sin aplicación asociada/);
   });
   it.each([{value:null},{value:undefined},{value:'malformed'},{value:[ID.l1,'a1999999-0000-4000-8000-000000000001']}])('bad scheduled assignment $value cannot prove lot-scoped membership',async ({value})=>{
     const d=await data();(d.tareas[0] as unknown as Record<string,unknown>).lote_ids=value;
@@ -89,14 +90,14 @@ describe('P2-v1 field completeness and valid references BEFORE filtering',()=>{
   });
   it.each([Number.POSITIVE_INFINITY,Number.NaN,-1])('nonfinite or negative denominator %j cannot create a numeric ratio',async value=>{
     const d=await data();d.lotes.find(l=>l.id===ID.l1)!.total_arboles=value;const r=await memory(d,plan({lote_ids:[ID.l1],metricas:['jornales_por_arbol']}));
-    expect(r.resultados[0].total.jornales_por_arbol).toBeNull();expect(r.resultados[0].notas.join(' ')).toMatch(/árboles/);
+    expect(resultadosLabores(r)[0].total.jornales_por_arbol).toBeNull();expect(resultadosLabores(r)[0].notas.join(' ')).toMatch(/árboles/);
   });
   it('scheduled estimate source flags and invalid estimates cannot produce an authoritative known subtotal',async()=>{
     const args=plan({cohorte:'tarea_programada',base_fecha:'fecha_estimada_inicio',desde:'2026-11-10',hasta:'2026-11-12',categorias:['Mantenimiento del cultivo'],metricas:[],agrupar_por:['tarea']});
     const d=await data();d.fuente={consistencia:'lecturas_independientes',camposNoDisponibles:['tareas.jornales_estimados']};const hidden=await memory(d,args);
-    const e=hidden.resultados[0].estimados as {tareas_estimado_no_disponible?:number}|undefined;expect(e?.tareas_estimado_no_disponible===2||hidden.resultados[0].estado==='no_disponible').toBe(true);
+    const e=resultadosLabores(hidden)[0].estimados as {tareas_estimado_no_disponible?:number}|undefined;expect(e?.tareas_estimado_no_disponible===2||resultadosLabores(hidden)[0].estado==='no_disponible').toBe(true);
     const invalid=await data();invalid.tareas.find(t=>t.id===ID.t1)!.jornales_estimados=Number.NaN;const bad=await memory(invalid,args);
-    const invalidEstimate=bad.resultados[0].estimados as {tareas_estimado_no_disponible?:number}|undefined;expect(invalidEstimate?.tareas_estimado_no_disponible===1||bad.resultados[0].estado==='no_disponible').toBe(true);
+    const invalidEstimate=resultadosLabores(bad)[0].estimados as {tareas_estimado_no_disponible?:number}|undefined;expect(invalidEstimate?.tareas_estimado_no_disponible===1||resultadosLabores(bad)[0].estado==='no_disponible').toBe(true);
   });
   it.each(['registros.id','tareas.id','lotes.id','tiposTareas.id','tareas.nombre','lotes.nombre','tiposTareas.nombre'])('declared-unread identity %s cannot authorize supplied facts',async field=>{
     const d=await data();d.fuente={consistencia:'lecturas_independientes',camposNoDisponibles:[field]};unavailable(await memory(d));
@@ -104,7 +105,7 @@ describe('P2-v1 field completeness and valid references BEFORE filtering',()=>{
   it('invalid raw estimate in a row cannot survive omission by metadata validation',async()=>{
     const d=await data();d.tareas.find(t=>t.id===ID.t1)!.jornales_estimados=-9;
     const r=await memory(d,plan({categorias:['Mantenimiento del cultivo'],agrupar_por:['tarea'],incluir_estado_tarea:true}));
-    const row=r.resultados[0].filas.find(f=>f.grupo_ids?.tarea===ID.t1);expect(row?.jornales_estimados).toBeUndefined();expect(row?.campos_no_disponibles).toContain('jornales_estimados');expect(r.respuesta).not.toContain('-9');expect(r.resultados[0].total.jornales).toBe(2.5);
+    const row=resultadosLabores(r)[0].filas.find(f=>f.grupo_ids?.tarea===ID.t1);expect(row?.jornales_estimados).toBeUndefined();expect(row?.campos_no_disponibles).toContain('jornales_estimados');expect(r.respuesta).not.toContain('-9');expect(resultadosLabores(r)[0].total.jornales).toBe(2.5);
   });
   it('declared-unread fields cannot authorize supplied category, status, estimate or ratio values',async()=>{
     for(const [field,args] of [
@@ -114,12 +115,12 @@ describe('P2-v1 field completeness and valid references BEFORE filtering',()=>{
     ] as const){const d=await data();d.fuente={consistencia:'lecturas_independientes',camposNoDisponibles:[field]};unavailable(await memory(d,args));}
     const d=await data();d.fuente={consistencia:'lecturas_independientes',camposNoDisponibles:['tareas.estado','tareas.jornales_estimados']};
     const r=await memory(d,plan({agrupar_por:['tarea'],incluir_estado_tarea:true}));
-    expect(r.resultados[0].filas.every(f=>f.estado_tarea===undefined&&f.jornales_estimados===undefined)).toBe(true);
+    expect(resultadosLabores(r)[0].filas.every(f=>f.estado_tarea===undefined&&f.jornales_estimados===undefined)).toBe(true);
   });
   it('dangling application task reference is unavailable instead of verified-empty',async()=>{
     const d=await data();d.aplicaciones![0].tarea_id='c1999999-0000-4000-8000-000000000001';
-    const r=await memory(d,plan({agrupar_por:['tarea'],incluir_estado_tarea:true}));expect(r.resultados[0].total.jornales).toBe(2.5);
-    expect(r.resultados[0].filas.every(f=>f.asociaciones?.estado==='no_disponible')).toBe(true);
+    const r=await memory(d,plan({agrupar_por:['tarea'],incluir_estado_tarea:true}));expect(resultadosLabores(r)[0].total.jornales).toBe(2.5);
+    expect(resultadosLabores(r)[0].filas.every(f=>f.asociaciones?.estado==='no_disponible')).toBe(true);
   });
   it('independent reads never certify atomic cross-table consistency',async()=>{
     const r=await run(db,plan({agrupar_por:['lote']}));
@@ -134,12 +135,12 @@ describe('P2-v1 additional duplicate type and malformed catalog integration',()=
     d.tiposTareas.push({id:second,nombre:'Labor',categoria:'Mantenimiento del cultivo'});
     d.tareas.find(t=>t.id===ID.t2)!.tipo_tarea_id=second;d.tareas.find(t=>t.id===ID.t2)!.jornales_estimados=7;
     const r=await memory(d,plan({categorias:['Mantenimiento del cultivo'],agrupar_por:['tipo_tarea']}));
-    expect(r.resultados[0].filas).toHaveLength(2);
-    const rows=new Map(r.resultados[0].filas.map(f=>[f.grupo_ids?.tipo_tarea,f]));
+    expect(resultadosLabores(r)[0].filas).toHaveLength(2);
+    const rows=new Map(resultadosLabores(r)[0].filas.map(f=>[f.grupo_ids?.tipo_tarea,f]));
     expect(rows.get(ID.ty)?.jornales_estimados).toBe(5);expect(rows.get(second)?.jornales_estimados).toBe(7);
   });
   it('malformed catalog label becomes explicit unavailable instead of throwing before source validation',async()=>{
     const d=await data();delete (d.tareas[0] as Partial<typeof d.tareas[0]>).nombre;
-    const r=await memory(d,plan({tareas:['Labor igual']}));expect(r.origen).toBe('error_datos');expect(r.resultados).toEqual([]);
+    const r=await memory(d,plan({tareas:['Labor igual']}));expect(r.origen).toBe('error_datos');expect(resultadosLabores(r)).toEqual([]);
   });
 });

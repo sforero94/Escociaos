@@ -4,13 +4,15 @@ import { aplicarReglaDoble, terminoDoble } from './ambiguedad.ts';
 import { resumenCatalogo, normalizar, resolverTareas } from './catalogo.ts';
 import { renderMensaje, validarMensajeFinal, mensajeAclaracion, mensajeDisposicion } from './mensajes.ts';
 import { ejecutarConsulta, SIN_LOTE_ETIQUETA } from './ejecutor.ts';
-import type { EstadoTurno } from './estado.ts';
+import { OPCIONES_FECHA_APLICACIONES, type EstadoTurno } from './estado.ts';
 import type { ClienteLLM, Esfuerzo, MensajeLLM, RespuestaLLM } from './llm.ts';
 import { promptPlanificador } from './prompts.ts';
 import { fuenteEnMemoria, type FuenteLabores } from './fuente.ts';
 import { ErrorPlan, herramientasPlanificador, validarPlan } from './registro.ts';
 import { type ModeloEtapa, type Ruta } from './ruteo.ts';
-import type { ConsultaLabores, DatosLabores, MensajeHistorial, Plan, ResultadoParte } from './tipos.ts';
+import { operacionesDelPlan, planDeOperaciones, type ConsultaLabores, type DatosLabores, type MensajeHistorial, type Plan, type ResultadoConsulta, type ResultadoParte } from './tipos.ts';
+import { ejecutarInventarioAplicaciones } from './aplicaciones.ts';
+import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';
 /** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
 export const MAX_HISTORIAL_PLANIFICADOR = 6;
 export interface ConfigModelos {
@@ -50,7 +52,7 @@ export interface ResultadoTurno {
     ruta: Ruta | null;
     /** Cambios deterministas aplicados al plan (D26). */
     ajustes: string[];
-    resultados: ResultadoParte[];
+    resultados: ResultadoConsulta[];
     guarda: {
         primera: string[] | null;
         segunda: string[] | null;
@@ -62,7 +64,7 @@ function registrar(etapa: RegistroLlamada['etapa'], r: RespuestaLLM): RegistroLl
     return { etapa, modelo: r.modelo, ms: r.ms, ...r.uso };
 }
 /** Compatibility entrypoint for the canonical human message. */
-export function renderDeterminista(resultados: ResultadoParte[]): string { return renderMensaje(resultados); }
+export function renderDeterminista(resultados: ResultadoConsulta[]): string { return renderMensaje(resultados); }
 function resultadoPendiente(c: ConsultaLabores, id: string, aclaracion?: ResultadoParte['aclaracion']): ResultadoParte {
     return { id, proposito: 'Consulta de labores', aclaracion, estado: 'no_resuelto', alcance: { desde: c.desde, hasta: c.hasta, hasta_recortado_a_hoy: false, lotes: 'todos', tareas: 'todas', categorias: 'todas', sin_lote: c.sin_lote, agrupar_por: c.agrupar_por }, no_resueltos: [], filas: [], total: {}, notas: [], cobertura: { registros: 0, registros_sin_lote: 0, registros_sin_costo: 0, grupos_totales: 0, grupos_mostrados: 0 }, semantica: { cohorte: c.cohorte ?? 'trabajo_registrado', base_fecha: c.cohorte === 'tarea_programada' ? 'fecha_estimada_inicio' : 'fecha_trabajo', disposicion: 'aclaracion', miembros: [], fuentes: [], calificadores: [] } };
 }
@@ -74,6 +76,7 @@ interface ArgsTurno {
     config: ConfigModelos;
     estado?: EstadoTurno;
     respuestaAclaracion?: string;
+    fuenteAplicaciones?: FuenteAplicaciones;
 }
 /** Turno sobre datos ya cargados (snapshot congelado, pruebas). */
 export function responderTurno(args: ArgsTurno & {
@@ -86,9 +89,9 @@ export function rangoDelPlan(plan: Plan, hoy: string): {
     desde: string;
     hasta: string;
 } | null {
-    if (plan.tipo !== 'consultas' || plan.consultas.length === 0)
+    if (plan.tipo !== 'consultas' && plan.tipo !== 'operaciones')
         return null;
-    const consultas = plan.consultas.filter(c => c.cohorte !== 'tarea_programada');
+    const consultas = operacionesDelPlan(plan).filter(o => o.tipo === 'labores').map(o => o.consulta).filter(c => c.cohorte !== 'tarea_programada');
     if (!consultas.length)
         return null;
     const desde = consultas.map((c) => c.desde).sort()[0];
@@ -119,9 +122,9 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         ruta: null,
         ajustes: [],
     };
-    const sinDatos = mensajeDisposicion('error_datos');
     // 0. Catálogo (nombres de lotes, tareas, tipos y categorías)
-    let catalogo: Awaited<ReturnType<FuenteLabores['catalogo']>>;
+    let catalogo: Awaited<ReturnType<FuenteLabores['catalogo']>> = { tareas: [], lotes: [], tiposTareas: [] };
+    let catalogoDisponible = true;
     try {
         catalogo = await fuente.catalogo();
         for (const rows of [catalogo.tareas, catalogo.lotes, catalogo.tiposTareas])
@@ -131,25 +134,47 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             throw new Error('catalogo_no_valido');
     }
     catch {
-        return salida({ ...base, respuesta: sinDatos, origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
+        // An empty planning-only catalog is not factual evidence for any executor.
+        catalogoDisponible = false;
+        catalogo = { tareas: [], lotes: [], tiposTareas: [] };
+    }
+    let inventarioPlaneado: DatosInventarioAplicaciones | undefined;
+    if (!catalogoDisponible && !args.estado?.pendiente) {
+        try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* Both unavailable is handled before planning. */ }
+        if (!Array.isArray(inventarioPlaneado?.aplicaciones))
+            return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
     const pendiente = args.estado?.pendiente;
     const decisiones = pendiente ? { ...args.estado?.decisiones } : {};
     if (pendiente) {
-        const choice = pendiente.opciones.find(o => o.id === args.respuestaAclaracion);
-        if (!choice) {
+        const saved = structuredClone(args.estado!.plan);
+        const operaciones = operacionesDelPlan(saved);
+        const operacion = operaciones[pendiente.indice];
+        if (pendiente.tipo === 'fecha_aplicaciones') {
+            if (operacion?.tipo !== 'aplicaciones') return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: 'estado_no_valido' });
+            const choice = pendiente.opciones.find(o => o.id === args.respuestaAclaracion);
+            if (!choice) {
+                const resultado = ejecutarInventarioAplicaciones(operacion.consulta, {}, `p${pendiente.indice + 1}`, hoy);
+                resultado.requiere_eleccion = true;
+                return salida({ ...base, resultados: [resultado], respuesta: renderMensaje([resultado]), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
+            }
+            operacion.consulta.base_fecha = choice.base_fecha;
+            plan = saved;
+        } else {
+          if (operacion?.tipo !== 'labores') return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: 'estado_no_valido' });
+          const choice = pendiente.opciones.find(o => o.id === args.respuestaAclaracion);
+          if (!choice) {
             const ids = pendiente.opciones.find(o => o.tipo === 'tarea')?.tarea_ids ?? [];
             const categoria = pendiente.opciones.find(o => o.tipo === 'categoria')?.categorias?.[0];
             const nombres = ids.map(id => catalogo.tareas.find(t => t.id === id)?.nombre);
             if (!categoria || nombres.some(n => n === undefined) || !catalogo.tiposTareas.some(t => t.categoria === categoria))
                 return salida({ ...base, respuesta: 'Las opciones anteriores ya no están disponibles. Repite la consulta para revisar las tareas actuales.', origen: 'aclaracion' });
-            const resultados = [resultadoPendiente(args.estado!.plan.consultas[pendiente.indice], `p${pendiente.indice + 1}`, { tipo: 'categoria_o_tareas', categoria, tareas: nombres as string[], requiere_eleccion: true })];
+            const resultados = [resultadoPendiente(operacion.consulta, `p${pendiente.indice + 1}`, { tipo: 'categoria_o_tareas', categoria, tareas: nombres as string[], requiere_eleccion: true })];
             return salida({ ...base, resultados, respuesta: renderMensaje(resultados), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
         }
         decisiones[`${pendiente.indice}:${normalizar(pendiente.termino)}`] = choice.tipo;
-        const saved = structuredClone(args.estado!.plan);
-        const c = saved.consultas[pendiente.indice];
+        const c = operacion.consulta;
         c.tareas = c.tareas.filter(t => t !== pendiente.termino);
         c.categorias = c.categorias.filter(t => t !== pendiente.termino);
         if (choice.tipo === 'tarea') {
@@ -161,6 +186,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         else
             c.categorias.push(...choice.categorias!);
         plan = saved;
+        }
     }
     else {
         const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] })) }, ...historial, { role: 'user', content: pregunta }];
@@ -192,7 +218,14 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     if (plan.tipo === 'aclaracion')
         return salida({ ...base, plan, respuesta: mensajeDisposicion('aclaracion'), origen: 'aclaracion' });
     const original = structuredClone(plan);
-    const d26 = aplicarReglaDoble(plan, catalogo, [], decisiones);
+    const operaciones = operacionesDelPlan(original);
+    const laborales = operaciones.map((o, i) => ({ o, i })).filter((x): x is { o: Extract<typeof x.o, { tipo: 'labores' }>; i: number } => x.o.tipo === 'labores');
+    const decisionesLabor: Record<string, 'tarea' | 'categoria'> = {};
+    laborales.forEach(({ i }, local) => {
+        for (const [key, value] of Object.entries(decisiones)) if (key.startsWith(`${i}:`)) decisionesLabor[`${local}:${key.slice(key.indexOf(':') + 1)}`] = value;
+    });
+    const planLabor: Plan = { tipo: 'consultas', consultas: laborales.map(x => x.o.consulta) };
+    const d26 = catalogoDisponible ? aplicarReglaDoble(planLabor, catalogo, [], decisionesLabor) : { plan: planLabor, ajustes: [] };
     base.ajustes = d26.ajustes;
     let estado: EstadoTurno = { version: 1, plan: original, decisiones };
     let opciones: {
@@ -200,39 +233,66 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         etiqueta: string;
     }[] | undefined;
     const preguntas = new Map<number, NonNullable<ResultadoParte['aclaracion']>>();
-    let consultas = plan.consultas;
     const blocked = new Set<number>();
+    const consultasLabor = new Map<number, ConsultaLabores>();
     if (d26.plan.tipo === 'consultas')
-        consultas = d26.plan.consultas;
+        laborales.forEach(({ i }, local) => consultasLabor.set(i, d26.plan.tipo === 'consultas' ? d26.plan.consultas[local] : laborales[local].o.consulta));
     else {
-        for (let i = 0; i < consultas.length; i++) {
-            const c = consultas[i];
+        for (const { o, i } of laborales) {
+            const c = o.consulta;
             const d = [...c.tareas, ...c.categorias].filter(t => !decisiones[`${i}:${normalizar(t)}`]).map(t => terminoDoble(t, catalogo)).find(x => x !== null);
             if (!d)
                 continue;
             blocked.add(i);
             if (!estado.pendiente) {
                 const opcionesPendientes = [{ id: 'tarea', etiqueta: 'Tareas con ese nombre', tipo: 'tarea' as const, tarea_ids: [...resolverTareas([d.texto], catalogo.tareas, catalogo.tiposTareas).ids] }, { id: 'categoria', etiqueta: 'Categoría completa', tipo: 'categoria' as const, categorias: [d.categoria] }];
-                estado = { ...estado, pendiente: { indice: i, termino: d.texto, pregunta: mensajeAclaracion(d.categoria, d.tareas), opciones: opcionesPendientes } };
+                estado = { ...estado, pendiente: { tipo: 'labores', indice: i, termino: d.texto, pregunta: mensajeAclaracion(d.categoria, d.tareas), opciones: opcionesPendientes } };
                 opciones = opcionesPendientes;
                 preguntas.set(i, { tipo: 'categoria_o_tareas', categoria: d.categoria, tareas: opcionesPendientes[0].tarea_ids!.map(id => catalogo.tareas.find(t => t.id === id)!.nombre) });
             }
         }
-        consultas = consultas.filter((_, i) => !blocked.has(i));
+        laborales.filter(x => !blocked.has(x.i)).forEach(({ o, i }) => consultasLabor.set(i, o.consulta));
     }
-    const executionPlan: Plan = { tipo: 'consultas', consultas };
+    // Select the first unresolved obligation in its original global position.
+    for (let i = 0; i < operaciones.length; i++) {
+        const o = operaciones[i];
+        if (o.tipo !== 'aplicaciones' || o.consulta.base_fecha !== 'sin_precisar') continue;
+        if (!estado.pendiente || i < estado.pendiente.indice) {
+            estado.pendiente = { tipo: 'fecha_aplicaciones', indice: i, pregunta: '¿Qué base de fecha quieres consultar?', opciones: structuredClone(OPCIONES_FECHA_APLICACIONES) };
+            opciones = estado.pendiente.opciones;
+        }
+    }
+    const executionPlan: Plan = { tipo: 'consultas', consultas: [...consultasLabor.values()] };
     const rango = rangoDelPlan(executionPlan, hoy);
-    let datos: DatosLabores;
+    const datos: DatosLabores = { ...catalogo, registros: [] };
+    let registrosDisponibles = catalogoDisponible;
     try {
-        datos = { ...catalogo, registros: rango ? await fuente.registros(rango.desde, rango.hasta) : [] };
+        if (catalogoDisponible && rango) datos.registros = await fuente.registros(rango.desde, rango.hasta);
     }
     catch {
-        return salida({ ...base, plan, respuesta: sinDatos, origen: 'error_datos', errorPlan: 'registros_no_disponibles' });
+        registrosDisponibles = false;
     }
-    const resultados = original.consultas.map((c, i) => blocked.has(i) ? resultadoPendiente(c, `p${i + 1}`, preguntas.get(i)) : ejecutarConsulta(d26.plan.tipo === 'consultas' ? d26.plan.consultas[i] : c, datos, hoy, `p${i + 1}`));
+    if (!registrosDisponibles && !estado.pendiente && operaciones.every(o => o.tipo === 'labores' && o.consulta.cohorte !== 'tarea_programada'))
+        return salida({ ...base, plan, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: catalogoDisponible ? 'registros_no_disponibles' : 'catalogo_no_disponible' });
+    const resultados: ResultadoConsulta[] = [];
+    for (let i = 0; i < operaciones.length; i++) {
+        const o = operaciones[i], id = `p${i + 1}`;
+        if (o.tipo === 'aplicaciones') {
+            let fuenteApps = {};
+            if (o.consulta.base_fecha !== 'sin_precisar' && o.consulta.base_fecha !== 'cierre_administrativo') {
+                try { fuenteApps = o.consulta.base_fecha === 'fecha_inicio_planeada' && inventarioPlaneado ? inventarioPlaneado : await args.fuenteAplicaciones?.leer(o.consulta.base_fecha) ?? {}; } catch { /* Explicit unavailable result below. */ }
+            }
+            resultados.push(ejecutarInventarioAplicaciones(o.consulta, fuenteApps, id, hoy));
+        } else if (!catalogoDisponible || !registrosDisponibles && o.consulta.cohorte !== 'tarea_programada') {
+            const r = resultadoPendiente(o.consulta, id);
+            r.estado = 'no_disponible';
+            r.semantica = { ...r.semantica!, disposicion: 'fuente_no_disponible', motivo: catalogoDisponible ? 'campo_registro_no_disponible' : 'identidad_catalogo_no_disponible' };
+            resultados.push(r);
+        } else resultados.push(blocked.has(i) ? resultadoPendiente(o.consulta, id, preguntas.get(i)) : ejecutarConsulta(consultasLabor.get(i) ?? o.consulta, datos, hoy, id));
+    }
     const respuesta = renderMensaje(resultados);
     if (!validarMensajeFinal(respuesta, resultados))
         return salida({ ...base, plan: executionPlan, resultados: [], respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'mensaje_no_valido' });
-    return salida({ ...base, plan: { tipo: 'consultas', consultas: original.consultas }, resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
+    return salida({ ...base, plan: planDeOperaciones(operaciones), resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
 }
 export { SIN_LOTE_ETIQUETA };

@@ -1,3 +1,4 @@
+import { resultadosLabores } from './esco2ResultadosLabores';
 import { describe, expect, it } from 'vitest';
 import { aplicarReglaDoble, terminoDoble } from '../utils/esco2/ambiguedad.ts';
 import { ErrorDatos, fuenteSupabase } from '../utils/esco2/fuente.ts';
@@ -106,11 +107,11 @@ describe('D26: palabra que es categoría y tarea', () => {
   it('la diferencia importa: tarea excluye «Empaque», categoría lo incluye', async () => {
     const llm = llmFalso([[{ tareas: ['cosecha'] }, { tareas: ['guadaña'] }]]);
     const t = await responderTurno({ pregunta: 'cosecha y guadaña en mayo', historial: [], hoy: '2026-06-01', datos, llm, config: CONFIG });
-    expect(t.resultados[0].alcance.tareas).toEqual(['Clasificación cosecha', 'Cosecha fruta temprana']);
-    expect(t.resultados[0].total.jornales).toBe(1.5);
+    expect(resultadosLabores(t)[0].alcance.tareas).toEqual(['Clasificación cosecha', 'Cosecha fruta temprana']);
+    expect(resultadosLabores(t)[0].total.jornales).toBe(1.5);
     const llm2 = llmFalso([[{ categorias: ['cosecha', 'Proyectos Especiales'] }]]);
     const t2 = await responderTurno({ pregunta: 'categorías cosecha y proyectos', historial: [], hoy: '2026-06-01', datos, llm: llm2, config: CONFIG });
-    expect(t2.resultados[0].total.jornales).toBe(2.5);
+    expect(resultadosLabores(t2)[0].total.jornales).toBe(2.5);
   });
 
   it('turno completo sin señal: una sola llamada al modelo y respuesta de aclaración', async () => {
@@ -118,8 +119,8 @@ describe('D26: palabra que es categoría y tarea', () => {
     const t = await responderTurno({ pregunta: 'jornales de cosecha', historial: [], hoy: '2026-06-01', datos, llm, config: CONFIG });
     expect(t.origen).toBe('aclaracion');
     expect(t.llamadas).toHaveLength(1);
-    expect(t.resultados).toHaveLength(1);
-    expect(t.resultados[0].semantica?.disposicion).toBe('aclaracion');
+    expect(resultadosLabores(t)).toHaveLength(1);
+    expect(resultadosLabores(t)[0].semantica?.disposicion).toBe('aclaracion');
   });
 });
 
@@ -262,6 +263,6 @@ describe('fuente Supabase paginada', () => {
     const t = await responderTurnoDesdeFuente({ pregunta: 'guadaña', historial: [], hoy: '2026-05-20', fuente: fuenteSupabase(cliente), llm, config: CONFIG });
     expect(t.origen).toBe('determinista');
     expect(rangoDelPlan(t.plan!, '2026-05-20')).toEqual({ desde: '2026-05-10', hasta: '2026-05-20' });
-    expect(t.resultados[0].cobertura.registros).toBe(1);
+    expect(resultadosLabores(t)[0].cobertura.registros).toBe(1);
   });
 });

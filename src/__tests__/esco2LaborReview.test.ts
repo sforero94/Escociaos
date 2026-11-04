@@ -1,3 +1,4 @@
+import { resultadosLabores } from './esco2ResultadosLabores';
 import { describe, expect, it } from 'vitest';
 import { datos } from '../../scripts/esco2/fixtureSintetico.ts';
 import { ejecutarConsulta } from '../utils/esco2/ejecutor.ts';
@@ -89,6 +90,6 @@ describe('labor review: D30 with no registered work', () => {
     expect(t.llamadas).toHaveLength(1);
     expect(t.respuesta).toContain('Jornales estimados');
     expect(t.respuesta).toContain('50');
-    expect(verificarCifrasObligatorias(t.respuesta, t.resultados)).toEqual([]);
+    expect(verificarCifrasObligatorias(t.respuesta, resultadosLabores(t))).toEqual([]);
   });
 });
