@@ -16,12 +16,12 @@ const A = id(1), P = id(2), M = id(3), T = id(4), L = id(5);
 const HOY = '2026-11-05';
 
 describe('costos: formato y caso sin ejecución', () => {
-  it('formats money in Colombian style, without decimals or COP suffix', () => {
+  it('formats Esco money with US separators and no COP suffix', () => {
     const d: DatosCostosAplicacion = { seleccion: 'ok', aplicacion: { id: A, nombre_aplicacion: 'Foco', estado: 'Cerrada' }, costos: { id: A, estado: 'Cerrada', costo_total_insumos: 120000.5, costo_total_mano_obra: 2500000, costo_total: 2620000.5 }, cierres: [{ id: id(9), aplicacion_id: A, fecha_cierre: '2026-11-01' }] };
     const text = renderCostosAplicacion(ejecutarCostosAplicacion({ aplicacion_id: A }, d, 'p1', HOY));
     expect(text).not.toContain('COP');
-    expect(text).toContain('Insumos: aprox. $120.001');
-    expect(text).toContain('mano de obra: $2,5M');
+    expect(text).toContain('Insumos: aprox. $120,001');
+    expect(text).toContain('mano de obra: $2.5M');
     expect(text).toMatch(/^\*\*Costo congelado al cierre\*\*/m);
   });
   it('says there is no execution yet for a Calculada application with no movements', () => {
@@ -40,8 +40,8 @@ describe('costos: formato y caso sin ejecución', () => {
     expect(renderCostosAplicacion(r)).not.toContain('Aún no hay ejecución registrada');
   });
   it('labels rounded amounts above one million as approximate', () => {
-    expect(dineroMensaje(1440000)).toBe('aprox. $1,4M');
-    expect(dineroMensaje(2000000)).toBe('$2M');
+    expect(dineroMensaje(1440000)).toBe('aprox. $1.4M');
+    expect(dineroMensaje(2000000)).toBe('$2.0M');
     expect(dineroMensaje(999)).toBe('$999');
   });
 });
