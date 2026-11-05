@@ -2,8 +2,9 @@
 import { formatCurrency, formatLongDate, formatMillonesCOP } from '../formatPuro.ts';
 import { numeroMensaje as numero } from './formatoMensaje.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import { esResultadoAplicaciones, esResultadoCantidades, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
+import { esResultadoAplicaciones, esResultadoCantidades, esResultadoFaltantesAplicacion, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
 import { renderAplicaciones } from './aplicaciones.ts';
+import { renderFaltantesAplicacion } from './faltantes.ts';
 import { renderCantidadesAplicacion } from './cantidades.ts';
 export type AvisoMensaje = 'contexto_no_disponible' | 'contexto_demasiado_amplio';
 const avisos: Record<AvisoMensaje, string> = { contexto_no_disponible: 'No pude recuperar el contexto anterior. Repite tu consulta completa.', contexto_demasiado_amplio: 'La selección es demasiado amplia para conservarla. Reduce las tareas seleccionadas y repite la consulta.' };
@@ -272,10 +273,10 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
     if (aviso !== undefined && (typeof aviso !== 'string' || !Object.prototype.hasOwnProperty.call(avisos, aviso)))
         throw new Error('aviso_no_registrado');
     const parts = resultados.map((r, i) => {
-        const text = esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const text = esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
             return text;
-        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
+        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
     if (aviso)

@@ -1,6 +1,8 @@
 // utils/calculosAplicaciones.ts
 // Funciones de cálculo para aplicaciones de agroinsumos
 
+import { acumularProductosMezclas, calcularFaltanteProducto } from './calculosNecesidadProductos.ts';
+
 import type {
   LoteSeleccionado,
   ProductoEnMezcla,
@@ -236,30 +238,14 @@ export function calcularTotalesProductos(
 export function calcularTotalesGlobalesProductos(
   mezclas: Mezcla[]
 ): ProductoEnMezcla[] {
-  const productosMap = new Map<string, ProductoEnMezcla>();
-
-  mezclas.forEach(mezcla => {
-    mezcla.productos.forEach(producto => {
-      const existing = productosMap.get(producto.producto_id);
-
-      if (existing) {
-        // Sumar cantidad_total_necesaria desde cada mezcla
-        existing.cantidad_total_necesaria += producto.cantidad_total_necesaria;
-      } else {
-        productosMap.set(producto.producto_id, {
-          ...producto,
-          cantidad_total_necesaria: producto.cantidad_total_necesaria
-        });
-      }
-    });
-  });
+  const productos = acumularProductosMezclas(mezclas);
 
   // Redondear totales
-  productosMap.forEach(producto => {
+  productos.forEach(producto => {
     producto.cantidad_total_necesaria = Math.ceil(producto.cantidad_total_necesaria * 100) / 100;
   });
 
-  return Array.from(productosMap.values());
+  return productos;
 }
 
 /**
@@ -287,7 +273,7 @@ export function generarListaCompras(
 
     const inventario_actual = productoInventario.cantidad_actual || 0;
     const cantidad_necesaria = productoNecesario.cantidad_total_necesaria;
-    const cantidad_faltante = Math.max(0, cantidad_necesaria - inventario_actual);
+    const cantidad_faltante = calcularFaltanteProducto(cantidad_necesaria, inventario_actual);
 
     // Calcular unidades a comprar según presentación
     // Ejemplo: si falta 150kg y el bulto es de 25kg, comprar 6 bultos

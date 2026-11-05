@@ -2,6 +2,7 @@
 import { leerFilasFijas, type ClienteDatos } from './fuente.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { esUuid, ESTADOS_APLICACION, type AplicacionInventario, type CierreInventario, type DatosInventarioAplicaciones, type FuenteAplicaciones, type MovimientoInventario } from './aplicacionesTipos.ts';
+import { crearLectorFaltantes } from './faltantesFuente.ts';
 import { crearLectorCantidades } from './cantidadesFuente.ts';
 
 export const COLUMNAS_APLICACIONES = {
@@ -55,5 +56,6 @@ export function fuenteAplicacionesSupabase(cliente: ClienteDatos, opciones: { ta
     },
   };
   fuente.leerCantidades = crearLectorCantidades(cliente, () => fuente.leer('fecha_inicio_planeada'), opciones.tamanoPagina);
+  fuente.leerFaltantes = crearLectorFaltantes(cliente, () => fuente.leer('fecha_inicio_planeada'), opciones.tamanoPagina);
   return fuente;
 }

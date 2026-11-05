@@ -43,8 +43,8 @@ export function validarEstado(estado: EstadoTurno): boolean {
             return false;
         const operaciones = operacionesDelPlan(estado.plan);
         if (!operaciones.length || operaciones.length > 4) return false;
-        if (operaciones.some(o => !o || !['labores', 'aplicaciones', 'cantidades_aplicacion'].includes(o.tipo))) return false;
-        validarPlan(operaciones.map(o => ({ nombre: o.tipo === 'labores' ? 'consultar_labores' : o.tipo === 'aplicaciones' ? 'consultar_aplicaciones' : 'consultar_cantidades_aplicacion', argumentos: JSON.stringify(o.consulta) })));
+        if (operaciones.some(o => !o || !['labores', 'aplicaciones', 'cantidades_aplicacion', 'faltantes_aplicacion'].includes(o.tipo))) return false;
+        validarPlan(operaciones.map(o => ({ nombre: o.tipo === 'faltantes_aplicacion' ? 'consultar_faltantes_aplicacion' : o.tipo === 'labores' ? 'consultar_labores' : o.tipo === 'aplicaciones' ? 'consultar_aplicaciones' : 'consultar_cantidades_aplicacion', argumentos: JSON.stringify(o.consulta) })));
         if (estado.decisiones && Object.values(estado.decisiones).some(v => v !== 'tarea' && v !== 'categoria'))
             return false;
         const p = estado.pendiente;

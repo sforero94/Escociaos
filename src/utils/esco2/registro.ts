@@ -2,6 +2,7 @@
 // validador que corre antes de ejecutar: no hay una lista paralela que se desincronice.
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { BASES_FECHA_APLICACIONES, ESTADOS_APLICACION, esUuid, type ConsultaAplicaciones } from './aplicacionesTipos.ts';
+import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
@@ -20,6 +21,7 @@ export const MAX_CONSULTAS_POR_TURNO = 4;
 export const MAX_AGRUPACIONES = 2;
 export const HERRAMIENTA_CONSULTAR = 'consultar_labores';
 export const HERRAMIENTA_APLICACIONES = 'consultar_aplicaciones';
+export const HERRAMIENTA_FALTANTES = 'consultar_faltantes_aplicacion';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
@@ -95,6 +97,14 @@ export function herramientasPlanificador(): unknown[] {
                 desde: { type: 'string', description: 'Fecha calendario inicial inclusiva solo para ejecución; exige hasta.' }, hasta: { type: 'string', description: 'Fecha calendario final inclusiva solo para ejecución; exige desde.' },
             } },
         } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_FALTANTES,
+            description: 'Faltantes vigentes de insumos para aplicaciones seleccionadas explícitamente. Un selector aplicacion_ids o aplicaciones obligatorio; nunca incluir cerradas implícitamente. Suma cantidades guardadas de todas las mezclas y resta inventario registrado hoy una vez por producto. No descuenta ejecución ni usa compras congeladas. No stock histórico ni reserva garantizada.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                aplicacion_ids: { type: 'array', minItems: 1, items: { type: 'string', format: 'uuid' } },
+                aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
+            } },
+        } },
         {
             type: 'function',
             function: {
@@ -112,7 +122,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta no corresponde a labores, inventario por fecha/estado ni cantidades por producto/lote de una aplicación. Costos de aplicaciones, cruces laborales y faltantes aún no están disponibles.',
+                description: 'La pregunta no corresponde a labores, inventario por fecha/estado, cantidades por producto/lote o faltantes vigentes de aplicaciones. Costos de aplicaciones y cruces laborales aún no están disponibles.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -225,6 +235,12 @@ function validarConsultaCantidades(a: Record<string, unknown>): ConsultaCantidad
     if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de ejecución inválido');
     return { ...(a.aplicacion_id !== undefined ? { aplicacion_id: (a.aplicacion_id as string).toLowerCase() } : { aplicacion: (a.aplicacion as string).trim() }), ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
 }
+function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): ConsultaFaltantesAplicacion {
+    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento laboral de aplicación no registrado');
+    const ids = listaTextos(a.aplicacion_ids, 'aplicacion_ids'), nombres = listaTextos(a.aplicaciones, 'aplicaciones');
+    if ((!ids.length && !nombres.length) || (ids.length && nombres.length) || ids.some(id => !esUuid(id)) || new Set(ids).size !== ids.length || new Set(nombres).size !== nombres.length) throw new ErrorPlan('selector laboral de aplicación inválido');
+    return { aplicacion_ids: ids.map(id => id.toLowerCase()), aplicaciones: nombres };
+}
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
 export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     if (llamadas.length === 0)
@@ -244,7 +260,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_FALTANTES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if ((nombres.has(HERRAMIENTA_ACLARAR) || nombres.has(HERRAMIENTA_FUERA)) && llamadas.length !== 1)
@@ -265,6 +281,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     }
     if (llamadas.length > MAX_CONSULTAS_POR_TURNO)
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} consultas en un turno`);
-    if (nombres.has(HERRAMIENTA_APLICACIONES) || nombres.has(HERRAMIENTA_CANTIDADES)) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if (nombres.has(HERRAMIENTA_APLICACIONES) || nombres.has(HERRAMIENTA_CANTIDADES) || nombres.has(HERRAMIENTA_FALTANTES)) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', consultas: llamadas.map((l) => validarConsulta(parsear(l))) };
 }

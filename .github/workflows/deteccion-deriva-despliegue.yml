@@ -47,7 +47,7 @@ jobs:
           # src/utils/escoEvals/numeros.ts: un commit ahi tambien exige redesplegar.
           # verify_jwt=true, asi que el GET anonimo a /health debe dar 401 del gateway.
           - slug: esco-consultas
-            path: supabase/functions/esco-consultas src/utils/esco2 src/utils/escoEvals/numeros.ts src/utils/formatPuro.ts src/utils/calculosAplicaciones.ts src/types/aplicaciones.ts
+            path: supabase/functions/esco-consultas src/utils/esco2 src/utils/escoEvals/numeros.ts src/utils/formatPuro.ts src/utils/calculosAplicaciones.ts src/types/aplicaciones.ts src/utils/esco2/faltantes.ts src/utils/esco2/faltantesFuente.ts src/utils/esco2/faltantesTipos.ts src/utils/calculosNecesidadProductos.ts
             verify_jwt: 'true'
             health_anon: '401'
     steps:
