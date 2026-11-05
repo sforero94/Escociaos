@@ -43,6 +43,7 @@ export interface DatosInventarioAplicaciones {
 }
 export interface FuenteAplicaciones {
   leer(base: BaseFechaAplicaciones): Promise<DatosInventarioAplicaciones>;
+  leerLaborAplicacion?(consulta: ConsultaLaborAplicacion): Promise<DatosLaborAplicacion>;
   leerCantidades?(consulta: ConsultaCantidadesAplicacion): Promise<DatosCantidadesAplicacion>;
   leerCostos?(consulta: ConsultaCostosAplicacion): Promise<DatosCostosAplicacion>;
 }

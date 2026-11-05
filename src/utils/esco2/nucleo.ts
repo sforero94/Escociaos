@@ -12,6 +12,7 @@ import { ErrorPlan, herramientasPlanificador, validarPlan } from './registro.ts'
 import { type ModeloEtapa, type Ruta } from './ruteo.ts';
 import { operacionesDelPlan, planDeOperaciones, type ConsultaLabores, type DatosLabores, type MensajeHistorial, type Plan, type ResultadoConsulta, type ResultadoParte } from './tipos.ts';
 import { ejecutarInventarioAplicaciones } from './aplicaciones.ts';
+import { ejecutarLaborAplicacion } from './laborAplicacion.ts';
 import { ejecutarCantidadesAplicacion } from './cantidades.ts';
 import { ejecutarCostosAplicacion } from './costos.ts';
 import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';

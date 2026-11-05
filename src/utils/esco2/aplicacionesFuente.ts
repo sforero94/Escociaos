@@ -2,6 +2,7 @@
 import { leerFilasFijas, type ClienteDatos } from './fuente.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { esUuid, ESTADOS_APLICACION, type AplicacionInventario, type CierreInventario, type DatosInventarioAplicaciones, type FuenteAplicaciones, type MovimientoInventario } from './aplicacionesTipos.ts';
+import { crearLectorLaborAplicacion } from './laborAplicacionFuente.ts';
 import { crearLectorCantidades } from './cantidadesFuente.ts';
 import { crearLectorCostos } from './costosFuente.ts';
 

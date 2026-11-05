@@ -1,6 +1,7 @@
 // Esco 2.0 — tipos del núcleo de consultas (M2.5: familia de labores).
 // Sin dependencias de Deno ni del navegador: el mismo código corre en Vitest,
 // en Node (runner de evaluación) y, más adelante, en la edge function.
+import type { ConsultaLaborAplicacion, ResultadoLaborAplicacion } from './laborAplicacionTipos.ts';
 import type { ConsultaAplicaciones, ResultadoAplicaciones } from './aplicacionesTipos.ts';
 import type { ConsultaCostosAplicacion, ResultadoCostosAplicacion } from './costosTipos.ts';
 import type { ConsultaCantidadesAplicacion, ResultadoCantidadesAplicacion } from './cantidadesTipos.ts';

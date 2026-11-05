@@ -21,6 +21,7 @@ export const MAX_CONSULTAS_POR_TURNO = 4;
 export const MAX_AGRUPACIONES = 2;
 export const HERRAMIENTA_CONSULTAR = 'consultar_labores';
 export const HERRAMIENTA_APLICACIONES = 'consultar_aplicaciones';
+export const HERRAMIENTA_LABOR_APLICACION = 'consultar_labor_aplicacion';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
 export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';

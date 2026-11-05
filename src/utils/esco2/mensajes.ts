@@ -4,6 +4,7 @@ import { numeroMensaje as numero } from './formatoMensaje.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
 import { renderAplicaciones } from './aplicaciones.ts';
+import { renderLaborAplicacion } from './laborAplicacion.ts';
 import { renderCantidadesAplicacion } from './cantidades.ts';
 import { renderCostosAplicacion } from './costos.ts';
 export type AvisoMensaje = 'contexto_no_disponible' | 'contexto_demasiado_amplio';
