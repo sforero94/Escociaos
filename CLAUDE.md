@@ -966,6 +966,14 @@ acceptance remains open because exploratory findings require separate review. Se
   `$50,4M`, `$2.000M`; 38 files), with Santiago's approval in chat: `ACTIVE`,
   `verify_jwt = true`, `ezbr_sha256` `32c12d3f…`, anonymous `/health` 401, anon key `/health`
   200, valid question 401 «sesión inválida». P3 is still not accepted (`docs/esco2/p3-result-2026-11-05.md`).
+  Redeployed 2026-11-05 as **version 8** from clean `main` `94839a26` (PR #435, which includes
+  #434: planner coverage format repair, closed reason codes with a fixed retry instruction,
+  follow-up quotes from earlier user messages, and the rule that an application's cost —
+  insumos, mano de obra, total — comes from `consultar_costos_aplicacion`; 39 files), with
+  Santiago's approval in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `0a7f8e2c…`,
+  anonymous `/health` 401, anon key `/health` 200, valid question 401 «sesión inválida». The
+  handler log now carries `errorPlan`/`motivoPlan` (closed codes only). On the frozen 8-scenario
+  P3 set the M4 measurement went 15/24 → 24/24 (`docs/esco2/m4-reparacion-planificador-2026-11-05.md`).
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
