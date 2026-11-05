@@ -1,4 +1,5 @@
 // Minimal P3 Task 2 source. Undefined means unread; null is a recorded NULL.
+import type { ConsultaCostosAplicacion, DatosCostosAplicacion } from './costosTipos.ts';
 import type { ConsultaCantidadesAplicacion, DatosCantidadesAplicacion } from './cantidadesTipos.ts';
 export const BASES_FECHA_APLICACIONES = ['fecha_inicio_planeada', 'fecha_movimiento', 'fecha_cierre_operativo', 'sin_precisar', 'cierre_administrativo'] as const;
 export type BaseFechaAplicaciones = typeof BASES_FECHA_APLICACIONES[number];
@@ -43,6 +44,7 @@ export interface DatosInventarioAplicaciones {
 export interface FuenteAplicaciones {
   leer(base: BaseFechaAplicaciones): Promise<DatosInventarioAplicaciones>;
   leerCantidades?(consulta: ConsultaCantidadesAplicacion): Promise<DatosCantidadesAplicacion>;
+  leerCostos?(consulta: ConsultaCostosAplicacion): Promise<DatosCostosAplicacion>;
 }
 export interface ResultadoAplicaciones {
   tipo: 'aplicaciones';

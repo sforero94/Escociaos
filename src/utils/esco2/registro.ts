@@ -2,6 +2,7 @@
 // validador que corre antes de ejecutar: no hay una lista paralela que se desincronice.
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { BASES_FECHA_APLICACIONES, ESTADOS_APLICACION, esUuid, type ConsultaAplicaciones } from './aplicacionesTipos.ts';
+import type { ConsultaCostosAplicacion } from './costosTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
@@ -21,6 +22,7 @@ export const MAX_AGRUPACIONES = 2;
 export const HERRAMIENTA_CONSULTAR = 'consultar_labores';
 export const HERRAMIENTA_APLICACIONES = 'consultar_aplicaciones';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
+export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
@@ -95,6 +97,15 @@ export function herramientasPlanificador(): unknown[] {
                 desde: { type: 'string', description: 'Fecha calendario inicial inclusiva solo para ejecución; exige hasta.' }, hasta: { type: 'string', description: 'Fecha calendario final inclusiva solo para ejecución; exige desde.' },
             } },
         } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_COSTOS,
+            description: 'Costo de UNA aplicación, solo si el usuario pide dinero. Cerrada: costo congelado al cierre operativo verificado, aplicación completa. Abierta: subtotal de insumos ejecutados a precio de hoy; nunca costo histórico ni costo total. incluir_plan=true solo si pide valorizar también el plan completo guardado, siempre separado. Selector ID o nombre/código; desde/hasta juntos solo filtran ejecución. No costo por lote ni por árbol, ni sumar bases congeladas y actuales.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                aplicacion_id: { type: 'string', format: 'uuid' }, aplicacion: { type: 'string' },
+                desde: { type: 'string', description: 'Inicio inclusivo solo de ejecución; exige hasta.' }, hasta: { type: 'string', description: 'Fin inclusivo solo de ejecución; exige desde.' },
+                incluir_plan: { type: 'boolean', description: 'Solo si el usuario pide valorización del plan; se presenta aparte.' },
+            } },
+        } },
         {
             type: 'function',
             function: {
@@ -112,7 +123,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta no corresponde a labores, inventario por fecha/estado ni cantidades por producto/lote de una aplicación. Costos de aplicaciones, cruces laborales y faltantes aún no están disponibles.',
+                description: 'La pregunta no corresponde a labores, inventario por fecha/estado, cantidades por producto/lote ni costo de aplicación. Cruces laborales y faltantes aún no están disponibles.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -225,6 +236,12 @@ function validarConsultaCantidades(a: Record<string, unknown>): ConsultaCantidad
     if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de ejecución inválido');
     return { ...(a.aplicacion_id !== undefined ? { aplicacion_id: (a.aplicacion_id as string).toLowerCase() } : { aplicacion: (a.aplicacion as string).trim() }), ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
 }
+function validarConsultaCostos(a: Record<string, unknown>): ConsultaCostosAplicacion {
+    if (Object.keys(a).some(k => !['aplicacion_id', 'aplicacion', 'desde', 'hasta', 'incluir_plan'].includes(k))) throw new ErrorPlan('argumento de costos no registrado');
+    if (a.incluir_plan !== undefined && typeof a.incluir_plan !== 'boolean') throw new ErrorPlan('incluir_plan debe ser booleano');
+    const { incluir_plan, ...selector } = a;
+    return { ...validarConsultaCantidades(selector), ...(incluir_plan !== undefined ? { incluir_plan: incluir_plan as boolean } : {}) };
+}
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
 export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     if (llamadas.length === 0)
@@ -244,7 +261,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if ((nombres.has(HERRAMIENTA_ACLARAR) || nombres.has(HERRAMIENTA_FUERA)) && llamadas.length !== 1)
@@ -265,6 +282,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     }
     if (llamadas.length > MAX_CONSULTAS_POR_TURNO)
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} consultas en un turno`);
-    if (nombres.has(HERRAMIENTA_APLICACIONES) || nombres.has(HERRAMIENTA_CANTIDADES)) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if (nombres.has(HERRAMIENTA_APLICACIONES) || nombres.has(HERRAMIENTA_CANTIDADES) || nombres.has(HERRAMIENTA_COSTOS)) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', consultas: llamadas.map((l) => validarConsulta(parsear(l))) };
 }
