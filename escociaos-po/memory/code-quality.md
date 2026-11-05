@@ -130,3 +130,12 @@ esta corrida** — filado como hallazgo contra la operacion.
 
 ## Corrida 2026-10-16-viernes
 - ESCO-151 en PR #329: `extraerTamanoPresentacion` tiene una sola copia, exportada desde `calculosAplicaciones.ts` (coma decimal, `<=0` → 1). `'sin_stock'` salio del union de `alerta`: produccion `aplicaciones_compras.alerta` solo tiene normal/sin_precio. (b) liquidos en fertilizacion y (c) redondeo ceil siguen siendo reglas de Santiago. [corrida: 2026-10-16-viernes]
+
+## Corrida 2026-11-05-jueves (primer jueves del mes)
+- Filados ESCO-173 (compositor de Esco 2.0 retirado por #415 sigue en código; m3-funcion.md D25 falso) y ESCO-174 (16 componentes muertos sostienen 10 dependencias). Ambos VIERNES. [corrida: 2026-11-05-jueves]
+- Barrido de código muerto con build de scratch: `npx vite build --sourcemap --outDir <scratch>`, luego extraer rutas `src/` del sourcemap (546 ficheros). Nunca escribir build/ dentro del worktree. [corrida: 2026-11-05-jueves]
+- Dependencias usadas solo por ficheros muertos: bucle sobre deps de package.json con `grep -rlE "from ['\"]$d"` excluyendo tests, contra la lista de muertos. [corrida: 2026-11-05-jueves]
+- 13 workflows `*-once.yml` + 26 scripts `scripts/*-once*.mjs` (4.187 líneas) de releases de un solo uso, anclados a versiones 282–294 (prod v295); abortan por 'Baseline drift', inertes. Propuesta de limpieza posible, no urgente. [corrida: 2026-11-05-jueves]
+- Dos pruebas dependen del reloj (supabaseGuardHook '<1000ms', escoFamiliasContratoIndependent timeout 5 s): fallan solo con lint/tsc en paralelo. Correr la suite sola. [corrida: 2026-11-05-jueves]
+- calculosReporteAplicacion.ts sin prueba pero solo tiene helpers de división/formato; no re-reportar como crítico. database.ts sin tablas 186/187/189; regenerar dentro de ESCO-170 si F2 lee alternativos. [corrida: 2026-11-05-jueves]
+- Líneas base: lint 0 errores / 907 warnings (921 el 10-09) · tsc limpio · 320 ficheros / 7.567 pruebas · `as any` cliente 71 · npm audit --omit=dev 9 (sin cambio) · npm outdated 53. [corrida: 2026-11-05-jueves]

@@ -853,3 +853,11 @@ Clima: 09-21..27 todos 288 lecturas, ok salvo 09-26 reconstruido 0,00. Candado 1
 - «Fuera de ventana de ronda» = 51 filas, todas Ronda 26 (abril). Línea base, no filar. [corrida: 2026-11-02-lunes]
 - hato_alertas_respuesta_trazas (186) funciona punta a punta: 7 pasos por callback. Columnas: creado_en, paso, estado, detalle jsonb, update_id. [corrida: 2026-11-02-lunes]
 - Navegación: hato_alertas_tick_runs corre 12:30Z (175). Una lectura del lunes antes de 12:30Z no ve la corrida del día; no es falla. [corrida: 2026-11-02-lunes]
+
+## Corrida 2026-11-05-jueves (sonda P0)
+- Sonda P0 sin hallazgos. Ledger máx 190 (`20261104182847`), sin versiones posteriores, 185–190 con fichero en main `ba9003d`. Siguiente libre 191 (barrer ramas igual). [corrida: 2026-11-05-jueves]
+- La 189 no tiene entrada numerada en el CLAUDE.md raíz; añadido como evidencia a ESCO-168. [corrida: 2026-11-05-jueves]
+- Primer cierre de aplicación desde la 188: "Foco monalonion piedra paula" (26a883cd), 2026-11-03, 3 salidas encadenadas, libro = stock. [corrida: 2026-11-05-jueves]
+- Aplicación histórica 3bea3a70 con fin_planeada < inicio_planeada (enero 2026): línea base previa a la 188, no filar como P0. [corrida: 2026-11-05-jueves]
+- Parto de VALENCIANA #123 del 2026-11-04 (Telegram) con cria_id NULL: no hay ficha de la cría. Revisar el lunes con Martha. [corrida: 2026-11-05-jueves]
+- Líneas base: hato_eventos 804 · activas 67 · pesajes 807 (último 2026-10-28) · monitoreos 4.346 · mov_inventario 195 · inventario_operaciones 0 · compras 35 · md 204 / mdp 913 · aplicaciones 24 / cierres 22 · rt 3.388 · fin_gastos 4.637 · fin_ingresos 252 · gan 288 = log · globalgap_correcciones 964 · hato_correcciones 29 · clima_resumen_diario 1.985 · alternativos 0 · logs_auditoria 0. n_tup_del sin cambio desde 10-29. Divergencia libro/stock conocida: TecniFeed Boro. [corrida: 2026-11-05-jueves]

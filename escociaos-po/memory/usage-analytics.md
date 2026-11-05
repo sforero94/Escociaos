@@ -392,3 +392,12 @@ estado de producción es una hipótesis, no un hecho. Esta se refutó con un sol
 - ESCO-164 en uso real: el 10-24 Acidurez y Focus muestran que el usuario corrige el doble conteo a mano. Evidencia para ESCO-164; no refilar. [corrida: 2026-10-29-jueves]
 - Secado por alerta: 3 secado_due 10-25/26, 2 confirmadas (Fernando, Santiago), RICARENA #88 escalada sin respuesta. El secado_real usa la fecha de la respuesta con fecha_confianza='aproximada' (contrato): no leer ese rezago como error. Si RICARENA sigue sin secado el 11-02, mirar. [corrida: 2026-10-29-jueves]
 - Navegación: hato_alertas.respondida_por guarda texto (nombre) tras #356. hato_alertas_envios se une a telegram_usuarios por telegram_id::text. [corrida: 2026-10-29-jueves]
+
+## Corrida 2026-11-05-jueves
+- Pulso 10-29→11-04: monitoreos 39/0 · pesajes 50/0 · registros_trabajo 57/47 · fin_gastos 14/17 · chat_messages 483 pero 465 son del bot (evaluación); humanos 10. Escritores: David 104, Fernando 55, Consuelito 14, Martha 2; Efraín, María Paula, Uriel 0. [corrida: 2026-11-05-jueves]
+- Vigilancia del pesaje resuelta: la foto del 11-02 escribió 10-21 y 10-28. `filas_escritas` incluye UPDATEs de semanas previas de la hoja mensual (pipeline:759); no es doble escritura. [corrida: 2026-11-05-jueves]
+- Monitoreo: una ronda = un lote de carga, no una visita. R33 (5 subl), R34 (1), R35 (6) son una visita (10-28 + 11-03); filado ESCO-172. Agrupar por ventana de fechas antes de comparar cobertura por ronda. [corrida: 2026-11-05-jueves]
+- `inventario_operaciones` y `aplicaciones_productos_alternativos` en 0: esperado (el cierre no escribe recibo; ESCO-170 sin enviar). [corrida: 2026-11-05-jueves]
+- Esco 2.0: medir uso en `function_edge_logs` (path `esco-consultas`), no en `chat_messages`. Hasta 11-05 solo tráfico de prueba. [corrida: 2026-11-05-jueves]
+- Desde 2026-11-16, cero chequeos es señal (último 09-08). RICARENA #88 secado_due escalada desde 10-25 sin secado_real (cae en ESCO-111/150). [corrida: 2026-11-05-jueves]
+- Navegación: `fin_gastos_lote_operaciones` no existe; buscar el nombre real de la tabla de la 187 en information_schema. [corrida: 2026-11-05-jueves]

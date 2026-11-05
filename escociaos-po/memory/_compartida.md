@@ -2462,3 +2462,13 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 | 2026-10-30-viernes | 0 | 1 (ESCO-165 propuesta) | **0** (la regla exige elegible vacio Y nada que preparar) |
 - Ledger hasta 188 (`20261030023201`), 185–188 con archivo en main. Siguiente numero libre 189 (barrer ramas igual). [corrida: 2026-10-30-viernes]
 - ESCO-165 F2: la tabla nueva con RLS lleva CREATE POLICY -> no es ddl_aditivo del viernes (V2a + parser del hook); va FDS/datos. [corrida: 2026-10-30-viernes]
+
+## Corrida 2026-11-05-jueves — hechos transversales
+- Primer jueves del mes: roster 5 (usage-analytics, feature-strategy, code-quality, sonda infra-perf + data-integrity). Preflight verde: Composio supabase/vercel/github `active`, `escocia-os` = supabase_bitis-coward, Notion oficial responde, `query_logs` 44 filas/h. `ATTENDED=0`. Cero denegaciones. Cero escrituras a la base. [corrida: 2026-11-05-jueves]
+- Sonda P0 tranquila en los dos agentes. Filados ESCO-172 (FDS propuesta), ESCO-173 y ESCO-174 (VIERNES). Evidencia añadida a ESCO-166 (R34 contiene Salto S1 del 10-28) y ESCO-168 (falta la 189). [corrida: 2026-11-05-jueves]
+
+## Racha del jueves (regla de auto-poda v2) — actualizada 2026-11-05
+| Corrida | Propuestas filadas | Respondidas `si` | Racha sin `si` |
+|---|---|---|---|
+| 2026-10-29-jueves | 1 (ESCO-165) | **si** (2026-11-02, respuesta al sábado) | 0 |
+| **2026-11-05-jueves** | 1 (ESCO-172) | pendiente (sábado 11-07) | 0 |
