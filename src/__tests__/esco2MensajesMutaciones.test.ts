@@ -11,7 +11,7 @@ describe('Mensajes-v1: ocho mutaciones del texto final, con controles positivos'
     {name:'miembro equivocado del conjunto de aplicaciones',results:[asociaciones],mutate:(t:string)=>t.replace('Abono','Herbicida')},
     {name:'calificador obligatorio omitido',results:[conocido],mutate:(t:string)=>t.replace(ALCANCE_VISIBLE,'')},
     {name:'número solo en la pregunta',results:[conocido],mutate:(t:string)=>t+'\nEl total adicional es 777.'},
-    {name:'parte multipartes omitida',results:[conocido,otroPeriodo],mutate:(t:string)=>t.slice(0,t.indexOf('Se registraron 4,5 jornales; costo de mano de obra: $2M.')).trim()},
+    {name:'parte multipartes omitida',results:[conocido,otroPeriodo],mutate:(t:string)=>t.slice(0,t.indexOf('Se registraron 4,5 jornales; costo de mano de obra: $2,0M.')).trim()},
     {name:'asociación desconocida convertida en vacío',results:[asociacionDesconocida],mutate:(t:string)=>t.replace('No pude comprobar las aplicaciones asociadas a Cosecha porque esos datos no están disponibles.','Cosecha no tiene aplicaciones asociadas entre las que puedes ver.')},
   ];
   for(const c of cases)it(c.name,()=>{
@@ -20,7 +20,7 @@ describe('Mensajes-v1: ocho mutaciones del texto final, con controles positivos'
   });
   it('rechaza un costo copiado de otro período aunque ambos costos existan en los resultados',()=>{
     const results=[conocido,otroPeriodo];const text=renderMensaje(results);expect(validarMensajeFinal(text,results)).toBe(true);
-    const changed=text.replace('Se registraron 4,5 jornales; costo de mano de obra: $95M.','Se registraron 4,5 jornales; costo de mano de obra: $2M.');expect(validarMensajeFinal(changed,results)).toBe(false);
+    const changed=text.replace('Se registraron 4,5 jornales; costo de mano de obra: $95,0M.','Se registraron 4,5 jornales; costo de mano de obra: $2,0M.');expect(validarMensajeFinal(changed,results)).toBe(false);
   });
   it('rechaza fecha de otro período aunque esté presente en la segunda parte',()=>{
     const results=[conocido,otroPeriodo];const text=renderMensaje(results);const changed=text.replace('Del 26 de octubre de 2026 al 1 de noviembre de 2026, ambas fechas incluidas.',PERIODO_NOV);
