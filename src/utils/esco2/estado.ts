@@ -43,8 +43,9 @@ export function validarEstado(estado: EstadoTurno): boolean {
             return false;
         const operaciones = operacionesDelPlan(estado.plan);
         if (!operaciones.length || operaciones.length > 4) return false;
-        if (operaciones.some(o => !o || !['labores', 'aplicaciones', 'cantidades_aplicacion'].includes(o.tipo))) return false;
-        validarPlan(operaciones.map(o => ({ nombre: o.tipo === 'labores' ? 'consultar_labores' : o.tipo === 'aplicaciones' ? 'consultar_aplicaciones' : 'consultar_cantidades_aplicacion', argumentos: JSON.stringify(o.consulta) })));
+        const herramientaDe: Record<string, string> = { labores: 'consultar_labores', aplicaciones: 'consultar_aplicaciones', cantidades_aplicacion: 'consultar_cantidades_aplicacion', costos_aplicacion: 'consultar_costos_aplicacion', labor_aplicacion: 'consultar_labor_aplicacion', faltantes_aplicacion: 'consultar_faltantes_aplicacion' };
+        if (operaciones.some(o => !o || !Object.prototype.hasOwnProperty.call(herramientaDe, o.tipo))) return false;
+        validarPlan(operaciones.map(o => ({ nombre: herramientaDe[o.tipo], argumentos: JSON.stringify(o.consulta) })));
         if (estado.decisiones && Object.values(estado.decisiones).some(v => v !== 'tarea' && v !== 'categoria'))
             return false;
         const p = estado.pendiente;

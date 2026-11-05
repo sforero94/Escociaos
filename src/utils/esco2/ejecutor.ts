@@ -18,7 +18,7 @@ export const SIN_LOTE_ETIQUETA = '(sin lote)';
 function r2(n: number): number {
     return Math.round(n * 100) / 100;
 }
-function metricas(registros: RegistroTrabajo[]): ValoresMetricas {
+export function metricas(registros: RegistroTrabajo[]): ValoresMetricas {
     const fechas = registros.map((r) => r.fecha_trabajo).sort();
     const sinCosto = registros.some((r) => r.costo_jornal === null);
     return {

@@ -1,10 +1,13 @@
 // Canonical human Spanish for computed labor results. No model text is composed here.
-import { formatCurrency, formatLongDate, formatMillonesCOP } from '../formatPuro.ts';
-import { numeroMensaje as numero } from './formatoMensaje.ts';
+import { formatLongDate } from '../formatPuro.ts';
+import { dineroMensaje, numeroMensaje as numero } from './formatoMensaje.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import { esResultadoAplicaciones, esResultadoCantidades, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
+import { esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
 import { renderAplicaciones } from './aplicaciones.ts';
+import { renderLaborAplicacion } from './laborAplicacion.ts';
 import { renderCantidadesAplicacion } from './cantidades.ts';
+import { renderCostosAplicacion } from './costos.ts';
+import { renderFaltantesAplicacion } from './faltantes.ts';
 export type AvisoMensaje = 'contexto_no_disponible' | 'contexto_demasiado_amplio';
 const avisos: Record<AvisoMensaje, string> = { contexto_no_disponible: 'No pude recuperar el contexto anterior. Repite tu consulta completa.', contexto_demasiado_amplio: 'La selección es demasiado amplia para conservarla. Reduce las tareas seleccionadas y repite la consulta.' };
 const metricas = {
@@ -13,16 +16,7 @@ const metricas = {
 const campos: Record<string, string> = { estado_actual: 'el estado actual', jornales_estimados: 'los jornales estimados', fechas_tarea: 'las fechas de la tarea', fecha_estimada_inicio: 'la fecha de inicio planeada', fecha_estimada_fin: 'la fecha de fin planeada', fecha_inicio_real: 'la fecha de inicio real', fecha_fin_real: 'la fecha de fin real', asociaciones: 'las aplicaciones asociadas' };
 const fecha = (value: string) => formatLongDate(value);
 const jornal = (n: number, registrado = false) => `${numero(n)} ${n === 1 ? 'jornal' : 'jornales'}${registrado ? n === 1 ? ' registrado' : ' registrados' : ''}`;
-// Under $10M a whole-million figure can be off by up to 40 %, so one decimal is kept there
-// ("aprox. $1,4M"). From $10M up, whole millions. Any rounding is labeled "aprox.".
-function dinero(n: number): string {
-    const abs = Math.abs(n);
-    if (abs < 1000000)
-        return `${Number.isInteger(n) ? '' : 'aprox. '}${formatCurrency(n)}`;
-    const decimales = n % 1000000 !== 0 && Math.round(abs / 100000) < 100 ? 1 : 0;
-    const exacto = n % (decimales ? 100000 : 1000000) === 0;
-    return `${exacto ? '' : 'aprox. '}${formatMillonesCOP(n, decimales)}`;
-}
+const dinero = dineroMensaje;
 function nombre(text: string | undefined, base = 'Labor'): string {
     const result = (text ?? '').replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&');
     return result || base;
@@ -272,10 +266,10 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
     if (aviso !== undefined && (typeof aviso !== 'string' || !Object.prototype.hasOwnProperty.call(avisos, aviso)))
         throw new Error('aviso_no_registrado');
     const parts = resultados.map((r, i) => {
-        const text = esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const text = esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
             return text;
-        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
+        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
     if (aviso)
