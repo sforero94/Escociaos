@@ -1,8 +1,10 @@
 // Canonical human Spanish for computed labor results. No model text is composed here.
-import { formatCurrency, formatLongDate, formatMillonesCOP, formatNumber } from '../formatPuro.ts';
+import { formatCurrency, formatLongDate, formatMillonesCOP } from '../formatPuro.ts';
+import { numeroMensaje as numero } from './formatoMensaje.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import { esResultadoAplicaciones, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
+import { esResultadoAplicaciones, esResultadoCantidades, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
 import { renderAplicaciones } from './aplicaciones.ts';
+import { renderCantidadesAplicacion } from './cantidades.ts';
 export type AvisoMensaje = 'contexto_no_disponible' | 'contexto_demasiado_amplio';
 const avisos: Record<AvisoMensaje, string> = { contexto_no_disponible: 'No pude recuperar el contexto anterior. Repite tu consulta completa.', contexto_demasiado_amplio: 'La selección es demasiado amplia para conservarla. Reduce las tareas seleccionadas y repite la consulta.' };
 const metricas = {
@@ -10,10 +12,6 @@ const metricas = {
 } as const;
 const campos: Record<string, string> = { estado_actual: 'el estado actual', jornales_estimados: 'los jornales estimados', fechas_tarea: 'las fechas de la tarea', fecha_estimada_inicio: 'la fecha de inicio planeada', fecha_estimada_fin: 'la fecha de fin planeada', fecha_inicio_real: 'la fecha de inicio real', fecha_fin_real: 'la fecha de fin real', asociaciones: 'las aplicaciones asociadas' };
 const fecha = (value: string) => formatLongDate(value);
-const numero = (n: number) => {
-    const decimals = Math.max(0, (String(n).split('.')[1]?.split('e')[0].length ?? 0) - Number(String(n).split('e')[1] ?? 0));
-    return decimals > 20 ? String(n).replace('.', ',') : formatNumber(n, decimals);
-};
 const jornal = (n: number, registrado = false) => `${numero(n)} ${n === 1 ? 'jornal' : 'jornales'}${registrado ? n === 1 ? ' registrado' : ' registrados' : ''}`;
 // Under $10M a whole-million figure can be off by up to 40 %, so one decimal is kept there
 // ("aprox. $1,4M"). From $10M up, whole millions. Any rounding is labeled "aprox.".
@@ -274,10 +272,10 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
     if (aviso !== undefined && (typeof aviso !== 'string' || !Object.prototype.hasOwnProperty.call(avisos, aviso)))
         throw new Error('aviso_no_registrado');
     const parts = resultados.map((r, i) => {
-        const text = esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const text = esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
             return text;
-        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
+        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
     if (aviso)

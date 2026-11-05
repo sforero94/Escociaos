@@ -51,10 +51,24 @@ export function unidadAplicacion(tipo: string | null | undefined): 'canecas' | '
  * - # canecas = Litros de mezcla / Tamaño caneca
  * - Cantidad de cada producto = (# canecas × dosis por caneca) / 1000
  */
+// Structural overloads expose only arithmetic inputs to read-only consumers.
+// No commercial catalog fields or placeholder metadata are needed to use the engine.
+export interface LoteFumigacionMinimo {
+  lote_id: string; nombre?: string; conteo_arboles: { total: number };
+  calibracion_litros_arbol?: number; tamano_caneca?: number;
+}
+export interface LoteFertilizacionMinimo {
+  lote_id: string; nombre?: string; conteo_arboles: LoteSeleccionado['conteo_arboles'];
+}
+type MezclaFumigacionMinima = { productos: Pick<ProductoEnMezcla, 'producto_id' | 'dosis_por_caneca'>[] };
+type MezclaFertilizacionMinima = { productos: Pick<ProductoEnMezcla, 'producto_id' | 'dosis_grandes' | 'dosis_medianos' | 'dosis_pequenos' | 'dosis_clonales'>[] };
+type CalculoMinimo = Omit<CalculosPorLote, 'lote_nombre'> & { lote_nombre?: string };
+export function calcularFumigacion(lote: LoteSeleccionado, mezcla: Mezcla): CalculosPorLote;
+export function calcularFumigacion(lote: LoteFumigacionMinimo, mezcla: MezclaFumigacionMinima): CalculoMinimo;
 export function calcularFumigacion(
-  lote: LoteSeleccionado,
-  mezcla: Mezcla
-): CalculosPorLote {
+  lote: LoteFumigacionMinimo,
+  mezcla: MezclaFumigacionMinima
+): CalculoMinimo {
   const total_arboles = lote.conteo_arboles.total;
   const calibracion = lote.calibracion_litros_arbol || 0;
   const tamano_caneca = lote.tamano_caneca || 200;
@@ -106,11 +120,13 @@ const TAMANO_BULTO_MEZCLA_KG = 50;
  * de cada insumo (10, 25, 40, 50kg). La lista de compras usa la presentación
  * comercial; aquí se calcula cuántos bultos de mezcla preparar.
  */
+export function calcularFertilizacion(lote: LoteSeleccionado, mezcla: Mezcla, productosInfo?: Map<string, { presentacion_kg_l: number }>): CalculosPorLote;
+export function calcularFertilizacion(lote: LoteFertilizacionMinimo, mezcla: MezclaFertilizacionMinima, productosInfo?: Map<string, { presentacion_kg_l: number }>): CalculoMinimo;
 export function calcularFertilizacion(
-  lote: LoteSeleccionado,
-  mezcla: Mezcla,
+  lote: LoteFertilizacionMinimo,
+  mezcla: MezclaFertilizacionMinima,
   _productosInfo?: Map<string, { presentacion_kg_l: number }>
-): CalculosPorLote {
+): CalculoMinimo {
   // Calcular kilos por cada tipo de árbol para cada producto
   let kilos_grandes_total = 0;
   let kilos_medianos_total = 0;

@@ -2,6 +2,7 @@
 import { leerFilasFijas, type ClienteDatos } from './fuente.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { esUuid, ESTADOS_APLICACION, type AplicacionInventario, type CierreInventario, type DatosInventarioAplicaciones, type FuenteAplicaciones, type MovimientoInventario } from './aplicacionesTipos.ts';
+import { crearLectorCantidades } from './cantidadesFuente.ts';
 
 export const COLUMNAS_APLICACIONES = {
   aplicaciones: 'id,codigo_aplicacion,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_inicio_ejecucion,fecha_fin_ejecucion,tarea_id',
@@ -25,7 +26,7 @@ function validarIds(rows: Record<string, unknown>[]): void {
   if (rows.some(r => !r || !esUuid(r.id)) || new Set(rows.map(r => r.id)).size !== rows.length) throw new Error('identidades_no_disponibles');
 }
 export function fuenteAplicacionesSupabase(cliente: ClienteDatos, opciones: { tamanoPagina?: number } = {}): FuenteAplicaciones {
-  return {
+  const fuente: FuenteAplicaciones = {
     async leer(base) {
       const datos: DatosInventarioAplicaciones = {};
       try {
@@ -53,4 +54,6 @@ export function fuenteAplicacionesSupabase(cliente: ClienteDatos, opciones: { ta
       return datos;
     },
   };
+  fuente.leerCantidades = crearLectorCantidades(cliente, () => fuente.leer('fecha_inicio_planeada'), opciones.tamanoPagina);
+  return fuente;
 }
