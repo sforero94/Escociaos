@@ -12,6 +12,7 @@ import { ErrorPlan, herramientasPlanificador, validarPlan } from './registro.ts'
 import { type ModeloEtapa, type Ruta } from './ruteo.ts';
 import { operacionesDelPlan, planDeOperaciones, type ConsultaLabores, type DatosLabores, type MensajeHistorial, type Plan, type ResultadoConsulta, type ResultadoParte } from './tipos.ts';
 import { ejecutarInventarioAplicaciones } from './aplicaciones.ts';
+import { ejecutarLaborAplicacion } from './laborAplicacion.ts';
 import { ejecutarCantidadesAplicacion } from './cantidades.ts';
 import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';
 /** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
@@ -278,7 +279,11 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
         const o = operaciones[i], id = `p${i + 1}`;
-        if (o.tipo === 'cantidades_aplicacion') {
+        if (o.tipo === 'labor_aplicacion') {
+            let datosLabor;
+            try { datosLabor = await args.fuenteAplicaciones?.leerLaborAplicacion?.(o.consulta); } catch { /* Independent unavailable relation. */ }
+            resultados.push(ejecutarLaborAplicacion(o.consulta, datosLabor ?? { seleccion: 'no_leido' }, id, hoy));
+        } else if (o.tipo === 'cantidades_aplicacion') {
             let fuenteCantidades;
             try { fuenteCantidades = await args.fuenteAplicaciones?.leerCantidades?.(o.consulta); } catch { /* Typed unread quantity result; independent parts survive. */ }
             resultados.push(ejecutarCantidadesAplicacion(o.consulta, fuenteCantidades ?? { seleccion: 'no_leido' }, id, hoy));

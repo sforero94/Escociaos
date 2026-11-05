@@ -523,7 +523,7 @@ describe('funciones con verify_jwt=true (esco-consultas, Esco 2.0 M3)', () => {
 
   it('el workflow lista esco-consultas con verify_jwt true, health 401 y las rutas del núcleo', () => {
     const wf = readFileSync(fileURLToPath(new URL('../.github/workflows/deteccion-deriva-despliegue.yml', import.meta.url)), 'utf8');
-    expect(wf).toMatch(/slug: esco-consultas\n\s+path: supabase\/functions\/esco-consultas src\/utils\/esco2 src\/utils\/escoEvals\/numeros.ts src\/utils\/formatPuro.ts src\/utils\/calculosAplicaciones.ts src\/types\/aplicaciones.ts\n\s+verify_jwt: 'true'\n\s+health_anon: '401'/);
+    expect(wf).toMatch(/slug: esco-consultas\n\s+path: supabase\/functions\/esco-consultas src\/utils\/esco2 src\/utils\/escoEvals\/numeros.ts src\/utils\/formatPuro.ts src\/utils\/calculosAplicaciones.ts src\/types\/aplicaciones.ts src\/utils\/esco2\/laborAplicacion.ts src\/utils\/esco2\/laborAplicacionFuente.ts src\/utils\/esco2\/laborAplicacionTipos.ts\n\s+verify_jwt: 'true'\n\s+health_anon: '401'/);
     expect(wf).toContain('EDGE_FUNCTION_VERIFY_JWT: ${{ matrix.verify_jwt }}');
   });
 });
