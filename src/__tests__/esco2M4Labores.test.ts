@@ -396,7 +396,7 @@ describe('P2: cifras obligatorias por render determinista, sin recomposición', 
 // --- Brecha 5: scorer exacto -----------------------------------------------------------------------------------
 
 function turnoDe(respuesta: string, resultados: ResultadoParte[] = [], origen: ResultadoTurno['origen'] = 'compositor'): ResultadoTurno {
-  return { respuesta, origen, plan: null, errorPlan: null, ruta: null, ajustes: [], resultados, guarda: { primera: [], segunda: null }, llamadas: [], ms: 1 };
+  return { respuesta, origen, plan: null, errorPlan: null, ruta: null, ajustes: [], resultados, guarda: { primera: [], segunda: null }, llamadas: [], ms: 1, cobertura: { version: 1, estado: 'no_certificada', exhaustividad: 'no_certificada', partes: [] } };
 }
 
 describe('fechas en texto', () => {

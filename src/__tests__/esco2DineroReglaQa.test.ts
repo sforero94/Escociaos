@@ -16,20 +16,20 @@ function laborMessage(cost: number) {
   const result=resultadoMensaje({ total:{ jornales:1.25,costo:cost } });
   return { result, text:renderMensaje([result]) };
 }
-const MONEY_ORACLES: ReadonlyArray<readonly [number,string]> = [
+const MONEY_ORACLES: ReadonlyArray<readonly [number,string,string?]> = [
   [0,'$0'],[-0,'$0'],[934567,'$934.567'],[999999,'$999.999'],
-  [999999.6,'aprox. $1.000.000'],[1000000,'$1,0M'],[1100000,'$1,1M'],
-  [1050000,'aprox. $1,1M'],[50400000,'$50,4M'],[95000000,'$95,0M'],
-  [99999999,'aprox. $100,0M'],[100000000,'$100M'],
-  [100499999,'aprox. $100M'],[233000000,'$233M'],
+  [999999.6,'aprox. $1.000.000','$999.999,6'],[1000000,'$1,0M'],[1100000,'$1,1M'],
+  [1050000,'aprox. $1,1M','$1.050.000'],[50400000,'$50,4M'],[95000000,'$95,0M'],
+  [99999999,'aprox. $100,0M','$99.999.999'],[100000000,'$100M'],
+  [100499999,'aprox. $100M','$100.499.999'],[233000000,'$233M'],
   [-934567,'-$934.567'],[-1000000,'-$1,0M'],[-50400000,'-$50,4M'],
-  [-99999999,'aprox. -$100,0M'],[-100000000,'-$100M'],[-233400000,'aprox. -$233M'],
+  [-99999999,'aprox. -$100,0M','-$99.999.999'],[-100000000,'-$100M'],[-233400000,'aprox. -$233M','-$233.400.000'],
 ];
 
 describe('Esco currency acceptance through factual labor/application renderers',()=>{
-  it.each(MONEY_ORACLES)('renders the explicitly approved amount %s as %s without changing factual evidence',(amount,expected)=>{
+  it.each(MONEY_ORACLES.map(([amount, expected, exact]) => ({ amount, expected, exact })))('renders the explicitly approved amount $amount as $expected without changing factual evidence',({amount,expected,exact})=>{
     const { result,text }=laborMessage(amount);
-    expect(text).toContain(`costo de mano de obra: ${expected}.`);
+    expect(text).toContain(`costo de mano de obra: ${expected}${exact ? ` (valor exacto: ${exact})` : ''}.`);
     expect(text).toContain('1,25 jornales');
     expect(result.total.costo).toBe(amount);
     expect(validarMensajeFinal(text,[result])).toBe(true);
@@ -44,7 +44,7 @@ describe('Esco currency acceptance through factual labor/application renderers',
     };
     const result=ejecutarCostosAplicacion({aplicacion_id:APP},data,'p1','2026-11-05');
     const text=renderCostosAplicacion(result);
-    expect(text).toContain('Insumos: $934.567; mano de obra: $50,4M; total: aprox. $51,3M.');
+    expect(text).toContain('Insumos: $934.567; mano de obra: $50,4M; total: aprox. $51,3M (valor exacto: $51.334.567).');
     expect(result.congelado).toMatchObject({insumos:934567,mano_obra:50400000,total:51334567});
     expect(text).not.toContain('COP');
   });

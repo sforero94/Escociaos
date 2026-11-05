@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { responderTurnoDesdeFuente, type ConfigModelos } from '@/utils/esco2/nucleo';
+import { type ConfigModelos } from '@/utils/esco2/nucleo';
+import { responderTurnoDesdeFuenteLegadoSinCertificar as responderTurnoDesdeFuente } from './esco2CoberturaLegacy.ts';
 import type { ClienteLLM } from '@/utils/esco2/llm';
 import { validarEstado, type EstadoTurno } from '@/utils/esco2/estado';
 import { validarPlan } from '@/utils/esco2/registro';

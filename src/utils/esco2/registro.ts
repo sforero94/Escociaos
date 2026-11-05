@@ -7,6 +7,8 @@ import type { ConsultaLaborAplicacion } from './laborAplicacionTipos.ts';
 import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
+import { operacionesDelPlan } from './tipos.ts';
+import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, validarInventarioDeclarado, validarCorrespondenciaPlan } from './cobertura.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
 export const METRICAS: readonly Metrica[] = [
     'jornales',
@@ -31,7 +33,7 @@ export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
 export function herramientasPlanificador(): unknown[] {
-    return [
+    const herramientas = [
         {
             type: 'function',
             function: {
@@ -154,6 +156,7 @@ export function herramientasPlanificador(): unknown[] {
             },
         },
     ];
+    return herramientas.map(h => ({ ...h, function: { ...h.function, parameters: { ...h.function.parameters, properties: { ...h.function.parameters.properties, cobertura: ESQUEMA_COBERTURA, parte_ids: ESQUEMA_PARTE_IDS } } } }));
 }
 export interface LlamadaHerramienta {
     nombre: string;
@@ -280,7 +283,32 @@ function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): Consult
     return selectorAplicaciones(a, 'faltantes');
 }
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
-export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
+export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; exigirCobertura: true }): Plan {
+    if (contexto?.exigirCobertura) {
+        try {
+            if (!llamadas.length || llamadas.length > MAX_CONSULTAS_POR_TURNO) throw new Error('limite');
+            const argumentos = llamadas.map(l => JSON.parse(l.argumentos) as Record<string, unknown>);
+            if (argumentos.some(a => !a || typeof a !== 'object' || Array.isArray(a)) || argumentos.slice(1).some(a => Object.prototype.hasOwnProperty.call(a, 'cobertura'))) throw new Error('metadato');
+            const cobertura = validarInventarioDeclarado(argumentos[0].cobertura, contexto.pregunta);
+            const limpias = llamadas.map((l, i) => {
+                const { cobertura: _cobertura, parte_ids: _partes, ...consulta } = argumentos[i];
+                return { nombre: l.nombre, argumentos: JSON.stringify(consulta) };
+            });
+            const base = validarPlan(limpias);
+            const sinOperaciones = base.tipo === 'aclaracion' || base.tipo === 'fuera_de_alcance';
+            if (sinOperaciones) {
+                if (llamadas.length !== 1 || argumentos[0].parte_ids !== undefined && (!Array.isArray(argumentos[0].parte_ids) || argumentos[0].parte_ids.length)) throw new Error('carrier');
+                validarCorrespondenciaPlan(cobertura, []);
+                if ((base.tipo === 'aclaracion') !== cobertura.partes.some(p => p.disposicion === 'aclarar')) throw new Error('carrier');
+                // Los motivos libres no se conservan como evidencia de las subpartes.
+                return base.tipo === 'aclaracion' ? { tipo: 'aclaracion', aclaracion: { pregunta: '', motivo: '' }, cobertura } : { tipo: 'fuera_de_alcance', motivo: '', cobertura };
+            }
+            if (llamadas.some(l => l.nombre === HERRAMIENTA_FUERA || l.nombre === HERRAMIENTA_ACLARAR)) throw new Error('carrier_extra');
+            const operaciones = operacionesDelPlan(base).map((o, i) => ({ ...o, parte_ids: argumentos[i].parte_ids as string[] }));
+            validarCorrespondenciaPlan(cobertura, operaciones);
+            return { tipo: 'operaciones', operaciones, cobertura };
+        } catch { throw new ErrorPlan('cobertura_no_valida'); }
+    }
     if (llamadas.length === 0)
         throw new ErrorPlan('el planificador no llamó ninguna herramienta');
     const parsear = (l: LlamadaHerramienta): Record<string, unknown> => {

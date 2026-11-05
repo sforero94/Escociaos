@@ -4,7 +4,7 @@ import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 import { esUuid } from './aplicacionesTipos.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { formatLongDate } from '../formatPuro.ts';
-import { dineroMensaje, numeroMensaje } from './formatoMensaje.ts';
+import { dineroConDetalleMensaje as dineroMensaje, numeroMensaje } from './formatoMensaje.ts';
 import type { EstadoCantidad, UnidadCantidad } from './cantidadesTipos.ts';
 import type { BloqueCongelado, BloqueValoracion, ConsultaCostosAplicacion, DatosCostosAplicacion, EstadoDatoCosto, FilaValorada, ResultadoCostosAplicacion } from './costosTipos.ts';
 const numero = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
@@ -89,7 +89,7 @@ export function ejecutarCostosAplicacion(consulta: ConsultaCostosAplicacion,d: D
 }
 const escapar=(s:string)=>s.replace(/\s+/g,' ').trim().replace(/[\\`*_[\]|<>]/g,'\\$&');
 const valor=(n:number)=>numeroMensaje(limpiar(n));
-const dinero=(n:number)=>dineroMensaje(limpiar(n));
+const dinero=(n:number)=>dineroMensaje(n);
 const textos:Record<EstadoDatoCosto,string>={conocido:'verificado',sin_dato:'sin dato registrado',no_leido:'dato no leído',incompatible:'unidad incompatible',inventario_no_disponible:'inventario no disponible',no_verificado:'sin costo de cierre verificado',discrepancia:'los componentes no cuadran con el total guardado',sin_filas:'sin cantidades registradas'};
 function renderValoracion(b:BloqueValoracion,titulo:string):string[]{
   const nombres=new Map(b.filas.map(f=>[f.producto_id,f.producto_nombre?.trim()?escapar(f.producto_nombre):null]));

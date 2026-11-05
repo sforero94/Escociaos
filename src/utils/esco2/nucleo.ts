@@ -17,6 +17,7 @@ import { ejecutarCantidadesAplicacion } from './cantidades.ts';
 import { ejecutarCostosAplicacion } from './costos.ts';
 import { ejecutarFaltantesAplicacion } from './faltantes.ts';
 import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';
+import { construirCoberturaFinal, coberturaNoCertificada, validarCoberturaFinal, type CoberturaTurno, type ModoCobertura } from './cobertura.ts';
 /** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
 export const MAX_HISTORIAL_PLANIFICADOR = 6;
 export interface ConfigModelos {
@@ -43,6 +44,7 @@ export interface RegistroLlamada {
 }
 export interface ResultadoTurno {
     respuesta: string;
+    cobertura: CoberturaTurno;
     estado?: EstadoTurno;
     opcionesAclaracion?: {
         id: string;
@@ -81,12 +83,14 @@ interface ArgsTurno {
     estado?: EstadoTurno;
     respuestaAclaracion?: string;
     fuenteAplicaciones?: FuenteAplicaciones;
+    /** Solo integración interna: el recorrido real exige cobertura por defecto. */
+    modoCobertura?: ModoCobertura;
 }
-/** Turno sobre datos ya cargados (snapshot congelado, pruebas). */
+/** Wrapper puro de compatibilidad de motores: sin manifest no certifica cobertura. */
 export function responderTurno(args: ArgsTurno & {
     datos: DatosLabores;
 }): Promise<ResultadoTurno> {
-    return responderTurnoDesdeFuente({ ...args, fuente: fuenteEnMemoria(args.datos) });
+    return responderTurnoDesdeFuente({ ...args, modoCobertura: args.modoCobertura ?? 'legado_sin_certificar', fuente: fuenteEnMemoria(args.datos) });
 }
 /** Rango mínimo que cubre todas las partes del plan, recortado a hoy. */
 export function rangoDelPlan(plan: Plan, hoy: string): {
@@ -108,6 +112,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
 }): Promise<ResultadoTurno> {
     const inicio = Date.now();
     const { pregunta, hoy, fuente, llm, config } = args;
+    const exigirCobertura = args.modoCobertura !== 'legado_sin_certificar';
     // Client history helps the planner interpret a follow-up (the period, lots or tasks
     // already under discussion). It never proves a clarification choice or grants scope:
     // the D26 rule below ignores it in code, choices come only from the server-side
@@ -117,7 +122,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         ...(args.estado?.plan ? [{ role: 'system' as const, content: `Contexto aceptado por el servidor: ${JSON.stringify(args.estado.plan)}` }] : []),
     ];
     const llamadas: RegistroLlamada[] = [];
-    const salida = (o: Omit<ResultadoTurno, 'llamadas' | 'ms'>): ResultadoTurno => ({ ...o, llamadas, ms: Date.now() - inicio });
+    const salida = (o: Omit<ResultadoTurno, 'llamadas' | 'ms' | 'cobertura'> & { cobertura?: CoberturaTurno }): ResultadoTurno => ({ cobertura: coberturaNoCertificada(), ...o, llamadas, ms: Date.now() - inicio });
     const base: Pick<ResultadoTurno, 'plan' | 'errorPlan' | 'resultados' | 'guarda' | 'ruta' | 'ajustes'> = {
         plan: null,
         errorPlan: null,
@@ -157,6 +162,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const decisiones = pendiente ? { ...args.estado?.decisiones } : {};
     if (pendiente) {
         const saved = structuredClone(args.estado!.plan);
+        if (exigirCobertura && !saved.cobertura) return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: 'estado_sin_cobertura' });
         const operaciones = operacionesDelPlan(saved);
         const operacion = operaciones[pendiente.indice];
         if (pendiente.tipo === 'fecha_aplicaciones') {
@@ -165,9 +171,9 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             if (!choice) {
                 const resultado = ejecutarInventarioAplicaciones(operacion.consulta, {}, `p${pendiente.indice + 1}`, hoy);
                 resultado.requiere_eleccion = true;
-                return salida({ ...base, plan: saved, resultados: [resultado], respuesta: renderMensaje([resultado], undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
+                if (!saved.cobertura) return salida({ ...base, plan: saved, resultados: [resultado], respuesta: renderMensaje([resultado], undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
             }
-            operacion.consulta.base_fecha = choice.base_fecha;
+            if (choice) operacion.consulta.base_fecha = choice.base_fecha;
             plan = saved;
         } else {
           if (operacion?.tipo !== 'labores') return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: 'estado_no_valido' });
@@ -179,8 +185,9 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             if (!categoria || nombres.some(n => n === undefined) || !catalogo.tiposTareas.some(t => t.categoria === categoria))
                 return salida({ ...base, respuesta: 'Las opciones anteriores ya no están disponibles. Repite la consulta para revisar las tareas actuales.', origen: 'aclaracion' });
             const resultados = [resultadoPendiente(operacion.consulta, `p${pendiente.indice + 1}`, { tipo: 'categoria_o_tareas', categoria, tareas: nombres as string[], requiere_eleccion: true })];
-            return salida({ ...base, plan: saved, resultados, respuesta: renderMensaje(resultados, undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
+            if (!saved.cobertura) return salida({ ...base, plan: saved, resultados, respuesta: renderMensaje(resultados, undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
         }
+        if (choice) {
         decisiones[`${pendiente.indice}:${normalizar(pendiente.termino)}`] = choice.tipo;
         const c = operacion.consulta;
         c.tareas = c.tareas.filter(t => t !== pendiente.termino);
@@ -193,6 +200,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
         else
             c.categorias.push(...choice.categorias!);
+        }
         plan = saved;
         }
     }
@@ -209,7 +217,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                 return salida({ ...base, respuesta: mensajeDisposicion('error_llm'), origen: 'error_llm', errorPlan: 'planificador_no_disponible' });
             }
             try {
-                validado = validarPlan(rPlan.llamadas);
+                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta, exigirCobertura: true } : undefined);
                 break;
             }
             catch (e) {
@@ -221,10 +229,11 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
         plan = validado!;
     }
-    if (plan.tipo === 'fuera_de_alcance')
-        return salida({ ...base, plan, respuesta: mensajeDisposicion('fuera_de_alcance'), origen: 'fuera_de_alcance' });
-    if (plan.tipo === 'aclaracion')
-        return salida({ ...base, plan, respuesta: mensajeDisposicion('aclaracion'), origen: 'aclaracion' });
+    if (plan.tipo === 'fuera_de_alcance' || plan.tipo === 'aclaracion') {
+        const cobertura = construirCoberturaFinal(plan, [], hoy);
+        const respuesta = cobertura.estado === 'declarada_validada' ? renderMensaje([], undefined, undefined, cobertura) : mensajeDisposicion(plan.tipo);
+        return salida({ ...base, plan, cobertura, respuesta, origen: plan.tipo });
+    }
     const original = structuredClone(plan);
     const operaciones = operacionesDelPlan(original);
     const laborales = operaciones.map((o, i) => ({ o, i })).filter((x): x is { o: Extract<typeof x.o, { tipo: 'labores' }>; i: number } => x.o.tipo === 'labores');
@@ -273,14 +282,14 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const executionPlan: Plan = { tipo: 'consultas', consultas: [...consultasLabor.values()] };
     const rango = rangoDelPlan(executionPlan, hoy);
     const datos: DatosLabores = { ...catalogo, registros: [] };
-    let registrosDisponibles = catalogoDisponible;
+    let registrosDisponibles = catalogoDisponible && (!original.cobertura || rango !== null || laborales.every(({ o }) => o.consulta.cohorte === 'tarea_programada'));
     try {
         if (catalogoDisponible && rango) datos.registros = await fuente.registros(rango.desde, rango.hasta);
     }
     catch {
         registrosDisponibles = false;
     }
-    if (!registrosDisponibles && !estado.pendiente && operaciones.every(o => o.tipo === 'labores' && o.consulta.cohorte !== 'tarea_programada'))
+    if (!original.cobertura && !registrosDisponibles && !estado.pendiente && operaciones.every(o => o.tipo === 'labores' && o.consulta.cohorte !== 'tarea_programada'))
         return salida({ ...base, plan, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: catalogoDisponible ? 'registros_no_disponibles' : 'catalogo_no_disponible' });
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
@@ -314,9 +323,15 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             resultados.push(r);
         } else resultados.push(blocked.has(i) ? resultadoPendiente(o.consulta, id, preguntas.get(i)) : ejecutarConsulta(consultasLabor.get(i) ?? o.consulta, datos, hoy, id));
     }
-    const respuesta = renderMensaje(resultados, undefined, original.parcialFueraDeAlcance);
-    if (!validarMensajeFinal(respuesta, resultados, undefined, original.parcialFueraDeAlcance))
+    const operacionesEfectivas = original.cobertura ? operaciones.map((o, i) => o.tipo === 'labores' && !blocked.has(i) ? { ...o, consulta: consultasLabor.get(i) ?? o.consulta } : o) : operaciones;
+    const planFinal = planDeOperaciones(operacionesEfectivas, original.parcialFueraDeAlcance, original.cobertura);
+    if (original.cobertura) estado.plan = planFinal;
+    let cobertura: CoberturaTurno;
+    try { cobertura = construirCoberturaFinal(planFinal, resultados, hoy); }
+    catch { return salida({ ...base, plan: planFinal, resultados: [], respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'correspondencia_no_valida' }); }
+    const respuesta = renderMensaje(resultados, undefined, original.parcialFueraDeAlcance, cobertura);
+    if (!validarCoberturaFinal(cobertura, planFinal, resultados, hoy) || !validarMensajeFinal(respuesta, resultados, undefined, original.parcialFueraDeAlcance, cobertura))
         return salida({ ...base, plan: executionPlan, resultados: [], respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'mensaje_no_valido' });
-    return salida({ ...base, plan: planDeOperaciones(operaciones, original.parcialFueraDeAlcance), resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
+    return salida({ ...base, plan: planFinal, cobertura, resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
 }
 export { SIN_LOTE_ETIQUETA };
