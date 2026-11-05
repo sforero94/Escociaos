@@ -959,8 +959,13 @@ acceptance remains open because exploratory findings require separate review. Se
   application costs D34, labor linked by `tarea_id` D36, current input shortages D37; the
   bundle adds `src/utils/calculosNecesidadProductos.ts`, 37 files), with Santiago's approval in
   chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `b9394b94…`, anonymous `/health` 401, anon
-  key `/health` 200, valid question 401 «sesión inválida». A real Gerencia session test is still
-  pending.
+  key `/health` 200, valid question 401 «sesión inválida». The real-session check (A0) passed
+  later the same day with Santiago's login: Gerencia 9/9 HTTP 200, Administrador 403.
+  Redeployed 2026-11-05 as **version 7** from clean `main` `88facd2e` (PR #430 plan/execution
+  summary per application, PR #431 money rule with Colombian separators — `$934.567`,
+  `$50,4M`, `$2.000M`; 38 files), with Santiago's approval in chat: `ACTIVE`,
+  `verify_jwt = true`, `ezbr_sha256` `32c12d3f…`, anonymous `/health` 401, anon key `/health`
+  200, valid question 401 «sesión inválida». P3 is still not accepted (`docs/esco2/p3-result-2026-11-05.md`).
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
