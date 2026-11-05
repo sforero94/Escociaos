@@ -76,6 +76,30 @@ export interface RecipienteGuardado {
   motivos: string[];
   fuentes: string[];
 }
+export type UnidadResumenCantidad = UnidadCantidad | 'canecas' | 'bultos' | 'L de mezcla' | 'kg de mezcla' | null;
+export type EstadoResumenCantidad = EstadoCantidad | 'parcial';
+export interface TotalResumenCantidad {
+  unidad: UnidadResumenCantidad;
+  /** A complete amount; a valid stored plan remains available when reconstruction does not reconcile. */
+  cantidad: number | null;
+  /** Explicit known subtotal, never promoted to a complete amount if another contribution is missing. */
+  subtotal_conocido: number | null;
+  estado: EstadoResumenCantidad;
+  motivos: string[];
+  fuentes: string[];
+}
+export interface ProductoResumenCantidad extends TotalResumenCantidad {
+  producto_id: string;
+  producto_nombre?: string | null;
+  unidad: UnidadCantidad | null;
+}
+export interface BloqueResumenCantidades {
+  estado: 'conocido' | 'parcial' | 'no_leido' | 'sin_filas' | 'sin_movimientos' | 'sin_productos';
+  productos: ProductoResumenCantidad[];
+  recipientes: TotalResumenCantidad[];
+  mezcla: TotalResumenCantidad[];
+}
+export interface ResumenCantidadesAplicacion { plan: BloqueResumenCantidades; ejecucion: BloqueResumenCantidades }
 export interface ResultadoCantidadesAplicacion {
   tipo: 'cantidades_aplicacion'; id: string;
   estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto';
@@ -84,5 +108,7 @@ export interface ResultadoCantidadesAplicacion {
   /** `avisos` are disclosed method notes that do not block a quantity (e.g. `equivalencia_cc_g:<producto_id>`). */
   plan: { estado: 'conocido' | 'parcial' | 'no_leido' | 'sin_filas'; filas: CantidadPorLote[]; totales_guardados: TotalProductoGuardado[]; conciliacion: ConciliacionMezcla[]; recipientes: RecipienteGuardado[]; motivos: string[]; avisos: string[] };
   ejecucion: { estado: 'conocido' | 'parcial' | 'no_leido' | 'sin_movimientos' | 'sin_productos'; filas: CantidadPorLote[]; recipientes: RecipienteGuardado[]; motivos: string[] };
+  /** Aggregate only the already validated source of each metric; never a join to product/lot fan-out. */
+  resumen?: ResumenCantidadesAplicacion;
   fuente: 'lecturas_independientes';
 }

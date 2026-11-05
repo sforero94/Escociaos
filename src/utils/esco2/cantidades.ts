@@ -5,7 +5,8 @@ import { numeroMensaje } from './formatoMensaje.ts';
 import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 import { esUuid } from './aplicacionesTipos.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import type { BaseLoteCantidad, CalculoCantidad, CantidadPorLote, ConsultaCantidadesAplicacion, DatosCantidadesAplicacion, EstadoCantidad, ProductoPlanCantidad, RecipienteGuardado, ResultadoCantidadesAplicacion, UnidadCantidad } from './cantidadesTipos.ts';
+import { resumirCantidadesAplicacion, resumirRecipientes } from './cantidadesResumen.ts';
+import type { BaseLoteCantidad, CalculoCantidad, CantidadPorLote, ConsultaCantidadesAplicacion, DatosCantidadesAplicacion, EstadoCantidad, ProductoPlanCantidad, RecipienteGuardado, ResultadoCantidadesAplicacion, TotalResumenCantidad, UnidadCantidad } from './cantidadesTipos.ts';
 
 const numero = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const unidad = (v: unknown): UnidadCantidad | null => v === 'Kilos' ? 'kg' : v === 'Litros' ? 'L' : v === 'Unidades' ? 'unidades' : null;
@@ -169,6 +170,8 @@ export function ejecutarCantidadesAplicacion(consulta: ConsultaCantidadesAplicac
     } else r.ejecucion.motivos.push('fecha_movimiento:no_leido');
   } else r.ejecucion.motivos.push('movimientos:no_leido');
   r.estado = r.plan.estado === 'no_leido' && r.ejecucion.estado === 'no_leido' ? 'no_disponible' : r.plan.estado === 'parcial' || r.plan.estado === 'no_leido' || r.ejecucion.estado === 'parcial' || r.ejecucion.estado === 'no_leido' ? 'parcial' : 'ok';
+  r.resumen = resumirCantidadesAplicacion(r);
+  if (r.estado === 'ok' && (r.resumen.plan.estado === 'parcial' || r.resumen.ejecucion.estado === 'parcial')) r.estado = 'parcial';
   return r;
 }
 const escapar = (v: string) => v.replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&');
@@ -185,20 +188,18 @@ function etiquetas(items: { id: string | null; nombre?: string | null }[], sinNo
   };
 }
 const textoEstado = (estado: EstadoCantidad) => estado === 'no_leido' ? 'dato no leído' : estado === 'incompatible' ? 'unidad o tipo incompatible' : estado === 'no_concilia' ? 'no cuadra con el total guardado' : 'sin dato registrado';
+function textoTotalResumen(row: TotalResumenCantidad): string {
+  const u = row.unidad ?? 'unidad no disponible';
+  const singular = row.cantidad === 1 && ['canecas', 'bultos', 'unidades'].includes(u) ? u === 'unidades' ? 'unidad' : u.slice(0, -1) : u;
+  if (row.cantidad !== null) return `${valor(row.cantidad)} ${singular}${row.estado === 'no_concilia' ? ' (no cuadra por lote)' : ''}`;
+  const estado = row.estado === 'parcial' ? 'parcial' : textoEstado(row.estado);
+  return row.subtotal_conocido !== null ? `subtotal conocido ${valor(row.subtotal_conocido)} ${u}; total no disponible (${estado})` : `${u} sin dato (${estado})`;
+}
 function resumenRecipientes(xs: RecipienteGuardado[], ejecucion: boolean): string {
   if (!xs.length) return '';
   const partes: string[] = ejecucion ? [`${xs.length} ${xs.length === 1 ? 'movimiento' : 'movimientos'}`] : [];
-  const u = xs.find(x => x.unidad)?.unidad;
-  const conocidos = xs.filter(x => x.cantidad !== null);
-  if (!u) partes.push(`recipientes sin dato (${textoEstado(xs[0].estado)})`);
-  else if (!conocidos.length) partes.push(`${u} sin dato`);
-  else {
-    const total = limpiarSuma(conocidos.reduce((s, x) => s + x.cantidad!, 0));
-    partes.push(`${valor(total)} ${total === 1 ? u.slice(0, -1) : u}${conocidos.length < xs.length ? `, sin dato en ${xs.length - conocidos.length}` : ''}`);
-  }
-  const ms = xs.map(x => x.mezcla_litros_kilos).filter((m): m is NonNullable<RecipienteGuardado['mezcla_litros_kilos']> => !!m);
-  const msConocidas = ms.filter(m => m.cantidad !== null);
-  if (ms.length) partes.push(msConocidas.length ? `${valor(limpiarSuma(msConocidas.reduce((s, m) => s + m.cantidad!, 0)))} ${ms[0].unidad}${msConocidas.length < ms.length ? ', parcial' : ''}` : 'mezcla sin dato');
+  const s = resumirRecipientes(xs);
+  partes.push(...s.recipientes.map(textoTotalResumen), ...s.mezcla.map(textoTotalResumen));
   return ` (${partes.join('; ')})`;
 }
 /** One line per lot: containers in parentheses, then each product and its amount. */
@@ -220,8 +221,11 @@ export function renderCantidadesAplicacion(r: ResultadoCantidadesAplicacion): st
   const mezcla = etiquetas(r.plan.totales_guardados.map(g => ({ id: g.mezcla_id, nombre: g.mezcla_nombre })), 'Mezcla sin nombre');
   const variasMezclas = new Set(r.plan.totales_guardados.map(g => g.mezcla_id)).size > 1;
   const enMezcla = (mezclaId: string, productoId: string) => variasMezclas ? `${producto(productoId)} (${mezcla(mezclaId)})` : producto(productoId);
+  const resumen = r.resumen ?? resumirCantidadesAplicacion(r);
+  const lineaResumen = (titulo: string, bloque: typeof resumen.plan, recipientes: RecipienteGuardado[], ejecucion: boolean) => `${titulo}${resumenRecipientes(recipientes, ejecucion)}: ${bloque.productos.length ? bloque.productos.map(p => `${producto(p.producto_id)} ${textoTotalResumen(p)}`).join('; ') : bloque.estado === 'no_leido' ? 'productos no leídos' : 'sin productos registrados; no equivale a consumo cero'}.`;
   const nombreApp = r.aplicacion.nombre_aplicacion ?? r.aplicacion.codigo_aplicacion;
   const out = [`Aplicación: ${typeof nombreApp === 'string' && nombreApp.trim() ? escapar(nombreApp) : `ID ${r.aplicacion.id}`}.`, '**Plan completo guardado**', 'El plan abarca la aplicación completa y no se recorta por el período de ejecución.'];
+  out.push(lineaResumen('Resumen del plan guardado', resumen.plan, r.plan.recipientes, false));
   if (r.plan.estado === 'no_leido') out.push('No pude leer los datos del plan exacto. No se interpreta como plan cero.');
   if (r.plan.estado === 'sin_filas') out.push('Sin productos planificados registrados; no equivale a cantidades cero.');
   if (r.plan.totales_guardados.length) out.push('Totales guardados:', ...r.plan.totales_guardados.map(g => `- ${enMezcla(g.mezcla_id, g.producto_id)}: ${g.cantidad === null ? `total no disponible (${textoEstado(g.estado)})` : `${valor(g.cantidad)} ${g.unidad}`}.`));
@@ -244,6 +248,7 @@ export function renderCantidadesAplicacion(r: ResultadoCantidadesAplicacion): st
   if (r.plan.motivos.includes('calculos:no_leido')) out.push('No pude leer o verificar los cálculos guardados por lote.');
   if (r.plan.motivos.includes('mezcla_fertilizacion:unidad_fisica_no_verificada')) out.push('La mezcla de fertilización contiene productos con unidades distintas de kg. Los kg de mezcla y bultos mostrados son metadatos guardados, sin conciliación física; no se sumaron kg con L ni unidades.');
   out.push('**Ejecución**', r.consulta.desde ? `Solo movimientos del ${formatLongDate(r.consulta.desde)} al ${formatLongDate(r.consulta.hasta!)}, ambas fechas incluidas.` : 'Movimientos registrados de la vida completa de la aplicación.');
+  out.push(lineaResumen('Resumen de ejecución', resumen.ejecucion, r.ejecucion.recipientes, true));
   if (r.ejecucion.estado === 'no_leido') out.push('No pude leer los productos ejecutados o sus movimientos; no equivale a consumo cero.');
   if (r.ejecucion.estado === 'sin_movimientos') out.push('Sin movimientos registrados en este alcance.');
   if (r.ejecucion.estado === 'sin_productos') out.push('Sin productos registrados en esos movimientos; no prueba consumo real cero.');
