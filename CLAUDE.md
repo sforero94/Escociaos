@@ -949,6 +949,12 @@ acceptance remains open because exploratory findings require separate review. Se
   buttons + one planner retry, #418 P3 source contract, #419 chat history back for
   interpretation only), with Santiago's approval in chat: `ACTIVE`, `verify_jwt = true`,
   anonymous `/health` 401.
+  Redeployed 2026-11-05 as **version 5** from clean `main` `fbafdcf9` (PRs #421 application
+  list by operational date and state, #422 exact plan/execution quantities — the bundle now
+  includes `src/utils/calculosAplicaciones.ts` and `src/types/aplicaciones.ts`), with
+  Santiago's approval in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `6af29942…`,
+  anonymous `/health` 401. With the anon key the function boots (`/health` 200) and a valid
+  question returns 401 «sesión inválida» without a model call.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
