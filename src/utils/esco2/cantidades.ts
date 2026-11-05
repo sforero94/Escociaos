@@ -255,6 +255,6 @@ export function renderCantidadesAplicacion(r: ResultadoCantidadesAplicacion): st
   out.push(...porLote(r.ejecucion.filas, r.ejecucion.recipientes, true, lote, producto));
   if (r.ejecucion.motivos.some(m => m.includes('null_excluida'))) out.push('Hay movimientos sin fecha registrada que no pude asignar al período.');
   if (r.ejecucion.motivos.some(m => m.includes('futura_registrada'))) out.push('Hay fechas de movimiento futuras registradas; no prueban que el trabajo ya ocurrió.');
-  out.push('Plan y ejecución se muestran por separado y no se suman. Las unidades de producto no son unidades de mezcla ni agua registrada.', 'Lecturas independientes con tu sesión; no se verificó un único momento entre tablas.');
+  out.push('Plan y ejecución se muestran por separado y no se suman. Las unidades de producto no son unidades de mezcla ni agua registrada.', 'Agua utilizada: sin registro directo en las fuentes de esta consulta. No puedo determinarla a partir de las canecas ni del volumen de mezcla; no equivale a agua cero.', 'Lecturas independientes con tu sesión; no se verificó un único momento entre tablas.');
   return out.join('\n');
 }

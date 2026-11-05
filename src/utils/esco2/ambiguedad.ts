@@ -100,5 +100,5 @@ export function aplicarReglaDoble(plan: Plan, catalogo: Catalogo, _historial: Me
       ajustes: [`D26: aclaración por ${sinResolver.map((s) => s.texto).join(', ')}`],
     };
   }
-  return { plan: { tipo: 'consultas', consultas }, ajustes };
+  return { plan: { ...plan, consultas }, ajustes };
 }

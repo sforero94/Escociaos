@@ -143,8 +143,12 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         catalogo = { tareas: [], lotes: [], tiposTareas: [] };
     }
     let inventarioPlaneado: DatosInventarioAplicaciones | undefined;
+    if (!args.estado?.pendiente) {
+        // El catálogo laboral excluye aplicaciones sin tarea: leer el catálogo propio,
+        // con el mismo lector fijo/JWT, antes de planear. Fallo conserva no leído.
+        try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* El dominio no leído no bloquea los otros. */ }
+    }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* Both unavailable is handled before planning. */ }
         if (!Array.isArray(inventarioPlaneado?.aplicaciones))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
@@ -161,7 +165,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             if (!choice) {
                 const resultado = ejecutarInventarioAplicaciones(operacion.consulta, {}, `p${pendiente.indice + 1}`, hoy);
                 resultado.requiere_eleccion = true;
-                return salida({ ...base, resultados: [resultado], respuesta: renderMensaje([resultado]), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
+                return salida({ ...base, plan: saved, resultados: [resultado], respuesta: renderMensaje([resultado], undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
             }
             operacion.consulta.base_fecha = choice.base_fecha;
             plan = saved;
@@ -175,7 +179,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             if (!categoria || nombres.some(n => n === undefined) || !catalogo.tiposTareas.some(t => t.categoria === categoria))
                 return salida({ ...base, respuesta: 'Las opciones anteriores ya no están disponibles. Repite la consulta para revisar las tareas actuales.', origen: 'aclaracion' });
             const resultados = [resultadoPendiente(operacion.consulta, `p${pendiente.indice + 1}`, { tipo: 'categoria_o_tareas', categoria, tareas: nombres as string[], requiere_eleccion: true })];
-            return salida({ ...base, resultados, respuesta: renderMensaje(resultados), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
+            return salida({ ...base, plan: saved, resultados, respuesta: renderMensaje(resultados, undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
         }
         decisiones[`${pendiente.indice}:${normalizar(pendiente.termino)}`] = choice.tipo;
         const c = operacion.consulta;
@@ -193,7 +197,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
     }
     else {
-        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] })) }, ...historial, { role: 'user', content: pregunta }];
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones)) }, ...historial, { role: 'user', content: pregunta }];
         let validado: Plan | undefined;
         for (let intento = 0; intento < 2; intento++) {
             let rPlan: RespuestaLLM;
@@ -310,9 +314,9 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             resultados.push(r);
         } else resultados.push(blocked.has(i) ? resultadoPendiente(o.consulta, id, preguntas.get(i)) : ejecutarConsulta(consultasLabor.get(i) ?? o.consulta, datos, hoy, id));
     }
-    const respuesta = renderMensaje(resultados);
-    if (!validarMensajeFinal(respuesta, resultados))
+    const respuesta = renderMensaje(resultados, undefined, original.parcialFueraDeAlcance);
+    if (!validarMensajeFinal(respuesta, resultados, undefined, original.parcialFueraDeAlcance))
         return salida({ ...base, plan: executionPlan, resultados: [], respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'mensaje_no_valido' });
-    return salida({ ...base, plan: planDeOperaciones(operaciones), resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
+    return salida({ ...base, plan: planDeOperaciones(operaciones, original.parcialFueraDeAlcance), resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
 }
 export { SIN_LOTE_ETIQUETA };

@@ -104,10 +104,10 @@ export interface Aclaracion {
   motivo: string;
 }
 
-/** Plan validado de un turno: o consultas, o una aclaración. Nunca las dos cosas. */
+/** Plan validado: las consultas pueden conservar una disposición parcial cerrada. La aclaración es exclusiva. */
 export type Plan =
-  | { tipo: 'consultas'; consultas: ConsultaLabores[] }
-  | { tipo: 'operaciones'; operaciones: OperacionConsulta[] }
+  | { tipo: 'consultas'; consultas: ConsultaLabores[]; parcialFueraDeAlcance?: true }
+  | { tipo: 'operaciones'; operaciones: OperacionConsulta[]; parcialFueraDeAlcance?: true }
   | { tipo: 'aclaracion'; aclaracion: Aclaracion }
   | { tipo: 'fuera_de_alcance'; motivo: string };
 export type OperacionConsulta = { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones } | { tipo: 'cantidades_aplicacion'; consulta: ConsultaCantidadesAplicacion } | { tipo: 'costos_aplicacion'; consulta: ConsultaCostosAplicacion } | { tipo: 'labor_aplicacion'; consulta: ConsultaLaborAplicacion } | { tipo: 'faltantes_aplicacion'; consulta: ConsultaFaltantesAplicacion };
@@ -115,8 +115,10 @@ export type PlanConsultas = Extract<Plan, { tipo: 'consultas' | 'operaciones' }>
 export function operacionesDelPlan(plan: PlanConsultas): OperacionConsulta[] {
   return plan.tipo === 'consultas' ? plan.consultas.map(consulta => ({ tipo: 'labores', consulta })) : plan.operaciones;
 }
-export function planDeOperaciones(operaciones: OperacionConsulta[]): PlanConsultas {
-  return operaciones.every(o => o.tipo === 'labores') ? { tipo: 'consultas', consultas: operaciones.map(o => o.consulta) } : { tipo: 'operaciones', operaciones };
+export function planDeOperaciones(operaciones: OperacionConsulta[], parcialFueraDeAlcance?: true): PlanConsultas {
+  if (parcialFueraDeAlcance !== undefined && parcialFueraDeAlcance !== true) throw new Error('disposicion_parcial_no_valida');
+  const parcial = parcialFueraDeAlcance ? { parcialFueraDeAlcance } : {};
+  return operaciones.every(o => o.tipo === 'labores') ? { tipo: 'consultas', consultas: operaciones.map(o => o.consulta), ...parcial } : { tipo: 'operaciones', operaciones, ...parcial };
 }
 export type ResultadoConsulta = ResultadoParte | ResultadoAplicaciones | ResultadoCantidadesAplicacion | ResultadoCostosAplicacion | ResultadoLaborAplicacion | ResultadoFaltantesAplicacion;
 export const esResultadoAplicaciones = (r: ResultadoConsulta): r is ResultadoAplicaciones => 'tipo' in r && r.tipo === 'aplicaciones';

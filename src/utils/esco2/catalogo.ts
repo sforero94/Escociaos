@@ -3,6 +3,7 @@
 // registros se refieren. Sin coincidencia o con ambigüedad no se adivina: se reporta.
 
 import type { DatosLabores, Lote, NoResuelto, Tarea, TipoTarea } from './tipos.ts';
+import type { AplicacionInventario } from './aplicacionesTipos.ts';
 
 export function normalizar(texto: string): string {
   return texto
@@ -153,11 +154,13 @@ export function resolverCategorias(textos: string[], datos: DatosLabores): Resol
 }
 
 /** Resumen del catálogo para el planificador: nombres, sin cifras. */
-export function resumenCatalogo(datos: DatosLabores): { lotes: string[]; categorias: string[]; tipos: string[]; tareas: string[] } {
+export function resumenCatalogo(datos: DatosLabores, aplicaciones?: AplicacionInventario[]): { lotes: string[]; categorias: string[]; tipos: string[]; tareas: string[]; aplicaciones?: string[] } {
   return {
     lotes: datos.lotes.map((l) => `${l.nombre} [id:${l.id}]`).sort(),
     categorias: [...new Set(datos.tiposTareas.map((t) => t.categoria).filter((c): c is string => !!c))].sort(),
     tipos: [...new Set(datos.tiposTareas.map((t) => t.nombre.trim()))].sort(),
     tareas: datos.tareas.map((t) => `${t.nombre.trim()} [id:${t.id}]`).sort(),
+    // Catálogo propio: una aplicación sin tarea sigue siendo seleccionable. No es un join.
+    ...(aplicaciones === undefined ? {} : { aplicaciones: aplicaciones.map(a => `${a.nombre_aplicacion?.trim() || 'Sin nombre registrado'}${a.codigo_aplicacion?.trim() ? ` (código: ${a.codigo_aplicacion.trim()})` : ''} [id:${a.id}]`).sort() }),
   };
 }

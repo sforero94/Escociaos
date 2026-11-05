@@ -144,7 +144,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta no corresponde a labores, inventario de aplicaciones por fecha/estado, cantidades por producto/lote, costo de una aplicación, labor vinculada a aplicaciones ni faltantes vigentes de insumos.',
+                description: 'La pregunta o una parte no corresponde a las capacidades disponibles. Si hay partes sustentadas, añade una sola llamada a esta herramienta junto a sus consultas (máximo cuatro llamadas en total); se responderán por separado con aviso parcial fijo. El motivo no se publica ni autoriza cálculos nuevos.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -301,8 +301,8 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
         if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
-    if ((nombres.has(HERRAMIENTA_ACLARAR) || nombres.has(HERRAMIENTA_FUERA)) && llamadas.length !== 1)
-        throw new ErrorPlan('aclaración o fuera de alcance exige una operación exclusiva');
+    if (nombres.has(HERRAMIENTA_ACLARAR) && llamadas.length !== 1)
+        throw new ErrorPlan('aclaración exige una operación exclusiva');
     if (nombres.has(HERRAMIENTA_ACLARAR)) {
         const a = parsear(llamadas.find((l) => l.nombre === HERRAMIENTA_ACLARAR)!);
         if (Object.keys(a).some(k => !['pregunta', 'motivo'].includes(k)))
@@ -311,14 +311,16 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
             throw new ErrorPlan('aclaración sin pregunta');
         return { tipo: 'aclaracion', aclaracion: { pregunta: a.pregunta.trim(), motivo: String(a.motivo ?? '') } };
     }
-    if (nombres.has(HERRAMIENTA_FUERA)) {
-        const a = parsear(llamadas.find((l) => l.nombre === HERRAMIENTA_FUERA)!);
-        if (Object.keys(a).some(k => k !== 'motivo'))
+    const fuera = llamadas.filter(l => l.nombre === HERRAMIENTA_FUERA);
+    if (fuera.length > 1) throw new ErrorPlan('fuera de alcance repetido');
+    if (fuera.length) {
+        const a = parsear(fuera[0]);
+        if (Object.keys(a).some(k => k !== 'motivo') || typeof a.motivo !== 'string')
             throw new ErrorPlan('argumento no registrado');
-        return { tipo: 'fuera_de_alcance', motivo: String(a.motivo ?? '') };
+        if (llamadas.length === 1) return { tipo: 'fuera_de_alcance', motivo: a.motivo };
     }
-    if (llamadas.length > MAX_CONSULTAS_POR_TURNO)
-        throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} consultas en un turno`);
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
-    return { tipo: 'consultas', consultas: llamadas.map((l) => validarConsulta(parsear(l))) };
+    const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
+    const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }

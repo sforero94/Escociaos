@@ -228,11 +228,12 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     const avisoFinal = avisoTamano ?? avisoEstado;
     const disposicionesCerradas = ['fuera_de_alcance', 'aclaracion', 'error_plan', 'error_llm', 'error_datos'] as const;
     const disposicion = disposicionesCerradas.find(d => d === turno.origen);
+    const parcial = turno.plan?.tipo === 'consultas' || turno.plan?.tipo === 'operaciones' ? turno.plan.parcialFueraDeAlcance : undefined;
     // Factual blocks are canonical for the results. Operational notices and
     // no-result dispositions are composed only from the two closed registries.
     const operativa = !turno.resultados.length && avisoFinal && disposicion ? `${mensajeDisposicion(disposicion)}\n\n${renderMensaje([], avisoFinal)}` : undefined;
-    const respuestaFinal = turno.resultados.length ? renderMensaje(turno.resultados, avisoFinal) : operativa ?? turno.respuesta;
-    const valida = turno.resultados.length ? validarMensajeFinal(respuestaFinal, turno.resultados, avisoFinal) : operativa !== undefined ? respuestaFinal === `${mensajeDisposicion(disposicion!)}\n\n${renderMensaje([], avisoFinal)}` : true;
+    const respuestaFinal = turno.resultados.length ? renderMensaje(turno.resultados, avisoFinal, parcial) : operativa ?? turno.respuesta;
+    const valida = turno.resultados.length ? validarMensajeFinal(respuestaFinal, turno.resultados, avisoFinal, parcial) : operativa !== undefined ? respuestaFinal === `${mensajeDisposicion(disposicion!)}\n\n${renderMensaje([], avisoFinal)}` : true;
     if (!valida)
         return json(500, { error: mensajeDisposicion('error_datos') });
     return json(200, { ...cuerpoRespuesta(turno, hoy), respuesta: respuestaFinal, estadoToken, opcionesAclaracion: estadoToken ? turno.opcionesAclaracion : undefined, avisoEstado: avisoTamano ?? avisoEstado });

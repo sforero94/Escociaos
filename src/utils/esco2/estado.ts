@@ -41,11 +41,12 @@ export function validarEstado(estado: EstadoTurno): boolean {
             return false;
         if (estado.version !== 1 || !['consultas', 'operaciones'].includes(estado.plan.tipo))
             return false;
+        if (estado.plan.parcialFueraDeAlcance !== undefined && estado.plan.parcialFueraDeAlcance !== true) return false;
         const operaciones = operacionesDelPlan(estado.plan);
         if (!operaciones.length || operaciones.length > 4) return false;
         const herramientaDe: Record<string, string> = { labores: 'consultar_labores', aplicaciones: 'consultar_aplicaciones', cantidades_aplicacion: 'consultar_cantidades_aplicacion', costos_aplicacion: 'consultar_costos_aplicacion', labor_aplicacion: 'consultar_labor_aplicacion', faltantes_aplicacion: 'consultar_faltantes_aplicacion' };
         if (operaciones.some(o => !o || !Object.prototype.hasOwnProperty.call(herramientaDe, o.tipo))) return false;
-        validarPlan(operaciones.map(o => ({ nombre: herramientaDe[o.tipo], argumentos: JSON.stringify(o.consulta) })));
+        validarPlan([...operaciones.map(o => ({ nombre: herramientaDe[o.tipo], argumentos: JSON.stringify(o.consulta) })), ...(estado.plan.parcialFueraDeAlcance ? [{ nombre: 'fuera_de_alcance', argumentos: JSON.stringify({ motivo: 'parte_no_soportada' }) }] : [])]);
         if (estado.decisiones && Object.values(estado.decisiones).some(v => v !== 'tarea' && v !== 'categoria'))
             return false;
         const p = estado.pendiente;

@@ -28,7 +28,7 @@ export function mensajeAclaracion(categoria: string, tareas: string[] = [categor
     return `¿Quieres consultar ${tareas.length === 1 ? 'la tarea' : 'las tareas'} ${choices}${tail} o toda la categoría «${nombre(categoria, 'la categoría indicada')}»?`;
 }
 export function mensajeDisposicion(tipo: 'fuera_de_alcance' | 'aclaracion' | 'error_plan' | 'error_llm' | 'error_datos'): string {
-    const textos = { fuera_de_alcance: 'Hoy puedo ayudarte con labores: jornales, costos de mano de obra y tareas programadas. ¿Qué labor quieres consultar?', aclaracion: 'Necesito precisar tu consulta. ¿Qué período quieres revisar?', error_plan: 'No pude entender tu consulta. ¿Qué período de labores quieres revisar?', error_llm: 'No pude procesar tu consulta en este momento. Inténtalo de nuevo.', error_datos: 'No pude leer los datos de labores en este momento. Inténtalo de nuevo.' };
+    const textos = { fuera_de_alcance: 'Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones: jornales, tareas programadas, fechas y estado actual, cantidades de productos, costos de una aplicación, labor vinculada y faltantes vigentes de insumos.', aclaracion: 'Necesito precisar tu consulta. Indica la entidad o el alcance que falta para poder responder.', error_plan: 'No pude entender tu consulta. ¿Qué período de labores quieres revisar?', error_llm: 'No pude procesar tu consulta en este momento. Inténtalo de nuevo.', error_datos: 'No pude leer los datos de labores en este momento. Inténtalo de nuevo.' };
     return textos[tipo];
 }
 function periodo(r: ResultadoParte): string { return `Del ${fecha(r.alcance.desde)} al ${fecha(r.alcance.hasta)}, ambas fechas incluidas.`; }
@@ -262,9 +262,11 @@ function renderParte(r: ResultadoParte): string {
         out.push('No verifiqué que las tareas y sus aplicaciones correspondan al mismo momento.');
     return out.join('\n');
 }
-export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMensaje): string {
+export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMensaje, parcialFueraDeAlcance?: true): string {
     if (aviso !== undefined && (typeof aviso !== 'string' || !Object.prototype.hasOwnProperty.call(avisos, aviso)))
         throw new Error('aviso_no_registrado');
+    if (parcialFueraDeAlcance !== undefined && parcialFueraDeAlcance !== true)
+        throw new Error('disposicion_parcial_no_valida');
     const parts = resultados.map((r, i) => {
         const text = esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
@@ -272,14 +274,16 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
+    if (parcialFueraDeAlcance)
+        parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden a las partes sustentadas y no representan el costo completo de producción.');
     if (aviso)
         parts.push(avisos[aviso]);
     return parts.join('\n\n');
 }
 /** Exact canonical regeneration preserves entity, metric, period and qualifier bindings. */
-export function validarMensajeFinal(texto: string, resultados: ResultadoConsulta[], aviso?: AvisoMensaje): boolean {
+export function validarMensajeFinal(texto: string, resultados: ResultadoConsulta[], aviso?: AvisoMensaje, parcialFueraDeAlcance?: true): boolean {
     try {
-        return texto === renderMensaje(resultados, aviso);
+        return texto === renderMensaje(resultados, aviso, parcialFueraDeAlcance);
     }
     catch {
         return false;

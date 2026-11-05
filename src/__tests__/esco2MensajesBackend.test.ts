@@ -24,5 +24,5 @@ describe('Mensajes humanos deterministas backend', () => {
         expect(t).not.toContain('777');
         expect(t).toContain('¿Te refieres a Norte o Sur?');
     });
-    it('clarification asks one concrete question and unsupported states current capability', () => { const t = mensajeAclaracion('Cosecha'); expect(t).toContain('¿Quieres consultar'); expect((t.match(/¿/g) || [])).toHaveLength(1); expect(mensajeDisposicion('fuera_de_alcance')).toContain('Hoy puedo ayudarte con labores'); });
+    it('clarification asks one concrete question and unsupported states current capability', () => { const t = mensajeAclaracion('Cosecha'); expect(t).toContain('¿Quieres consultar'); expect((t.match(/¿/g) || [])).toHaveLength(1); expect(mensajeDisposicion('fuera_de_alcance')).toContain('labores y aplicaciones'); });
 });
