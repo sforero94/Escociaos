@@ -56,10 +56,12 @@ export function renderFaltantesAplicacion(r: ResultadoFaltantesAplicacion): stri
   if(r.estado==='no_disponible')return 'No pude leer el plan completo para verificar los faltantes vigentes.';
   const out=[`Faltantes vigentes. Fecha de consulta en Bogotá: ${formatLongDate(r.fecha_consulta)}.`];
   out.push(`Aplicaciones: ${r.aplicaciones.map(a=>{const n=texto(a.nombre_aplicacion||a.codigo_aplicacion);return !n?a.id:r.aplicaciones.some(b=>b.id!==a.id&&texto(b.nombre_aplicacion||b.codigo_aplicacion)===n)?`${n} (${a.id})`:n;}).join(', ')}.`);
+  const cerradas=r.aplicaciones.filter(a=>a.estado==='Cerrada');
+  if(cerradas.length)out.push(`${cerradas.length===r.aplicaciones.length?'Todas las aplicaciones indicadas están cerradas':`${cerradas.length===1?'Una aplicación indicada está cerrada':`${cerradas.length} aplicaciones indicadas están cerradas`}`}: su plan ya se ejecutó, así que su necesidad no es una compra pendiente.`);
   const estados={sin_dato:'sin dato completo',no_leido:'dato no leído',inventario_no_disponible:'inventario no disponible',incompatible:'unidad incompatible',conocido:''};
   const valor=(v:number|null,u:string|null)=>v===null?'sin dato':`${numeroMensaje(limpiar(v))}${u?` ${u}`:''}`;
   for(const f of r.filas){const n=texto(f.producto_nombre),nombre=!n?f.producto_id:r.filas.some(p=>p.producto_id!==f.producto_id&&texto(p.producto_nombre)===n)?`${n} (${f.producto_id})`:n;out.push(`${nombre}: necesidad ${valor(f.necesidad,f.unidad)}; stock ${f.motivos.includes('unidad_inventario_incompatible') ? 'unidad incompatible' : valor(f.stock,f.unidad)}; ${f.estado==='conocido'?`faltante ${valor(f.faltante,f.unidad)}`:estados[f.estado]}.`);}
-  if(r.completo&&r.filas.every(f=>f.faltante===0))out.push('alcanza el inventario registrado hoy.');
+  if(r.completo&&r.filas.every(f=>f.faltante===0))out.push('Alcanza el inventario registrado hoy.');
   if(!r.completo)out.push('Necesidad o stock sin verificación completa; disponibilidad sin confirmar.');
   out.push('Necesidad del plan guardado; no descuenta ejecución. Stock contado una vez por producto. Lecturas independientes, sin reserva garantizada.');
   return out.join('\n');

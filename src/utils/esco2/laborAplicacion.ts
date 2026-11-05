@@ -32,7 +32,7 @@ export function ejecutarLaborAplicacion(c: ConsultaLaborAplicacion, d: DatosLabo
   for (const [tareaId, apps] of porTarea) {
     const tarea = tareasValidas ? d.tareas!.find(t => t.id === tareaId) : undefined;
     const asociadas = d.aplicaciones_visibles?.filter(a => a.tarea_id === tareaId) ?? apps;
-    const f: FilaLaborAplicacion = { tarea_id: tareaId, tarea_nombre: tarea?.nombre, aplicaciones: asociadas, compartida: asociadas.length > 1, estado: tarea ? registrosValidos ? 'ok' : 'registros_no_leidos' : 'tarea_no_disponible', total: desconocido(), lotes: [] };
+    const f: FilaLaborAplicacion = { tarea_id: tareaId, tarea_nombre: tarea?.nombre, aplicaciones: asociadas, compartida: asociadas.length > 1, estado: tarea ? registrosValidos ? 'ok' : 'registros_no_leidos' : tareasValidas ? 'tarea_no_disponible' : 'vinculo_no_leido', total: desconocido(), lotes: [] };
     if (f.estado === 'ok') {
       const registros = d.registros!.filter(x => x.tarea_id === tareaId && (!c.desde || x.fecha_trabajo >= c.desde) && (!c.hasta || x.fecha_trabajo <= c.hasta));
       // An unread/invalid cost preserves jornales, but cannot certify a complete cost.
@@ -52,7 +52,7 @@ export function ejecutarLaborAplicacion(c: ConsultaLaborAplicacion, d: DatosLabo
 }
 function texto(v: string | null | undefined): string { return (v ?? '').replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&'); }
 function etiqueta(id: string, nombre: string | null | undefined, universo: { id: string; nombre?: string | null }[]): string { const n=texto(nombre); return !n ? id : universo.some(x => x.id !== id && texto(x.nombre) === n) ? `${n} (${id})` : n; }
-function valores(t: TotalLaborAplicacion): string { return `${t.jornales === null ? 'jornales no verificados' : `${numeroMensaje(limpiar(t.jornales))} jornales registrados`}; ${t.costo === null ? `costo laboral incompleto${t.costo_registrado !== null ? ` (subtotal registrado: ${formatCurrency(t.costo_registrado)})` : ''}` : `costo laboral registrado: ${formatCurrency(t.costo)}`}`; }
+function valores(t: TotalLaborAplicacion): string { return `${t.jornales === null ? 'jornales no verificados' : `${numeroMensaje(limpiar(t.jornales))} ${t.jornales === 1 ? 'jornal registrado' : 'jornales registrados'}`}; ${t.costo === null ? `costo laboral incompleto${t.costo_registrado !== null ? ` (subtotal registrado: ${formatCurrency(t.costo_registrado)})` : ''}` : `costo laboral registrado: ${formatCurrency(t.costo)}`}`; }
 export function renderLaborAplicacion(r: ResultadoLaborAplicacion): string {
   if (r.estado === 'no_resuelto') return 'No pude resolver las aplicaciones indicadas. Precisa su nombre o código.';
   if (r.estado === 'no_disponible') return 'No pude leer las aplicaciones para verificar su vínculo laboral.';
@@ -63,7 +63,9 @@ export function renderLaborAplicacion(r: ResultadoLaborAplicacion): string {
   const estados = {sin_tarea_vinculada:'aplicación sin tarea vinculada',vinculo_no_leido:'vínculo no leído',tarea_no_disponible:'tarea vinculada no disponible',registros_no_leidos:'no pude leer los jornales de la tarea',sin_jornales_registrados:'sin jornales registrados',ok:''};
   for(const f of r.filas) {
     const nombres=f.aplicaciones.map(a=>etiqueta(a.id,a.nombre_aplicacion||a.codigo_aplicacion,apps)).join(', ');
-    const tarea=f.tarea_id ? etiqueta(f.tarea_id,f.tarea_nombre,tareas) : '';
+    const tareaEtiqueta=f.tarea_id ? etiqueta(f.tarea_id,f.tarea_nombre,tareas) : '';
+    // A task named exactly like its only application adds no information.
+    const tarea=f.aplicaciones.length===1&&tareaEtiqueta===nombres ? '' : tareaEtiqueta;
     out.push(`${nombres}${tarea ? ` · ${tarea}` : ''}: ${f.compartida ? 'costo común de la tarea; sin atribución exclusiva; ' : ''}${estados[f.estado] || valores(f.total)}.`);
     for(const l of f.lotes) out.push(`${l.lote_id === null ? 'Sin lote' : etiqueta(l.lote_id,l.lote_nombre,lotes)}: ${valores(l.total)}.`);
   }

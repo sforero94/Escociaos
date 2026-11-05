@@ -14,11 +14,11 @@ describe('Task4 frozen and current monetary bases',()=>{
   it('reads frozen amounts only with an operational closure',()=>{
     const r=ejecutarCostosAplicacion({aplicacion_id:A},cerrada(),'p1','2026-11-05');
     expect(r.congelado).toMatchObject({estado:'conocido',insumos:120,mano_obra:80,total:200,fecha_cierre:'2026-11-01'});
-    const text=renderCostosAplicacion(r);expect(text).toContain('costo congelado al cierre');expect(text).toContain('1 de noviembre de 2026');expect(text).toContain('precios mal capturados');expect(text).not.toContain(A);
+    const text=renderCostosAplicacion(r);expect(text).toMatch(/costo congelado al cierre/i);expect(text).toContain('1 de noviembre de 2026');expect(text).toContain('precios mal capturados');expect(text).not.toContain(A);
   });
   it.each(['ausente','duplicado','no_leido'] as const)('withholds unverified closure %s',modo=>{
     const d=cerrada();if(modo==='ausente')d.cierres=[];if(modo==='duplicado')d.cierres!.push({...d.cierres![0],id:id(9)});if(modo==='no_leido')delete d.cierres;
-    const r=ejecutarCostosAplicacion({aplicacion_id:A},d,'p1','2026-11-05');expect(r.congelado!.total).toBeNull();expect(renderCostosAplicacion(r)).toContain('sin costo de cierre verificado');
+    const r=ejecutarCostosAplicacion({aplicacion_id:A},d,'p1','2026-11-05');expect(r.congelado!.total).toBeNull();expect(renderCostosAplicacion(r)).toMatch(/sin costo de cierre verificado/i);
   });
   it('preserves NULL costs and retains a contradictory saved amount without publishing an exact total',()=>{
     const d=cerrada();d.costos!.costo_total_mano_obra=null;

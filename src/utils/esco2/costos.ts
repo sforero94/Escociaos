@@ -4,7 +4,7 @@ import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 import { esUuid } from './aplicacionesTipos.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { formatLongDate } from '../formatPuro.ts';
-import { numeroMensaje } from './formatoMensaje.ts';
+import { dineroMensaje, numeroMensaje } from './formatoMensaje.ts';
 import type { EstadoCantidad, UnidadCantidad } from './cantidadesTipos.ts';
 import type { BloqueCongelado, BloqueValoracion, ConsultaCostosAplicacion, DatosCostosAplicacion, EstadoDatoCosto, FilaValorada, ResultadoCostosAplicacion } from './costosTipos.ts';
 const numero = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
@@ -75,7 +75,7 @@ export function ejecutarCostosAplicacion(consulta: ConsultaCostosAplicacion,d: D
       const movimientos=datos.movimientos?.filter(m=>m.aplicacion_id===d.aplicacion!.id&&(!consulta.desde||typeof m.fecha_movimiento==='string'&&m.fecha_movimiento>=consulta.desde&&m.fecha_movimiento<=consulta.hasta!));
       const hijos=new Set(datos.productos_ejecutados?.map(p=>p.movimiento_diario_id));
       const sinProductos=movimientos?.some(m=>!hijos.has(m.id))??true;
-      r.ejecucion=valorizar(q.ejecucion.filas,q.ejecucion.estado==='conocido'&&!sinProductos,[...q.ejecucion.motivos,...(sinProductos?['movimiento:sin_productos']:[])],d.precios,hoy);
+      r.ejecucion=valorizar(q.ejecucion.filas,(q.ejecucion.estado==='conocido'||q.ejecucion.estado==='sin_movimientos')&&!sinProductos,[...q.ejecucion.motivos,...(sinProductos?['movimiento:sin_productos']:[])],d.precios,hoy);
     }
     if(consulta.incluir_plan){
       // Saved mix-product rows, once each. Per-lot reconstruction is a different, separately verified fact.
@@ -89,13 +89,14 @@ export function ejecutarCostosAplicacion(consulta: ConsultaCostosAplicacion,d: D
 }
 const escapar=(s:string)=>s.replace(/\s+/g,' ').trim().replace(/[\\`*_[\]|<>]/g,'\\$&');
 const valor=(n:number)=>numeroMensaje(limpiar(n));
-const dinero=(n:number)=>`$${valor(n)} COP`;
+const dinero=(n:number)=>dineroMensaje(limpiar(n));
 const textos:Record<EstadoDatoCosto,string>={conocido:'verificado',sin_dato:'sin dato registrado',no_leido:'dato no leído',incompatible:'unidad incompatible',inventario_no_disponible:'inventario no disponible',no_verificado:'sin costo de cierre verificado',discrepancia:'los componentes no cuadran con el total guardado',sin_filas:'sin cantidades registradas'};
 function renderValoracion(b:BloqueValoracion,titulo:string):string[]{
   const nombres=new Map(b.filas.map(f=>[f.producto_id,f.producto_nombre?.trim()?escapar(f.producto_nombre):null]));
   const nombre=(f:FilaValorada)=>{const n=nombres.get(f.producto_id);return !n?`Producto sin nombre [${f.producto_id}]`:[...nombres.values()].filter(x=>x?.toLocaleLowerCase('es')===n.toLocaleLowerCase('es')).length>1?`${n} [${f.producto_id}]`:n;};
   const out=[`**${titulo}** · consulta ${formatLongDate(b.fecha_consulta)} (Bogotá).`];
   for(const f of b.filas)out.push(`- ${nombre(f)}: ${f.cantidad===null?'cantidad no valorizable':`${valor(f.cantidad)} ${f.unidad??'unidad no disponible'}`}; ${f.costo===null?`no valorizable (${textos[f.estado]})`:`${dinero(f.costo)}${f.precio_unitario===0?' (precio cero registrado)':` a ${dinero(f.precio_unitario!)}/${f.unidad}`}`}.`);
+  if(b.estado==='sin_filas'){out.push('Aún no hay ejecución registrada: no hay insumos ejecutados que valorizar.');return out;}
   if(b.total!==null)out.push(`Subtotal de insumos completo: ${dinero(b.total)}.`);
   else {out.push('Sin total completo de insumos: las cantidades o los precios no están completos y compatibles.');if(b.subtotal_conocido!==null)out.push(`Subtotal conocido de productos valorizables: ${dinero(b.subtotal_conocido)}.`);if(!b.filas.length)out.push('Sin cantidades completas registradas; esto no prueba costo real cero.');}
   return out;
@@ -108,8 +109,8 @@ export function renderCostosAplicacion(r:ResultadoCostosAplicacion):string {
   if(r.estado==='no_disponible')return [...out,'No pude verificar el estado actual de la aplicación. No publico un costo congelado ni una valorización abierta.'].join('\n');
   if(r.congelado){
     const b=r.congelado;
-    out.push(`**costo congelado al cierre** · aplicación completa${b.fecha_cierre?`; cierre operativo ${formatLongDate(b.fecha_cierre)}`:''}.`);
-    if(b.estado==='no_verificado')out.push('sin costo de cierre verificado.');
+    out.push(`**Costo congelado al cierre** · aplicación completa${b.fecha_cierre?`; cierre operativo ${formatLongDate(b.fecha_cierre)}`:''}.`);
+    if(b.estado==='no_verificado')out.push('Sin costo de cierre verificado.');
     else {
       out.push(`Insumos: ${b.insumos===null?textos[b.estados_campos.insumos]:dinero(b.insumos)}; mano de obra: ${b.mano_obra===null?textos[b.estados_campos.mano_obra]:dinero(b.mano_obra)}; ${b.total===null?'sin total completo verificado':`total: ${dinero(b.total)}`}.`);
       if(b.total===null&&b.total_guardado!==null)out.push(`Total guardado: ${dinero(b.total_guardado)}; ${b.estado==='discrepancia'?textos.discrepancia:'faltan componentes verificados'}.`);
