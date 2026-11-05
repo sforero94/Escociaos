@@ -7,18 +7,20 @@ No cambia fuentes, aritmética financiera, operaciones del planner ni permisos.
 ## Regla vigente
 
 La banda se selecciona con la magnitud absoluta del valor original. Se conservan símbolo `$`
-y signo negativo; no se añade COP. Se usan los separadores de los ejemplos de Santiago:
-coma de miles y punto decimal. Ejemplos sintéticos:
+y signo negativo; no se añade COP. Separadores colombianos: punto de miles y coma decimal,
+los mismos de las cantidades (`numeroMensaje`), para que un mismo mensaje nunca mezcle dos
+convenciones. Los ejemplos originales de Santiago venían con separadores de EE. UU.; en la
+revisión del 5 de noviembre él pidió homogeneizarlos con las cantidades. Ejemplos sintéticos:
 
 | Magnitud | Presentación |
 |---|---|
-| Menos de 1.000.000 | Entero sin decimales: `$3,245`, `$934,567` |
-| Desde 1.000.000 hasta menos de 100.000.000 | Millones con exactamente un decimal: `$1.0M`, `$50.4M`, `$95.0M` |
-| Desde 100.000.000 | Millones enteros: `$100M`, `$233M`, `$2,000M` |
+| Menos de 1.000.000 | Entero sin decimales: `$3.245`, `$934.567` |
+| Desde 1.000.000 hasta menos de 100.000.000 | Millones con exactamente un decimal: `$1,0M`, `$50,4M`, `$95,0M` |
+| Desde 100.000.000 | Millones enteros: `$100M`, `$233M`, `$2.000M` |
 
 `aprox.` aparece únicamente si se redondea el valor. El redondeo no reclasifica la banda del
 valor original: por ejemplo, un valor justo inferior al millón puede mostrarse como entero
-redondeado y uno justo inferior a cien millones como `100.0M`. No se inventa una cuarta regla.
+redondeado y uno justo inferior a cien millones como `100,0M`. No se inventa una cuarta regla.
 La interpretación del corte incluye exactamente cien millones en la banda sin decimales.
 
 `dineroMensaje` sirve tanto para mensajes laborales P2 como para costos de aplicaciones y

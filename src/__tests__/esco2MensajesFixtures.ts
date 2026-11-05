@@ -56,10 +56,10 @@ export const casosMensajes:CasoMensaje[]=[
  {id:'no-resuelto',criterio:'Un nombre ambiguo ofrece sugerencias legibles sin seleccionar una entidad.',resultados:[noResuelto],lineas:['No pude identificar el lote que quieres consultar. ¿Te refieres a Norte o Sur?'],vinculos:[]},
  {id:'cero-conocido',criterio:'Un costo cero registrado conserva el trabajo conocido.',resultados:[ceroConocido],lineas:['Se registró 1 jornal; costo de mano de obra: $0.',PERIODO_OCT],vinculos:[]},
  {id:'vacio-programado',criterio:'Vacío programado es ausencia registrada y visible, no dato desconocido.',resultados:[vacioProgramado],lineas:['No hay tareas programadas registradas con inicio planeado en el período consultado entre las que puedes ver.',PERIODO_OCT],vinculos:[]},
- {id:'conocido',criterio:'Trabajo y costo conocidos aparecen con su entidad y período inclusivo.',resultados:[conocido],lineas:['Se registraron 4,5 jornales; costo de mano de obra: $95.0M.',PERIODO_OCT,'- Cosecha: 2 jornales registrados; costo de mano de obra: $40.0M.','- Poda: 2,5 jornales registrados; costo de mano de obra: $55.0M.',ALCANCE_VISIBLE],vinculos:[
-  {entidad:'total',metrica:'jornales',valor:4.5,desde:'2026-10-26',hasta:'2026-11-01',fragmento:'Se registraron 4,5 jornales; costo de mano de obra: $95.0M.'},
-  {entidad:'task-cosecha',metrica:'costo',valor:40000000,desde:'2026-10-26',hasta:'2026-11-01',fragmento:'- Cosecha: 2 jornales registrados; costo de mano de obra: $40.0M.'},
-  {entidad:'task-poda',metrica:'jornales',valor:2.5,desde:'2026-10-26',hasta:'2026-11-01',fragmento:'- Poda: 2,5 jornales registrados; costo de mano de obra: $55.0M.'},
+ {id:'conocido',criterio:'Trabajo y costo conocidos aparecen con su entidad y período inclusivo.',resultados:[conocido],lineas:['Se registraron 4,5 jornales; costo de mano de obra: $95,0M.',PERIODO_OCT,'- Cosecha: 2 jornales registrados; costo de mano de obra: $40,0M.','- Poda: 2,5 jornales registrados; costo de mano de obra: $55,0M.',ALCANCE_VISIBLE],vinculos:[
+  {entidad:'total',metrica:'jornales',valor:4.5,desde:'2026-10-26',hasta:'2026-11-01',fragmento:'Se registraron 4,5 jornales; costo de mano de obra: $95,0M.'},
+  {entidad:'task-cosecha',metrica:'costo',valor:40000000,desde:'2026-10-26',hasta:'2026-11-01',fragmento:'- Cosecha: 2 jornales registrados; costo de mano de obra: $40,0M.'},
+  {entidad:'task-poda',metrica:'jornales',valor:2.5,desde:'2026-10-26',hasta:'2026-11-01',fragmento:'- Poda: 2,5 jornales registrados; costo de mano de obra: $55,0M.'},
  ]},
  {id:'vacio-visible',criterio:'Vacío verificado se limita al usuario y período.',resultados:[vacio],lineas:['No hay registros de trabajo en el período consultado.',PERIODO_OCT,ALCANCE_VISIBLE],vinculos:[]},
  {id:'costo-null',criterio:'NULL no se convierte en costo cero.',resultados:[sinCosto],lineas:['Se registraron 4,5 jornales.','El costo no está completo: hay registros sin costo registrado.',PERIODO_OCT],vinculos:[]},

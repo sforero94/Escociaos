@@ -17,13 +17,13 @@ function laborMessage(cost: number) {
   return { result, text:renderMensaje([result]) };
 }
 const MONEY_ORACLES: ReadonlyArray<readonly [number,string]> = [
-  [0,'$0'],[-0,'$0'],[934567,'$934,567'],[999999,'$999,999'],
-  [999999.6,'aprox. $1,000,000'],[1000000,'$1.0M'],[1100000,'$1.1M'],
-  [1050000,'aprox. $1.1M'],[50400000,'$50.4M'],[95000000,'$95.0M'],
-  [99999999,'aprox. $100.0M'],[100000000,'$100M'],
+  [0,'$0'],[-0,'$0'],[934567,'$934.567'],[999999,'$999.999'],
+  [999999.6,'aprox. $1.000.000'],[1000000,'$1,0M'],[1100000,'$1,1M'],
+  [1050000,'aprox. $1,1M'],[50400000,'$50,4M'],[95000000,'$95,0M'],
+  [99999999,'aprox. $100,0M'],[100000000,'$100M'],
   [100499999,'aprox. $100M'],[233000000,'$233M'],
-  [-934567,'-$934,567'],[-1000000,'-$1.0M'],[-50400000,'-$50.4M'],
-  [-99999999,'aprox. -$100.0M'],[-100000000,'-$100M'],[-233400000,'aprox. -$233M'],
+  [-934567,'-$934.567'],[-1000000,'-$1,0M'],[-50400000,'-$50,4M'],
+  [-99999999,'aprox. -$100,0M'],[-100000000,'-$100M'],[-233400000,'aprox. -$233M'],
 ];
 
 describe('Esco currency acceptance through factual labor/application renderers',()=>{
@@ -44,7 +44,7 @@ describe('Esco currency acceptance through factual labor/application renderers',
     };
     const result=ejecutarCostosAplicacion({aplicacion_id:APP},data,'p1','2026-11-05');
     const text=renderCostosAplicacion(result);
-    expect(text).toContain('Insumos: $934,567; mano de obra: $50.4M; total: aprox. $51.3M.');
+    expect(text).toContain('Insumos: $934.567; mano de obra: $50,4M; total: aprox. $51,3M.');
     expect(result.congelado).toMatchObject({insumos:934567,mano_obra:50400000,total:51334567});
     expect(text).not.toContain('COP');
   });
@@ -60,8 +60,8 @@ describe('Esco currency acceptance through factual labor/application renderers',
     const result=ejecutarCostosAplicacion({aplicacion_id:APP},data,'p1','2026-11-05');
     const text=renderCostosAplicacion(result);
     expect(text).toContain('1.234,5 kg');
-    expect(text).toContain('a $2,000/kg');
-    expect(text).toContain('aprox. $2.5M');
+    expect(text).toContain('a $2.000/kg');
+    expect(text).toContain('aprox. $2,5M');
     expect(result.ejecucion?.total).toBe(2469000);
     expect(result.ejecucion?.filas[0].cantidad).toBe(1234.5);
   });
@@ -74,7 +74,7 @@ describe('Esco currency acceptance through factual labor/application renderers',
       lotes:[{id:LOT,nombre:'Lote de prueba'}]};
     const result=ejecutarLaborAplicacion({aplicacion_ids:[APP],aplicaciones:[]},data,'p1','2026-11-05');
     const text=renderLaborAplicacion(result);
-    expect(text).toContain('costo laboral registrado: $934,567');
+    expect(text).toContain('costo laboral registrado: $934.567');
     expect(text).toContain('0,25 jornales');
     expect(result.total.costo).toBe(934567);
   });

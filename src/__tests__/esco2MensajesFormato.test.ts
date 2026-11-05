@@ -10,22 +10,24 @@ import {ID,dependencies,forbidNetwork,p2Db,p2Seed,plan,request,run,tool} from '.
 describe('Mensajes-v1: regla monetaria de Esco y cantidades es-CO',()=>{
   it.each([
     {value:0,expected:'$0',approx:false},
-    {value:1234,expected:'$1,234',approx:false},
-    {value:999999,expected:'$999,999',approx:false},
-    {value:1000000,expected:'$1.0M',approx:false},
-    {value:1500000,expected:'$1.5M',approx:false},
-    {value:1449000,expected:'aprox. $1.4M',approx:true},
-    {value:9600000,expected:'$9.6M',approx:false},
-    {value:9960000,expected:'aprox. $10.0M',approx:true},
-    {value:95000000,expected:'$95.0M',approx:false},
-    {value:95499999,expected:'aprox. $95.5M',approx:true},
-    {value:2000000000,expected:'$2,000M',approx:false},
+    {value:1234,expected:'$1.234',approx:false},
+    {value:999999,expected:'$999.999',approx:false},
+    {value:1000000,expected:'$1,0M',approx:false},
+    {value:1500000,expected:'$1,5M',approx:false},
+    {value:1449000,expected:'aprox. $1,4M',approx:true},
+    {value:9600000,expected:'$9,6M',approx:false},
+    {value:9960000,expected:'aprox. $10,0M',approx:true},
+    {value:95000000,expected:'$95,0M',approx:false},
+    {value:95499999,expected:'aprox. $95,5M',approx:true},
+    {value:2000000000,expected:'$2.000M',approx:false},
   ])('costo$value se muestra como$expected',({value,expected,approx})=>{
     const r=resultadoMensaje({total:{jornales:1,costo:value}});const text=renderMensaje([r]);expect(text).toContain(expected);
     // One decimal in [1M,100M); integer amounts outside that band. No COP or billions.
-    expect(text).not.toMatch(/\bCOP\b|\$[\d,]+\.\d\d|\dB\b|bill[oó]n/i);
-    if(value>=1000000&&value<100000000)expect(text).toMatch(/\$[\d,]+\.\dM/);
-    else expect(text).not.toMatch(/\$[\d,]+\.\d/);
+    // Colombian separators: dot thousands, comma decimal; US separators never appear.
+    expect(text).not.toMatch(/\bCOP\b|\$[\d.]+,\d\d|\dB\b|bill[oó]n/i);
+    expect(text).not.toMatch(/\$\d{1,3}(?:,\d{3})+|\$\d+\.\dM/);
+    if(value>=1000000&&value<100000000)expect(text).toMatch(/\$[\d.]+,\dM/);
+    else expect(text).not.toMatch(/\$[\d.]+,\d/);
     if(approx)expect(text).toMatch(/aprox\.|aproximad/i);else expect(text).not.toMatch(/aprox\.|aproximad/i);
   });
   it.each([
