@@ -30,29 +30,37 @@ export const ESQUEMA_COBERTURA = {
 };
 export const ESQUEMA_PARTE_IDS = { type: 'array', maxItems: 8, uniqueItems: true, items: { type: 'string', pattern: '^s[1-8]$' } };
 const objeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
-const fallar = (): never => { throw new Error('cobertura_no_valida'); };
+const fallar = (motivo = 'cobertura_no_valida'): never => { throw new Error(motivo); };
+/** Case-, accent-, punctuation- and space-insensitive form. A part must still quote the question. */
+export const normalizarTextoParte = (t: string): string => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[¿?¡!.,;:«»"“”'‘’()]/g, ' ').replace(/\s+/g, ' ').trim();
 export function validarInventarioDeclarado(valor: unknown, pregunta: string): CoberturaPlan {
-  if (!objeto(valor) || Object.keys(valor).some(k => !['version', 'partes'].includes(k)) || valor.version !== 1 || !Array.isArray(valor.partes) || !valor.partes.length || valor.partes.length > 8 || typeof pregunta !== 'string') return fallar();
+  if (!objeto(valor) || Object.keys(valor).some(k => !['version', 'partes'].includes(k)) || valor.version !== 1 || !Array.isArray(valor.partes) || !valor.partes.length || valor.partes.length > 8 || typeof pregunta !== 'string') return fallar('inventario_forma');
+  const preguntaNormal = normalizarTextoParte(pregunta);
   const partes = valor.partes.map((p: unknown, indice): ParteDeclarada => {
-    if (!objeto(p) || Object.keys(p).some(k => !['id', 'texto', 'capacidad', 'disposicion'].includes(k)) || p.id !== `s${indice + 1}` || typeof p.texto !== 'string' || !p.texto.trim() || p.texto.length > 300 || !pregunta.includes(p.texto) || !CAPACIDADES_PARTE.includes(p.capacidad as CapacidadParte) || !DISPOSICIONES_DECLARADAS.includes(p.disposicion as ParteDeclarada['disposicion'])) return fallar();
-    if ((p.disposicion === 'fuera_de_contrato') !== (p.capacidad === 'fuera_de_contrato')) return fallar();
+    if (!objeto(p) || Object.keys(p).some(k => !['id', 'texto', 'capacidad', 'disposicion'].includes(k)) || p.id !== `s${indice + 1}`) return fallar('parte_forma');
+    if (typeof p.texto !== 'string' || !p.texto.trim() || p.texto.length > 300 || !normalizarTextoParte(p.texto) || !preguntaNormal.includes(normalizarTextoParte(p.texto))) return fallar('texto_no_literal');
+    if (!CAPACIDADES_PARTE.includes(p.capacidad as CapacidadParte) || !DISPOSICIONES_DECLARADAS.includes(p.disposicion as ParteDeclarada['disposicion'])) return fallar('parte_forma');
+    if ((p.disposicion === 'fuera_de_contrato') !== (p.capacidad === 'fuera_de_contrato')) return fallar('fuera_de_contrato_inconsistente');
     return { id: p.id, texto: p.texto, capacidad: p.capacidad as CapacidadParte, disposicion: p.disposicion as ParteDeclarada['disposicion'] };
   });
   return { version: 1, pregunta, partes };
 }
 export function validarCorrespondenciaPlan(cobertura: CoberturaPlan, operaciones: OperacionConsulta[]): void {
   validarInventarioDeclarado({ version: cobertura.version, partes: cobertura.partes }, cobertura.pregunta);
-  if (operaciones.length > 4) return fallar();
+  if (operaciones.length > 4) return fallar('limite');
   for (const o of operaciones) {
-    if (!Array.isArray(o.parte_ids) || !o.parte_ids.length || o.parte_ids.length > 8 || new Set(o.parte_ids).size !== o.parte_ids.length) return fallar();
+    if (!Array.isArray(o.parte_ids) || !o.parte_ids.length || o.parte_ids.length > 8 || new Set(o.parte_ids).size !== o.parte_ids.length) return fallar('parte_ids_forma');
     for (const id of o.parte_ids) {
       const parte = cobertura.partes.find(p => p.id === id);
-      if (!parte || parte.disposicion !== 'consultar' || parte.capacidad !== o.tipo) return fallar();
+      if (!parte) return fallar('parte_id_inexistente');
+      if (parte.disposicion !== 'consultar') return fallar('vinculo_a_parte_no_consultar');
+      if (parte.capacidad !== o.tipo) return fallar('capacidad_no_coincide');
     }
   }
   for (const p of cobertura.partes) {
     const cantidad = operaciones.filter(o => o.parte_ids?.includes(p.id)).length;
-    if ((p.disposicion === 'consultar') !== (cantidad > 0)) return fallar();
+    if (p.disposicion === 'consultar' && cantidad === 0) return fallar('parte_consultar_sin_operacion');
+    if (p.disposicion !== 'consultar' && cantidad > 0) return fallar('vinculo_a_parte_no_consultar');
   }
 }
 /** Ordena claves para comparar consultas, sin transformar sus valores. */

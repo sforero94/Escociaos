@@ -30,12 +30,16 @@ function substantive(body: Awaited<ReturnType<typeof execute>>['body']) {
 }
 
 describe('P3 coverage QA: exact four contract mutation boundaries', () => {
-  it('orphan operation: positive substantive control passes, removing its link is rejected before execution', async () => {
-    substantive((await execute()).body);
+  // Contract change 2026-11-05 (M4): a forgotten link with exactly ONE call of the part's
+  // capacity is repaired, because it has only one possible reading. The repaired turn must
+  // equal the linked positive control: same results, same coverage. Ambiguous links are
+  // still rejected (esco2CoberturaBackend.test.ts).
+  it('orphan operation: a forgotten unambiguous link is repaired to the exact positive control', async () => {
+    const positive = await execute(); substantive(positive.body);
     const mutated = await execute(call(undefined, { parte_ids: [] }));
-    expect(mutated.body.origen).toBe('error_plan');
-    expect(mutated.body.resultados).toEqual([]);
-    expect(mutated.traza.consultas.filter(q => q.tabla === 'movimientos_diarios')).toHaveLength(0);
+    substantive(mutated.body);
+    expect(mutated.body.resultados).toEqual(positive.body.resultados);
+    expect(mutated.body.cobertura).toEqual(positive.body.cobertura);
   });
   it('crossed capacity or selection: positive substantive control passes, mismatched operation and result entity are rejected', async () => {
     const positive = await execute(); substantive(positive.body);

@@ -225,6 +225,9 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         partes: turno.plan?.tipo === 'consultas' ? turno.plan.consultas.length : turno.plan?.tipo === 'operaciones' ? turno.plan.operaciones.length : 0,
         ajustes: turno.ajustes.length,
         error: turno.errorPlan ? 'turno_no_completo' : null,
+        // Closed reason codes only (no user text): makes a rejected plan diagnosable in logs.
+        errorPlan: turno.errorPlan,
+        motivoPlan: turno.motivoPlan ?? null,
         ms: turno.ms,
         costoUsd: turno.llamadas.some(l => l.costoUsd === null) ? null : turno.llamadas.reduce((s, l) => s + (l.costoUsd ?? 0), 0),
     });

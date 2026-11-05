@@ -54,6 +54,8 @@ export interface ResultadoTurno {
     origen: 'compositor' | 'recomposicion' | 'determinista' | 'aclaracion' | 'fuera_de_alcance' | 'error_plan' | 'error_llm' | 'error_datos';
     plan: Plan | null;
     errorPlan: string | null;
+    /** Closed reason code of a rejected plan (diagnostic only; never user text). */
+    motivoPlan?: string;
     /** D25: ruta del compositor. null si el turno no llegó a componer. */
     ruta: Ruta | null;
     /** Cambios deterministas aplicados al plan (D26). */
@@ -65,6 +67,33 @@ export interface ResultadoTurno {
     };
     llamadas: RegistroLlamada[];
     ms: number;
+}
+/** Closed retry instructions, one per rejection reason. No model or user text enters here. */
+export const INSTRUCCION_REINTENTO: Record<string, string> = {
+    sin_cobertura: 'La primera llamada debe llevar cobertura con todas las subpartes.',
+    inventario_forma: 'cobertura lleva solo version:1 y partes, una lista de una a ocho partes.',
+    carrier: 'fuera_de_alcance o pedir_aclaracion van solos, con parte_ids vacío; usa pedir_aclaracion solo si alguna parte tiene disposicion aclarar.',
+    carrier_extra: 'No combines fuera_de_alcance ni pedir_aclaracion con consultas; declara esas partes solo en cobertura.',
+    texto_no_literal: 'Cada texto de cobertura debe copiar un fragmento de la pregunta actual.',
+    parte_forma: 'Cada parte lleva solo id, texto, capacidad y disposicion, con id s1, s2... en orden.',
+    fuera_de_contrato_inconsistente: 'Solo una parte con capacidad fuera_de_contrato lleva disposicion fuera_de_contrato.',
+    parte_consultar_sin_operacion: 'Cada parte con disposicion consultar necesita una llamada que la cite en parte_ids. Si ninguna herramienta la responde, declárala fuera_de_contrato.',
+    vinculo_a_parte_no_consultar: 'parte_ids solo puede citar partes con disposicion consultar.',
+    capacidad_no_coincide: 'La capacidad de cada parte citada debe ser la de la herramienta que la cita.',
+    parte_id_inexistente: 'parte_ids solo puede citar ids declarados en cobertura.',
+    parte_ids_forma: 'Cada llamada ejecutable lleva parte_ids, una lista no vacía sin repetidos.',
+    portadora_con_operaciones: 'No combines fuera_de_alcance ni pedir_aclaracion con consultas; declara esas partes solo en cobertura.',
+    cobertura_contradictoria: 'Declara un único inventario de cobertura.',
+    limite: 'Usa como máximo cuatro llamadas.',
+    argumentos_no_validos: 'Usa solo los argumentos registrados de cada herramienta.',
+};
+/** Maps an ErrorPlan message to a closed reason code. */
+export function motivoRechazoPlan(mensaje: string): string {
+    if (mensaje.startsWith('cobertura_no_valida:')) {
+        const codigo = mensaje.slice('cobertura_no_valida:'.length);
+        return /^[a-z_]+$/.test(codigo) ? codigo : 'cobertura_no_valida';
+    }
+    return 'argumentos_no_validos';
 }
 function registrar(etapa: RegistroLlamada['etapa'], r: RespuestaLLM): RegistroLlamada {
     return { etapa, modelo: r.modelo, ms: r.ms, ...r.uso };
@@ -206,6 +235,9 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     }
     else {
         const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones)) }, ...historial, { role: 'user', content: pregunta }];
+        // A follow-up («y la de octubre?») inherits subparts from the user's earlier messages
+        // that the planner received, so a part may quote them. Assistant text never counts.
+        const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
         let validado: Plan | undefined;
         for (let intento = 0; intento < 2; intento++) {
             let rPlan: RespuestaLLM;
@@ -217,14 +249,16 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                 return salida({ ...base, respuesta: mensajeDisposicion('error_llm'), origen: 'error_llm', errorPlan: 'planificador_no_disponible' });
             }
             try {
-                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta, exigirCobertura: true } : undefined);
+                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, exigirCobertura: true } : undefined);
                 break;
             }
             catch (e) {
+                const motivo = e instanceof ErrorPlan ? motivoRechazoPlan(e.message) : 'plan_error';
                 if (!(e instanceof ErrorPlan) || intento === 1)
-                    return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: e instanceof ErrorPlan ? 'plan_no_valido' : 'plan_error' });
-                // Do not promote the rejected output or its error text into context.
-                mensajes.push({ role: 'system', content: 'El plan anterior no cumple el esquema. Reintenta una sola vez la pregunta original con las herramientas y argumentos registrados.' });
+                    return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: e instanceof ErrorPlan ? 'plan_no_valido' : 'plan_error', motivoPlan: motivo });
+                // The rejected output is never promoted into context. Only a fixed instruction,
+                // chosen by our own closed reason code, tells the planner what to correct.
+                mensajes.push({ role: 'system', content: `El plan anterior no cumple el esquema. ${INSTRUCCION_REINTENTO[motivo] ?? ''} Reintenta una sola vez la pregunta original con las herramientas y argumentos registrados.`.replace(/\s+/g, ' ') });
             }
         }
         plan = validado!;
