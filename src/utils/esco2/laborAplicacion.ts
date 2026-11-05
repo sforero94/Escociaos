@@ -2,7 +2,7 @@ import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 import { metricas } from './ejecutor.ts';
 import { esUuid, type AplicacionInventario } from './aplicacionesTipos.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import { dineroMensaje, numeroMensaje } from './formatoMensaje.ts';
+import { dineroConDetalleMensaje as dineroMensaje, numeroMensaje } from './formatoMensaje.ts';
 import { formatLongDate } from '../formatPuro.ts';
 import type { RegistroTrabajo } from './tipos.ts';
 import type { ConsultaLaborAplicacion, DatosLaborAplicacion, FilaLaborAplicacion, ResultadoLaborAplicacion, TotalLaborAplicacion } from './laborAplicacionTipos.ts';

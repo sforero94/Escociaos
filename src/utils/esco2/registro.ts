@@ -7,6 +7,8 @@ import type { ConsultaLaborAplicacion } from './laborAplicacionTipos.ts';
 import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
+import { operacionesDelPlan } from './tipos.ts';
+import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, validarInventarioDeclarado, validarCorrespondenciaPlan } from './cobertura.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
 export const METRICAS: readonly Metrica[] = [
     'jornales',
@@ -31,7 +33,7 @@ export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
 export function herramientasPlanificador(): unknown[] {
-    return [
+    const herramientas = [
         {
             type: 'function',
             function: {
@@ -103,7 +105,7 @@ export function herramientasPlanificador(): unknown[] {
         } },
         { type: 'function', function: {
             name: HERRAMIENTA_COSTOS,
-            description: 'Costo de UNA aplicación, solo si el usuario pide dinero. Cerrada: costo congelado al cierre operativo verificado, aplicación completa. Abierta: subtotal de insumos ejecutados a precio de hoy; nunca costo histórico ni costo total. incluir_plan=true solo si pide valorizar también el plan completo guardado, siempre separado. Selector ID o nombre/código; desde/hasta juntos solo filtran ejecución. No costo por lote ni por árbol, ni sumar bases congeladas y actuales.',
+            description: 'Costo de UNA aplicación (insumos, mano de obra y total), solo si el usuario pide dinero. Cerrada: costo congelado al cierre operativo verificado, aplicación completa. Abierta: subtotal de insumos ejecutados a precio de hoy; nunca costo histórico ni costo total. incluir_plan=true solo si pide valorizar también el plan completo guardado, siempre separado. Selector ID o nombre/código; desde/hasta juntos solo filtran ejecución. No costo por lote ni por árbol, ni sumar bases congeladas y actuales.',
             parameters: { type: 'object', additionalProperties: false, properties: {
                 aplicacion_id: { type: 'string', format: 'uuid' }, aplicacion: { type: 'string' },
                 desde: { type: 'string', description: 'Inicio inclusivo solo de ejecución; exige hasta.' }, hasta: { type: 'string', description: 'Fin inclusivo solo de ejecución; exige desde.' },
@@ -112,7 +114,7 @@ export function herramientasPlanificador(): unknown[] {
         } },
         { type: 'function', function: {
             name: HERRAMIENTA_LABOR_APLICACION,
-            description: 'Jornales y costo laboral registrados de tareas vinculadas por ID a aplicaciones explícitas. Un selector aplicacion_ids o aplicaciones obligatorio. desde/hasta opcionales y juntos filtran fecha_trabajo; sin ellos usa vida completa. Sin tarea no significa cero; tareas compartidas se cuentan una vez y son costo común, nunca exclusivo ni costo congelado.',
+            description: 'Jornales y costo laboral registrados de tareas vinculadas por ID a aplicaciones explícitas. Úsala solo si piden jornales o trabajo registrado; el costo de mano de obra de una aplicación al cierre sale de consultar_costos_aplicacion. Un selector aplicacion_ids o aplicaciones obligatorio. desde/hasta opcionales y juntos filtran fecha_trabajo; sin ellos usa vida completa. Sin tarea no significa cero; tareas compartidas se cuentan una vez y son costo común, nunca exclusivo ni costo congelado.',
             parameters: { type: 'object', additionalProperties: false, properties: {
                 aplicacion_ids: { type: 'array', minItems: 1, items: { type: 'string', format: 'uuid' } },
                 aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
@@ -144,7 +146,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta no corresponde a labores, inventario de aplicaciones por fecha/estado, cantidades por producto/lote, costo de una aplicación, labor vinculada a aplicaciones ni faltantes vigentes de insumos.',
+                description: 'La pregunta o una parte no corresponde a las capacidades disponibles. Si hay partes sustentadas, añade una sola llamada a esta herramienta junto a sus consultas (máximo cuatro llamadas en total); se responderán por separado con aviso parcial fijo. El motivo no se publica ni autoriza cálculos nuevos.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -154,6 +156,7 @@ export function herramientasPlanificador(): unknown[] {
             },
         },
     ];
+    return herramientas.map(h => ({ ...h, function: { ...h.function, parameters: { ...h.function.parameters, properties: { ...h.function.parameters.properties, cobertura: ESQUEMA_COBERTURA, parte_ids: ESQUEMA_PARTE_IDS } } } }));
 }
 export interface LlamadaHerramienta {
     nombre: string;
@@ -279,8 +282,113 @@ function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): Consult
     if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
     return selectorAplicaciones(a, 'faltantes');
 }
+/** Ordena claves para comparar inventarios repetidos sin transformar valores. */
+const canonicoCobertura = (v: unknown): string => JSON.stringify(v, (_k, x) => x !== null && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(k => [k, (x as Record<string, unknown>)[k]])) : x);
+const CAPACIDAD_DE_HERRAMIENTA: Record<string, string> = {
+    [HERRAMIENTA_CONSULTAR]: 'labores', [HERRAMIENTA_APLICACIONES]: 'aplicaciones', [HERRAMIENTA_CANTIDADES]: 'cantidades_aplicacion',
+    [HERRAMIENTA_COSTOS]: 'costos_aplicacion', [HERRAMIENTA_LABOR_APLICACION]: 'labor_aplicacion', [HERRAMIENTA_FALTANTES]: 'faltantes_aplicacion',
+};
+type ParteBruta = { id?: unknown; capacidad?: unknown; disposicion?: unknown };
+/** Une inventarios parciales que el modelo repartió entre llamadas (s1 en una, s2 en otra). */
+function fusionarInventarios(inventarios: unknown[]): unknown {
+    if (new Set(inventarios.map(canonicoCobertura)).size === 1) return inventarios[0];
+    const porId = new Map<string, unknown>();
+    for (const inv of inventarios) {
+        const partes = (inv as { version?: unknown; partes?: unknown } | null)?.partes;
+        if (!inv || typeof inv !== 'object' || (inv as { version?: unknown }).version !== 1 || !Array.isArray(partes)) throw new Error('cobertura_contradictoria');
+        for (const parte of partes as ParteBruta[]) {
+            if (typeof parte?.id !== 'string') throw new Error('cobertura_contradictoria');
+            const previa = porId.get(parte.id);
+            if (previa !== undefined && canonicoCobertura(previa) !== canonicoCobertura(parte)) throw new Error('cobertura_contradictoria');
+            porId.set(parte.id, parte);
+        }
+    }
+    const ids = [...porId.keys()].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    if (ids.some((id, i) => id !== `s${i + 1}`)) throw new Error('cobertura_contradictoria');
+    return { version: 1, partes: ids.map(id => porId.get(id)) };
+}
+/**
+ * Repara variantes de FORMA del contrato de cobertura sin cambiar lo que el modelo declaró.
+ * Medido 2026-11-05 con el planificador real sobre 36 planes: 25 % se rechazaba solo por
+ * forma, y los usuarios veían «No pude entender tu consulta». Reparaciones, todas cerradas:
+ * (1) un inventario repetido o movido a otra llamada se conserva una vez en la primera;
+ * (2) inventarios parciales con ids disjuntos y consecutivos (s1 en una llamada, s2 en otra)
+ *     se unen; un mismo id con contenido distinto sigue siendo un rechazo;
+ * (3) una portadora (fuera_de_alcance/pedir_aclaracion) junto a operaciones se descarta solo
+ *     si el inventario ya registra una parte no ejecutable;
+ * (4) una parte `consultar` sin vínculo se enlaza a la ÚNICA llamada de su misma capacidad.
+ *     Con cero o con varias candidatas no se adivina: sigue siendo un rechazo.
+ */
+export function normalizarLlamadasCobertura(llamadas: LlamadaHerramienta[]): { llamadas: LlamadaHerramienta[]; reparaciones: string[] } {
+    let argumentos: Record<string, unknown>[];
+    try {
+        argumentos = llamadas.map(l => JSON.parse(l.argumentos) as Record<string, unknown>);
+    } catch { return { llamadas, reparaciones: [] }; }
+    if (argumentos.some(a => !a || typeof a !== 'object' || Array.isArray(a))) return { llamadas, reparaciones: [] };
+    const reparaciones: string[] = [];
+    const inventarios = argumentos.filter(a => Object.prototype.hasOwnProperty.call(a, 'cobertura')).map(a => a.cobertura);
+    const inventario = inventarios.length ? fusionarInventarios(inventarios) : undefined;
+    if (inventarios.length > 1 && new Set(inventarios.map(canonicoCobertura)).size > 1) reparaciones.push('cobertura_fusionada');
+    let pares = llamadas.map((l, i) => ({ nombre: l.nombre, args: { ...argumentos[i] } }));
+    const portadora = (n: string) => n === HERRAMIENTA_FUERA || n === HERRAMIENTA_ACLARAR;
+    const partes = (inventario as { partes?: ParteBruta[] } | undefined)?.partes;
+    if (pares.some(p => portadora(p.nombre)) && pares.some(p => !portadora(p.nombre))) {
+        if (!Array.isArray(partes) || !partes.some(p => p?.disposicion === 'fuera_de_contrato' || p?.disposicion === 'aclarar')) throw new Error('portadora_con_operaciones');
+        pares = pares.filter(p => !portadora(p.nombre));
+        reparaciones.push('portadora_descartada');
+    }
+    if (inventario !== undefined && (inventarios.length > 1 || !Object.prototype.hasOwnProperty.call(pares[0].args, 'cobertura'))) reparaciones.push('cobertura_unificada');
+    if (Array.isArray(partes)) {
+        for (const parte of partes) {
+            if (parte?.disposicion !== 'consultar' || typeof parte.id !== 'string') continue;
+            const vinculada = pares.some(p => Array.isArray(p.args.parte_ids) && (p.args.parte_ids as unknown[]).includes(parte.id));
+            if (vinculada) continue;
+            const candidatas = pares.filter(p => CAPACIDAD_DE_HERRAMIENTA[p.nombre] === parte.capacidad);
+            if (candidatas.length !== 1) continue;
+            // A malformed (non-list) parte_ids is not a forgotten link: keep the rejection.
+            if (candidatas[0].args.parte_ids !== undefined && !Array.isArray(candidatas[0].args.parte_ids)) continue;
+            const actuales = (candidatas[0].args.parte_ids ?? []) as unknown[];
+            candidatas[0].args.parte_ids = [...actuales, parte.id];
+            reparaciones.push('vinculo_unico_agregado');
+        }
+    }
+    pares = pares.map((p, i) => {
+        const { cobertura: _c, ...resto } = p.args;
+        return { nombre: p.nombre, args: i === 0 && inventario !== undefined ? { cobertura: inventario, ...resto } : resto };
+    });
+    if (!reparaciones.length) return { llamadas, reparaciones };
+    return { llamadas: pares.map(p => ({ nombre: p.nombre, argumentos: JSON.stringify(p.args) })), reparaciones };
+}
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
-export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
+export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; exigirCobertura: true }): Plan {
+    if (contexto?.exigirCobertura) {
+        try {
+            if (!llamadas.length) throw new Error('sin_llamadas');
+            llamadas = normalizarLlamadasCobertura(llamadas).llamadas;
+            if (llamadas.length > MAX_CONSULTAS_POR_TURNO) throw new Error('limite');
+            const argumentos = llamadas.map(l => JSON.parse(l.argumentos) as Record<string, unknown>);
+            if (argumentos.some(a => !a || typeof a !== 'object' || Array.isArray(a)) || argumentos.slice(1).some(a => Object.prototype.hasOwnProperty.call(a, 'cobertura'))) throw new Error('metadato');
+            if (argumentos[0].cobertura === undefined) throw new Error('sin_cobertura');
+            const cobertura = validarInventarioDeclarado(argumentos[0].cobertura, contexto.pregunta);
+            const limpias = llamadas.map((l, i) => {
+                const { cobertura: _cobertura, parte_ids: _partes, ...consulta } = argumentos[i];
+                return { nombre: l.nombre, argumentos: JSON.stringify(consulta) };
+            });
+            const base = (() => { try { return validarPlan(limpias); } catch (e) { throw new Error(e instanceof ErrorPlan ? 'argumentos_no_validos' : 'plan_error'); } })();
+            const sinOperaciones = base.tipo === 'aclaracion' || base.tipo === 'fuera_de_alcance';
+            if (sinOperaciones) {
+                if (llamadas.length !== 1 || argumentos[0].parte_ids !== undefined && (!Array.isArray(argumentos[0].parte_ids) || argumentos[0].parte_ids.length)) throw new Error('carrier');
+                validarCorrespondenciaPlan(cobertura, []);
+                if ((base.tipo === 'aclaracion') !== cobertura.partes.some(p => p.disposicion === 'aclarar')) throw new Error('carrier');
+                // Los motivos libres no se conservan como evidencia de las subpartes.
+                return base.tipo === 'aclaracion' ? { tipo: 'aclaracion', aclaracion: { pregunta: '', motivo: '' }, cobertura } : { tipo: 'fuera_de_alcance', motivo: '', cobertura };
+            }
+            if (llamadas.some(l => l.nombre === HERRAMIENTA_FUERA || l.nombre === HERRAMIENTA_ACLARAR)) throw new Error('carrier_extra');
+            const operaciones = operacionesDelPlan(base).map((o, i) => ({ ...o, parte_ids: argumentos[i].parte_ids as string[] }));
+            validarCorrespondenciaPlan(cobertura, operaciones);
+            return { tipo: 'operaciones', operaciones, cobertura };
+        } catch (e) { throw new ErrorPlan(`cobertura_no_valida:${e instanceof Error ? e.message : 'desconocido'}`); }
+    }
     if (llamadas.length === 0)
         throw new ErrorPlan('el planificador no llamó ninguna herramienta');
     const parsear = (l: LlamadaHerramienta): Record<string, unknown> => {
@@ -301,8 +409,8 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
         if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
-    if ((nombres.has(HERRAMIENTA_ACLARAR) || nombres.has(HERRAMIENTA_FUERA)) && llamadas.length !== 1)
-        throw new ErrorPlan('aclaración o fuera de alcance exige una operación exclusiva');
+    if (nombres.has(HERRAMIENTA_ACLARAR) && llamadas.length !== 1)
+        throw new ErrorPlan('aclaración exige una operación exclusiva');
     if (nombres.has(HERRAMIENTA_ACLARAR)) {
         const a = parsear(llamadas.find((l) => l.nombre === HERRAMIENTA_ACLARAR)!);
         if (Object.keys(a).some(k => !['pregunta', 'motivo'].includes(k)))
@@ -311,14 +419,16 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
             throw new ErrorPlan('aclaración sin pregunta');
         return { tipo: 'aclaracion', aclaracion: { pregunta: a.pregunta.trim(), motivo: String(a.motivo ?? '') } };
     }
-    if (nombres.has(HERRAMIENTA_FUERA)) {
-        const a = parsear(llamadas.find((l) => l.nombre === HERRAMIENTA_FUERA)!);
-        if (Object.keys(a).some(k => k !== 'motivo'))
+    const fuera = llamadas.filter(l => l.nombre === HERRAMIENTA_FUERA);
+    if (fuera.length > 1) throw new ErrorPlan('fuera de alcance repetido');
+    if (fuera.length) {
+        const a = parsear(fuera[0]);
+        if (Object.keys(a).some(k => k !== 'motivo') || typeof a.motivo !== 'string')
             throw new ErrorPlan('argumento no registrado');
-        return { tipo: 'fuera_de_alcance', motivo: String(a.motivo ?? '') };
+        if (llamadas.length === 1) return { tipo: 'fuera_de_alcance', motivo: a.motivo };
     }
-    if (llamadas.length > MAX_CONSULTAS_POR_TURNO)
-        throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} consultas en un turno`);
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
-    return { tipo: 'consultas', consultas: llamadas.map((l) => validarConsulta(parsear(l))) };
+    const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
+    const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }

@@ -59,7 +59,9 @@ export function dependencies(db:PGlite,calls:LlamadaHerramienta[],over:Partial<D
   const {llm,solicitudes}=scripted(calls);const traza:Traza={consultas:[]};
   const events:Record<string,unknown>[]=[];
   const env:Record<string,string>={OPENROUTER_API_KEY:'offline-placeholder',SUPABASE_URL:'http://local',SUPABASE_ANON_KEY:'offline-placeholder'};
-  const deps:Dependencias={env:n=>env[n],crearClienteUsuario:jwt=>clienteRls(db,jwt,traza),crearLLM:()=>llm,ahora:()=>new Date('2026-11-05T04:30:00Z'),registrar:e=>events.push(e),...over};
+  // These historical scripted plans intentionally have no question-part manifest.
+  // New coverage acceptance fixtures must override this internal-only mode to obligatoria.
+  const deps:Dependencias={modoCobertura:'legado_sin_certificar',env:n=>env[n],crearClienteUsuario:jwt=>clienteRls(db,jwt,traza),crearLLM:()=>llm,ahora:()=>new Date('2026-11-05T04:30:00Z'),registrar:e=>events.push(e),...over};
   return {deps,solicitudes,traza,events};
 }
 export async function run(db:PGlite,args:Record<string,unknown>|Record<string,unknown>[],body:Record<string,unknown>={pregunta:'consulta'},over:Partial<Dependencias>={}) {

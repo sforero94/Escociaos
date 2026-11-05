@@ -69,6 +69,8 @@ function deps(over: Partial<Dependencias> & { traza?: Traza; llm?: ClienteLLM } 
     crearLLM: () => llm,
     ahora: () => new Date('2026-06-02T15:00:00Z'),
     registrar: (e) => eventos.push(e),
+    // Fixture histórico de transporte/RLS: no acredita extracción de subpartes.
+    modoCobertura: 'legado_sin_certificar',
     ...over,
   };
 }
@@ -90,6 +92,7 @@ describe('esco-consultas: acceso', () => {
     const cuerpo = await res.json();
     expect(cuerpo.origen).toBe('determinista');
     expect(cuerpo.hoy).toBe('2026-06-02');
+    expect(cuerpo.cobertura).toMatchObject({ estado: 'no_certificada', partes: [] });
 
     // Oráculo: la misma suma, calculada por Postgres como superusuario.
     const o = await db.query<{ j: string; n: number; sin_lote: number }>(

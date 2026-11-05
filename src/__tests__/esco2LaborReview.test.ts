@@ -19,6 +19,7 @@ const consulta: ConsultaLabores = {
 function turno(respuesta: string): ResultadoTurno {
   return {
     respuesta, origen: 'compositor', plan: null, errorPlan: null, ruta: null, ajustes: [],
+    cobertura: { version: 1, estado: 'no_certificada', exhaustividad: 'no_certificada', partes: [] },
     resultados: [], guarda: { primera: [], segunda: null }, llamadas: [], ms: 0,
   };
 }

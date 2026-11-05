@@ -23,6 +23,7 @@ import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } fr
 import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
+import { coberturaNoCertificada, validarCoberturaFinal, type ModoCobertura } from '../../../src/utils/esco2/cobertura.ts';
 export const NOMBRE_FUNCION = 'esco-consultas';
 /** D25: Luna sin razonamiento es la ruta habitual; Sol solo compone planes de varias partes. */
 export const CONFIG_M3: ConfigModelos = {
@@ -47,6 +48,8 @@ export interface ClienteUsuario extends ClienteDatos {
     };
 }
 export interface Dependencias {
+    /** Compatibilidad de pruebas de motores. El índice productivo no fija este campo. */
+    modoCobertura?: ModoCobertura;
     env(nombre: string): string | undefined;
     /** Cliente de Supabase que actúa como el usuario dueño del JWT. */
     crearClienteUsuario(jwt: string): ClienteUsuario;
@@ -150,6 +153,7 @@ export async function autorizarGerencia(cliente: ClienteUsuario, jwt: string): P
 export function cuerpoRespuesta(t: ResultadoTurno, hoy: string) {
     return {
         respuesta: t.respuesta,
+        cobertura: t.cobertura,
         origen: t.origen,
         hoy,
         ruta: t.ruta,
@@ -197,7 +201,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         const respuestaReset = renderMensaje([], avisoEstado);
         if (!validarMensajeFinal(respuestaReset, [], avisoEstado))
             return json(500, { error: mensajeDisposicion('error_datos') });
-        return json(200, { respuesta: respuestaReset, origen: 'aclaracion', hoy, opcionesAclaracion: [], avisoEstado, resultados: [], llamadas: [], ruta: null, ajustes: [], ms: 0, plan: null });
+        return json(200, { respuesta: respuestaReset, cobertura: coberturaNoCertificada(), origen: 'aclaracion', hoy, opcionesAclaracion: [], avisoEstado, resultados: [], llamadas: [], ruta: null, ajustes: [], ms: 0, plan: null });
     }
     const llm = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco 2.0 esco-consultas')))(apiKey);
     const turno = await responderTurnoDesdeFuente({
@@ -210,6 +214,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         fuenteAplicaciones: fuenteAplicacionesSupabase(cliente),
         llm,
         config: CONFIG_M3,
+        modoCobertura: deps.modoCobertura,
     });
     // Traza mínima: sin la pregunta ni la respuesta (datos de la finca), sin ids de filas.
     deps.registrar?.({
@@ -220,6 +225,9 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         partes: turno.plan?.tipo === 'consultas' ? turno.plan.consultas.length : turno.plan?.tipo === 'operaciones' ? turno.plan.operaciones.length : 0,
         ajustes: turno.ajustes.length,
         error: turno.errorPlan ? 'turno_no_completo' : null,
+        // Closed reason codes only (no user text): makes a rejected plan diagnosable in logs.
+        errorPlan: turno.errorPlan,
+        motivoPlan: turno.motivoPlan ?? null,
         ms: turno.ms,
         costoUsd: turno.llamadas.some(l => l.costoUsd === null) ? null : turno.llamadas.reduce((s, l) => s + (l.costoUsd ?? 0), 0),
     });
@@ -228,11 +236,15 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     const avisoFinal = avisoTamano ?? avisoEstado;
     const disposicionesCerradas = ['fuera_de_alcance', 'aclaracion', 'error_plan', 'error_llm', 'error_datos'] as const;
     const disposicion = disposicionesCerradas.find(d => d === turno.origen);
+    const parcial = turno.plan?.tipo === 'consultas' || turno.plan?.tipo === 'operaciones' ? turno.plan.parcialFueraDeAlcance : undefined;
+    if (!validarCoberturaFinal(turno.cobertura, turno.plan, turno.resultados, hoy))
+        return json(500, { error: mensajeDisposicion('error_datos') });
+    const declarada = turno.cobertura.estado === 'declarada_validada';
     // Factual blocks are canonical for the results. Operational notices and
     // no-result dispositions are composed only from the two closed registries.
     const operativa = !turno.resultados.length && avisoFinal && disposicion ? `${mensajeDisposicion(disposicion)}\n\n${renderMensaje([], avisoFinal)}` : undefined;
-    const respuestaFinal = turno.resultados.length ? renderMensaje(turno.resultados, avisoFinal) : operativa ?? turno.respuesta;
-    const valida = turno.resultados.length ? validarMensajeFinal(respuestaFinal, turno.resultados, avisoFinal) : operativa !== undefined ? respuestaFinal === `${mensajeDisposicion(disposicion!)}\n\n${renderMensaje([], avisoFinal)}` : true;
+    const respuestaFinal = turno.resultados.length || declarada ? renderMensaje(turno.resultados, avisoFinal, parcial, turno.cobertura) : operativa ?? turno.respuesta;
+    const valida = turno.resultados.length || declarada ? validarMensajeFinal(respuestaFinal, turno.resultados, avisoFinal, parcial, turno.cobertura) : operativa !== undefined ? respuestaFinal === `${mensajeDisposicion(disposicion!)}\n\n${renderMensaje([], avisoFinal)}` : true;
     if (!valida)
         return json(500, { error: mensajeDisposicion('error_datos') });
     return json(200, { ...cuerpoRespuesta(turno, hoy), respuesta: respuestaFinal, estadoToken, opcionesAclaracion: estadoToken ? turno.opcionesAclaracion : undefined, avisoEstado: avisoTamano ?? avisoEstado });
