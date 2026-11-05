@@ -68,20 +68,26 @@ export const TAMANO_PAGINA = 1000;
 export const MAX_PAGINAS = 50;
 type Tabla = keyof typeof COLUMNAS;
 async function leerTodo(cliente: ClienteDatos, tabla: Tabla, filtrar: (q: FiltroPostgrest) => FiltroPostgrest = (q) => q, tamanoPagina = TAMANO_PAGINA): Promise<Record<string, unknown>[]> {
+    return leerFilasFijas(cliente, tabla, COLUMNAS[tabla], filtrar, tamanoPagina);
+}
+/** Shared exact-count pagination. Callers supply a closed, literal projection. */
+export async function leerFilasFijas(cliente: ClienteDatos, tabla: string, columnas: string, filtrar: (q: FiltroPostgrest) => FiltroPostgrest = (q) => q, tamanoPagina = TAMANO_PAGINA): Promise<Record<string, unknown>[]> {
+    if (!Number.isInteger(tamanoPagina) || tamanoPagina < 1 || tamanoPagina > TAMANO_PAGINA)
+        throw new ErrorDatos('tamano_pagina_no_valido');
     const filas: Record<string, unknown>[] = [];
     let esperado: number | null = null;
     for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
         // El desplazamiento avanza por lo recibido, no por el tamaño pedido: si el servidor
         // corta por debajo de la página (`max-rows`), la siguiente página sigue donde quedó.
         const inicio = filas.length;
-        const base = cliente.from(tabla).select(COLUMNAS[tabla], pagina === 0 ? { count: 'exact' } : undefined);
+        const base = cliente.from(tabla).select(columnas, pagina === 0 ? { count: 'exact' } : undefined);
         const { data, error, count } = await filtrar(base).order('id', { ascending: true }).range(inicio, inicio + tamanoPagina - 1);
         if (error)
             throw new ErrorDatos(`${tabla}: ${error.message}`);
         if (!Array.isArray(data))
             throw new ErrorDatos(`${tabla}: respuesta sin filas`);
         if (pagina === 0) {
-            if (typeof count !== 'number')
+            if (typeof count !== 'number' || !Number.isInteger(count) || count < 0)
                 throw new ErrorDatos(`${tabla}: sin conteo exacto, no se puede comprobar la lectura completa`);
             esperado = count;
         }

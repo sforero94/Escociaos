@@ -1,6 +1,7 @@
 // Esco 2.0 — tipos del núcleo de consultas (M2.5: familia de labores).
 // Sin dependencias de Deno ni del navegador: el mismo código corre en Vitest,
 // en Node (runner de evaluación) y, más adelante, en la edge function.
+import type { ConsultaAplicaciones, ResultadoAplicaciones } from './aplicacionesTipos.ts';
 
 /** Fila mínima de `registros_trabajo` que el núcleo necesita. */
 export interface RegistroTrabajo {
@@ -102,8 +103,19 @@ export interface Aclaracion {
 /** Plan validado de un turno: o consultas, o una aclaración. Nunca las dos cosas. */
 export type Plan =
   | { tipo: 'consultas'; consultas: ConsultaLabores[] }
+  | { tipo: 'operaciones'; operaciones: OperacionConsulta[] }
   | { tipo: 'aclaracion'; aclaracion: Aclaracion }
   | { tipo: 'fuera_de_alcance'; motivo: string };
+export type OperacionConsulta = { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones };
+export type PlanConsultas = Extract<Plan, { tipo: 'consultas' | 'operaciones' }>;
+export function operacionesDelPlan(plan: PlanConsultas): OperacionConsulta[] {
+  return plan.tipo === 'consultas' ? plan.consultas.map(consulta => ({ tipo: 'labores', consulta })) : plan.operaciones;
+}
+export function planDeOperaciones(operaciones: OperacionConsulta[]): PlanConsultas {
+  return operaciones.every(o => o.tipo === 'labores') ? { tipo: 'consultas', consultas: operaciones.map(o => o.consulta) } : { tipo: 'operaciones', operaciones };
+}
+export type ResultadoConsulta = ResultadoParte | ResultadoAplicaciones;
+export const esResultadoAplicaciones = (r: ResultadoConsulta): r is ResultadoAplicaciones => 'tipo' in r && r.tipo === 'aplicaciones';
 
 export interface NoResuelto {
   tipo: 'lote' | 'tarea' | 'categoria';

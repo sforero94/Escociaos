@@ -1,3 +1,4 @@
+import { resultadosLabores } from './esco2ResultadosLabores';
 import { describe, expect, it, vi } from 'vitest';
 import { responderTurno, type ConfigModelos } from '@/utils/esco2/nucleo';
 import type { ClienteLLM, RespuestaLLM } from '@/utils/esco2/llm';
@@ -41,7 +42,7 @@ describe('Task 0 planner retry units', () => {
     const llm = cliente(respuesta({ ...consulta, metricas: ['inventada'] }), respuesta());
     const r = await responderTurno({ ...base, llm });
     expect(r.origen).toBe('determinista');
-    expect(r.resultados[0].total).toMatchObject({ jornales: 0.75, costo: 150 });
+    expect(resultadosLabores(r)[0].total).toMatchObject({ jornales: 0.75, costo: 150 });
     expect(llm.completar).toHaveBeenCalledTimes(2);
     expect(r.llamadas).toHaveLength(2);
     expect(r.llamadas.reduce((s, l) => s + l.costoUsd!, 0)).toBe(0.002);
@@ -56,7 +57,7 @@ describe('Task 0 planner retry units', () => {
     const r = await responderTurno({ ...base, llm });
     expect(r.origen).toBe('error_plan');
     expect(r.errorPlan).toBe('plan_no_valido');
-    expect(r.resultados).toEqual([]);
+    expect(resultadosLabores(r)).toEqual([]);
     expect(llm.completar).toHaveBeenCalledTimes(2);
   });
 
@@ -84,8 +85,8 @@ describe('Task 0 pending clarification units', () => {
     expect(segundo.opcionesAclaracion).toEqual(primero.opcionesAclaracion);
     expect(segundo.estado).toEqual(primero.estado);
     expect(segundo.respuesta).toContain('Elige una de las dos opciones');
-    expect(segundo.respuesta).toBe(renderMensaje(segundo.resultados));
-    expect(segundo.resultados.every(r => Object.keys(r.total).length === 0)).toBe(true);
+    expect(segundo.respuesta).toBe(renderMensaje(resultadosLabores(segundo)));
+    expect(resultadosLabores(segundo).every(r => Object.keys(r.total).length === 0)).toBe(true);
     expect(segundo.llamadas).toEqual([]);
     expect(llm.completar).toHaveBeenCalledTimes(1);
   });
@@ -95,7 +96,7 @@ describe('Task 0 pending clarification units', () => {
     const primero = await responderTurno({ ...base, llm });
     const segundo = await responderTurno({ ...base, pregunta: 'Categoría completa', estado: primero.estado, respuestaAclaracion: 'categoria', llm });
     expect(segundo.origen).toBe('determinista');
-    expect(segundo.resultados[0].total.jornales).toBe(0.75);
+    expect(resultadosLabores(segundo)[0].total.jornales).toBe(0.75);
     expect(segundo.estado?.pendiente).toBeUndefined();
     expect(segundo.llamadas).toEqual([]);
     expect(llm.completar).toHaveBeenCalledTimes(1);

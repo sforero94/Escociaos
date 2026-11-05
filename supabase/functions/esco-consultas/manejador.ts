@@ -18,6 +18,7 @@
 // exige reiniciar el contexto. El historial del cliente no autoriza alcance ni elecciones.
 import { crearClienteOpenRouter, type ClienteLLM } from '../../../src/utils/esco2/llm.ts';
 import { fuenteSupabase, type ClienteDatos, type RespuestaPostgrest } from '../../../src/utils/esco2/fuente.ts';
+import { fuenteAplicacionesSupabase } from '../../../src/utils/esco2/aplicacionesFuente.ts';
 import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } from '../../../src/utils/esco2/nucleo.ts';
 import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
@@ -206,6 +207,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         historial: solicitud.historial,
         hoy,
         fuente: fuenteSupabase(cliente),
+        fuenteAplicaciones: fuenteAplicacionesSupabase(cliente),
         llm,
         config: CONFIG_M3,
     });
@@ -215,7 +217,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         evento: 'turno',
         origen: turno.origen,
         ruta: turno.ruta,
-        partes: turno.plan?.tipo === 'consultas' ? turno.plan.consultas.length : 0,
+        partes: turno.plan?.tipo === 'consultas' ? turno.plan.consultas.length : turno.plan?.tipo === 'operaciones' ? turno.plan.operaciones.length : 0,
         ajustes: turno.ajustes.length,
         error: turno.errorPlan ? 'turno_no_completo' : null,
         ms: turno.ms,

@@ -1,6 +1,7 @@
 // Registro único de operaciones. De aquí salen el esquema que ve el modelo y el
 // validador que corre antes de ejecutar: no hay una lista paralela que se desincronice.
 import { esFechaCalendario } from './fechaCalendario.ts';
+import { BASES_FECHA_APLICACIONES, ESTADOS_APLICACION, esUuid, type ConsultaAplicaciones } from './aplicacionesTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
 export const METRICAS: readonly Metrica[] = [
@@ -17,6 +18,7 @@ export const SIN_LOTE: readonly SinLote[] = ['incluir', 'excluir', 'solo'];
 export const MAX_CONSULTAS_POR_TURNO = 4;
 export const MAX_AGRUPACIONES = 2;
 export const HERRAMIENTA_CONSULTAR = 'consultar_labores';
+export const HERRAMIENTA_APLICACIONES = 'consultar_aplicaciones';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
@@ -72,6 +74,17 @@ export function herramientasPlanificador(): unknown[] {
                 },
             },
         },
+        { type: 'function', function: {
+            name: HERRAMIENTA_APLICACIONES,
+            description: 'Lista aplicaciones visibles en un período por inicio planeado, fecha de movimientos o cierre operativo registrado. Muestra su estado actual. Sin cantidades, costos, jornales ni faltantes de insumos. La fecha de cierre operativo no prueba cuándo se hizo el trámite administrativo. Si no está claro qué fecha pide el usuario, usa sin_precisar; si pide el trámite administrativo, cierre_administrativo. Máximo cuatro operaciones sumando aplicaciones y labores.',
+            parameters: { type: 'object', additionalProperties: false, required: ['desde', 'hasta', 'base_fecha'], properties: {
+                desde: { type: 'string', description: 'Fecha calendario inicial inclusiva AAAA-MM-DD.' }, hasta: { type: 'string', description: 'Fecha calendario final inclusiva AAAA-MM-DD.' },
+                base_fecha: { type: 'string', enum: [...BASES_FECHA_APLICACIONES] },
+                aplicacion_ids: { type: 'array', items: { type: 'string', format: 'uuid' } },
+                aplicaciones: { type: 'array', items: { type: 'string' }, description: 'Nombres o códigos dichos por el usuario; el sistema resuelve contra aplicaciones visibles.' },
+                estados: { type: 'array', items: { type: 'string', enum: [...ESTADOS_APLICACION] }, description: 'Estado actual: Calculada se muestra Planificada. Nunca estado histórico.' },
+            } },
+        } },
         {
             type: 'function',
             function: {
@@ -89,7 +102,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta no es sobre labores (jornales o costo de mano de obra registrados).',
+                description: 'La pregunta no corresponde a labores ni a listar aplicaciones por fecha/estado actual. Cantidades, costos de aplicaciones, cruces y faltantes aún no están disponibles.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -185,6 +198,15 @@ function validarConsulta(a: Record<string, unknown>): ConsultaLabores {
         limite,
     };
 }
+function validarConsultaAplicaciones(a: Record<string, unknown>): ConsultaAplicaciones {
+    if (Object.keys(a).some(k => !['desde', 'hasta', 'base_fecha', 'aplicacion_ids', 'aplicaciones', 'estados'].includes(k))) throw new ErrorPlan('argumento no registrado');
+    if (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta) throw new ErrorPlan('período de aplicaciones inválido');
+    if (!BASES_FECHA_APLICACIONES.includes(a.base_fecha as ConsultaAplicaciones['base_fecha'])) throw new ErrorPlan('base de aplicaciones no registrada');
+    const ids = listaTextos(a.aplicacion_ids, 'aplicacion_ids');
+    const estados = listaTextos(a.estados, 'estados');
+    if (ids.some(id => !esUuid(id)) || estados.some(e => !ESTADOS_APLICACION.includes(e as typeof ESTADOS_APLICACION[number]))) throw new ErrorPlan('filtro de aplicaciones inválido');
+    return { desde: a.desde, hasta: a.hasta, base_fecha: a.base_fecha as ConsultaAplicaciones['base_fecha'], aplicacion_ids: [...new Set(ids)], aplicaciones: listaTextos(a.aplicaciones, 'aplicaciones'), estados: [...new Set(estados)] as ConsultaAplicaciones['estados'] };
+}
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
 export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     if (llamadas.length === 0)
@@ -204,7 +226,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if ((nombres.has(HERRAMIENTA_ACLARAR) || nombres.has(HERRAMIENTA_FUERA)) && llamadas.length !== 1)
@@ -225,5 +247,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     }
     if (llamadas.length > MAX_CONSULTAS_POR_TURNO)
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} consultas en un turno`);
+    if (nombres.has(HERRAMIENTA_APLICACIONES)) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', consultas: llamadas.map((l) => validarConsulta(parsear(l))) };
 }

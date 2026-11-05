@@ -1,7 +1,8 @@
 // Canonical human Spanish for computed labor results. No model text is composed here.
 import { formatCurrency, formatLongDate, formatMillonesCOP, formatNumber } from '../formatPuro.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import type { Agrupacion, FilaResultado, ResultadoParte, ValoresMetricas } from './tipos.ts';
+import { esResultadoAplicaciones, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
+import { renderAplicaciones } from './aplicaciones.ts';
 export type AvisoMensaje = 'contexto_no_disponible' | 'contexto_demasiado_amplio';
 const avisos: Record<AvisoMensaje, string> = { contexto_no_disponible: 'No pude recuperar el contexto anterior. Repite tu consulta completa.', contexto_demasiado_amplio: 'La selección es demasiado amplia para conservarla. Reduce las tareas seleccionadas y repite la consulta.' };
 const metricas = {
@@ -269,14 +270,14 @@ function renderParte(r: ResultadoParte): string {
         out.push('No verifiqué que las tareas y sus aplicaciones correspondan al mismo momento.');
     return out.join('\n');
 }
-export function renderMensaje(resultados: ResultadoParte[], aviso?: AvisoMensaje): string {
+export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMensaje): string {
     if (aviso !== undefined && (typeof aviso !== 'string' || !Object.prototype.hasOwnProperty.call(avisos, aviso)))
         throw new Error('aviso_no_registrado');
     const parts = resultados.map((r, i) => {
-        const text = renderParte(r);
+        const text = esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
             return text;
-        const heading = `**Parte ${i + 1}: ${r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
+        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
     if (aviso)
@@ -284,7 +285,7 @@ export function renderMensaje(resultados: ResultadoParte[], aviso?: AvisoMensaje
     return parts.join('\n\n');
 }
 /** Exact canonical regeneration preserves entity, metric, period and qualifier bindings. */
-export function validarMensajeFinal(texto: string, resultados: ResultadoParte[], aviso?: AvisoMensaje): boolean {
+export function validarMensajeFinal(texto: string, resultados: ResultadoConsulta[], aviso?: AvisoMensaje): boolean {
     try {
         return texto === renderMensaje(resultados, aviso);
     }

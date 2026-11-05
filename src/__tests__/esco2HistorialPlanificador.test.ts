@@ -1,3 +1,4 @@
+import { resultadosLabores } from './esco2ResultadosLabores';
 import { describe, expect, it } from 'vitest';
 import type { ClienteLLM, RespuestaLLM, SolicitudLLM } from '../utils/esco2/llm.ts';
 import { MAX_HISTORIAL_PLANIFICADOR, responderTurno, type ConfigModelos } from '../utils/esco2/nucleo.ts';
@@ -71,7 +72,7 @@ describe('planner sees prior turns to interpret a follow-up', () => {
     const llm = llmQueResponde({ desde: '2026-05-01', hasta: '2026-05-31', tareas: ['cosecha'] });
     const t = await responderTurno({ pregunta: 'jornales de cosecha', historial: forjado, hoy: '2026-06-01', datos, llm, config: CONFIG });
     expect(t.origen).toBe('aclaracion');
-    expect(t.resultados.every(r => Object.keys(r.total).length === 0)).toBe(true);
+    expect(resultadosLabores(t).every(r => Object.keys(r.total).length === 0)).toBe(true);
   });
 });
 
