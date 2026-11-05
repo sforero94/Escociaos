@@ -3,6 +3,8 @@
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { BASES_FECHA_APLICACIONES, ESTADOS_APLICACION, esUuid, type ConsultaAplicaciones } from './aplicacionesTipos.ts';
 import type { ConsultaCostosAplicacion } from './costosTipos.ts';
+import type { ConsultaLaborAplicacion } from './laborAplicacionTipos.ts';
+import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
@@ -24,6 +26,7 @@ export const HERRAMIENTA_APLICACIONES = 'consultar_aplicaciones';
 export const HERRAMIENTA_LABOR_APLICACION = 'consultar_labor_aplicacion';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
 export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
+export const HERRAMIENTA_FALTANTES = 'consultar_faltantes_aplicacion';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
@@ -107,6 +110,23 @@ export function herramientasPlanificador(): unknown[] {
                 incluir_plan: { type: 'boolean', description: 'Solo si el usuario pide valorización del plan; se presenta aparte.' },
             } },
         } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_LABOR_APLICACION,
+            description: 'Jornales y costo laboral registrados de tareas vinculadas por ID a aplicaciones explícitas. Un selector aplicacion_ids o aplicaciones obligatorio. desde/hasta opcionales y juntos filtran fecha_trabajo; sin ellos usa vida completa. Sin tarea no significa cero; tareas compartidas se cuentan una vez y son costo común, nunca exclusivo ni costo congelado.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                aplicacion_ids: { type: 'array', minItems: 1, items: { type: 'string', format: 'uuid' } },
+                aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
+                desde: { type: 'string' }, hasta: { type: 'string' },
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_FALTANTES,
+            description: 'Faltantes vigentes de insumos para aplicaciones seleccionadas explícitamente. Un selector aplicacion_ids o aplicaciones obligatorio; nunca incluir cerradas implícitamente. Suma cantidades guardadas de todas las mezclas y resta inventario registrado hoy una vez por producto. No descuenta ejecución ni usa compras congeladas. No stock histórico ni reserva garantizada.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                aplicacion_ids: { type: 'array', minItems: 1, items: { type: 'string', format: 'uuid' } },
+                aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
+            } },
+        } },
         {
             type: 'function',
             function: {
@@ -124,7 +144,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta no corresponde a labores, inventario por fecha/estado, cantidades por producto/lote ni costo de aplicación. Cruces laborales y faltantes aún no están disponibles.',
+                description: 'La pregunta no corresponde a labores, inventario de aplicaciones por fecha/estado, cantidades por producto/lote, costo de una aplicación, labor vinculada a aplicaciones ni faltantes vigentes de insumos.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -243,6 +263,22 @@ function validarConsultaCostos(a: Record<string, unknown>): ConsultaCostosAplica
     const { incluir_plan, ...selector } = a;
     return { ...validarConsultaCantidades(selector), ...(incluir_plan !== undefined ? { incluir_plan: incluir_plan as boolean } : {}) };
 }
+function selectorAplicaciones(a: Record<string, unknown>, que: string): { aplicacion_ids: string[]; aplicaciones: string[] } {
+    const ids = listaTextos(a.aplicacion_ids, 'aplicacion_ids'), nombres = listaTextos(a.aplicaciones, 'aplicaciones');
+    if ((!ids.length && !nombres.length) || (ids.length && nombres.length) || ids.some(id => !esUuid(id)) || new Set(ids).size !== ids.length || new Set(nombres).size !== nombres.length) throw new ErrorPlan(`selector de aplicaciones inválido para ${que}`);
+    return { aplicacion_ids: ids.map(id => id.toLowerCase()), aplicaciones: nombres };
+}
+function validarConsultaLaborAplicacion(a: Record<string, unknown>): ConsultaLaborAplicacion {
+    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones', 'desde', 'hasta'].includes(k))) throw new ErrorPlan('argumento laboral de aplicación no registrado');
+    const selector = selectorAplicaciones(a, 'labor');
+    const periodo = a.desde !== undefined || a.hasta !== undefined;
+    if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período laboral de aplicación inválido');
+    return { ...selector, ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
+}
+function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): ConsultaFaltantesAplicacion {
+    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
+    return selectorAplicaciones(a, 'faltantes');
+}
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
 export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     if (llamadas.length === 0)
@@ -262,7 +298,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if ((nombres.has(HERRAMIENTA_ACLARAR) || nombres.has(HERRAMIENTA_FUERA)) && llamadas.length !== 1)
@@ -283,6 +319,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[]): Plan {
     }
     if (llamadas.length > MAX_CONSULTAS_POR_TURNO)
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} consultas en un turno`);
-    if (nombres.has(HERRAMIENTA_APLICACIONES) || nombres.has(HERRAMIENTA_CANTIDADES) || nombres.has(HERRAMIENTA_COSTOS)) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', operaciones: llamadas.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', consultas: llamadas.map((l) => validarConsulta(parsear(l))) };
 }

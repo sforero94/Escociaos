@@ -15,6 +15,7 @@ import { ejecutarInventarioAplicaciones } from './aplicaciones.ts';
 import { ejecutarLaborAplicacion } from './laborAplicacion.ts';
 import { ejecutarCantidadesAplicacion } from './cantidades.ts';
 import { ejecutarCostosAplicacion } from './costos.ts';
+import { ejecutarFaltantesAplicacion } from './faltantes.ts';
 import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';
 /** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
 export const MAX_HISTORIAL_PLANIFICADOR = 6;
@@ -284,6 +285,14 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             let fuenteCostos;
             try { fuenteCostos = await args.fuenteAplicaciones?.leerCostos?.(o.consulta); } catch { /* Unread costs remain local to this operation. */ }
             resultados.push(ejecutarCostosAplicacion(o.consulta, fuenteCostos ?? { seleccion: 'no_leido' }, id, hoy));
+        } else if (o.tipo === 'labor_aplicacion') {
+            let datosLabor;
+            try { datosLabor = await args.fuenteAplicaciones?.leerLaborAplicacion?.(o.consulta); } catch { /* Independent unavailable relation. */ }
+            resultados.push(ejecutarLaborAplicacion(o.consulta, datosLabor ?? { seleccion: 'no_leido' }, id, hoy));
+        } else if (o.tipo === 'faltantes_aplicacion') {
+            let datosFaltantes;
+            try { datosFaltantes = await args.fuenteAplicaciones?.leerFaltantes?.(o.consulta); } catch { /* Independent unavailable relation. */ }
+            resultados.push(ejecutarFaltantesAplicacion(o.consulta, datosFaltantes ?? { seleccion: 'no_leido' }, id, hoy));
         } else if (o.tipo === 'cantidades_aplicacion') {
             let fuenteCantidades;
             try { fuenteCantidades = await args.fuenteAplicaciones?.leerCantidades?.(o.consulta); } catch { /* Typed unread quantity result; independent parts survive. */ }
