@@ -955,6 +955,12 @@ acceptance remains open because exploratory findings require separate review. Se
   Santiago's approval in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `6af29942…`,
   anonymous `/health` 401. With the anon key the function boots (`/health` 200) and a valid
   question returns 401 «sesión inválida» without a model call.
+  Redeployed 2026-11-05 as **version 6** from clean `main` `a182ffc5` (PR #427: P3 Tasks 4–6 —
+  application costs D34, labor linked by `tarea_id` D36, current input shortages D37; the
+  bundle adds `src/utils/calculosNecesidadProductos.ts`, 37 files), with Santiago's approval in
+  chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `b9394b94…`, anonymous `/health` 401, anon
+  key `/health` 200, valid question 401 «sesión inválida». A real Gerencia session test is still
+  pending.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
