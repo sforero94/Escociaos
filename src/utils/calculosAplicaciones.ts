@@ -9,7 +9,7 @@ import type {
   ItemListaCompras,
   ListaCompras,
   ProductoCatalogo
-} from '../types/aplicaciones';
+} from '../types/aplicaciones.ts'; // explicit extension: esco-consultas bundles this file with Deno
 
 /**
  * ¿Esta aplicación se mide en canecas (mezcla líquida) o en bultos (sólido)?

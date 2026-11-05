@@ -12,7 +12,9 @@ export const COLUMNAS_CANTIDADES = {
   movimientos_diarios_productos: 'id,movimiento_diario_id,producto_id,producto_nombre,cantidad_utilizada,unidad',
   lotes: 'id,nombre',
 } as const;
-const CAMPOS_NUMERICOS = new Set(['numero_mezcla', 'total_arboles', 'numero_canecas', 'litros_mezcla', 'numero_bultos', 'kilos_totales', 'arboles_grandes', 'arboles_medianos', 'arboles_pequenos', 'arboles_clonales', 'calibracion_litros_arbol', 'tamano_caneca', 'cantidad_total_necesaria', 'dosis_por_caneca', 'dosis_grandes', 'dosis_medianos', 'dosis_pequenos', 'dosis_clonales', 'cantidad_utilizada']);
+/** Parent IDs per `in` read: 100 UUIDs keep the PostgREST URL near 4 KB. */
+const BLOQUE_IN = 100;
+const CAMPOS_NUMERICOS =new Set(['numero_mezcla', 'total_arboles', 'numero_canecas', 'litros_mezcla', 'numero_bultos', 'kilos_totales', 'arboles_grandes', 'arboles_medianos', 'arboles_pequenos', 'arboles_clonales', 'calibracion_litros_arbol', 'tamano_caneca', 'cantidad_total_necesaria', 'dosis_por_caneca', 'dosis_grandes', 'dosis_medianos', 'dosis_pequenos', 'dosis_clonales', 'cantidad_utilizada']);
 function normalizarFila(r: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(r).map(([k, v]) => {
     if (!CAMPOS_NUMERICOS.has(k) || v === null) return [k, v];
@@ -34,6 +36,19 @@ export function crearLectorCantidades(cliente: ClienteDatos, leerPadres: () => P
       if (rows.some(r => !r || !esUuid(r.id) || r[campo] !== padre) || new Set(rows.map(r => r.id)).size !== rows.length) throw new Error('fuente_cantidad_no_valida');
       return rows.map(normalizarFila);
     }
+    /** Children of several code-resolved parents, one `in` read per block instead of one read per parent. */
+    async function leerHijos(tabla: keyof typeof COLUMNAS_CANTIDADES, campo: string, padres: string[]) {
+      const ids = [...new Set(padres)];
+      const filas: Record<string, unknown>[] = [];
+      for (let i = 0; i < ids.length; i += BLOQUE_IN) {
+        const bloque = ids.slice(i, i + BLOQUE_IN), permitidos = new Set(bloque);
+        const rows = await leerFilasFijas(cliente, tabla, COLUMNAS_CANTIDADES[tabla], q => q.in(campo, bloque), tamanoPagina);
+        if (rows.some(r => !r || !esUuid(r.id) || !permitidos.has(r[campo] as string))) throw new Error('fuente_cantidad_no_valida');
+        filas.push(...rows);
+      }
+      if (new Set(filas.map(r => r.id)).size !== filas.length) throw new Error('fuente_cantidad_no_valida');
+      return filas.map(normalizarFila);
+    }
     const appId = d.aplicacion.id;
     const seguro = async (f: () => Promise<Record<string, unknown>[]>) => { try { return await f(); } catch { return undefined; } };
     const [mezclas, calculos, bases, movimientos] = await Promise.all([
@@ -45,10 +60,15 @@ export function crearLectorCantidades(cliente: ClienteDatos, leerPadres: () => P
     d.calculos = calculos as DatosCantidadesAplicacion['calculos'];
     d.bases_lotes = bases as DatosCantidadesAplicacion['bases_lotes'];
     d.movimientos = movimientos as DatosCantidadesAplicacion['movimientos'];
-    if (mezclas) d.productos_plan = await seguro(async () => (await Promise.all(mezclas.map(m => leer('aplicaciones_productos', 'mezcla_id', m.id as string)))).flat()) as DatosCantidadesAplicacion['productos_plan'];
-    if (movimientos) d.productos_ejecutados = await seguro(async () => (await Promise.all(movimientos.map(m => leer('movimientos_diarios_productos', 'movimiento_diario_id', m.id as string)))).flat()) as DatosCantidadesAplicacion['productos_ejecutados'];
-    const loteIds = [...new Set([...(calculos ?? []).map(c => c.lote_id), ...(movimientos ?? []).map(m => m.lote_id)].filter(esUuid))];
-    d.lotes = await seguro(async () => (await Promise.all(loteIds.map(l => leer('lotes', 'id', l)))).flat()) as DatosCantidadesAplicacion['lotes'];
+    const loteIds = [...(calculos ?? []).map(c => c.lote_id), ...(movimientos ?? []).map(m => m.lote_id)].filter(esUuid);
+    const [productosPlan, productosEjecutados, lotes] = await Promise.all([
+      mezclas ? seguro(() => leerHijos('aplicaciones_productos', 'mezcla_id', mezclas.map(m => m.id as string))) : undefined,
+      movimientos ? seguro(() => leerHijos('movimientos_diarios_productos', 'movimiento_diario_id', movimientos.map(m => m.id as string))) : undefined,
+      seguro(() => leerHijos('lotes', 'id', loteIds)),
+    ]);
+    if (mezclas) d.productos_plan = productosPlan as DatosCantidadesAplicacion['productos_plan'];
+    if (movimientos) d.productos_ejecutados = productosEjecutados as DatosCantidadesAplicacion['productos_ejecutados'];
+    d.lotes = lotes as DatosCantidadesAplicacion['lotes'];
     return d;
   };
 }

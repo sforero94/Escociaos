@@ -42,7 +42,8 @@ export interface DatosCantidadesAplicacion {
   lotes?: { id: string; nombre?: string | null }[];
 }
 export type UnidadCantidad = 'kg' | 'L' | 'unidades';
-export type EstadoCantidad = 'conocido' | 'sin_dato' | 'no_leido' | 'incompatible';
+/** `no_concilia`: the per-lot calculation exists but its sum does not match the saved total, so it is never published as exact. */
+export type EstadoCantidad = 'conocido' | 'sin_dato' | 'no_leido' | 'incompatible' | 'no_concilia';
 export interface CantidadPorLote {
   lote_id: string | null;
   producto_id: string;
@@ -57,14 +58,17 @@ export interface CantidadPorLote {
 export interface TotalProductoGuardado {
   mezcla_id: string; producto_id: string; unidad: UnidadCantidad | null; cantidad: number | null;
   estado: EstadoCantidad; motivos: string[];
+  producto_nombre?: string | null; mezcla_nombre?: string | null;
 }
 export interface ConciliacionMezcla {
   mezcla_id: string; producto_id: string; unidad: UnidadCantidad | null;
   guardado: number | null; reconstruido: number | null;
   estado: 'coincide' | 'discrepancia' | 'no_verificable';
+  producto_nombre?: string | null; mezcla_nombre?: string | null;
 }
 export interface RecipienteGuardado {
   lote_id: string | null;
+  lote_nombre?: string | null;
   unidad: 'canecas' | 'bultos' | null;
   cantidad: number | null;
   estado: EstadoCantidad;
@@ -77,7 +81,8 @@ export interface ResultadoCantidadesAplicacion {
   estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto';
   consulta: ConsultaCantidadesAplicacion;
   aplicacion?: AplicacionInventario;
-  plan: { estado: 'conocido' | 'parcial' | 'no_leido' | 'sin_filas'; filas: CantidadPorLote[]; totales_guardados: TotalProductoGuardado[]; conciliacion: ConciliacionMezcla[]; recipientes: RecipienteGuardado[]; motivos: string[] };
+  /** `avisos` are disclosed method notes that do not block a quantity (e.g. `equivalencia_cc_g:<producto_id>`). */
+  plan: { estado: 'conocido' | 'parcial' | 'no_leido' | 'sin_filas'; filas: CantidadPorLote[]; totales_guardados: TotalProductoGuardado[]; conciliacion: ConciliacionMezcla[]; recipientes: RecipienteGuardado[]; motivos: string[]; avisos: string[] };
   ejecucion: { estado: 'conocido' | 'parcial' | 'no_leido' | 'sin_movimientos' | 'sin_productos'; filas: CantidadPorLote[]; recipientes: RecipienteGuardado[]; motivos: string[] };
   fuente: 'lecturas_independientes';
 }

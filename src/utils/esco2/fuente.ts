@@ -44,6 +44,7 @@ export interface FiltroPostgrest extends PromiseLike<RespuestaPostgrest> {
     eq(columna: string, valor: string): FiltroPostgrest;
     gte(columna: string, valor: string): FiltroPostgrest;
     lte(columna: string, valor: string): FiltroPostgrest;
+    in(columna: string, valores: string[]): FiltroPostgrest;
     order(columna: string, opciones?: {
         ascending?: boolean;
     }): FiltroPostgrest;

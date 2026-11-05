@@ -106,6 +106,11 @@ totales guardados de mezcla, sin inventar presencia de cada producto en ese lote
 - **Fumigación/Drench:** total guardado de árboles × calibración guardada / capacidad guardada,
   luego dosis guardada por caneca / 1.000. Unidad de dosis `cc` debe producir L y `gramos` kg,
   compatible con `producto_unidad`. Reutilizar el motor sin partir de canecas ya redondeadas.
+  **Revisión 2026-11-05 (decisión de Santiago):** una dosis `cc` sobre un producto en kg, o
+  `g`/`gramos` sobre uno en L, se calcula como la calculadora (1 cc = 1 g) y la respuesta lo
+  declara con el nombre del producto (`plan.avisos`). En datos vivos, 14 de 15 de esos
+  productos cuadran así con su total guardado. `Unidades` u otra unidad de dosis sigue
+  incompatible.
 - **Fertilización:** cada clase guardada de árboles × su dosis guardada / 1.000, por producto.
   `unidad_dosis` NULL es normal en esta rama; kg o L provienen de `producto_unidad` (dosis
   originales en gramos o cc respectivamente). `Unidades` no autoriza aplicar esa conversión.
@@ -143,6 +148,15 @@ operandos y suma finitos). Ese margen solo cubre residuos de aritmética binaria
 `0.1 + 0.2` frente a `0.3`; no usar un umbral fijo como `1e-8` o `0.01` que ocultaría
 una discrepancia registrada fina. Las cantidades guardadas permanecen sin redondeo añadido;
 el formato visual no decide si las fuentes coinciden.
+
+**Revisión 2026-11-05 — reemplaza el párrafo anterior en dos puntos.** (1) El margen es un paso
+de redondeo de la calculadora, `0,01`, más el residuo flotante: el propio total guardado sale de
+`Math.ceil(suma * 100) / 100`, y una suma binaria como 12,340000000000002 se guarda como 12,35.
+En datos vivos, 10 de las 18 discrepancias eran exactamente ese paso. (2) Si una mezcla/producto
+no cuadra, sus filas por lote **no se publican como plan exacto** (estado `no_concilia`): se
+muestran el total guardado y el cálculo por lote, sin ajustar la diferencia. Caso que lo obliga:
+una fertilización guardó la dosis en kg por árbol, el motor divide por 1.000 y cada lote salía
+como plan exacto 1.000 veces menor.
 
 Ejecución suma cada ID de hijo una sola vez por su producto/lote/unidad y período. No se une
 con mezclas para agregar ni con el plan para sumar. Productos ejecutados sin plan y lotes con

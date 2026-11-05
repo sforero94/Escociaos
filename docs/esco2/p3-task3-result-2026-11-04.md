@@ -84,3 +84,25 @@ Protected chat, Telegram and legacy server files and the unrelated local handoff
 No essential semantic question remains open for this slice. Santiago or Claude Code must
 review Tasks 2 and 3 before merge. After a later merge, backend deployment drift is expected
 until a separately authorized redeploy; this session does not deploy.
+
+## Review fixes (Claude Code, 2026-11-05)
+
+Review of PR #422 against the 24 live applications (read-only, local simulation, aggregates only)
+found one blocking defect and a readability problem. Fixed in the same PR:
+
+| Finding | Fix |
+|---|---|
+| A fertilization stored doses in kg per tree. The engine divides by 1,000, and each lot was published as an exact plan about 1,000 times smaller than the saved total. | A mix/product whose per-lot sum does not match its saved total is withheld per lot (`no_concilia`). The saved total and the per-lot sum are both shown; the difference is never adjusted. |
+| 10 of 18 discrepancies were exactly one 0.01 step: the saved total is itself `ceil`'d. | Tolerance is one calculator rounding step (0.01) plus binary residue. |
+| 15 products had a crossed dose unit (cc on kg, g on L) and were marked incompatible. | Owner decision: compute as the calculator does (1 cc = 1 g) and name the products in a note. 14 of 15 now match their saved totals. |
+| Answers up to 204 lines, products, mixes and lots shown by UUID. | Names first; an ID only when two names collide or a name is missing. One line per lot, with containers in parentheses; execution containers summed per lot. Only real discrepancies are listed. |
+| Float noise in sums and in some saved sources (`463,99999999999994`). | Display at 12 significant digits. Values and comparisons are unchanged. |
+| One read per mix, movement and lot. | One `in` read per block of 100 parent IDs. |
+| `calculosAplicaciones.ts` was not watched by the drift detector. | Added with `src/types/aplicaciones.ts`; the type import now has an explicit `.ts` extension for the Deno bundle. |
+
+Simulation after the fix (24 applications, plan and execution): 0 UUIDs in any answer; lines
+median 24, max 89 (the 62-product application); characters median about 1,900. Conciliation:
+156 match, 9 discrepancies (5 real base changes of about 2 %, 4 kg-per-tree fertilization
+records), 40 not verifiable for missing data. Full suite 7,640 / 7,640, `tsc` and lint clean.
+No paid model calls: the planner prompt, the tool registry and the core were not changed, and
+the development set is labor only.

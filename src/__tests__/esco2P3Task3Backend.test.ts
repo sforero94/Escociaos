@@ -53,18 +53,25 @@ describe('Task 3 exact saved-source quantity units', () => {
     expect(r.plan.filas.find(x => x.lote_id === L1)?.estado).toBe('sin_dato');
     expect(r.plan.filas.find(x => x.lote_id === L2)?.estado).toBe('no_leido');
     expect(r.ejecucion.estado).toBe('conocido');
-    expect(renderCantidadesAplicacion(r)).toContain('sin dato para el plan exacto de este producto/lote');
+    expect(renderCantidadesAplicacion(r)).toContain('sin plan exacto (sin dato registrado)');
   });
-  it('reports stored-vs-exact discrepancies without scaling the result', () => {
+  it('reports stored-vs-exact discrepancies and never publishes the non-conciliating per-lot rows as exact', () => {
     const d = datos(); d.productos_plan![0].cantidad_total_necesaria = 99;
     const r = ejecutarCantidadesAplicacion({ aplicacion_id: A }, d, 'p1');
     expect(r.plan.conciliacion.find(x => x.mezcla_id === M1 && x.producto_id === P)).toMatchObject({ guardado: 99, reconstruido: 10, estado: 'discrepancia' });
-    expect(r.plan.filas.find(x => x.lote_id === L1 && x.producto_id === P)?.cantidad).toBe(10);
+    expect(r.plan.filas.find(x => x.lote_id === L1 && x.producto_id === P)).toMatchObject({ cantidad: null, estado: 'no_concilia' });
+    const text = renderCantidadesAplicacion(r);
+    expect(text).toContain('total guardado 99 kg; el cálculo por lote da 10 kg');
+    const planPorLote = text.slice(text.indexOf('Plan por lote:'), text.indexOf('**Ejecución**'));
+    expect(planPorLote).toContain(`Igual [${P}] sin plan exacto (no cuadra con el total guardado)`);
+    expect(planPorLote).not.toContain(`Igual [${P}] 10 kg`);
   });
-  it('does not conceal a fine recorded discrepancy behind a business tolerance', () => {
-    const d = datos(); d.productos_plan![0].cantidad_total_necesaria = 10 + 1e-10;
-    const r = ejecutarCantidadesAplicacion({ aplicacion_id: A }, d, 'p1');
-    expect(r.plan.conciliacion.find(x => x.mezcla_id === M1 && x.producto_id === P)?.estado).toBe('discrepancia');
+  it('accepts one calculator rounding step (0.01) and nothing wider', () => {
+    for (const [guardado, estado] of [[10 + 1e-10, 'coincide'], [10.01, 'coincide'], [9.99, 'coincide'], [10.02, 'discrepancia'], [9.98, 'discrepancia']] as const) {
+      const d = datos(); d.productos_plan![0].cantidad_total_necesaria = guardado;
+      const r = ejecutarCantidadesAplicacion({ aplicacion_id: A }, d, 'p1');
+      expect(r.plan.conciliacion.find(x => x.mezcla_id === M1 && x.producto_id === P)?.estado, String(guardado)).toBe(estado);
+    }
   });
   it('allows only machine accumulation residue for a legitimate decimal sum', () => {
     const d = datos(); d.calculos![1].total_arboles = 200;

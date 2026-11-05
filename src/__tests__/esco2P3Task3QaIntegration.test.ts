@@ -19,7 +19,7 @@ type QaQuantity = { lote_id: string | null; producto_id: string; unidad: string 
 type QaRecipient = { lote_id: string | null; cantidad: number | null; estado: string };
 type QaStored = { mezcla_id: string; producto_id: string; unidad: string | null; cantidad: number | null; estado?: string };
 type QaReconciliation = { mezcla_id: string; producto_id: string; unidad: string | null; guardado: number | null; reconstruido: number | null; estado: string };
-type QaResult = { tipo: 'cantidades_aplicacion'; id: string; estado: string; plan: { estado: string; filas: QaQuantity[]; totales_guardados: QaStored[]; conciliacion: QaReconciliation[]; recipientes: QaRecipient[]; motivos: string[] }; ejecucion: { estado: string; filas: QaQuantity[]; recipientes: QaRecipient[]; motivos: string[] } };
+type QaResult = { tipo: 'cantidades_aplicacion'; id: string; estado: string; plan: { estado: string; filas: QaQuantity[]; totales_guardados: QaStored[]; conciliacion: QaReconciliation[]; recipientes: QaRecipient[]; motivos: string[]; avisos: string[] }; ejecucion: { estado: string; filas: QaQuantity[]; recipientes: QaRecipient[]; motivos: string[] } };
 const quantityCall = (overrides: Record<string, unknown> = {}) => ({ nombre: 'consultar_cantidades_aplicacion', argumentos: JSON.stringify({ aplicacion_id: T3.fertilizer, ...overrides }) });
 function quantity(body: { resultados: unknown[] }): QaResult {
   const r = body.resultados.find(r => r && typeof r === 'object' && 'tipo' in r && r.tipo === 'cantidades_aplicacion');
@@ -134,10 +134,16 @@ describe('Task 3 QA: literal quantities through real handler + fixed readers + s
     expect(lines.some((line: string) => line.includes(ID.l2) && line.includes(T3.productP) && /0\s*kg/.test(line))).toBe(true);
   });
 
-  it('does not hide an actual fine stored-vs-reconstructed discrepancy behind a business-size epsilon', async () => {
-    await db.query("update aplicaciones_productos set cantidad_total_necesaria='10.0000000001'::numeric where mezcla_id=$1 and producto_id=$2", [T3.mix1,T3.productP]);
+  it('flags a stored-vs-reconstructed difference wider than one calculator rounding step', async () => {
+    await db.query("update aplicaciones_productos set cantidad_total_necesaria='10.02'::numeric where mezcla_id=$1 and producto_id=$2", [T3.mix1,T3.productP]);
     const r = quantity((await execute()).body);
-    expect(r.plan.conciliacion.find(x => x.mezcla_id === T3.mix1 && x.producto_id === T3.productP)).toMatchObject({ guardado: 10.0000000001, reconstruido: 10, estado: 'discrepancia' });
+    expect(r.plan.conciliacion.find(x => x.mezcla_id === T3.mix1 && x.producto_id === T3.productP)).toMatchObject({ guardado: 10.02, reconstruido: 10, estado: 'discrepancia' });
+  });
+
+  it('accepts the saved total ceil artifact of one 0.01 step', async () => {
+    await db.query("update aplicaciones_productos set cantidad_total_necesaria='10.01'::numeric where mezcla_id=$1 and producto_id=$2", [T3.mix1,T3.productP]);
+    const r = quantity((await execute()).body);
+    expect(r.plan.conciliacion.find(x => x.mezcla_id === T3.mix1 && x.producto_id === T3.productP)).toMatchObject({ guardado: 10.01, reconstruido: 10, estado: 'coincide' });
   });
 
   it('accepts only floating-point residue when exact decimal source sum is 0.1 + 0.2 = 0.3', async () => {
@@ -179,11 +185,13 @@ describe('Task 3 QA: literal quantities through real handler + fixed readers + s
     expect(rows(r.ejecucion.filas)).toEqual(oracle(T3_ORACLE.executionFertilizer));
   });
 
-  it('reports stored/reconstructed mismatch without rescaling or deleting exact rows', async () => {
+  it('reports stored/reconstructed mismatch without rescaling, and withholds only that mix/product as exact', async () => {
     await db.query('update aplicaciones_productos set cantidad_total_necesaria=99 where mezcla_id=$1 and producto_id=$2', [T3.mix1, T3.productP]);
     const h = await execute();
     const r = quantity(h.body);
-    expect(rows(r.plan.filas)).toEqual(oracle(T3_ORACLE.planFertilizer));
+    // mix1 holds product P for l1 and l2; mix2 holds P for l3. Only the mix1 rows lose their exact value.
+    expect(rows(r.plan.filas)).toEqual(oracle(T3_ORACLE.planFertilizer.map(f => f.producto_id === T3.productP && f.lote_id !== ID.l3 ? { ...f, cantidad: null as unknown as number } : f)));
+    expect(r.plan.filas.filter(x => x.producto_id === T3.productP && x.lote_id !== ID.l3).every(x => x.estado === 'no_concilia')).toBe(true);
     expect(r.plan.conciliacion.find(x => x.mezcla_id === T3.mix1 && x.producto_id === T3.productP)).toMatchObject({ guardado: 99, reconstruido: 10, estado: 'discrepancia' });
     expect(h.body.respuesta).toMatch(/discrepan|no coincide|diferencia/i);
   });
@@ -268,12 +276,24 @@ describe('Task 3 QA: literal quantities through real handler + fixed readers + s
     expect(h.body.respuesta).toMatch(/\bL\b/);
   });
 
-  it.each([['Kilos', 'cc'], ['Litros', 'g'], ['Unidades', 'cc']])('refuses a liquid unit/dose incompatibility %s/%s without fake quantities', async (unit, doseUnit) => {
+  it.each([['Unidades', 'cc'], ['Litros', 'ml']])('refuses a liquid unit/dose incompatibility %s/%s without fake quantities', async (unit, doseUnit) => {
     await db.query('update aplicaciones_productos set producto_unidad=$1,unidad_dosis=$2 where mezcla_id=$3', [unit, doseUnit, T3.liquidMix]);
     const h = await execute([quantityCall({ aplicacion_id: T3.liquid })]);
     const r = quantity(h.body);
     expect(r.plan.filas).toHaveLength(1);
     expect(r.plan.filas.every(x => x.cantidad === null && x.estado === 'incompatible')).toBe(true);
+    expect(rows(r.ejecucion.filas)).toEqual(oracle(T3_ORACLE.executionLiquid));
+  });
+
+  // Owner decision 2026-11-05: compute as the calculator does (1 cc = 1 g) and disclose it.
+  it.each([['Kilos', 'cc', 'kg'], ['Litros', 'g', 'L']])('computes a crossed %s/%s dose as the calculator does and discloses the 1 cc = 1 g rule', async (unit, doseUnit, canonical) => {
+    await db.query('update aplicaciones_productos set producto_unidad=$1,unidad_dosis=$2 where mezcla_id=$3', [unit, doseUnit, T3.liquidMix]);
+    const h = await execute([quantityCall({ aplicacion_id: T3.liquid })]);
+    const r = quantity(h.body);
+    expect(r.plan.filas).toEqual([expect.objectContaining({ unidad: canonical, cantidad: 0.03, estado: 'conocido' })]);
+    expect(r.plan.avisos).toEqual([`equivalencia_cc_g:${T3.productR}`]);
+    expect(r.plan.conciliacion[0]).toMatchObject({ estado: 'coincide' });
+    expect(h.body.respuesta).toContain('1 cc = 1 g');
     expect(rows(r.ejecucion.filas)).toEqual(oracle(T3_ORACLE.executionLiquid));
   });
 
