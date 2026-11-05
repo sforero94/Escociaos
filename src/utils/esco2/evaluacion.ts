@@ -19,7 +19,7 @@ import { MARCA } from './ambiguedad.ts';
 import { extraerFechas } from './fechasTexto.ts';
 import { normalizar } from './catalogo.ts';
 import type { ResultadoTurno } from './nucleo.ts';
-import { esResultadoAplicaciones } from './tipos.ts';
+import { esResultadoAplicaciones, esResultadoCantidades } from './tipos.ts';
 
 export interface Ancla {
   claim: string;
@@ -72,9 +72,9 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
   const f = new Set<string>();
   if (hoy) f.add(hoy);
   for (const r of turno.resultados) {
-    const periodo = esResultadoAplicaciones(r) ? r.consulta : r.alcance;
-    f.add(periodo.desde);
-    f.add(periodo.hasta);
+    const periodo = esResultadoAplicaciones(r) || esResultadoCantidades(r) ? r.consulta : r.alcance;
+    if (periodo.desde) f.add(periodo.desde);
+    if (periodo.hasta) f.add(periodo.hasta);
   }
   return f;
 }
@@ -82,8 +82,8 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
 /** Yearless dates need the supplied calendar context, never the evaluator's clock. */
 function anioDeContexto(turno: ResultadoTurno, hoy: string | undefined): number {
   const first = turno.resultados[0];
-  const hasta = first ? esResultadoAplicaciones(first) ? first.consulta.hasta : first.alcance.hasta : '';
-  return Number.parseInt((hoy ?? hasta).slice(0, 4), 10);
+  const hasta = first ? esResultadoAplicaciones(first) || esResultadoCantidades(first) ? first.consulta.hasta : first.alcance.hasta : '';
+  return Number.parseInt((hoy ?? hasta ?? '').slice(0, 4), 10);
 }
 
 /** Fechas que la respuesta afirma y que ninguna ancla de fecha o conjunto cubre. */

@@ -46,6 +46,10 @@ export function clientePostgrestFalso(tablas: Record<string, Record<string, unkn
               filtros.push((f) => String(f[c]) <= v);
               return q;
             },
+            in(c, vs) {
+              filtros.push((f) => vs.includes(f[c] as string));
+              return q;
+            },
             order(c) {
               orden = c;
               return q;

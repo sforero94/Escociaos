@@ -10,7 +10,7 @@ function cliente(tablas: Record<string, Record<string, unknown>[]>, fallar?: str
     traza.push({ tabla, columnas });
     let desde = 0, hasta = 999;
     const query: FiltroPostgrest = {
-      eq: () => query, gte: () => query, lte: () => query, order: () => query,
+      eq: () => query, gte: () => query, lte: () => query, in: () => query, order: () => query,
       range(a: number, b: number) { desde = a; hasta = b; return query; },
       then(resolve, reject) {
         const rows = tablas[tabla] ?? [];

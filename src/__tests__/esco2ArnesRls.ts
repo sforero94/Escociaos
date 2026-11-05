@@ -198,6 +198,12 @@ export function clienteRls(db: PGlite, jwt: string, traza: Traza = { consultas: 
               filtro(c, '<=', v);
               return q;
             },
+            in(c, vs) {
+              if (!IDENT.test(c)) throw new Error(`columna inválida: ${c}`);
+              params.push(vs);
+              condiciones.push(`${c}::text = any($${params.length}::text[])`);
+              return q;
+            },
             order(c, o) {
               if (!IDENT.test(c)) throw new Error(`orden inválido: ${c}`);
               orden = ` order by ${c} ${o?.ascending === false ? 'desc' : 'asc'}`;

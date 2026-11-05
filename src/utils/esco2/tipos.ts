@@ -2,6 +2,7 @@
 // Sin dependencias de Deno ni del navegador: el mismo código corre en Vitest,
 // en Node (runner de evaluación) y, más adelante, en la edge function.
 import type { ConsultaAplicaciones, ResultadoAplicaciones } from './aplicacionesTipos.ts';
+import type { ConsultaCantidadesAplicacion, ResultadoCantidadesAplicacion } from './cantidadesTipos.ts';
 
 /** Fila mínima de `registros_trabajo` que el núcleo necesita. */
 export interface RegistroTrabajo {
@@ -106,7 +107,7 @@ export type Plan =
   | { tipo: 'operaciones'; operaciones: OperacionConsulta[] }
   | { tipo: 'aclaracion'; aclaracion: Aclaracion }
   | { tipo: 'fuera_de_alcance'; motivo: string };
-export type OperacionConsulta = { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones };
+export type OperacionConsulta = { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones } | { tipo: 'cantidades_aplicacion'; consulta: ConsultaCantidadesAplicacion };
 export type PlanConsultas = Extract<Plan, { tipo: 'consultas' | 'operaciones' }>;
 export function operacionesDelPlan(plan: PlanConsultas): OperacionConsulta[] {
   return plan.tipo === 'consultas' ? plan.consultas.map(consulta => ({ tipo: 'labores', consulta })) : plan.operaciones;
@@ -114,8 +115,9 @@ export function operacionesDelPlan(plan: PlanConsultas): OperacionConsulta[] {
 export function planDeOperaciones(operaciones: OperacionConsulta[]): PlanConsultas {
   return operaciones.every(o => o.tipo === 'labores') ? { tipo: 'consultas', consultas: operaciones.map(o => o.consulta) } : { tipo: 'operaciones', operaciones };
 }
-export type ResultadoConsulta = ResultadoParte | ResultadoAplicaciones;
+export type ResultadoConsulta = ResultadoParte | ResultadoAplicaciones | ResultadoCantidadesAplicacion;
 export const esResultadoAplicaciones = (r: ResultadoConsulta): r is ResultadoAplicaciones => 'tipo' in r && r.tipo === 'aplicaciones';
+export const esResultadoCantidades = (r: ResultadoConsulta): r is ResultadoCantidadesAplicacion => 'tipo' in r && r.tipo === 'cantidades_aplicacion';
 
 export interface NoResuelto {
   tipo: 'lote' | 'tarea' | 'categoria';

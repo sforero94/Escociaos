@@ -2,9 +2,8 @@
 import { formatLongDate, formatNumber } from '../formatPuro.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { normalizarAplicacionInventario } from './aplicacionesFuente.ts';
+import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 import { esUuid, ESTADOS_APLICACION, type AplicacionInventario, type ConsultaAplicaciones, type DatosInventarioAplicaciones, type ResultadoAplicaciones } from './aplicacionesTipos.ts';
-// Application codes are identifiers: unlike lot display labels, retain digits/punctuation.
-const normalizarIdentidad = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 function idsValidos(rows: { id: string }[]): boolean {
   return rows.every(r => r && esUuid(r.id)) && new Set(rows.map(r => r.id)).size === rows.length;
@@ -18,20 +17,9 @@ export function ejecutarInventarioAplicaciones(consulta: ConsultaAplicaciones, d
   if (!idsValidos(datos.aplicaciones)) return fallo('identidad_no_disponible');
   const apps = datos.aplicaciones.map(normalizarAplicacionInventario);
   const visibles = new Set(apps.map(a => a.id));
-  if (consulta.aplicacion_ids.some(a => !visibles.has(a))) return { ...base, estado: 'no_resuelto', motivo: 'seleccion_no_resuelta' };
-  const porTexto = new Set<string>();
-  const universoIdentidad = apps.filter(a => !consulta.aplicacion_ids.length || consulta.aplicacion_ids.includes(a.id));
-  for (const texto of consulta.aplicaciones) {
-    const exacta = (a: typeof apps[number]) => [a.nombre_aplicacion, a.codigo_aplicacion].some(v => typeof v === 'string' && normalizarIdentidad(v) === normalizarIdentidad(texto));
-    const coincide = universoIdentidad.some(exacta) ? exacta : (a: typeof apps[number]) => [a.nombre_aplicacion, a.codigo_aplicacion].some(v => typeof v === 'string' && normalizarIdentidad(v).includes(normalizarIdentidad(texto)));
-    if (universoIdentidad.some(a => !coincide(a) && (a.nombre_aplicacion === undefined || a.codigo_aplicacion === undefined))) return fallo('identidad_no_disponible');
-    const encontrados = universoIdentidad.filter(coincide);
-    // Labels resolve an identity; unlike labor fragments, they do not broaden scope.
-    if (encontrados.length !== 1) return { ...base, estado: 'no_resuelto', motivo: 'seleccion_no_resuelta' };
-    encontrados.forEach(a => porTexto.add(a.id));
-  }
-  const candidatas = apps.filter(a => (!consulta.aplicacion_ids.length || consulta.aplicacion_ids.includes(a.id)) && (!consulta.aplicaciones.length || porTexto.has(a.id)));
-  if ((consulta.aplicacion_ids.length || consulta.aplicaciones.length) && !candidatas.length) return { ...base, estado: 'no_resuelto', motivo: 'seleccion_no_resuelta' };
+  const identidad = resolverIdentidadAplicaciones(consulta, apps);
+  if (identidad.estado !== 'ok') return identidad.estado === 'no_disponible' ? fallo('identidad_no_disponible') : { ...base, estado: 'no_resuelto', motivo: 'seleccion_no_resuelta' };
+  const candidatas = identidad.aplicaciones;
   const fechas = new Map<string, (string | null)[]>();
   if (consulta.base_fecha === 'fecha_inicio_planeada') {
     for (const a of candidatas) {
