@@ -27,11 +27,10 @@ function nombre(text: string | undefined, base = 'Labor'): string {
     const result = (text ?? '').replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&');
     return result || base;
 }
-/** The original fragment remains in structured coverage, never as factual numeric evidence.
- * Suppress digit-bearing tokens as a whole, independent of their number/date notation. */
+/** Cita de la solicitud, separada de los hechos; conserva cifras, fechas y nombres. */
 function solicitudCitada(texto: string): string {
     const sinIdentificadores = texto.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[identificador de la solicitud]');
-    return nombre(sinIdentificadores.replace(/\S*\p{N}\S*/gu, '[dato numérico de la solicitud]'));
+    return nombre(sinIdentificadores);
 }
 export function mensajeAclaracion(categoria: string, tareas: string[] = [categoria]): string {
     const shown = tareas.slice(0, 6).map(t => `«${nombre(t, 'la labor indicada')}»`);
@@ -293,7 +292,7 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         parts.unshift(`Subpartes de tu solicitud:\n${inventario.join('\n')}`);
     }
     if (parcialFueraDeAlcance || cobertura?.partes.some(p => p.disposicion !== 'respondida'))
-        parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden a las partes sustentadas y no representan el costo completo de producción.');
+        parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden únicamente a las partes sustentadas.');
     if (aviso)
         parts.push(avisos[aviso]);
     return parts.join('\n\n');

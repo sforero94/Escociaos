@@ -108,7 +108,7 @@ export function construirCoberturaFinal(plan: Plan | null, resultados: Resultado
     if (p.disposicion !== 'consultar') return { ...p, resultado_ids: [], disposicion: p.disposicion };
     const estados = resultados.flatMap((r, i) => operaciones[i].parte_ids?.includes(p.id) ? [disposicionResultado(r, operaciones[i])] : []);
     const disposicion = estados.some(e => e.disposicion === 'aclarar') ? 'aclarar' : estados.some(e => e.disposicion === 'fuera_de_contrato') ? 'fuera_de_contrato' : estados.some(e => e.disposicion === 'fuente_no_disponible') ? 'fuente_no_disponible' : 'respondida';
-    return { id: p.id, texto: p.texto, capacidad: p.capacidad, disposicion, resultado_ids: propios.map(r => r.id), ...(estados.some(e => e.parcial) ? { parcial: true as const } : {}) };
+    return { id: p.id, texto: p.texto, capacidad: p.capacidad, disposicion, resultado_ids: propios.map(r => r.id), ...(disposicion === 'fuente_no_disponible' && estados.some(e => e.parcial) ? { parcial: true as const } : {}) };
   });
   return { version: 1, estado: 'declarada_validada', exhaustividad: 'no_certificada', partes };
 }

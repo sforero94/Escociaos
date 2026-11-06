@@ -4,7 +4,6 @@ import { aFechaUTC, esFechaCalendario } from './fechaCalendario.ts';
 import { validarFilasClima } from './climaFuente.ts';
 import type { ConsultaClima, FilaClima, ResumenClima, ResumenDiarioClima, ResultadoClima, VariableClima } from './climaTipos.ts';
 const CONFIANZAS = new Set(['ok', 'contador_congelado', 'sin_time_piezo', 'cobertura_parcial', 'reconstruido']);
-const suma = (valores: number[]): number | null => valores.length ? valores.reduce((a, b) => a + b, 0) : null;
 function filaObservada(f: ResumenDiarioClima, variables: VariableClima[]): FilaClima {
   const cobertura_temporal = f.cobertura_hueco_max_min === null ? 'desconocida' : f.cobertura_hueco_max_min <= 45 ? 'completa' : 'parcial';
   const fila: FilaClima = { fecha: f.fecha, station_id: f.station_id, lluvia_confianza: f.lluvia_confianza, cobertura_temporal, valores: {}, estados: {}, contradicciones: [], raw: { ...f } };
@@ -19,18 +18,30 @@ function filaObservada(f: ResumenDiarioClima, variables: VariableClima[]): FilaC
     if (variable !== 'temp_c_min' && variable !== 'temp_c_max' && variable !== 'temp_c_avg' && valor !== null && valor < 0) valor = null;
     if (variable.startsWith('humedad_pct_') && valor !== null && valor > 100) valor = null;
     if (variable === 'viento_dir_predominante' && valor !== null && valor > 360) valor = null;
+    if (valor !== null && !Number.isFinite(valor)) {
+      valor = null;
+      fila.contradicciones.push(`${variable}_calculo_no_finito`);
+    }
     fila.valores[variable] = valor;
     fila.estados[variable] = crudo === null ? 'null_registrado' : valor === null ? 'no_usable' : 'usable';
   }
   return fila;
 }
-function resumir(station_id: string | null, filas: FilaClima[], variables: VariableClima[], solicitados: number): ResumenClima {
+function resumir(station_id: string | null, filas: FilaClima[], variables: VariableClima[], solicitados: number, avisos: string[]): ResumenClima {
+  const suma = (valores: number[], magnitud: string): number | null => {
+    if (!valores.length) return null;
+    const total = valores.reduce((a, b) => a + b, 0);
+    if (Number.isFinite(total)) return total;
+    avisos.push(`Agregado de ${magnitud} no calculable por desbordamiento numérico; se conservan las observaciones y las otras variables.`);
+    return null;
+  };
   const huecos = filas.flatMap(f => f.raw.cobertura_hueco_max_min === null ? [] : [f.raw.cobertura_hueco_max_min]);
   const resumen: ResumenClima = { station_id, cobertura_temporal: { completa: filas.filter(f => f.cobertura_temporal === 'completa').length, parcial: filas.filter(f => f.cobertura_temporal === 'parcial').length, desconocida: filas.filter(f => f.cobertura_temporal === 'desconocida').length, hueco_max_min: huecos.length ? Math.max(...huecos) : null }, variables: {}, lluvia: { subtotal_dias_completos: null, cota_inferior_medida: null, dias_completos: 0, dias_cota_inferior: 0, dias_sin_dato: solicitados, dias_calidad_desconocida: 0, subtotal_observado_calidad_desconocida: null, dias_temporales_parciales: 0, subtotal_observado_temporal_parcial: null } };
   for (const variable of variables) {
     const valores = filas.flatMap(f => typeof f.valores[variable] === 'number' ? [f.valores[variable] as number] : []);
     const agregar = variable !== 'lluvia_total_mm' && variable !== 'viento_dir_predominante';
-    resumen.variables[variable] = { promedio: agregar && valores.length ? suma(valores)! / valores.length : null, min: agregar && valores.length ? Math.min(...valores) : null, max: agregar && valores.length ? Math.max(...valores) : null, cobertura: { solicitados, usables: valores.length, nulos_no_usables: filas.length - valores.length, sin_fila: solicitados - filas.length, calidad_desconocida: filas.filter(f => f.cobertura_temporal === 'desconocida' || !CONFIANZAS.has(f.lluvia_confianza) && variable === 'lluvia_total_mm').length } };
+    const total = agregar ? suma(valores, variable) : null;
+    resumen.variables[variable] = { promedio: total !== null ? total / valores.length : null, min: agregar && valores.length ? Math.min(...valores) : null, max: agregar && valores.length ? Math.max(...valores) : null, cobertura: { solicitados, usables: valores.length, nulos_no_usables: filas.length - valores.length, sin_fila: solicitados - filas.length, calidad_desconocida: filas.filter(f => f.cobertura_temporal === 'desconocida' || !CONFIANZAS.has(f.lluvia_confianza) && variable === 'lluvia_total_mm').length } };
   }
   if (variables.includes('lluvia_total_mm')) {
     const usables = filas.filter(f => f.valores.lluvia_total_mm !== null && f.valores.lluvia_total_mm !== undefined);
@@ -38,7 +49,7 @@ function resumir(station_id: string | null, filas: FilaClima[], variables: Varia
     const completos = usables.filter(f => !esCotaInferior(f) && f.cobertura_temporal === 'completa');
     const parciales = usables.filter(f => !esCotaInferior(f) && f.cobertura_temporal === 'parcial');
     const desconocidos = usables.filter(f => !esCotaInferior(f) && f.cobertura_temporal === 'desconocida');
-    resumen.lluvia = { subtotal_dias_completos: suma(completos.map(f => f.valores.lluvia_total_mm!)), cota_inferior_medida: suma(cotas.map(f => f.valores.lluvia_total_mm!)), dias_completos: completos.length, dias_cota_inferior: cotas.length, dias_sin_dato: solicitados - usables.length, dias_calidad_desconocida: desconocidos.length, subtotal_observado_calidad_desconocida: suma(desconocidos.map(f => f.valores.lluvia_total_mm!)), dias_temporales_parciales: parciales.length, subtotal_observado_temporal_parcial: suma(parciales.map(f => f.valores.lluvia_total_mm!)) };
+    resumen.lluvia = { subtotal_dias_completos: suma(completos.map(f => f.valores.lluvia_total_mm!), 'subtotal de lluvia completa'), cota_inferior_medida: suma(cotas.map(f => f.valores.lluvia_total_mm!), 'cota inferior de lluvia'), dias_completos: completos.length, dias_cota_inferior: cotas.length, dias_sin_dato: solicitados - usables.length, dias_calidad_desconocida: desconocidos.length, subtotal_observado_calidad_desconocida: suma(desconocidos.map(f => f.valores.lluvia_total_mm!), 'lluvia con calidad desconocida'), dias_temporales_parciales: parciales.length, subtotal_observado_temporal_parcial: suma(parciales.map(f => f.valores.lluvia_total_mm!), 'lluvia temporal parcial') };
   }
   return resumen;
 }
@@ -68,8 +79,9 @@ export function ejecutarClima(consulta: ConsultaClima, datos: ResumenDiarioClima
   r.filas = seleccion.map(f => filaObservada(f, consulta.variables)).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.station_id.localeCompare(b.station_id));
   const dias = Math.round((aFechaUTC(hasta).getTime() - aFechaUTC(consulta.desde).getTime()) / 86400000) + 1;
   const estaciones = estacionResuelta !== undefined ? [estacionResuelta] : r.estaciones.length ? r.estaciones : [null];
-  r.resumen = estaciones.map(estacion => resumir(estacion, r.filas.filter(f => f.station_id === estacion), consulta.variables, dias));
-  r.estado = !r.filas.length ? 'vacio_verificado' : r.resumen.some(s => Object.values(s.variables).some(v => v.cobertura.nulos_no_usables || v.cobertura.sin_fila || v.cobertura.calidad_desconocida)) || r.filas.some(f => f.cobertura_temporal !== 'completa') ? 'parcial' : 'ok';
+  r.resumen = estaciones.map(estacion => resumir(estacion, r.filas.filter(f => f.station_id === estacion), consulta.variables, dias, r.avisos));
+  if (r.filas.some(f => f.contradicciones.some(c => c.endsWith('_calculo_no_finito')))) r.avisos.push('Hay valores derivados no calculables por desbordamiento numérico; se conservan los registros originales y las otras variables.');
+  r.estado = !r.filas.length ? 'vacio_verificado' : r.avisos.some(a => a.includes('desbordamiento numérico')) || r.resumen.some(s => Object.values(s.variables).some(v => v.cobertura.nulos_no_usables || v.cobertura.sin_fila || v.cobertura.calidad_desconocida)) || r.filas.some(f => f.cobertura_temporal !== 'completa') ? 'parcial' : 'ok';
   return r;
 }
 const ETIQUETAS: Record<VariableClima, string> = { temp_c_min: 'Temperatura mínima (°C)', temp_c_max: 'Temperatura máxima (°C)', temp_c_avg: 'Temperatura media (°C)', humedad_pct_min: 'Humedad mínima (%)', humedad_pct_max: 'Humedad máxima (%)', humedad_pct_avg: 'Humedad media (%)', viento_kmh_avg: 'Viento medio (km/h)', rafaga_kmh_max: 'Ráfaga máxima (km/h)', viento_dir_predominante: 'Dirección predominante del viento (grados)', lluvia_total_mm: 'Lluvia (mm)', radiacion_wm2_avg: 'Radiación media (W/m²)', radiacion_wm2_max: 'Radiación máxima (W/m²)', uv_index_max: 'Índice UV (sin unidad)', horas_sol_duracion: 'Duración de sol (h)', energia_kwh_m2: 'Energía solar diaria (kWh/m²)' };

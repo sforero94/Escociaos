@@ -18,7 +18,7 @@ const unsupported: LlamadaHerramienta = { nombre: 'fuera_de_alcance', argumentos
 const quantity: LlamadaHerramienta = { nombre: 'consultar_cantidades_aplicacion', argumentos: JSON.stringify({ aplicacion_id: T3.liquid }) };
 const clarification: LlamadaHerramienta = { nombre: 'pedir_aclaracion', argumentos: JSON.stringify({ pregunta: '¿Qué entidad?', motivo: 'No determinada' }) };
 const partial = /respuesta parcial|partes? (?:no |fuera|sin)|resto[^.\n]*(?:no|fuera)/i;
-const noFullProduction = /no[^.\n]*(?:costo (?:total|completo) de producci[oó]n|costos? (?:totales|completos) de producci[oó]n)/i;
+const supportedScope = /corresponden únicamente a las partes sustentadas/i;
 async function execute(calls: LlamadaHerramienta[]) {
   const h = dependencies(db, calls);
   const response = await manejar(request({ pregunta: 'Consulta sintética con una parte sustentada y otra fuera de las capacidades actuales' }), h.deps);
@@ -33,7 +33,7 @@ describe('P3 option3 QA: typed partial disposition survives real handler and sta
     expect(h.body.plan.parcialFueraDeAlcance).toBe(true);
     expect(h.body.respuesta).toMatch(/0,01 L/);
     expect(h.body.respuesta).toMatch(partial);
-    expect(h.body.respuesta).toMatch(noFullProduction);
+    expect(h.body.respuesta).toMatch(supportedScope);
     expect(h.body.respuesta).not.toContain('NO PUBLICAR');
     expect(h.body.respuesta).not.toContain('987654321');
     expect(h.body.estadoToken).toBeTruthy();
@@ -52,7 +52,7 @@ describe('P3 option3 QA: typed partial disposition survives real handler and sta
     expect(body.resultados[0].total).toMatchObject({ jornales: 1.25, costo: 100 });
     expect(body.plan.parcialFueraDeAlcance).toBe(true);
     expect(body.respuesta).toMatch(partial);
-    expect(body.respuesta).toMatch(noFullProduction);
+    expect(body.respuesta).toMatch(supportedScope);
     expect(h.solicitudes).toHaveLength(1);
   });
   it('Given a pure unsupported request, When it is rejected, Then advertised capabilities include applications and labor', async () => {

@@ -75,7 +75,8 @@ describe('P3 cierre: disposición parcial cerrada', () => {
   it('renderer y validador requieren disposición cerrada auténtica', () => {
     const t = renderMensaje([], undefined, true);
     expect(t).toMatch(/respuesta parcial/i);
-    expect(t).toContain('costo completo de producción');
+    expect(t).toContain('únicamente a las partes sustentadas');
+    expect(t).not.toContain('costo completo de producción');
     expect(validarMensajeFinal(t, [], undefined, true)).toBe(true);
     expect(validarMensajeFinal(t, [])).toBe(false);
     for (const marca of [false, null, 'true', {}]) {
