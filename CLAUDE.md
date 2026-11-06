@@ -1,5 +1,10 @@
 # CLAUDE.md — Escocia OS
 
+## Esco 2.0 delivery guidance
+
+Before working on Esco 2.0 M5–M6 or pilot preparation, read and apply
+[`docs/esco2/guia-entrega-m5-m6.md`](docs/esco2/guia-entrega-m5-m6.md).
+
 ## Project Overview
 
 Escocia OS is a comprehensive agricultural management system for avocado (aguacate Hass) cultivation with GlobalGAP certification compliance. It is a single-page application built with React + TypeScript, backed by Supabase (PostgreSQL), and deployed on Vercel.
