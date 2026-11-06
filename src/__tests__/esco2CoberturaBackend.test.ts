@@ -93,14 +93,18 @@ describe('cobertura P3: validación estructural sin inferir exhaustividad', () =
   });
 });
 
-it('la cita de la solicitud no introduce anclas numéricas ni UUID del usuario en la respuesta', () => {
+it('la cita preserva cifras atribuidas al usuario y oculta UUID sin introducir hechos', () => {
   const pregunta = `calibración con $987.654 para ${A} el 2026-12-31`;
   const p = validarPlan([{ nombre: 'fuera_de_alcance', argumentos: JSON.stringify({ motivo: 'no publicar', cobertura: { version: 1, partes: [{ id: 's1', texto: pregunta, capacidad: 'fuera_de_contrato', disposicion: 'fuera_de_contrato' }] } }) }], { pregunta, exigirCobertura: true });
   const cobertura = construirCoberturaFinal(p, []);
   const texto = renderMensaje([], undefined, undefined, cobertura);
   expect(texto).toContain('calibración');
-  expect(texto).not.toContain('987');
-  expect(texto).not.toContain('2026');
+  expect(texto).toContain('solicitud del usuario');
+  expect(texto).toContain('$987.654');
+  expect(texto).toContain('2026-12-31');
+  const hechos = texto.split('\n').filter(linea => !linea.includes('solicitud del usuario')).join('\n');
+  expect(hechos).not.toContain('987');
+  expect(hechos).not.toContain('2026');
   expect(texto).not.toContain(A);
   expect(cobertura.partes[0].texto).toBe(pregunta);
 });
@@ -112,7 +116,11 @@ it.each(['$50,4M', '100.499.999', '2026-12-31', '31/12/2026', '1e7', '９９９'
     const cobertura = construirCoberturaFinal(p, []);
     const texto = renderMensaje([], undefined, undefined, cobertura);
     expect(texto).toContain('calibración');
-    expect(texto).not.toContain(token);
+    const esUuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(token);
+    if (esUuid) expect(texto).not.toContain(token);
+    else expect(texto).toContain(`solicitud del usuario: «${pregunta}»`);
+    const hechos = texto.split('\n').filter(linea => !linea.includes('solicitud del usuario')).join('\n');
+    expect(hechos).not.toContain(token);
     expect(cobertura.partes[0].texto).toBe(pregunta);
     expect(validarMensajeFinal(texto, [], undefined, undefined, cobertura)).toBe(true);
     expect(validarMensajeFinal(`${texto} ${token}`, [], undefined, undefined, cobertura)).toBe(false);

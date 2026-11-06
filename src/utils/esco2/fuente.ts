@@ -72,7 +72,7 @@ async function leerTodo(cliente: ClienteDatos, tabla: Tabla, filtrar: (q: Filtro
     return leerFilasFijas(cliente, tabla, COLUMNAS[tabla], filtrar, tamanoPagina);
 }
 /** Shared exact-count pagination. Callers supply a closed, literal projection. */
-export async function leerFilasFijas(cliente: ClienteDatos, tabla: string, columnas: string, filtrar: (q: FiltroPostgrest) => FiltroPostgrest = (q) => q, tamanoPagina = TAMANO_PAGINA): Promise<Record<string, unknown>[]> {
+export async function leerFilasFijas(cliente: ClienteDatos, tabla: string, columnas: string, filtrar: (q: FiltroPostgrest) => FiltroPostgrest = (q) => q, tamanoPagina = TAMANO_PAGINA, columnasOrden: readonly string[] = ['id']): Promise<Record<string, unknown>[]> {
     if (!Number.isInteger(tamanoPagina) || tamanoPagina < 1 || tamanoPagina > TAMANO_PAGINA)
         throw new ErrorDatos('tamano_pagina_no_valido');
     const filas: Record<string, unknown>[] = [];
@@ -82,7 +82,9 @@ export async function leerFilasFijas(cliente: ClienteDatos, tabla: string, colum
         // corta por debajo de la página (`max-rows`), la siguiente página sigue donde quedó.
         const inicio = filas.length;
         const base = cliente.from(tabla).select(columnas, pagina === 0 ? { count: 'exact' } : undefined);
-        const { data, error, count } = await filtrar(base).order('id', { ascending: true }).range(inicio, inicio + tamanoPagina - 1);
+        let consulta = filtrar(base);
+        for (const columna of columnasOrden) consulta = consulta.order(columna, { ascending: true });
+        const { data, error, count } = await consulta.range(inicio, inicio + tamanoPagina - 1);
         if (error)
             throw new ErrorDatos(`${tabla}: ${error.message}`);
         if (!Array.isArray(data))

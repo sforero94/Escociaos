@@ -15,7 +15,7 @@
 // falta una clave o llega mal tipada, esto FALLA explícito listando TODAS
 // las claves con problema de una vez -- nunca un fallback silencioso.
 
-import type { HatoConfig } from '@/utils/calculosHato';
+import type { HatoConfig } from './calculosHato.ts';
 
 /** Una fila cruda de `hato_config`: `clave text`, `valor jsonb`. */
 export interface FilaHatoConfig {

@@ -91,7 +91,7 @@ describe('Mensajes-v1: integración HTTP sin modelo real y hoy Bogotá',()=>{
   it('un contexto perdido conserva la explicación de capacidad y el aviso sin prosa del modelo',async()=>{
     await p2Seed(db);const h=dependencies(db,[{nombre:'fuera_de_alcance',argumentos:JSON.stringify({motivo:'Se gastaron 777 millones.'})}]);
     const response=await manejar(request({pregunta:'inventario',estadoToken:'77777777-7777-4777-8777-777777777777'}),h.deps);const b=await response.json();
-    expect(b.resultados).toEqual([]);expect(b.respuesta).toBe('Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones: jornales, tareas programadas, fechas y estado actual, cantidades de productos, costos de una aplicación, labor vinculada y faltantes vigentes de insumos.\n\nNo pude recuperar el contexto anterior. Repite tu consulta completa.');
+    expect(b.resultados).toEqual([]);expect(b.respuesta).toBe('Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones (jornales, tareas, fechas y estado, cantidades, costos, labor vinculada y faltantes de insumos), monitoreo de plagas por ronda, conductividad del suelo, clima histórico observado, ficha y estado reproductivo del hato, pesajes de leche por animal y litros quincenales.\n\nNo pude recuperar el contexto anterior. Repite tu consulta completa.');
     expect(b.respuesta).not.toContain('777');expect(h.solicitudes).toHaveLength(1);
   });
   it('cerca de medianoche UTC dice4 de noviembre y recorta solo el trabajo registrado',async()=>{

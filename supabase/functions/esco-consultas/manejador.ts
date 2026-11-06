@@ -1,3 +1,7 @@
+import { fuenteLecheSupabase } from '../../../src/utils/esco2/lecheFuente.ts';
+import { fuenteClimaSupabase } from '../../../src/utils/esco2/climaFuente.ts';
+import { fuenteHatoSupabase } from '../../../src/utils/esco2/hatoFuente.ts';
+import { fuenteConductividadSupabase } from '../../../src/utils/esco2/conductividadFuente.ts';
 // esco-consultas: manejador HTTP de Esco 2.0 (M3, familia de labores).
 //
 // Sin Deno ni npm aquí: las dependencias llegan inyectadas, así que Vitest prueba este
@@ -19,6 +23,7 @@
 import { crearClienteOpenRouter, type ClienteLLM } from '../../../src/utils/esco2/llm.ts';
 import { fuenteSupabase, type ClienteDatos, type RespuestaPostgrest } from '../../../src/utils/esco2/fuente.ts';
 import { fuenteAplicacionesSupabase } from '../../../src/utils/esco2/aplicacionesFuente.ts';
+import { fuenteMonitoreoSupabase } from '../../../src/utils/esco2/monitoreoFuente.ts';
 import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } from '../../../src/utils/esco2/nucleo.ts';
 import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
@@ -212,6 +217,11 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         hoy,
         fuente: fuenteSupabase(cliente),
         fuenteAplicaciones: fuenteAplicacionesSupabase(cliente),
+        fuenteMonitoreo: fuenteMonitoreoSupabase(cliente),
+        fuenteClima: fuenteClimaSupabase(cliente),
+        fuenteConductividad: fuenteConductividadSupabase(cliente),
+        fuenteHato: fuenteHatoSupabase(cliente),
+        fuenteLeche: fuenteLecheSupabase(cliente),
         llm,
         config: CONFIG_M3,
         modoCobertura: deps.modoCobertura,

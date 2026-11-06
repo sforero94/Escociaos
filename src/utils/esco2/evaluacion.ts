@@ -19,7 +19,7 @@ import { MARCA } from './ambiguedad.ts';
 import { extraerFechas } from './fechasTexto.ts';
 import { normalizar } from './catalogo.ts';
 import type { ResultadoTurno } from './nucleo.ts';
-import { esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion } from './tipos.ts';
+import { esResultadoPesajesLeche, esResultadoLitrosQuincenales, esResultadoClima, esResultadoHato, esResultadoConductividad, esResultadoMonitoreo, esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion } from './tipos.ts';
 
 export interface Ancla {
   claim: string;
@@ -72,8 +72,9 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
   const f = new Set<string>();
   if (hoy) f.add(hoy);
   for (const r of turno.resultados) {
+    if (esResultadoHato(r)) { f.add(r.fecha_referencia); continue; }
     if (esResultadoFaltantesAplicacion(r)) { f.add(r.fecha_consulta); continue; }
-    const periodo = esResultadoAplicaciones(r) || esResultadoCantidades(r) || esResultadoCostos(r) || esResultadoLaborAplicacion(r) ? r.consulta : r.alcance;
+    const periodo = esResultadoPesajesLeche(r) || esResultadoLitrosQuincenales(r) || esResultadoConductividad(r) || esResultadoClima(r) || esResultadoMonitoreo(r) || esResultadoAplicaciones(r) || esResultadoCantidades(r) || esResultadoCostos(r) || esResultadoLaborAplicacion(r) ? r.consulta : r.alcance;
     if (periodo.desde) f.add(periodo.desde);
     if (periodo.hasta) f.add(periodo.hasta);
   }
@@ -83,12 +84,18 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
 /** Yearless dates need the supplied calendar context, never the evaluator's clock. */
 function anioDeContexto(turno: ResultadoTurno, hoy: string | undefined): number {
   const first = turno.resultados[0];
-  const hasta = first ? esResultadoFaltantesAplicacion(first) ? first.fecha_consulta : esResultadoAplicaciones(first) || esResultadoCantidades(first) || esResultadoCostos(first) || esResultadoLaborAplicacion(first) ? first.consulta.hasta : first.alcance.hasta : '';
+  const hasta = first ? esResultadoHato(first) ? first.fecha_referencia : esResultadoFaltantesAplicacion(first) ? first.fecha_consulta : esResultadoPesajesLeche(first) || esResultadoLitrosQuincenales(first) || esResultadoConductividad(first) || esResultadoClima(first) || esResultadoMonitoreo(first) || esResultadoAplicaciones(first) || esResultadoCantidades(first) || esResultadoCostos(first) || esResultadoLaborAplicacion(first) ? first.consulta.hasta : first.alcance.hasta : '';
   return Number.parseInt((hoy ?? hasta ?? '').slice(0, 4), 10);
+}
+
+/** Quita la cita literal de cada subparte: repite la pregunta, no afirma un dato. */
+export function sinCitasDeSolicitud(respuesta: string): string {
+  return respuesta.split('\n').filter((l) => !/^- Parte \d+, solicitud del usuario: «/.test(l)).join('\n');
 }
 
 /** Fechas que la respuesta afirma y que ninguna ancla de fecha o conjunto cubre. */
 export function fechasDeMas(respuesta: string, anclas: Ancla[], turno: ResultadoTurno, hoy: string | undefined): string[] {
+  respuesta = sinCitasDeSolicitud(respuesta);
   const anclasFecha = anclas.filter((a) => a.tipo === 'fecha' || a.tipo === 'conjunto');
   if (anclasFecha.length === 0) return [];
   const anio = anioDeContexto(turno, hoy);
@@ -114,18 +121,20 @@ export function puntuarIntento(turno: ResultadoTurno, anclas: Ancla[], opciones:
     // Fecha y conjunto: igualdad exacta con una cadena del resultado (o con el nombre, normalizado).
     return miembros(a).every((m) => (ES_ISO.test(m) ? textos.includes(m) : textos.some((t) => normalizar(t) === normalizar(m))));
   });
-  const numsRespuesta = extraerNumeros(turno.respuesta);
+  // La cita literal de cada subparte repite la pregunta del usuario: no es una afirmación.
+  const respuesta = sinCitasDeSolicitud(turno.respuesta);
+  const numsRespuesta = extraerNumeros(respuesta);
   // Presence and extra-date checks must interpret dates identically, including both
   // endpoints of a range. The numeric-anchor helper also accepts bare quantity ranges.
-  const fechasRespuesta = extraerFechas(turno.respuesta, anioDeContexto(turno, opciones.hoy));
-  const deMas = fechasDeMas(turno.respuesta, anclas, turno, opciones.hoy);
+  const fechasRespuesta = extraerFechas(respuesta, anioDeContexto(turno, opciones.hoy));
+  const deMas = fechasDeMas(respuesta, anclas, turno, opciones.hoy);
   const enRespuesta = anclas.map((a) => {
     if (a.tipo === 'numero') return numeroCerca(Number(a.valor), a.tol, numsRespuesta);
-    const todos = miembros(a).every((m) => (ES_ISO.test(m) ? fechasRespuesta.has(m) : nombrePresente(m, turno.respuesta)));
+    const todos = miembros(a).every((m) => (ES_ISO.test(m) ? fechasRespuesta.has(m) : nombrePresente(m, respuesta)));
     if (!todos) return false;
     if (a.tipo === 'conjunto' && a.universo) {
       const propios = new Set(miembros(a).map(normalizar));
-      if (a.universo.some((n) => !propios.has(normalizar(n)) && nombrePresente(n, turno.respuesta))) return false;
+      if (a.universo.some((n) => !propios.has(normalizar(n)) && nombrePresente(n, respuesta))) return false;
     }
     // Una fecha de más hace fallar a toda ancla de fecha o conjunto: el conjunto afirmado no es el de la referencia.
     return deMas.length === 0;

@@ -2,7 +2,7 @@
 import type { OperacionConsulta, Plan, ResultadoConsulta } from './tipos.ts';
 import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 
-export const CAPACIDADES_PARTE = ['labores', 'aplicaciones', 'cantidades_aplicacion', 'costos_aplicacion', 'labor_aplicacion', 'faltantes_aplicacion', 'fuera_de_contrato'] as const;
+export const CAPACIDADES_PARTE = ['labores', 'aplicaciones', 'cantidades_aplicacion', 'costos_aplicacion', 'labor_aplicacion', 'faltantes_aplicacion', 'monitoreo', 'conductividad', 'clima', 'hato', 'pesajes_leche', 'litros_quincenales', 'fuera_de_contrato'] as const;
 export const DISPOSICIONES_DECLARADAS = ['consultar', 'aclarar', 'fuera_de_contrato'] as const;
 export type CapacidadParte = typeof CAPACIDADES_PARTE[number];
 export interface ParteDeclarada { id: string; texto: string; capacidad: CapacidadParte; disposicion: typeof DISPOSICIONES_DECLARADAS[number] }
@@ -32,6 +32,8 @@ export const ESQUEMA_PARTE_IDS = { type: 'array', maxItems: 8, uniqueItems: true
 const objeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fallar = (motivo = 'cobertura_no_valida'): never => { throw new Error(motivo); };
 /** Case-, accent-, punctuation- and space-insensitive form. A part must still quote the question. */
+/** «pesar», «pesaje», «se pesaron»… normalizados; excluye «pesos» (dinero). */
+const PIDE_PESAJE = /\bpes(?:ar|aron|aje|ajes|ada|adas|ado|ados|a|an|o)\b/;
 export const normalizarTextoParte = (t: string): string => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[¿?¡!.,;:«»"“”'‘’()]/g, ' ').replace(/\s+/g, ' ').trim();
 export function validarInventarioDeclarado(valor: unknown, pregunta: string): CoberturaPlan {
   if (!objeto(valor) || Object.keys(valor).some(k => !['version', 'partes'].includes(k)) || valor.version !== 1 || !Array.isArray(valor.partes) || !valor.partes.length || valor.partes.length > 8 || typeof pregunta !== 'string') return fallar('inventario_forma');
@@ -55,6 +57,8 @@ export function validarCorrespondenciaPlan(cobertura: CoberturaPlan, operaciones
       if (!parte) return fallar('parte_id_inexistente');
       if (parte.disposicion !== 'consultar') return fallar('vinculo_a_parte_no_consultar');
       if (parte.capacidad !== o.tipo) return fallar('capacidad_no_coincide');
+      // Pesajes por animal y litros quincenales son magnitudes distintas: una no responde la otra.
+      if (o.tipo === 'litros_quincenales' && PIDE_PESAJE.test(normalizarTextoParte(parte.texto))) return fallar('pesaje_como_quincenal');
     }
   }
   for (const p of cobertura.partes) {
@@ -84,6 +88,8 @@ function disposicionResultado(r: ResultadoConsulta, o: OperacionConsulta): Pick<
   const semantica = !('tipo' in r) ? r.semantica?.disposicion : undefined;
   if (r.estado === 'no_resuelto' || r.estado === 'aclaracion' || semantica === 'aclaracion') return { disposicion: 'aclarar' };
   if (r.estado === 'no_soportada' || semantica === 'no_soportada') return { disposicion: 'fuera_de_contrato' };
+  // La historia con cobertura explícita responde aun con NULL o días sin fila.
+  if (o.tipo === 'clima' && r.estado === 'parcial') return { disposicion: 'respondida' };
   if (r.estado === 'parcial') return { disposicion: 'fuente_no_disponible', parcial: true };
   if (r.estado === 'no_disponible' || semantica === 'fuente_no_disponible') return { disposicion: 'fuente_no_disponible' };
   if (o.tipo === 'labores' && !('tipo' in r)) {
@@ -106,7 +112,7 @@ export function construirCoberturaFinal(plan: Plan | null, resultados: Resultado
     if (p.disposicion !== 'consultar') return { ...p, resultado_ids: [], disposicion: p.disposicion };
     const estados = resultados.flatMap((r, i) => operaciones[i].parte_ids?.includes(p.id) ? [disposicionResultado(r, operaciones[i])] : []);
     const disposicion = estados.some(e => e.disposicion === 'aclarar') ? 'aclarar' : estados.some(e => e.disposicion === 'fuera_de_contrato') ? 'fuera_de_contrato' : estados.some(e => e.disposicion === 'fuente_no_disponible') ? 'fuente_no_disponible' : 'respondida';
-    return { id: p.id, texto: p.texto, capacidad: p.capacidad, disposicion, resultado_ids: propios.map(r => r.id), ...(estados.some(e => e.parcial) ? { parcial: true as const } : {}) };
+    return { id: p.id, texto: p.texto, capacidad: p.capacidad, disposicion, resultado_ids: propios.map(r => r.id), ...(disposicion === 'fuente_no_disponible' && estados.some(e => e.parcial) ? { parcial: true as const } : {}) };
   });
   return { version: 1, estado: 'declarada_validada', exhaustividad: 'no_certificada', partes };
 }

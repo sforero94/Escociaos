@@ -1,3 +1,6 @@
+import type { ConsultaPesajesLeche, ConsultaLitrosQuincenales } from './lecheTipos.ts';
+import type { ConsultaHato } from './hatoTipos.ts';
+import type { ConsultaConductividad } from './conductividadTipos.ts';
 // Registro único de operaciones. De aquí salen el esquema que ve el modelo y el
 // validador que corre antes de ejecutar: no hay una lista paralela que se desincronice.
 import { esFechaCalendario } from './fechaCalendario.ts';
@@ -6,9 +9,11 @@ import type { ConsultaCostosAplicacion } from './costosTipos.ts';
 import type { ConsultaLaborAplicacion } from './laborAplicacionTipos.ts';
 import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
+import { VARIABLES_CLIMA, VARIABLES_CLIMA_DEFAULT, type ConsultaClima } from './climaTipos.ts';
+import type { ConsultaMonitoreo } from './monitoreoTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 import { operacionesDelPlan } from './tipos.ts';
-import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, validarInventarioDeclarado, validarCorrespondenciaPlan } from './cobertura.ts';
+import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, normalizarTextoParte, validarInventarioDeclarado, validarCorrespondenciaPlan, type CoberturaPlan } from './cobertura.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
 export const METRICAS: readonly Metrica[] = [
     'jornales',
@@ -29,6 +34,12 @@ export const HERRAMIENTA_LABOR_APLICACION = 'consultar_labor_aplicacion';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
 export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
 export const HERRAMIENTA_FALTANTES = 'consultar_faltantes_aplicacion';
+export const HERRAMIENTA_HATO = 'consultar_hato';
+export const HERRAMIENTA_PESAJES_LECHE = 'consultar_pesajes_leche';
+export const HERRAMIENTA_LITROS_QUINCENALES = 'consultar_litros_quincenales';
+export const HERRAMIENTA_CONDUCTIVIDAD = 'consultar_conductividad';
+export const HERRAMIENTA_MONITOREO = 'consultar_monitoreo';
+export const HERRAMIENTA_CLIMA = 'consultar_clima';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
@@ -129,6 +140,56 @@ export function herramientasPlanificador(): unknown[] {
                 aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
             } },
         } },
+        { type:'function', function:{
+            name:HERRAMIENTA_PESAJES_LECHE,
+            description:'Pesajes fechados de leche por animal visible y desde/hasta inclusivos. Selecciona animal_ids, nombres o chapetas, una clase de selector; sin selector pide precisar. Conserva AM/PM y NULL: son condiciones admitidas de la misma consulta. Suma muestras completas o históricas de solo total y promedia solo días pesados, sin turnos NULL convertidos a cero ni extrapolación. Pedir no proyectar respeta este contrato. No ventas, proyección ni litros por vaca del hato.',
+            parameters:{type:'object',additionalProperties:false,required:['desde','hasta'],properties:{
+                desde:{type:'string'},hasta:{type:'string'},animal_ids:{type:'array',uniqueItems:true,items:{type:'string',format:'uuid'}},nombres:{type:'array',uniqueItems:true,items:{type:'string'}},chapetas:{type:'array',uniqueItems:true,items:{type:'integer',minimum:1}},
+            }},
+        }},
+        { type:'function', function:{
+            name:HERRAMIENTA_LITROS_QUINCENALES,
+            description:'Litros quincenales de leche medidos y derivados, separados por origen. desde/hasta deben abarcar quincenas calendario completas: inicio 1/16, fin 15/último del mes; pide aclaración si el rango es parcial. No prorratea, no suma muestras con ventas ni reconstruye vacas. Los medidos requieren cantidad del ingreso vinculado; los derivados usan la partición local. Abiertas separadas de cerradas. Sin dinero ni precios.',
+            parameters:{type:'object',additionalProperties:false,required:['desde','hasta'],properties:{desde:{type:'string'},hasta:{type:'string'}}},
+        }},
+        { type: 'function', function: {
+            name: HERRAMIENTA_HATO,
+            description: 'Ficha y estado reproductivo ACTUAL del hato lechero al corte Bogotá del servidor. Selección explícita de animales por animal_ids, nombres exactos o chapetas enteras, una sola clase de selector. Sin selector pide precisar; homónimos o chapetas repetidas exigen aclaración, nunca elegir por actividad o similitud. Ficha/parentescos por ID separados de reproducción calculada con vista y configuración estrictas. No notas, historial libre, producción, dinero, estado histórico, recomendaciones ni captura.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                animal_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } },
+                nombres: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                chapetas: { type: 'array', uniqueItems: true, items: { type: 'integer', minimum: 1 } },
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_CONDUCTIVIDAD,
+            description: 'Conductividad eléctrica de suelo por fecha operativa desde/hasta inclusivas y lote, sección propia. Por registro entrega separados promedio CE guardado (dS/m), distribución nativa por árbol en bandas baja/en rango/alta con porcentajes y promedio de medias alta/baja disponibles, y pH. Esa distribución es parte permitida de esta consulta; no usa agrupaciones laborales. Sin fecha pide precisar. Nunca selecciona ni infiere ronda, promedia promedios de registros, acredita completitud por num_arboles, prescribe o captura. Lotes por IDs o nombres exactos; nombres repetidos exigen aclarar.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                desde: { type: 'string' }, hasta: { type: 'string' },
+                lote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } },
+                lotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_CLIMA,
+            description: 'Historia climática observada del resumen diario, desde/hasta inclusivos. Variables cerradas y estación opcional por ID; ignora espacios exteriores solo si identifica una única estación raw. Una colisión necesita aclaración. Sin pronósticos, prescripciones ni lecturas en vivo. Devuelve cobertura por variable, cotas de lluvia separadas y procedencia; estaciones solapadas requieren aclaración.',
+            parameters: { type: 'object', additionalProperties: false, required: ['desde','hasta'], properties: {
+                desde: {type:'string'}, hasta: {type:'string'}, station_id: {type:'string',minLength:1},
+                variables: {type:'array',minItems:1,uniqueItems:true,items:{type:'string',enum:[...VARIABLES_CLIMA]}},
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_MONITOREO,
+            description: 'Incidencia y gravedad por ronda real de monitoreo, siempre separadas por plaga. Selecciona rondas por ID, nombre exacto o desde/hasta inclusivos sobre su fecha de inicio (conserva la ronda completa, aunque abarque varias fechas). ultima_global elige la ronda global visible más reciente, nunca la última lectura por combinación. Sin selector pide precisar. Filtros lote/sublote/plaga por ID o nombre exacto. Agrupa por lote/sublote solo si se pide. Cada observación suma una vez sus afectados y muestreados; sin fila significa no revisado. No severidad, densidad, árboles únicos, recomendaciones ni CE.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                ronda_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, rondas: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                lote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, lotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                sublote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, sublotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                plaga_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, plagas: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                desde: { type: 'string' }, hasta: { type: 'string' }, seleccion_ronda: { type: 'string', enum: ['todas', 'ultima_global'] },
+                agrupar_por: { type: 'array', uniqueItems: true, maxItems: 2, items: { type: 'string', enum: ['lote', 'sublote'] } },
+            } },
+        } },
         {
             type: 'function',
             function: {
@@ -146,7 +207,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta o una parte no corresponde a las capacidades disponibles. Si hay partes sustentadas, añade una sola llamada a esta herramienta junto a sus consultas (máximo cuatro llamadas en total); se responderán por separado con aviso parcial fijo. El motivo no se publica ni autoriza cálculos nuevos.',
+                description: 'Portadora única cuando todas las partes de cobertura están fuera del contrato. Si alguna requiere aclarar, usa pedir_aclaracion. En solicitudes mixtas ejecuta solo las consultas sustentadas y declara las partes excluidas en cobertura, sin llamar esta portadora junto a consultas. Conservar NULL/AM/PM o pedir no proyectar son condiciones de una consulta admitida, no capacidades excluidas. El motivo no se publica ni autoriza cálculos nuevos.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -282,11 +343,79 @@ function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): Consult
     if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
     return selectorAplicaciones(a, 'faltantes');
 }
+function validarPeriodoLeche(a: Record<string, unknown>): ConsultaLitrosQuincenales {
+    if (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde>a.hasta) throw new ErrorPlan('período de leche inválido');
+    return {desde:a.desde,hasta:a.hasta};
+}
+function validarConsultaPesajesLeche(a: Record<string, unknown>): ConsultaPesajesLeche {
+    const {desde,hasta,...selector}=a;
+    return {...validarPeriodoLeche({desde,hasta}),...validarConsultaHato(selector)};
+}
+function validarConsultaLitrosQuincenales(a: Record<string, unknown>): ConsultaLitrosQuincenales {
+    if (Object.keys(a).some(k=>!['desde','hasta'].includes(k))) throw new ErrorPlan('argumento quincenal no registrado');
+    return validarPeriodoLeche(a);
+}
+function validarConsultaHato(a: Record<string, unknown>): ConsultaHato {
+    if (Object.keys(a).some(k => !['animal_ids', 'nombres', 'chapetas'].includes(k))) throw new ErrorPlan('argumento de hato no registrado');
+    const filtros: Record<string, string[]> = {};
+    for (const campo of ['animal_ids', 'nombres']) {
+        if (a[campo] !== undefined && (!Array.isArray(a[campo]) || (a[campo] as unknown[]).some(v => typeof v !== 'string' || !v.trim()))) throw new ErrorPlan('selector de hato inválido');
+        const valores = listaTextos(a[campo], campo).map(v => campo === 'animal_ids' ? v.toLowerCase() : v);
+        if (new Set(valores).size !== valores.length || campo === 'animal_ids' && valores.some(v => !esUuid(v))) throw new ErrorPlan('selector de hato inválido');
+        filtros[campo] = valores;
+    }
+    if (a.chapetas !== undefined && (!Array.isArray(a.chapetas) || a.chapetas.some(v => typeof v !== 'number' || !Number.isSafeInteger(v) || v < 1))) throw new ErrorPlan('chapeta inválida');
+    const chapetas = (a.chapetas ?? []) as number[];
+    if (new Set(chapetas).size !== chapetas.length || [filtros.animal_ids, filtros.nombres, chapetas].filter(v => v.length).length > 1) throw new ErrorPlan('selector de hato ambiguo');
+    return { animal_ids: filtros.animal_ids, nombres: filtros.nombres, chapetas };
+}
+function validarConsultaConductividad(a: Record<string, unknown>): ConsultaConductividad {
+    if (Object.keys(a).some(k => !['desde', 'hasta', 'lote_ids', 'lotes'].includes(k))) throw new ErrorPlan('argumento de conductividad no registrado');
+    const filtros: Record<string, string[]> = {};
+    for (const campo of ['lote_ids', 'lotes']) {
+        if (a[campo] !== undefined && (!Array.isArray(a[campo]) || (a[campo] as unknown[]).some(v => typeof v !== 'string' || !v.trim()))) throw new ErrorPlan('selector de conductividad inválido');
+        const valores = listaTextos(a[campo], campo).map(v => campo === 'lote_ids' ? v.toLowerCase() : v);
+        if (new Set(valores).size !== valores.length || campo === 'lote_ids' && valores.some(v => !esUuid(v))) throw new ErrorPlan('selector de conductividad inválido');
+        filtros[campo] = valores;
+    }
+    if (filtros.lote_ids.length && filtros.lotes.length) throw new ErrorPlan('selector de conductividad ambiguo');
+    const periodo = a.desde !== undefined || a.hasta !== undefined;
+    if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de conductividad inválido');
+    return { lote_ids: filtros.lote_ids, lotes: filtros.lotes, ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
+}
+function validarConsultaClima(a: Record<string, unknown>): ConsultaClima {
+    if (Object.keys(a).some(k => !['desde','hasta','station_id','variables'].includes(k))) throw new ErrorPlan('argumento de clima no registrado');
+    if (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde>a.hasta) throw new ErrorPlan('período climático inválido');
+    if (a.station_id !== undefined && (typeof a.station_id !== 'string' || !a.station_id.trim())) throw new ErrorPlan('estación inválida');
+    if (a.variables !== undefined && (!Array.isArray(a.variables) || !a.variables.length || new Set(a.variables).size!==a.variables.length || a.variables.some(v=>!VARIABLES_CLIMA.includes(v)))) throw new ErrorPlan('variable climática no registrada');
+    return { desde:a.desde, hasta:a.hasta, variables:a.variables===undefined ? [...VARIABLES_CLIMA_DEFAULT] : a.variables as ConsultaClima['variables'], ...(a.station_id!==undefined ? {station_id:(a.station_id as string).trim()} : {}) };
+}
+function validarConsultaMonitoreo(a: Record<string, unknown>): ConsultaMonitoreo {
+    if (Object.keys(a).some(k => !['ronda_ids', 'rondas', 'lote_ids', 'lotes', 'sublote_ids', 'sublotes', 'plaga_ids', 'plagas', 'agrupar_por', 'desde', 'hasta', 'seleccion_ronda'].includes(k))) throw new ErrorPlan('argumento de monitoreo no registrado');
+    const filtros: Record<string, string[]> = {};
+    for (const [ids, nombres] of [['ronda_ids', 'rondas'], ['lote_ids', 'lotes'], ['sublote_ids', 'sublotes'], ['plaga_ids', 'plagas']]) {
+        for (const campo of [ids, nombres]) {
+            if (a[campo] !== undefined && (!Array.isArray(a[campo]) || (a[campo] as unknown[]).some(v => typeof v !== 'string' || !v.trim()))) throw new ErrorPlan('selector de monitoreo inválido');
+            const valores = listaTextos(a[campo], campo).map(v => campo === ids ? v.toLowerCase() : v);
+            if (new Set(valores).size !== valores.length || campo === ids && valores.some(v => !esUuid(v))) throw new ErrorPlan('selector de monitoreo inválido');
+            filtros[campo] = valores;
+        }
+        if (filtros[ids].length && filtros[nombres].length) throw new ErrorPlan('selector de monitoreo ambiguo');
+    }
+    if (a.agrupar_por !== undefined && (!Array.isArray(a.agrupar_por) || a.agrupar_por.some(g => typeof g !== 'string' || !g.trim()))) throw new ErrorPlan('agrupación de monitoreo inválida');
+    const agrupaciones = listaTextos(a.agrupar_por, 'agrupar_por');
+    if (agrupaciones.length > 2 || new Set(agrupaciones).size !== agrupaciones.length || agrupaciones.some(g => g !== 'lote' && g !== 'sublote') || a.agrupar_por === null) throw new ErrorPlan('agrupación de monitoreo inválida');
+    const periodo = a.desde !== undefined || a.hasta !== undefined;
+    if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de rondas inválido');
+    if (a.seleccion_ronda !== undefined && (typeof a.seleccion_ronda !== 'string' || !['todas', 'ultima_global'].includes(a.seleccion_ronda) || filtros.ronda_ids.length || filtros.rondas.length)) throw new ErrorPlan('selección de ronda inválida');
+    return { ronda_ids: filtros.ronda_ids, rondas: filtros.rondas, lote_ids: filtros.lote_ids, lotes: filtros.lotes, sublote_ids: filtros.sublote_ids, sublotes: filtros.sublotes, plaga_ids: filtros.plaga_ids, plagas: filtros.plagas, agrupar_por: agrupaciones as ConsultaMonitoreo['agrupar_por'], ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}), ...(a.seleccion_ronda !== undefined ? { seleccion_ronda: a.seleccion_ronda as ConsultaMonitoreo['seleccion_ronda'] } : {}) };
+}
 /** Ordena claves para comparar inventarios repetidos sin transformar valores. */
 const canonicoCobertura = (v: unknown): string => JSON.stringify(v, (_k, x) => x !== null && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(k => [k, (x as Record<string, unknown>)[k]])) : x);
 const CAPACIDAD_DE_HERRAMIENTA: Record<string, string> = {
     [HERRAMIENTA_CONSULTAR]: 'labores', [HERRAMIENTA_APLICACIONES]: 'aplicaciones', [HERRAMIENTA_CANTIDADES]: 'cantidades_aplicacion',
     [HERRAMIENTA_COSTOS]: 'costos_aplicacion', [HERRAMIENTA_LABOR_APLICACION]: 'labor_aplicacion', [HERRAMIENTA_FALTANTES]: 'faltantes_aplicacion',
+    [HERRAMIENTA_MONITOREO]: 'monitoreo', [HERRAMIENTA_CLIMA]: 'clima', [HERRAMIENTA_HATO]: 'hato', [HERRAMIENTA_PESAJES_LECHE]: 'pesajes_leche', [HERRAMIENTA_LITROS_QUINCENALES]: 'litros_quincenales', [HERRAMIENTA_CONDUCTIVIDAD]: 'conductividad',
 };
 type ParteBruta = { id?: unknown; capacidad?: unknown; disposicion?: unknown };
 /** Une inventarios parciales que el modelo repartió entre llamadas (s1 en una, s2 en otra). */
@@ -376,8 +505,41 @@ export function normalizarLlamadasCobertura(llamadas: LlamadaHerramienta[]): { l
     if (!reparaciones.length) return { llamadas, reparaciones };
     return { llamadas: pares.map(p => ({ nombre: p.nombre, argumentos: JSON.stringify(p.args) })), reparaciones };
 }
-/** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
-export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; exigirCobertura: true }): Plan {
+/** Historial citable no sustituye el inventario del turno actual. No interpreta el lenguaje. */
+function validarAnclaActual(cobertura: CoberturaPlan, preguntaActual: string): void {
+    const actual = normalizarTextoParte(preguntaActual);
+    if (!actual || !cobertura.partes.some(p => actual.includes(normalizarTextoParte(p.texto)))) throw new Error('turno_actual_sin_ancla');
+}
+// Gramática cerrada de intervalo: dos fechas aisladas también pueden describir hechos.
+const FECHA_ISO_PATRON = '\\d{4}-\\d{2}-\\d{2}';
+const INTERVALO_ISO_PATRON = new RegExp(`\\b(?:desde ${FECHA_ISO_PATRON} hasta ${FECHA_ISO_PATRON}|del ${FECHA_ISO_PATRON} al ${FECHA_ISO_PATRON}|(?:periodo|intervalo|rango)(?: (?:desde|del|de|al|entre))? ${FECHA_ISO_PATRON} (?:hasta|al|a|y) ${FECHA_ISO_PATRON})\\b`);
+/** Solo contrasta un intervalo ISO explícito citado del actual y una única operación vinculada.
+ * Varias operaciones pueden comparar días o períodos: no se infiere un intervalo común.
+ * Las fechas nunca se corrigen ni se extraen de palabras, aritmética o mensajes antiguos.
+ */
+function validarPeriodoActual(cobertura: CoberturaPlan, operaciones: ReturnType<typeof operacionesDelPlan>, preguntaActual: string): void {
+    const actual = normalizarTextoParte(preguntaActual);
+    for (const parte of cobertura.partes) {
+        const texto = normalizarTextoParte(parte.texto);
+        if (parte.disposicion !== 'consultar' || !actual.includes(texto) || !INTERVALO_ISO_PATRON.test(texto)) continue;
+        const fechas = parte.texto.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? [];
+        if (fechas.length !== 2 || !fechas.every(esFechaCalendario) || fechas[0] > fechas[1]) continue;
+        const vinculadas = operaciones.filter(o => o.parte_ids?.includes(parte.id));
+        if (vinculadas.length !== 1) continue;
+        const operacion = vinculadas[0];
+        if (operacion.tipo === 'hato' || operacion.tipo === 'faltantes_aplicacion') continue; // No ofrecen un filtro de período.
+        // La identidad de ronda conserva todas sus observaciones; sus fechas descriptivas
+        // no se convierten aquí en un filtro por fecha_inicio de ronda.
+        if (operacion.tipo === 'monitoreo' && (operacion.consulta.ronda_ids.length || operacion.consulta.rondas.length || operacion.consulta.seleccion_ronda !== undefined)) continue;
+        const consulta = operacion.consulta;
+        if (consulta.desde !== fechas[0] || consulta.hasta !== fechas[1]) throw new Error('periodo_actual_no_coincide');
+    }
+}
+/** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan.
+ * preguntaActual solo se aporta al planear un nuevo turno; los estados D26 se validan
+ * contra su pregunta guardada, sin reinterpretar la elección como una nueva consulta.
+ */
+export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; preguntaActual?: string; exigirCobertura: true }): Plan {
     if (contexto?.exigirCobertura) {
         try {
             if (!llamadas.length) throw new Error('sin_llamadas');
@@ -388,6 +550,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
             if (argumentos.some(a => !a || typeof a !== 'object' || Array.isArray(a)) || argumentos.slice(1).some(a => Object.prototype.hasOwnProperty.call(a, 'cobertura'))) throw new Error('metadato');
             if (argumentos[0].cobertura === undefined) throw new Error('sin_cobertura');
             const cobertura = validarInventarioDeclarado(argumentos[0].cobertura, contexto.pregunta);
+            if (contexto.preguntaActual !== undefined) validarAnclaActual(cobertura, contexto.preguntaActual);
             const limpias = llamadas.map((l, i) => {
                 const { cobertura: _cobertura, parte_ids: _partes, ...consulta } = argumentos[i];
                 return { nombre: l.nombre, argumentos: JSON.stringify(consulta) };
@@ -404,6 +567,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
             if (llamadas.some(l => l.nombre === HERRAMIENTA_FUERA || l.nombre === HERRAMIENTA_ACLARAR)) throw new Error('carrier_extra');
             const operaciones = operacionesDelPlan(base).map((o, i) => ({ ...o, parte_ids: argumentos[i].parte_ids as string[] }));
             validarCorrespondenciaPlan(cobertura, operaciones);
+            if (contexto.preguntaActual !== undefined) validarPeriodoActual(cobertura, operaciones, contexto.preguntaActual);
             return { tipo: 'operaciones', operaciones, cobertura };
         } catch (e) { throw new ErrorPlan(`cobertura_no_valida:${e instanceof Error ? e.message : 'desconocido'}`); }
     }
@@ -424,7 +588,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_CLIMA, HERRAMIENTA_HATO, HERRAMIENTA_PESAJES_LECHE, HERRAMIENTA_LITROS_QUINCENALES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if (nombres.has(HERRAMIENTA_ACLARAR) && llamadas.length !== 1)
@@ -447,6 +611,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
     }
     const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
     const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_CLIMA, HERRAMIENTA_HATO, HERRAMIENTA_PESAJES_LECHE, HERRAMIENTA_LITROS_QUINCENALES].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_PESAJES_LECHE ? {tipo:'pesajes_leche',consulta:validarConsultaPesajesLeche(parsear(l))} : l.nombre === HERRAMIENTA_LITROS_QUINCENALES ? {tipo:'litros_quincenales',consulta:validarConsultaLitrosQuincenales(parsear(l))} : l.nombre === HERRAMIENTA_HATO ? { tipo: 'hato', consulta: validarConsultaHato(parsear(l)) } : l.nombre === HERRAMIENTA_CLIMA ? { tipo: 'clima', consulta: validarConsultaClima(parsear(l)) } : l.nombre === HERRAMIENTA_CONDUCTIVIDAD ? { tipo: 'conductividad', consulta: validarConsultaConductividad(parsear(l)) } : l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }

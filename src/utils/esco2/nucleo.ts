@@ -1,3 +1,11 @@
+import { ejecutarPesajesLeche,ejecutarLitrosQuincenales,periodoQuincenalAlineado,seleccionarQuincenasLeche } from './leche.ts';
+import type { FuenteLeche, PesajeLeche, QuincenaLeche, IngresoLitros } from './lecheTipos.ts';
+import { ejecutarClima } from './clima.ts';
+import type { FuenteClima, ResumenDiarioClima } from './climaTipos.ts';
+import { ejecutarHato } from './hato.ts';
+import type { CatalogoHato, FuenteHato, RegistroVistaHato, DatosHato } from './hatoTipos.ts';
+import { ejecutarConductividad } from './conductividad.ts';
+import type { CatalogoConductividad, FuenteConductividad, RegistroConductividad } from './conductividadTipos.ts';
 // Turno P2: catálogo → planificador validado (un reintento si inválido) → D26 con estado del servidor
 // → lectores fijos → cálculo y render factual deterministas. Sin composición factual LLM.
 import { aplicarReglaDoble, terminoDoble } from './ambiguedad.ts';
@@ -16,6 +24,8 @@ import { ejecutarLaborAplicacion } from './laborAplicacion.ts';
 import { ejecutarCantidadesAplicacion } from './cantidades.ts';
 import { ejecutarCostosAplicacion } from './costos.ts';
 import { ejecutarFaltantesAplicacion } from './faltantes.ts';
+import { ejecutarMonitoreo } from './monitoreo.ts';
+import type { CatalogoMonitoreo, FuenteMonitoreo, ObservacionMonitoreo } from './monitoreoTipos.ts';
 import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';
 import { construirCoberturaFinal, coberturaNoCertificada, validarCoberturaFinal, type CoberturaTurno, type ModoCobertura } from './cobertura.ts';
 /** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
@@ -75,11 +85,14 @@ export const INSTRUCCION_REINTENTO: Record<string, string> = {
     carrier: 'fuera_de_alcance o pedir_aclaracion van solos, con parte_ids vacío; usa pedir_aclaracion solo si alguna parte tiene disposicion aclarar.',
     carrier_extra: 'No combines fuera_de_alcance ni pedir_aclaracion con consultas; declara esas partes solo en cobertura.',
     texto_no_literal: 'Cada texto de cobertura debe copiar un fragmento de la pregunta actual.',
+    turno_actual_sin_ancla: 'El inventario debe citar al menos un fragmento del último mensaje del usuario. El historial solo completa su contexto.',
+    periodo_actual_no_coincide: 'La operación vinculada debe conservar el intervalo ISO explícito citado del último mensaje del usuario. No sustituyas esas fechas por las de un turno anterior.',
     parte_forma: 'Cada parte lleva solo id, texto, capacidad y disposicion, con id s1, s2... en orden.',
     fuera_de_contrato_inconsistente: 'Solo una parte con capacidad fuera_de_contrato lleva disposicion fuera_de_contrato.',
     parte_consultar_sin_operacion: 'Cada parte con disposicion consultar necesita una llamada que la cite en parte_ids. Si ninguna herramienta la responde, declárala fuera_de_contrato.',
     vinculo_a_parte_no_consultar: 'parte_ids solo puede citar partes con disposicion consultar.',
     capacidad_no_coincide: 'La capacidad de cada parte citada debe ser la de la herramienta que la cita.',
+    pesaje_como_quincenal: 'Una parte que pide pesajes usa consultar_pesajes_leche con un animal o se declara aclarar con capacidad pesajes_leche; nunca consultar_litros_quincenales.',
     parte_id_inexistente: 'parte_ids solo puede citar ids declarados en cobertura.',
     parte_ids_forma: 'Cada llamada ejecutable lleva parte_ids, una lista no vacía sin repetidos.',
     portadora_con_operaciones: 'No combines fuera_de_alcance ni pedir_aclaracion con consultas; declara esas partes solo en cobertura.',
@@ -112,6 +125,11 @@ interface ArgsTurno {
     estado?: EstadoTurno;
     respuestaAclaracion?: string;
     fuenteAplicaciones?: FuenteAplicaciones;
+    fuenteMonitoreo?: FuenteMonitoreo;
+    fuenteClima?: FuenteClima;
+    fuenteConductividad?: FuenteConductividad;
+    fuenteHato?: FuenteHato;
+    fuenteLeche?: FuenteLeche;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
 }
@@ -177,13 +195,19 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         catalogo = { tareas: [], lotes: [], tiposTareas: [] };
     }
     let inventarioPlaneado: DatosInventarioAplicaciones | undefined;
+    let catalogoMonitoreo: CatalogoMonitoreo = {};
+    let catalogoConductividad: CatalogoConductividad = {};
+    let catalogoHato: CatalogoHato = {};
     if (!args.estado?.pendiente) {
         // El catálogo laboral excluye aplicaciones sin tarea: leer el catálogo propio,
         // con el mismo lector fijo/JWT, antes de planear. Fallo conserva no leído.
         try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* El dominio no leído no bloquea los otros. */ }
+        try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* No leído, no vacío. */ }
+        try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Dominio independiente. */ }
+        try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
     }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        if (!Array.isArray(inventarioPlaneado?.aplicaciones))
+        if (!args.fuenteClima && !args.fuenteLeche && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes) && !Array.isArray(catalogoHato.animales))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
@@ -234,9 +258,9 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
     }
     else {
-        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones)) }, ...historial, { role: 'user', content: pregunta }];
-        // A follow-up («y la de octubre?») inherits subparts from the user's earlier messages
-        // that the planner received, so a part may quote them. Assistant text never counts.
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad, hato: catalogoHato }) }, ...historial, { role: 'user', content: pregunta }];
+        // A follow-up can inherit context and quote earlier user messages, but at least
+        // one declared part must quote this turn. Assistant text never counts.
         const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
         let validado: Plan | undefined;
         for (let intento = 0; intento < 2; intento++) {
@@ -249,7 +273,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                 return salida({ ...base, respuesta: mensajeDisposicion('error_llm'), origen: 'error_llm', errorPlan: 'planificador_no_disponible' });
             }
             try {
-                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, exigirCobertura: true } : undefined);
+                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, preguntaActual: pregunta, exigirCobertura: true } : undefined);
                 break;
             }
             catch (e) {
@@ -258,7 +282,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                     return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: e instanceof ErrorPlan ? 'plan_no_valido' : 'plan_error', motivoPlan: motivo });
                 // The rejected output is never promoted into context. Only a fixed instruction,
                 // chosen by our own closed reason code, tells the planner what to correct.
-                mensajes.push({ role: 'system', content: `El plan anterior no cumple el esquema. ${INSTRUCCION_REINTENTO[motivo] ?? ''} Reintenta una sola vez la pregunta original con las herramientas y argumentos registrados.`.replace(/\s+/g, ' ') });
+                mensajes.push({ role: 'system', content: `El plan anterior no cumple el esquema. ${INSTRUCCION_REINTENTO[motivo] ?? ''} Reintenta una sola vez la consulta del ÚLTIMO mensaje del usuario, que aparece inmediatamente antes de esta instrucción. Conserva sus cambios explícitos de alcance; usa el historial solo para completar lo que ese mensaje no modifica. Usa las herramientas y argumentos registrados.`.replace(/\s+/g, ' ') });
             }
         }
         plan = validado!;
@@ -328,7 +352,54 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
         const o = operaciones[i], id = `p${i + 1}`;
-        if (o.tipo === 'costos_aplicacion') {
+        if (o.tipo === 'pesajes_leche') {
+            let pesajes: PesajeLeche[] | undefined;
+            if (args.estado?.pendiente) try { catalogoHato=await args.fuenteHato?.catalogo()??{}; } catch { /* Padre no leído. */ }
+            const hasta=o.consulta.hasta>hoy?hoy:o.consulta.hasta;
+            if (o.consulta.desde<=hasta && (o.consulta.animal_ids.length||o.consulta.nombres.length||o.consulta.chapetas.length)) try { pesajes=await args.fuenteLeche?.leerPesajes({...o.consulta,hasta}); } catch { /* No leído, no vacío. */ }
+            resultados.push(ejecutarPesajesLeche(o.consulta,{animales:catalogoHato.animales,pesajes},id,hoy));
+            continue;
+        }
+        if (o.tipo === 'litros_quincenales') {
+            let quincenas: QuincenaLeche[] | undefined, ingresos: IngresoLitros[] | undefined;
+            if (periodoQuincenalAlineado(o.consulta)) {
+                try { quincenas=await args.fuenteLeche?.leerQuincenas(o.consulta); } catch { /* Relación no leída. */ }
+                if (quincenas) try { ingresos=await args.fuenteLeche?.leerIngresos(seleccionarQuincenasLeche(o.consulta,quincenas).filter(f=>f.origen_dato==='medido'&&f.fin_ingreso_id!==null).map(f=>f.fin_ingreso_id!)); } catch { /* Los derivados conservan su partición local. */ }
+            }
+            resultados.push(ejecutarLitrosQuincenales(o.consulta,{quincenas,ingresos},id,hoy));
+            continue;
+        }
+        if (o.tipo === 'hato') {
+            let estados: RegistroVistaHato[] | undefined, config: DatosHato['config'];
+            if (args.estado?.pendiente) try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
+            if (o.consulta.animal_ids.length || o.consulta.nombres.length || o.consulta.chapetas.length) {
+                const lecturas = await Promise.allSettled([args.fuenteHato?.leerEstadoActual(), args.fuenteHato?.leerConfig()]);
+                if (lecturas[0].status === 'fulfilled') estados = lecturas[0].value;
+                if (lecturas[1].status === 'fulfilled') config = lecturas[1].value;
+            }
+            resultados.push(ejecutarHato(o.consulta, { ...catalogoHato, estados, config }, id, hoy));
+            continue;
+        }
+        if (o.tipo === 'conductividad') {
+            let registros: RegistroConductividad[] | undefined;
+            if (args.estado?.pendiente) try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }
+            // Una solicitud sin fecha pide precisar sin recorrer toda la historia CE.
+            if (o.consulta.desde && o.consulta.hasta) try { registros = await args.fuenteConductividad?.leerRegistros(); } catch { /* No leído, nunca vacío. */ }
+            resultados.push(ejecutarConductividad(o.consulta, { ...catalogoConductividad, registros }, id, hoy));
+            continue;
+        }
+        if (o.tipo === 'clima') {
+            let resumen: ResumenDiarioClima[] | undefined;
+            const hasta = o.consulta.hasta > hoy ? hoy : o.consulta.hasta;
+            if (o.consulta.desde <= hasta) try { resumen = await args.fuenteClima?.leerResumen({ ...o.consulta, hasta }); } catch { /* No leído, nunca vacío. */ }
+            resultados.push(ejecutarClima(o.consulta, resumen, id, hoy));
+        } else if (o.tipo === 'monitoreo') {
+            let observaciones: ObservacionMonitoreo[] | undefined;
+            // Un estado pendiente de otro dominio no convierte este catálogo en vacío.
+            if (args.estado?.pendiente) try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }
+            try { observaciones = await args.fuenteMonitoreo?.leerObservaciones(); } catch { /* No leído, no cero. */ }
+            resultados.push(ejecutarMonitoreo(o.consulta, { ...catalogoMonitoreo, observaciones }, id, hoy));
+        } else if (o.tipo === 'costos_aplicacion') {
             let fuenteCostos;
             try { fuenteCostos = await args.fuenteAplicaciones?.leerCostos?.(o.consulta); } catch { /* Unread costs remain local to this operation. */ }
             resultados.push(ejecutarCostosAplicacion(o.consulta, fuenteCostos ?? { seleccion: 'no_leido' }, id, hoy));

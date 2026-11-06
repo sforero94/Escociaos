@@ -1,9 +1,14 @@
+import { renderPesajesLeche,renderLitrosQuincenales } from './leche.ts';
+import { renderClima } from './clima.ts';
+import { renderHato } from './hato.ts';
+import { renderConductividad } from './conductividad.ts';
+import { renderMonitoreo } from './monitoreo.ts';
 // Canonical human Spanish for computed labor results. No model text is composed here.
 import { formatLongDate } from '../formatPuro.ts';
 import { dineroConDetalleMensaje as dineroMensaje, numeroMensaje as numero } from './formatoMensaje.ts';
 import { validarFormaCoberturaFinal, type CoberturaTurno } from './cobertura.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import { esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
+import { esResultadoPesajesLeche, esResultadoLitrosQuincenales, esResultadoClima, esResultadoHato, esResultadoConductividad, esResultadoMonitoreo, esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
 import { renderAplicaciones } from './aplicaciones.ts';
 import { renderLaborAplicacion } from './laborAplicacion.ts';
 import { renderCantidadesAplicacion } from './cantidades.ts';
@@ -22,11 +27,10 @@ function nombre(text: string | undefined, base = 'Labor'): string {
     const result = (text ?? '').replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&');
     return result || base;
 }
-/** The original fragment remains in structured coverage, never as factual numeric evidence.
- * Suppress digit-bearing tokens as a whole, independent of their number/date notation. */
+/** Cita de la solicitud, separada de los hechos; conserva cifras, fechas y nombres. */
 function solicitudCitada(texto: string): string {
     const sinIdentificadores = texto.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[identificador de la solicitud]');
-    return nombre(sinIdentificadores.replace(/\S*\p{N}\S*/gu, '[dato numérico de la solicitud]'));
+    return nombre(sinIdentificadores);
 }
 export function mensajeAclaracion(categoria: string, tareas: string[] = [categoria]): string {
     const shown = tareas.slice(0, 6).map(t => `«${nombre(t, 'la labor indicada')}»`);
@@ -35,7 +39,7 @@ export function mensajeAclaracion(categoria: string, tareas: string[] = [categor
     return `¿Quieres consultar ${tareas.length === 1 ? 'la tarea' : 'las tareas'} ${choices}${tail} o toda la categoría «${nombre(categoria, 'la categoría indicada')}»?`;
 }
 export function mensajeDisposicion(tipo: 'fuera_de_alcance' | 'aclaracion' | 'error_plan' | 'error_llm' | 'error_datos'): string {
-    const textos = { fuera_de_alcance: 'Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones: jornales, tareas programadas, fechas y estado actual, cantidades de productos, costos de una aplicación, labor vinculada y faltantes vigentes de insumos.', aclaracion: 'Necesito precisar tu consulta. Indica la entidad o el alcance que falta para poder responder.', error_plan: 'No pude entender tu consulta. ¿Qué período de labores quieres revisar?', error_llm: 'No pude procesar tu consulta en este momento. Inténtalo de nuevo.', error_datos: 'No pude leer los datos de labores en este momento. Inténtalo de nuevo.' };
+    const textos = { fuera_de_alcance: 'Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones (jornales, tareas, fechas y estado, cantidades, costos, labor vinculada y faltantes de insumos), monitoreo de plagas por ronda, conductividad del suelo, clima histórico observado, ficha y estado reproductivo del hato, pesajes de leche por animal y litros quincenales.', aclaracion: 'Necesito precisar tu consulta. Indica la entidad o el alcance que falta para poder responder.', error_plan: 'No pude entender tu consulta. Indica qué quieres consultar y el período.', error_llm: 'No pude procesar tu consulta en este momento. Inténtalo de nuevo.', error_datos: 'No pude leer los datos necesarios en este momento. Inténtalo de nuevo.' };
     return textos[tipo];
 }
 function periodo(r: ResultadoParte): string { return `Del ${fecha(r.alcance.desde)} al ${fecha(r.alcance.hasta)}, ambas fechas incluidas.`; }
@@ -276,10 +280,10 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         throw new Error('disposicion_parcial_no_valida');
     if (cobertura) validarFormaCoberturaFinal(cobertura, resultados);
     const parts = resultados.map((r, i) => {
-        const text = esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const text = esResultadoPesajesLeche(r) ? renderPesajesLeche(r) : esResultadoLitrosQuincenales(r) ? renderLitrosQuincenales(r) : esResultadoHato(r) ? renderHato(r) : esResultadoClima(r) ? renderClima(r) : esResultadoConductividad(r) ? renderConductividad(r) : esResultadoMonitoreo(r) ? renderMonitoreo(r) : esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
             return text;
-        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
+        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoPesajesLeche(r) ? 'Pesajes de leche' : esResultadoLitrosQuincenales(r) ? 'Litros quincenales' : esResultadoHato(r) ? 'Ficha y reproducción del hato' : esResultadoClima(r) ? 'Clima histórico observado' : esResultadoConductividad(r) ? 'Conductividad eléctrica del suelo' : esResultadoMonitoreo(r) ? 'Monitoreo por ronda' : esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
     if (cobertura?.estado === 'declarada_validada') {
@@ -287,8 +291,9 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         const inventario = cobertura.partes.map((p, i) => `- Parte ${i + 1}, solicitud del usuario: «${solicitudCitada(p.texto)}». ${disposiciones[p.disposicion]}${p.parcial ? ' Conservo los datos parciales sustentados.' : ''}`);
         parts.unshift(`Subpartes de tu solicitud:\n${inventario.join('\n')}`);
     }
-    if (parcialFueraDeAlcance || cobertura?.partes.some(p => p.disposicion !== 'respondida'))
-        parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden a las partes sustentadas y no representan el costo completo de producción.');
+    // Una aclaración pura no muestra datos: no lleva el aviso de respuesta parcial.
+    if (parcialFueraDeAlcance || cobertura?.partes.some(p => p.disposicion !== 'respondida') && !cobertura.partes.every(p => p.disposicion === 'aclarar'))
+        parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden únicamente a las partes sustentadas.');
     if (aviso)
         parts.push(avisos[aviso]);
     return parts.join('\n\n');
