@@ -36,14 +36,14 @@
 // Cambiar un límite exige tocar este archivo Y `categorizarAnimal` en
 // ambas copias de `hato-aggregation.ts`.
 
-import type { EtapaHato } from '@/types/hato';
+import type { EtapaHato } from '../types/hato.ts';
 import {
   derivarEstadoReproductivo,
   type EstadoActualHatoRow,
   type EstadoReproductivo,
   type EstadoReproductivoDerivado,
   type HatoConfig,
-} from '@/utils/calculosHato';
+} from './calculosHato.ts';
 
 export type CategoriaHato = 'ternera' | 'novilla' | 'hato' | 'horro';
 

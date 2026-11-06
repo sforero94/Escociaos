@@ -1,4 +1,5 @@
 import type { ConsultaClima, ResultadoClima } from './climaTipos.ts';
+import type { ConsultaHato, ResultadoHato } from './hatoTipos.ts';
 import type { ConsultaConductividad, ResultadoConductividad } from './conductividadTipos.ts';
 import type { ConsultaMonitoreo, ResultadoMonitoreo } from './monitoreoTipos.ts';
 // Esco 2.0 — tipos del núcleo de consultas (M2.5: familia de labores).
@@ -114,7 +115,7 @@ export type Plan = (
   | { tipo: 'operaciones'; operaciones: OperacionConsulta[]; parcialFueraDeAlcance?: true }
   | { tipo: 'aclaracion'; aclaracion: Aclaracion }
   | { tipo: 'fuera_de_alcance'; motivo: string }) & { cobertura?: CoberturaPlan };
-export type OperacionConsulta = ({ tipo: 'conductividad'; consulta: ConsultaConductividad } | { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'monitoreo'; consulta: ConsultaMonitoreo } | { tipo: 'clima'; consulta: ConsultaClima } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones } | { tipo: 'cantidades_aplicacion'; consulta: ConsultaCantidadesAplicacion } | { tipo: 'costos_aplicacion'; consulta: ConsultaCostosAplicacion } | { tipo: 'labor_aplicacion'; consulta: ConsultaLaborAplicacion } | { tipo: 'faltantes_aplicacion'; consulta: ConsultaFaltantesAplicacion }) & { parte_ids?: string[] };
+export type OperacionConsulta = ({ tipo: 'hato'; consulta: ConsultaHato } | { tipo: 'conductividad'; consulta: ConsultaConductividad } | { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'monitoreo'; consulta: ConsultaMonitoreo } | { tipo: 'clima'; consulta: ConsultaClima } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones } | { tipo: 'cantidades_aplicacion'; consulta: ConsultaCantidadesAplicacion } | { tipo: 'costos_aplicacion'; consulta: ConsultaCostosAplicacion } | { tipo: 'labor_aplicacion'; consulta: ConsultaLaborAplicacion } | { tipo: 'faltantes_aplicacion'; consulta: ConsultaFaltantesAplicacion }) & { parte_ids?: string[] };
 export type PlanConsultas = Extract<Plan, { tipo: 'consultas' | 'operaciones' }>;
 export function operacionesDelPlan(plan: PlanConsultas): OperacionConsulta[] {
   return plan.tipo === 'consultas' ? plan.consultas.map(consulta => ({ tipo: 'labores', consulta })) : plan.operaciones;
@@ -125,7 +126,7 @@ export function planDeOperaciones(operaciones: OperacionConsulta[], parcialFuera
   const laborales = operaciones.filter((o): o is Extract<OperacionConsulta, { tipo: 'labores' }> => o.tipo === 'labores');
   return !cobertura && laborales.length === operaciones.length && operaciones.every(o => !o.parte_ids) ? { tipo: 'consultas', consultas: laborales.map(o => o.consulta), ...parcial } : { tipo: 'operaciones', operaciones, ...parcial, ...(cobertura ? { cobertura } : {}) };
 }
-export type ResultadoConsulta = ResultadoConductividad | ResultadoParte | ResultadoClima | ResultadoMonitoreo | ResultadoAplicaciones | ResultadoCantidadesAplicacion | ResultadoCostosAplicacion | ResultadoLaborAplicacion | ResultadoFaltantesAplicacion;
+export type ResultadoConsulta = ResultadoHato | ResultadoConductividad | ResultadoParte | ResultadoClima | ResultadoMonitoreo | ResultadoAplicaciones | ResultadoCantidadesAplicacion | ResultadoCostosAplicacion | ResultadoLaborAplicacion | ResultadoFaltantesAplicacion;
 export const esResultadoAplicaciones = (r: ResultadoConsulta): r is ResultadoAplicaciones => 'tipo' in r && r.tipo === 'aplicaciones';
 export const esResultadoCostos = (r: ResultadoConsulta): r is ResultadoCostosAplicacion => 'tipo' in r && r.tipo === 'costos_aplicacion';
 export const esResultadoCantidades = (r: ResultadoConsulta): r is ResultadoCantidadesAplicacion => 'tipo' in r && r.tipo === 'cantidades_aplicacion';
@@ -234,3 +235,4 @@ export const esResultadoMonitoreo = (r: ResultadoConsulta): r is ResultadoMonito
 export const esResultadoConductividad = (r: ResultadoConsulta): r is ResultadoConductividad => 'tipo' in r && r.tipo === 'conductividad';
 
 export const esResultadoClima = (r: ResultadoConsulta): r is ResultadoClima => 'tipo' in r && r.tipo === 'clima';
+export const esResultadoHato = (r: ResultadoConsulta): r is ResultadoHato => 'tipo' in r && r.tipo === 'hato';

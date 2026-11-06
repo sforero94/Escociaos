@@ -19,7 +19,7 @@ import { MARCA } from './ambiguedad.ts';
 import { extraerFechas } from './fechasTexto.ts';
 import { normalizar } from './catalogo.ts';
 import type { ResultadoTurno } from './nucleo.ts';
-import { esResultadoClima, esResultadoConductividad, esResultadoMonitoreo, esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion } from './tipos.ts';
+import { esResultadoClima, esResultadoHato, esResultadoConductividad, esResultadoMonitoreo, esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion } from './tipos.ts';
 
 export interface Ancla {
   claim: string;
@@ -72,6 +72,7 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
   const f = new Set<string>();
   if (hoy) f.add(hoy);
   for (const r of turno.resultados) {
+    if (esResultadoHato(r)) { f.add(r.fecha_referencia); continue; }
     if (esResultadoFaltantesAplicacion(r)) { f.add(r.fecha_consulta); continue; }
     const periodo = esResultadoConductividad(r) || esResultadoClima(r) || esResultadoMonitoreo(r) || esResultadoAplicaciones(r) || esResultadoCantidades(r) || esResultadoCostos(r) || esResultadoLaborAplicacion(r) ? r.consulta : r.alcance;
     if (periodo.desde) f.add(periodo.desde);
@@ -83,7 +84,7 @@ function fechasDeContexto(turno: ResultadoTurno, hoy: string | undefined): Set<s
 /** Yearless dates need the supplied calendar context, never the evaluator's clock. */
 function anioDeContexto(turno: ResultadoTurno, hoy: string | undefined): number {
   const first = turno.resultados[0];
-  const hasta = first ? esResultadoFaltantesAplicacion(first) ? first.fecha_consulta : esResultadoConductividad(first) || esResultadoClima(first) || esResultadoMonitoreo(first) || esResultadoAplicaciones(first) || esResultadoCantidades(first) || esResultadoCostos(first) || esResultadoLaborAplicacion(first) ? first.consulta.hasta : first.alcance.hasta : '';
+  const hasta = first ? esResultadoHato(first) ? first.fecha_referencia : esResultadoFaltantesAplicacion(first) ? first.fecha_consulta : esResultadoConductividad(first) || esResultadoClima(first) || esResultadoMonitoreo(first) || esResultadoAplicaciones(first) || esResultadoCantidades(first) || esResultadoCostos(first) || esResultadoLaborAplicacion(first) ? first.consulta.hasta : first.alcance.hasta : '';
   return Number.parseInt((hoy ?? hasta ?? '').slice(0, 4), 10);
 }
 

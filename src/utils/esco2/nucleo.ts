@@ -1,5 +1,7 @@
 import { ejecutarClima } from './clima.ts';
 import type { FuenteClima, ResumenDiarioClima } from './climaTipos.ts';
+import { ejecutarHato } from './hato.ts';
+import type { CatalogoHato, FuenteHato, RegistroVistaHato, DatosHato } from './hatoTipos.ts';
 import { ejecutarConductividad } from './conductividad.ts';
 import type { CatalogoConductividad, FuenteConductividad, RegistroConductividad } from './conductividadTipos.ts';
 // Turno P2: catálogo → planificador validado (un reintento si inválido) → D26 con estado del servidor
@@ -121,6 +123,7 @@ interface ArgsTurno {
     fuenteMonitoreo?: FuenteMonitoreo;
     fuenteClima?: FuenteClima;
     fuenteConductividad?: FuenteConductividad;
+    fuenteHato?: FuenteHato;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
 }
@@ -188,15 +191,17 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     let inventarioPlaneado: DatosInventarioAplicaciones | undefined;
     let catalogoMonitoreo: CatalogoMonitoreo = {};
     let catalogoConductividad: CatalogoConductividad = {};
+    let catalogoHato: CatalogoHato = {};
     if (!args.estado?.pendiente) {
         // El catálogo laboral excluye aplicaciones sin tarea: leer el catálogo propio,
         // con el mismo lector fijo/JWT, antes de planear. Fallo conserva no leído.
         try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* El dominio no leído no bloquea los otros. */ }
         try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* No leído, no vacío. */ }
         try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Dominio independiente. */ }
+        try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
     }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        if (!args.fuenteClima && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes))
+        if (!args.fuenteClima && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes) && !Array.isArray(catalogoHato.animales))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
@@ -247,7 +252,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
     }
     else {
-        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad }) }, ...historial, { role: 'user', content: pregunta }];
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad, hato: catalogoHato }) }, ...historial, { role: 'user', content: pregunta }];
         // A follow-up («y la de octubre?») inherits subparts from the user's earlier messages
         // that the planner received, so a part may quote them. Assistant text never counts.
         const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
@@ -341,6 +346,17 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
         const o = operaciones[i], id = `p${i + 1}`;
+        if (o.tipo === 'hato') {
+            let estados: RegistroVistaHato[] | undefined, config: DatosHato['config'];
+            if (args.estado?.pendiente) try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
+            if (o.consulta.animal_ids.length || o.consulta.nombres.length || o.consulta.chapetas.length) {
+                const lecturas = await Promise.allSettled([args.fuenteHato?.leerEstadoActual(), args.fuenteHato?.leerConfig()]);
+                if (lecturas[0].status === 'fulfilled') estados = lecturas[0].value;
+                if (lecturas[1].status === 'fulfilled') config = lecturas[1].value;
+            }
+            resultados.push(ejecutarHato(o.consulta, { ...catalogoHato, estados, config }, id, hoy));
+            continue;
+        }
         if (o.tipo === 'conductividad') {
             let registros: RegistroConductividad[] | undefined;
             if (args.estado?.pendiente) try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }

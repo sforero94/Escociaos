@@ -2,7 +2,7 @@
 import type { OperacionConsulta, Plan, ResultadoConsulta } from './tipos.ts';
 import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
 
-export const CAPACIDADES_PARTE = ['labores', 'aplicaciones', 'cantidades_aplicacion', 'costos_aplicacion', 'labor_aplicacion', 'faltantes_aplicacion', 'monitoreo', 'conductividad', 'clima', 'fuera_de_contrato'] as const;
+export const CAPACIDADES_PARTE = ['labores', 'aplicaciones', 'cantidades_aplicacion', 'costos_aplicacion', 'labor_aplicacion', 'faltantes_aplicacion', 'monitoreo', 'conductividad', 'clima', 'hato', 'fuera_de_contrato'] as const;
 export const DISPOSICIONES_DECLARADAS = ['consultar', 'aclarar', 'fuera_de_contrato'] as const;
 export type CapacidadParte = typeof CAPACIDADES_PARTE[number];
 export interface ParteDeclarada { id: string; texto: string; capacidad: CapacidadParte; disposicion: typeof DISPOSICIONES_DECLARADAS[number] }

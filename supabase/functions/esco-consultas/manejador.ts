@@ -1,4 +1,5 @@
 import { fuenteClimaSupabase } from '../../../src/utils/esco2/climaFuente.ts';
+import { fuenteHatoSupabase } from '../../../src/utils/esco2/hatoFuente.ts';
 import { fuenteConductividadSupabase } from '../../../src/utils/esco2/conductividadFuente.ts';
 // esco-consultas: manejador HTTP de Esco 2.0 (M3, familia de labores).
 //
@@ -218,6 +219,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         fuenteMonitoreo: fuenteMonitoreoSupabase(cliente),
         fuenteClima: fuenteClimaSupabase(cliente),
         fuenteConductividad: fuenteConductividadSupabase(cliente),
+        fuenteHato: fuenteHatoSupabase(cliente),
         llm,
         config: CONFIG_M3,
         modoCobertura: deps.modoCobertura,

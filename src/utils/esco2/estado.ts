@@ -44,7 +44,7 @@ export function validarEstado(estado: EstadoTurno): boolean {
         if (estado.plan.parcialFueraDeAlcance !== undefined && estado.plan.parcialFueraDeAlcance !== true) return false;
         const operaciones = operacionesDelPlan(estado.plan);
         if (!operaciones.length || operaciones.length > 4) return false;
-        const herramientaDe: Record<string, string> = { labores: 'consultar_labores', aplicaciones: 'consultar_aplicaciones', cantidades_aplicacion: 'consultar_cantidades_aplicacion', costos_aplicacion: 'consultar_costos_aplicacion', labor_aplicacion: 'consultar_labor_aplicacion', faltantes_aplicacion: 'consultar_faltantes_aplicacion', monitoreo: 'consultar_monitoreo', clima: 'consultar_clima', conductividad: 'consultar_conductividad' };
+        const herramientaDe: Record<string, string> = { labores: 'consultar_labores', aplicaciones: 'consultar_aplicaciones', cantidades_aplicacion: 'consultar_cantidades_aplicacion', costos_aplicacion: 'consultar_costos_aplicacion', labor_aplicacion: 'consultar_labor_aplicacion', faltantes_aplicacion: 'consultar_faltantes_aplicacion', monitoreo: 'consultar_monitoreo', clima: 'consultar_clima', hato: 'consultar_hato', conductividad: 'consultar_conductividad' };
         if (operaciones.some(o => !o || !Object.prototype.hasOwnProperty.call(herramientaDe, o.tipo))) return false;
         const cobertura = estado.plan.cobertura;
         if (cobertura) {

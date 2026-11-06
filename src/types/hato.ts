@@ -15,7 +15,7 @@ import type {
   CriaDestino,
   TipoEstado,
   MetodoConfirmacionPrenez,
-} from '@/utils/calculosHato';
+} from '../utils/calculosHato.ts';
 
 export type { TipoEventoHato, CriaDestino, TipoEstado };
 
