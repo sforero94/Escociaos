@@ -6,6 +6,7 @@ import type { ConsultaCostosAplicacion } from './costosTipos.ts';
 import type { ConsultaLaborAplicacion } from './laborAplicacionTipos.ts';
 import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
+import type { ConsultaMonitoreo } from './monitoreoTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 import { operacionesDelPlan } from './tipos.ts';
 import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, validarInventarioDeclarado, validarCorrespondenciaPlan } from './cobertura.ts';
@@ -29,6 +30,7 @@ export const HERRAMIENTA_LABOR_APLICACION = 'consultar_labor_aplicacion';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
 export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
 export const HERRAMIENTA_FALTANTES = 'consultar_faltantes_aplicacion';
+export const HERRAMIENTA_MONITOREO = 'consultar_monitoreo';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
@@ -127,6 +129,18 @@ export function herramientasPlanificador(): unknown[] {
             parameters: { type: 'object', additionalProperties: false, properties: {
                 aplicacion_ids: { type: 'array', minItems: 1, items: { type: 'string', format: 'uuid' } },
                 aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_MONITOREO,
+            description: 'Incidencia y gravedad por ronda real de monitoreo, siempre separadas por plaga. Selecciona rondas por ID, nombre exacto o desde/hasta inclusivos sobre su fecha de inicio (conserva la ronda completa, aunque abarque varias fechas). ultima_global elige la ronda global visible más reciente, nunca la última lectura por combinación. Sin selector pide precisar. Filtros lote/sublote/plaga por ID o nombre exacto. Agrupa por lote/sublote solo si se pide. Cada observación suma una vez sus afectados y muestreados; sin fila significa no revisado. No severidad, densidad, árboles únicos, recomendaciones ni CE.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                ronda_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, rondas: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                lote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, lotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                sublote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, sublotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                plaga_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } }, plagas: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+                desde: { type: 'string' }, hasta: { type: 'string' }, seleccion_ronda: { type: 'string', enum: ['todas', 'ultima_global'] },
+                agrupar_por: { type: 'array', uniqueItems: true, maxItems: 2, items: { type: 'string', enum: ['lote', 'sublote'] } },
             } },
         } },
         {
@@ -282,11 +296,32 @@ function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): Consult
     if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
     return selectorAplicaciones(a, 'faltantes');
 }
+function validarConsultaMonitoreo(a: Record<string, unknown>): ConsultaMonitoreo {
+    if (Object.keys(a).some(k => !['ronda_ids', 'rondas', 'lote_ids', 'lotes', 'sublote_ids', 'sublotes', 'plaga_ids', 'plagas', 'agrupar_por', 'desde', 'hasta', 'seleccion_ronda'].includes(k))) throw new ErrorPlan('argumento de monitoreo no registrado');
+    const filtros: Record<string, string[]> = {};
+    for (const [ids, nombres] of [['ronda_ids', 'rondas'], ['lote_ids', 'lotes'], ['sublote_ids', 'sublotes'], ['plaga_ids', 'plagas']]) {
+        for (const campo of [ids, nombres]) {
+            if (a[campo] !== undefined && (!Array.isArray(a[campo]) || (a[campo] as unknown[]).some(v => typeof v !== 'string' || !v.trim()))) throw new ErrorPlan('selector de monitoreo inválido');
+            const valores = listaTextos(a[campo], campo).map(v => campo === ids ? v.toLowerCase() : v);
+            if (new Set(valores).size !== valores.length || campo === ids && valores.some(v => !esUuid(v))) throw new ErrorPlan('selector de monitoreo inválido');
+            filtros[campo] = valores;
+        }
+        if (filtros[ids].length && filtros[nombres].length) throw new ErrorPlan('selector de monitoreo ambiguo');
+    }
+    if (a.agrupar_por !== undefined && (!Array.isArray(a.agrupar_por) || a.agrupar_por.some(g => typeof g !== 'string' || !g.trim()))) throw new ErrorPlan('agrupación de monitoreo inválida');
+    const agrupaciones = listaTextos(a.agrupar_por, 'agrupar_por');
+    if (agrupaciones.length > 2 || new Set(agrupaciones).size !== agrupaciones.length || agrupaciones.some(g => g !== 'lote' && g !== 'sublote') || a.agrupar_por === null) throw new ErrorPlan('agrupación de monitoreo inválida');
+    const periodo = a.desde !== undefined || a.hasta !== undefined;
+    if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de rondas inválido');
+    if (a.seleccion_ronda !== undefined && (typeof a.seleccion_ronda !== 'string' || !['todas', 'ultima_global'].includes(a.seleccion_ronda) || filtros.ronda_ids.length || filtros.rondas.length)) throw new ErrorPlan('selección de ronda inválida');
+    return { ronda_ids: filtros.ronda_ids, rondas: filtros.rondas, lote_ids: filtros.lote_ids, lotes: filtros.lotes, sublote_ids: filtros.sublote_ids, sublotes: filtros.sublotes, plaga_ids: filtros.plaga_ids, plagas: filtros.plagas, agrupar_por: agrupaciones as ConsultaMonitoreo['agrupar_por'], ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}), ...(a.seleccion_ronda !== undefined ? { seleccion_ronda: a.seleccion_ronda as ConsultaMonitoreo['seleccion_ronda'] } : {}) };
+}
 /** Ordena claves para comparar inventarios repetidos sin transformar valores. */
 const canonicoCobertura = (v: unknown): string => JSON.stringify(v, (_k, x) => x !== null && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(k => [k, (x as Record<string, unknown>)[k]])) : x);
 const CAPACIDAD_DE_HERRAMIENTA: Record<string, string> = {
     [HERRAMIENTA_CONSULTAR]: 'labores', [HERRAMIENTA_APLICACIONES]: 'aplicaciones', [HERRAMIENTA_CANTIDADES]: 'cantidades_aplicacion',
     [HERRAMIENTA_COSTOS]: 'costos_aplicacion', [HERRAMIENTA_LABOR_APLICACION]: 'labor_aplicacion', [HERRAMIENTA_FALTANTES]: 'faltantes_aplicacion',
+    [HERRAMIENTA_MONITOREO]: 'monitoreo',
 };
 type ParteBruta = { id?: unknown; capacidad?: unknown; disposicion?: unknown };
 /** Une inventarios parciales que el modelo repartió entre llamadas (s1 en una, s2 en otra). */
@@ -424,7 +459,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if (nombres.has(HERRAMIENTA_ACLARAR) && llamadas.length !== 1)
@@ -447,6 +482,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
     }
     const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
     const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }

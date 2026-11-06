@@ -16,6 +16,8 @@ import { ejecutarLaborAplicacion } from './laborAplicacion.ts';
 import { ejecutarCantidadesAplicacion } from './cantidades.ts';
 import { ejecutarCostosAplicacion } from './costos.ts';
 import { ejecutarFaltantesAplicacion } from './faltantes.ts';
+import { ejecutarMonitoreo } from './monitoreo.ts';
+import type { CatalogoMonitoreo, FuenteMonitoreo, ObservacionMonitoreo } from './monitoreoTipos.ts';
 import type { DatosInventarioAplicaciones, FuenteAplicaciones } from './aplicacionesTipos.ts';
 import { construirCoberturaFinal, coberturaNoCertificada, validarCoberturaFinal, type CoberturaTurno, type ModoCobertura } from './cobertura.ts';
 /** Last client messages the planner sees to interpret a follow-up (same cap as before P2). */
@@ -112,6 +114,7 @@ interface ArgsTurno {
     estado?: EstadoTurno;
     respuestaAclaracion?: string;
     fuenteAplicaciones?: FuenteAplicaciones;
+    fuenteMonitoreo?: FuenteMonitoreo;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
 }
@@ -177,13 +180,15 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         catalogo = { tareas: [], lotes: [], tiposTareas: [] };
     }
     let inventarioPlaneado: DatosInventarioAplicaciones | undefined;
+    let catalogoMonitoreo: CatalogoMonitoreo = {};
     if (!args.estado?.pendiente) {
         // El catálogo laboral excluye aplicaciones sin tarea: leer el catálogo propio,
         // con el mismo lector fijo/JWT, antes de planear. Fallo conserva no leído.
         try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* El dominio no leído no bloquea los otros. */ }
+        try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* No leído, no vacío. */ }
     }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        if (!Array.isArray(inventarioPlaneado?.aplicaciones))
+        if (!Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
@@ -234,7 +239,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
     }
     else {
-        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones)) }, ...historial, { role: 'user', content: pregunta }];
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo }) }, ...historial, { role: 'user', content: pregunta }];
         // A follow-up («y la de octubre?») inherits subparts from the user's earlier messages
         // that the planner received, so a part may quote them. Assistant text never counts.
         const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
@@ -328,7 +333,13 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
         const o = operaciones[i], id = `p${i + 1}`;
-        if (o.tipo === 'costos_aplicacion') {
+        if (o.tipo === 'monitoreo') {
+            let observaciones: ObservacionMonitoreo[] | undefined;
+            // Un estado pendiente de otro dominio no convierte este catálogo en vacío.
+            if (args.estado?.pendiente) try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }
+            try { observaciones = await args.fuenteMonitoreo?.leerObservaciones(); } catch { /* No leído, no cero. */ }
+            resultados.push(ejecutarMonitoreo(o.consulta, { ...catalogoMonitoreo, observaciones }, id, hoy));
+        } else if (o.tipo === 'costos_aplicacion') {
             let fuenteCostos;
             try { fuenteCostos = await args.fuenteAplicaciones?.leerCostos?.(o.consulta); } catch { /* Unread costs remain local to this operation. */ }
             resultados.push(ejecutarCostosAplicacion(o.consulta, fuenteCostos ?? { seleccion: 'no_leido' }, id, hoy));
