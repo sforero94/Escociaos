@@ -84,6 +84,8 @@ function disposicionResultado(r: ResultadoConsulta, o: OperacionConsulta): Pick<
   const semantica = !('tipo' in r) ? r.semantica?.disposicion : undefined;
   if (r.estado === 'no_resuelto' || r.estado === 'aclaracion' || semantica === 'aclaracion') return { disposicion: 'aclarar' };
   if (r.estado === 'no_soportada' || semantica === 'no_soportada') return { disposicion: 'fuera_de_contrato' };
+  // La historia con cobertura explícita responde aun con NULL o días sin fila.
+  if (o.tipo === 'clima' && r.estado === 'parcial') return { disposicion: 'respondida' };
   if (r.estado === 'parcial') return { disposicion: 'fuente_no_disponible', parcial: true };
   if (r.estado === 'no_disponible' || semantica === 'fuente_no_disponible') return { disposicion: 'fuente_no_disponible' };
   if (o.tipo === 'labores' && !('tipo' in r)) {

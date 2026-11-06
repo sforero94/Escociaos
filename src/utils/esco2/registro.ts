@@ -7,6 +7,7 @@ import type { ConsultaCostosAplicacion } from './costosTipos.ts';
 import type { ConsultaLaborAplicacion } from './laborAplicacionTipos.ts';
 import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
+import { VARIABLES_CLIMA, VARIABLES_CLIMA_DEFAULT, type ConsultaClima } from './climaTipos.ts';
 import type { ConsultaMonitoreo } from './monitoreoTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 import { operacionesDelPlan } from './tipos.ts';
@@ -33,6 +34,7 @@ export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
 export const HERRAMIENTA_FALTANTES = 'consultar_faltantes_aplicacion';
 export const HERRAMIENTA_CONDUCTIVIDAD = 'consultar_conductividad';
 export const HERRAMIENTA_MONITOREO = 'consultar_monitoreo';
+export const HERRAMIENTA_CLIMA = 'consultar_clima';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
 /** Herramientas en formato OpenAI/OpenRouter. */
@@ -140,6 +142,14 @@ export function herramientasPlanificador(): unknown[] {
                 desde: { type: 'string' }, hasta: { type: 'string' },
                 lote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } },
                 lotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_CLIMA,
+            description: 'Historia climática observada del resumen diario, desde/hasta inclusivos. Variables cerradas y estación opcional exacta. Sin pronósticos, prescripciones ni lecturas en vivo. Devuelve cobertura por variable, cotas de lluvia separadas y procedencia; estaciones solapadas requieren aclaración.',
+            parameters: { type: 'object', additionalProperties: false, required: ['desde','hasta'], properties: {
+                desde: {type:'string'}, hasta: {type:'string'}, station_id: {type:'string',minLength:1},
+                variables: {type:'array',minItems:1,uniqueItems:true,items:{type:'string',enum:[...VARIABLES_CLIMA]}},
             } },
         } },
         { type: 'function', function: {
@@ -321,6 +331,13 @@ function validarConsultaConductividad(a: Record<string, unknown>): ConsultaCondu
     if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de conductividad inválido');
     return { lote_ids: filtros.lote_ids, lotes: filtros.lotes, ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
 }
+function validarConsultaClima(a: Record<string, unknown>): ConsultaClima {
+    if (Object.keys(a).some(k => !['desde','hasta','station_id','variables'].includes(k))) throw new ErrorPlan('argumento de clima no registrado');
+    if (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde>a.hasta) throw new ErrorPlan('período climático inválido');
+    if (a.station_id !== undefined && (typeof a.station_id !== 'string' || !a.station_id.trim())) throw new ErrorPlan('estación inválida');
+    if (a.variables !== undefined && (!Array.isArray(a.variables) || !a.variables.length || new Set(a.variables).size!==a.variables.length || a.variables.some(v=>!VARIABLES_CLIMA.includes(v)))) throw new ErrorPlan('variable climática no registrada');
+    return { desde:a.desde, hasta:a.hasta, variables:a.variables===undefined ? [...VARIABLES_CLIMA_DEFAULT] : a.variables as ConsultaClima['variables'], ...(a.station_id!==undefined ? {station_id:(a.station_id as string).trim()} : {}) };
+}
 function validarConsultaMonitoreo(a: Record<string, unknown>): ConsultaMonitoreo {
     if (Object.keys(a).some(k => !['ronda_ids', 'rondas', 'lote_ids', 'lotes', 'sublote_ids', 'sublotes', 'plaga_ids', 'plagas', 'agrupar_por', 'desde', 'hasta', 'seleccion_ronda'].includes(k))) throw new ErrorPlan('argumento de monitoreo no registrado');
     const filtros: Record<string, string[]> = {};
@@ -346,7 +363,7 @@ const canonicoCobertura = (v: unknown): string => JSON.stringify(v, (_k, x) => x
 const CAPACIDAD_DE_HERRAMIENTA: Record<string, string> = {
     [HERRAMIENTA_CONSULTAR]: 'labores', [HERRAMIENTA_APLICACIONES]: 'aplicaciones', [HERRAMIENTA_CANTIDADES]: 'cantidades_aplicacion',
     [HERRAMIENTA_COSTOS]: 'costos_aplicacion', [HERRAMIENTA_LABOR_APLICACION]: 'labor_aplicacion', [HERRAMIENTA_FALTANTES]: 'faltantes_aplicacion',
-    [HERRAMIENTA_MONITOREO]: 'monitoreo', [HERRAMIENTA_CONDUCTIVIDAD]: 'conductividad',
+    [HERRAMIENTA_MONITOREO]: 'monitoreo', [HERRAMIENTA_CLIMA]: 'clima', [HERRAMIENTA_CONDUCTIVIDAD]: 'conductividad',
 };
 type ParteBruta = { id?: unknown; capacidad?: unknown; disposicion?: unknown };
 /** Une inventarios parciales que el modelo repartió entre llamadas (s1 en una, s2 en otra). */
@@ -484,7 +501,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_CLIMA, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if (nombres.has(HERRAMIENTA_ACLARAR) && llamadas.length !== 1)
@@ -507,6 +524,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
     }
     const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
     const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_CONDUCTIVIDAD ? { tipo: 'conductividad', consulta: validarConsultaConductividad(parsear(l)) } : l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_CLIMA].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_CLIMA ? { tipo: 'clima', consulta: validarConsultaClima(parsear(l)) } : l.nombre === HERRAMIENTA_CONDUCTIVIDAD ? { tipo: 'conductividad', consulta: validarConsultaConductividad(parsear(l)) } : l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }

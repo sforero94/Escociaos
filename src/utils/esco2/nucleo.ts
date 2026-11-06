@@ -1,3 +1,5 @@
+import { ejecutarClima } from './clima.ts';
+import type { FuenteClima, ResumenDiarioClima } from './climaTipos.ts';
 import { ejecutarConductividad } from './conductividad.ts';
 import type { CatalogoConductividad, FuenteConductividad, RegistroConductividad } from './conductividadTipos.ts';
 // Turno P2: catálogo → planificador validado (un reintento si inválido) → D26 con estado del servidor
@@ -117,6 +119,7 @@ interface ArgsTurno {
     respuestaAclaracion?: string;
     fuenteAplicaciones?: FuenteAplicaciones;
     fuenteMonitoreo?: FuenteMonitoreo;
+    fuenteClima?: FuenteClima;
     fuenteConductividad?: FuenteConductividad;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
@@ -193,7 +196,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Dominio independiente. */ }
     }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        if (!Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes))
+        if (!args.fuenteClima && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
@@ -346,7 +349,12 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             resultados.push(ejecutarConductividad(o.consulta, { ...catalogoConductividad, registros }, id, hoy));
             continue;
         }
-        if (o.tipo === 'monitoreo') {
+        if (o.tipo === 'clima') {
+            let resumen: ResumenDiarioClima[] | undefined;
+            const hasta = o.consulta.hasta > hoy ? hoy : o.consulta.hasta;
+            if (o.consulta.desde <= hasta) try { resumen = await args.fuenteClima?.leerResumen({ ...o.consulta, hasta }); } catch { /* No leído, nunca vacío. */ }
+            resultados.push(ejecutarClima(o.consulta, resumen, id, hoy));
+        } else if (o.tipo === 'monitoreo') {
             let observaciones: ObservacionMonitoreo[] | undefined;
             // Un estado pendiente de otro dominio no convierte este catálogo en vacío.
             if (args.estado?.pendiente) try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }
