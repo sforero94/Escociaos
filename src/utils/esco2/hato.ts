@@ -73,22 +73,32 @@ function configValida(datos: DatosHato): { config: HatoConfig; umbrales: Umbrale
     return finitos(config) && finitos(umbrales) ? { config, umbrales } : null;
   } catch { return null; }
 }
-export function ejecutarHato(consulta: ConsultaHato, datos: DatosHato, id: string, hoy: string): ResultadoHato {
-  const base: ResultadoHato = { tipo: 'hato', id, consulta, fecha_referencia: hoy, estado: 'no_disponible', filas: [], fuente: 'lecturas_independientes' };
-  if (!consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { ...base, estado: 'aclaracion', motivo: 'animal_sin_precisar' };
-  if (!esFechaCalendario(hoy) || !Array.isArray(datos.animales) || !idsValidos(datos.animales)) return { ...base, motivo: 'fichas_no_leidas' };
-  const animales = datos.animales;
-  if (consulta.nombres.length && animales.some(a => a.nombre === undefined) || consulta.chapetas.length && animales.some(a => a.numero === undefined)) return { ...base, motivo: 'selector_no_leido' };
+export type SeleccionAnimalesHato = { estado: 'ok'; animales: AnimalHato[] } | { estado: 'aclaracion' | 'no_disponible' | 'no_resuelto'; motivo: string };
+export function resolverSeleccionAnimalesHato(consulta: ConsultaHato, animalesLeidos: AnimalHato[] | undefined): SeleccionAnimalesHato {
+  if (!consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { estado: 'aclaracion', motivo: 'animal_sin_precisar' };
+  if (!Array.isArray(animalesLeidos) || !idsValidos(animalesLeidos)) return { estado: 'no_disponible', motivo: 'fichas_no_leidas' };
+  const animales = animalesLeidos;
+  if (consulta.nombres.length && animales.some(a => a.nombre === undefined) || consulta.chapetas.length && animales.some(a => a.numero === undefined)) return { estado: 'no_disponible', motivo: 'selector_no_leido' };
   const ids = [...consulta.animal_ids];
-  if (ids.some(i => !animales.some(a => a.id === i))) return { ...base, motivo: 'animal_no_visible' };
+  if (ids.some(i => !animales.some(a => a.id === i))) return { estado: 'no_disponible', motivo: 'animal_no_visible' };
   for (const [valores, coincide] of [
     [consulta.nombres, (a: AnimalHato, v: string | number) => typeof a.nombre === 'string' && normalizar(a.nombre) === normalizar(String(v))],
     [consulta.chapetas, (a: AnimalHato, v: string | number) => a.numero === v],
   ] as const) for (const valor of valores) {
     const opciones = animales.filter(a => coincide(a, valor));
-    if (opciones.length !== 1) return { ...base, estado: 'no_resuelto', motivo: 'animal_ambiguo_o_ausente' };
+    if (opciones.length !== 1) return { estado: 'no_resuelto', motivo: 'animal_ambiguo_o_ausente' };
     ids.push(opciones[0].id);
   }
+  return { estado: 'ok', animales: animales.filter(a => ids.includes(a.id)) };
+}
+export function ejecutarHato(consulta: ConsultaHato, datos: DatosHato, id: string, hoy: string): ResultadoHato {
+  const base: ResultadoHato = { tipo: 'hato', id, consulta, fecha_referencia: hoy, estado: 'no_disponible', filas: [], fuente: 'lecturas_independientes' };
+  if (!consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { ...base, estado: 'aclaracion', motivo: 'animal_sin_precisar' };
+  if (!esFechaCalendario(hoy)) return { ...base, motivo: 'fichas_no_leidas' };
+  const seleccion = resolverSeleccionAnimalesHato(consulta, datos.animales);
+  if (seleccion.estado !== 'ok') return { ...base, estado: seleccion.estado, motivo: seleccion.motivo };
+  const animales = datos.animales!;
+  const ids = seleccion.animales.map(a => a.id);
   const configuracion = configValida(datos);
   const estadosLeidos = Array.isArray(datos.estados) && datos.estados.every(r => r && esUuid(r.animal_id)) && new Set(datos.estados.map(r => r.animal_id.toLowerCase())).size === datos.estados.length;
   for (const a of animales.filter(a => ids.includes(a.id))) {

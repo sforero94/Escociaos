@@ -1,3 +1,5 @@
+import { turnoIncompleto } from './turnoPesaje.ts';
+export { turnoIncompleto } from './turnoPesaje.ts';
 // ARCHIVO: utils/hato/litrosPesados.ts
 // DESCRIPCIÓN: ventana, agregación y comparación de los litros PESADOS
 // (pesaje semanal AM+PM), más el armado de la serie que la pantalla dibuja.
@@ -118,13 +120,6 @@ export function largoInclusivo(rango: RangoFecha): number {
   return diferenciaDias(rango.desde, rango.hasta) + 1;
 }
 
-/** `true` solo cuando hay exactamente un turno. Los dos vacíos (jornada
- * histórica) o los dos presentes cuentan como pesaje completo. */
-export function turnoIncompleto(pesaje: Pick<PesajeLitros, 'litros_am' | 'litros_pm'>): boolean {
-  const am = pesaje.litros_am != null;
-  const pm = pesaje.litros_pm != null;
-  return am !== pm;
-}
 
 export function rangoPeriodoLitrosPesados(
   periodo: PeriodoLitrosPesados,

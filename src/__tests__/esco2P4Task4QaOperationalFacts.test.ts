@@ -34,7 +34,7 @@ async function query(pregunta:string){
 }
 describe('P4-4 reopened QA: recorded operational facts survive deterministic rendering',()=>{
   it('retains all closed capabilities when climate and herd integration are merged',()=>{
-    expect([...CAPACIDADES_PARTE].sort()).toEqual(['labores','aplicaciones','cantidades_aplicacion','costos_aplicacion','labor_aplicacion','faltantes_aplicacion','monitoreo','conductividad','clima','hato','fuera_de_contrato'].sort());
+    expect([...CAPACIDADES_PARTE].sort()).toEqual(['labores','aplicaciones','cantidades_aplicacion','costos_aplicacion','labor_aplicacion','faltantes_aplicacion','monitoreo','conductividad','clima','hato','pesajes_leche','litros_quincenales','fuera_de_contrato'].sort());
   });
   it.each([
     {question:QUESTIONS.parto,field:'ultimo_parto_fecha',iso:'2026-07-01',label:/[úu]ltimo parto[^\n]*1 de julio de 2026/i},

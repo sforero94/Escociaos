@@ -1,3 +1,5 @@
+import { ejecutarPesajesLeche,ejecutarLitrosQuincenales,periodoQuincenalAlineado,seleccionarQuincenasLeche } from './leche.ts';
+import type { FuenteLeche, PesajeLeche, QuincenaLeche, IngresoLitros } from './lecheTipos.ts';
 import { ejecutarClima } from './clima.ts';
 import type { FuenteClima, ResumenDiarioClima } from './climaTipos.ts';
 import { ejecutarHato } from './hato.ts';
@@ -124,6 +126,7 @@ interface ArgsTurno {
     fuenteClima?: FuenteClima;
     fuenteConductividad?: FuenteConductividad;
     fuenteHato?: FuenteHato;
+    fuenteLeche?: FuenteLeche;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
 }
@@ -201,7 +204,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
     }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        if (!args.fuenteClima && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes) && !Array.isArray(catalogoHato.animales))
+        if (!args.fuenteClima && !args.fuenteLeche && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes) && !Array.isArray(catalogoHato.animales))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
@@ -346,6 +349,23 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
         const o = operaciones[i], id = `p${i + 1}`;
+        if (o.tipo === 'pesajes_leche') {
+            let pesajes: PesajeLeche[] | undefined;
+            if (args.estado?.pendiente) try { catalogoHato=await args.fuenteHato?.catalogo()??{}; } catch { /* Padre no leído. */ }
+            const hasta=o.consulta.hasta>hoy?hoy:o.consulta.hasta;
+            if (o.consulta.desde<=hasta && (o.consulta.animal_ids.length||o.consulta.nombres.length||o.consulta.chapetas.length)) try { pesajes=await args.fuenteLeche?.leerPesajes({...o.consulta,hasta}); } catch { /* No leído, no vacío. */ }
+            resultados.push(ejecutarPesajesLeche(o.consulta,{animales:catalogoHato.animales,pesajes},id,hoy));
+            continue;
+        }
+        if (o.tipo === 'litros_quincenales') {
+            let quincenas: QuincenaLeche[] | undefined, ingresos: IngresoLitros[] | undefined;
+            if (periodoQuincenalAlineado(o.consulta)) {
+                try { quincenas=await args.fuenteLeche?.leerQuincenas(o.consulta); } catch { /* Relación no leída. */ }
+                if (quincenas) try { ingresos=await args.fuenteLeche?.leerIngresos(seleccionarQuincenasLeche(o.consulta,quincenas).filter(f=>f.origen_dato==='medido'&&f.fin_ingreso_id!==null).map(f=>f.fin_ingreso_id!)); } catch { /* Los derivados conservan su partición local. */ }
+            }
+            resultados.push(ejecutarLitrosQuincenales(o.consulta,{quincenas,ingresos},id,hoy));
+            continue;
+        }
         if (o.tipo === 'hato') {
             let estados: RegistroVistaHato[] | undefined, config: DatosHato['config'];
             if (args.estado?.pendiente) try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }

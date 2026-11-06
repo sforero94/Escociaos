@@ -1,3 +1,4 @@
+import { fuenteLecheSupabase } from '../../../src/utils/esco2/lecheFuente.ts';
 import { fuenteClimaSupabase } from '../../../src/utils/esco2/climaFuente.ts';
 import { fuenteHatoSupabase } from '../../../src/utils/esco2/hatoFuente.ts';
 import { fuenteConductividadSupabase } from '../../../src/utils/esco2/conductividadFuente.ts';
@@ -220,6 +221,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         fuenteClima: fuenteClimaSupabase(cliente),
         fuenteConductividad: fuenteConductividadSupabase(cliente),
         fuenteHato: fuenteHatoSupabase(cliente),
+        fuenteLeche: fuenteLecheSupabase(cliente),
         llm,
         config: CONFIG_M3,
         modoCobertura: deps.modoCobertura,

@@ -1,3 +1,4 @@
+import { renderPesajesLeche,renderLitrosQuincenales } from './leche.ts';
 import { renderClima } from './clima.ts';
 import { renderHato } from './hato.ts';
 import { renderConductividad } from './conductividad.ts';
@@ -7,7 +8,7 @@ import { formatLongDate } from '../formatPuro.ts';
 import { dineroConDetalleMensaje as dineroMensaje, numeroMensaje as numero } from './formatoMensaje.ts';
 import { validarFormaCoberturaFinal, type CoberturaTurno } from './cobertura.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import { esResultadoClima, esResultadoHato, esResultadoConductividad, esResultadoMonitoreo, esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
+import { esResultadoPesajesLeche, esResultadoLitrosQuincenales, esResultadoClima, esResultadoHato, esResultadoConductividad, esResultadoMonitoreo, esResultadoAplicaciones, esResultadoCantidades, esResultadoCostos, esResultadoFaltantesAplicacion, esResultadoLaborAplicacion, type Agrupacion, type FilaResultado, type ResultadoConsulta, type ResultadoParte, type ValoresMetricas } from './tipos.ts';
 import { renderAplicaciones } from './aplicaciones.ts';
 import { renderLaborAplicacion } from './laborAplicacion.ts';
 import { renderCantidadesAplicacion } from './cantidades.ts';
@@ -280,10 +281,10 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         throw new Error('disposicion_parcial_no_valida');
     if (cobertura) validarFormaCoberturaFinal(cobertura, resultados);
     const parts = resultados.map((r, i) => {
-        const text = esResultadoHato(r) ? renderHato(r) : esResultadoClima(r) ? renderClima(r) : esResultadoConductividad(r) ? renderConductividad(r) : esResultadoMonitoreo(r) ? renderMonitoreo(r) : esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const text = esResultadoPesajesLeche(r) ? renderPesajesLeche(r) : esResultadoLitrosQuincenales(r) ? renderLitrosQuincenales(r) : esResultadoHato(r) ? renderHato(r) : esResultadoClima(r) ? renderClima(r) : esResultadoConductividad(r) ? renderConductividad(r) : esResultadoMonitoreo(r) ? renderMonitoreo(r) : esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
         if (resultados.length === 1)
             return text;
-        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoHato(r) ? 'Ficha y reproducción del hato' : esResultadoClima(r) ? 'Clima histórico observado' : esResultadoConductividad(r) ? 'Conductividad eléctrica del suelo' : esResultadoMonitoreo(r) ? 'Monitoreo por ronda' : esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
+        const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoPesajesLeche(r) ? 'Pesajes de leche' : esResultadoLitrosQuincenales(r) ? 'Litros quincenales' : esResultadoHato(r) ? 'Ficha y reproducción del hato' : esResultadoClima(r) ? 'Clima histórico observado' : esResultadoConductividad(r) ? 'Conductividad eléctrica del suelo' : esResultadoMonitoreo(r) ? 'Monitoreo por ronda' : esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
         return `${heading}\n${text}`;
     });
     if (cobertura?.estado === 'declarada_validada') {
