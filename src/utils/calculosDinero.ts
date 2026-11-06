@@ -12,8 +12,8 @@
 // pero esa parte vive en el componente -- este archivo no decide render); la
 // semántica de color del gasto es la OPUESTA a un KPI normal: gastar MENOS
 // que el mes anterior es favorable (verde), gastar MÁS es desfavorable
-// (rojo) -- mismo patrón invertido que `PlagasKPICard`, documentado ahí para
-// plagas y aquí para dinero.
+// (rojo) -- mismo patrón invertido que `PulsoAguacateCardView`
+// (`PulsoAguacateCard.tsx`), documentado ahí para plagas y aquí para dinero.
 
 import { resolverQuincena, quincenaAnterior, type QuincenaResuelta } from '@/utils/calculosHato';
 
