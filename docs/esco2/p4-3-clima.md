@@ -1,6 +1,6 @@
 # P4-3: clima histórico observado
 
-Fecha: 2026-11-06. Implementación del [contrato P4](p4-source-contract.md), D41,
+Fecha: 2026-11-05 (America/New_York). Implementación del [contrato P4](p4-source-contract.md), D41,
 apilada sobre P4-2. Esta entrega no acepta M5 ni acredita permisos JWT productivos.
 
 ## Operación y fuente
