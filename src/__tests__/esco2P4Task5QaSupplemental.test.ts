@@ -14,7 +14,8 @@ afterAll(async()=>{expect(fetch).not.toHaveBeenCalled();vi.unstubAllGlobals();aw
 const first={id:'s1',texto:'Pesajes de leche de los animales solicitados del 2026-10-01 al 2026-10-05',capacidad:'pesajes_leche',disposicion:'consultar'};
 const second={id:'s2',texto:'Litros quincenales de enero y febrero de 2026',capacidad:'litros_quincenales',disposicion:'consultar'};
 async function execute(pesoArgs:Record<string,unknown>={desde:'2026-10-01',hasta:'2026-10-05',animal_ids:[HATO_QA.main]},both=false,fault?:(t:string,r:RespuestaPostgrest)=>RespuestaPostgrest,qArgs={desde:'2026-01-01',hasta:'2026-02-28'}) {
-  const parts=both?[first,second]:[first];const pregunta=parts.map(p=>p.texto).join(' y ');
+  const requestedFirst={...first,texto:`Pesajes de leche de los animales solicitados del ${pesoArgs.desde} al ${pesoArgs.hasta}`};
+  const parts=both?[requestedFirst,second]:[requestedFirst];const pregunta=parts.map(p=>p.texto).join(' y ');
   const tools=[{nombre:'consultar_pesajes_leche',argumentos:JSON.stringify({...pesoArgs,parte_ids:['s1'],cobertura:{version:1,partes:parts}})},...(both?[{nombre:'consultar_litros_quincenales',argumentos:JSON.stringify({...qArgs,parte_ids:['s2']})}]:[])];
   const trace:Traza={consultas:[]};const projections:QaProjection[]=[];
   const h=dependencies(db,tools,{modoCobertura:'obligatoria',ahora:()=>new Date('2026-11-06T04:30:00Z'),crearClienteUsuario:jwt=>qaFaultClient(db,jwt,trace,projections,fault)});

@@ -85,6 +85,8 @@ export const INSTRUCCION_REINTENTO: Record<string, string> = {
     carrier: 'fuera_de_alcance o pedir_aclaracion van solos, con parte_ids vacío; usa pedir_aclaracion solo si alguna parte tiene disposicion aclarar.',
     carrier_extra: 'No combines fuera_de_alcance ni pedir_aclaracion con consultas; declara esas partes solo en cobertura.',
     texto_no_literal: 'Cada texto de cobertura debe copiar un fragmento de la pregunta actual.',
+    turno_actual_sin_ancla: 'El inventario debe citar al menos un fragmento del último mensaje del usuario. El historial solo completa su contexto.',
+    periodo_actual_no_coincide: 'La operación vinculada debe conservar el intervalo ISO explícito citado del último mensaje del usuario. No sustituyas esas fechas por las de un turno anterior.',
     parte_forma: 'Cada parte lleva solo id, texto, capacidad y disposicion, con id s1, s2... en orden.',
     fuera_de_contrato_inconsistente: 'Solo una parte con capacidad fuera_de_contrato lleva disposicion fuera_de_contrato.',
     parte_consultar_sin_operacion: 'Cada parte con disposicion consultar necesita una llamada que la cite en parte_ids. Si ninguna herramienta la responde, declárala fuera_de_contrato.',
@@ -256,8 +258,8 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     }
     else {
         const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad, hato: catalogoHato }) }, ...historial, { role: 'user', content: pregunta }];
-        // A follow-up («y la de octubre?») inherits subparts from the user's earlier messages
-        // that the planner received, so a part may quote them. Assistant text never counts.
+        // A follow-up can inherit context and quote earlier user messages, but at least
+        // one declared part must quote this turn. Assistant text never counts.
         const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
         let validado: Plan | undefined;
         for (let intento = 0; intento < 2; intento++) {
@@ -270,7 +272,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                 return salida({ ...base, respuesta: mensajeDisposicion('error_llm'), origen: 'error_llm', errorPlan: 'planificador_no_disponible' });
             }
             try {
-                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, exigirCobertura: true } : undefined);
+                validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, preguntaActual: pregunta, exigirCobertura: true } : undefined);
                 break;
             }
             catch (e) {
@@ -279,7 +281,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                     return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: e instanceof ErrorPlan ? 'plan_no_valido' : 'plan_error', motivoPlan: motivo });
                 // The rejected output is never promoted into context. Only a fixed instruction,
                 // chosen by our own closed reason code, tells the planner what to correct.
-                mensajes.push({ role: 'system', content: `El plan anterior no cumple el esquema. ${INSTRUCCION_REINTENTO[motivo] ?? ''} Reintenta una sola vez la pregunta original con las herramientas y argumentos registrados.`.replace(/\s+/g, ' ') });
+                mensajes.push({ role: 'system', content: `El plan anterior no cumple el esquema. ${INSTRUCCION_REINTENTO[motivo] ?? ''} Reintenta una sola vez la consulta del ÚLTIMO mensaje del usuario, que aparece inmediatamente antes de esta instrucción. Conserva sus cambios explícitos de alcance; usa el historial solo para completar lo que ese mensaje no modifica. Usa las herramientas y argumentos registrados.`.replace(/\s+/g, ' ') });
             }
         }
         plan = validado!;

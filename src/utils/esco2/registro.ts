@@ -13,7 +13,7 @@ import { VARIABLES_CLIMA, VARIABLES_CLIMA_DEFAULT, type ConsultaClima } from './
 import type { ConsultaMonitoreo } from './monitoreoTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
 import { operacionesDelPlan } from './tipos.ts';
-import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, validarInventarioDeclarado, validarCorrespondenciaPlan } from './cobertura.ts';
+import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, normalizarTextoParte, validarInventarioDeclarado, validarCorrespondenciaPlan, type CoberturaPlan } from './cobertura.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
 export const METRICAS: readonly Metrica[] = [
     'jornales',
@@ -142,7 +142,7 @@ export function herramientasPlanificador(): unknown[] {
         } },
         { type:'function', function:{
             name:HERRAMIENTA_PESAJES_LECHE,
-            description:'Pesajes fechados de leche por animal visible y desde/hasta inclusivos. Selecciona animal_ids, nombres o chapetas, una clase de selector; sin selector pide precisar. Suma muestras completas o históricas de solo total y promedia solo días pesados, sin turnos NULL convertidos a cero ni extrapolación. No ventas, proyección ni litros por vaca del hato.',
+            description:'Pesajes fechados de leche por animal visible y desde/hasta inclusivos. Selecciona animal_ids, nombres o chapetas, una clase de selector; sin selector pide precisar. Conserva AM/PM y NULL: son condiciones admitidas de la misma consulta. Suma muestras completas o históricas de solo total y promedia solo días pesados, sin turnos NULL convertidos a cero ni extrapolación. Pedir no proyectar respeta este contrato. No ventas, proyección ni litros por vaca del hato.',
             parameters:{type:'object',additionalProperties:false,required:['desde','hasta'],properties:{
                 desde:{type:'string'},hasta:{type:'string'},animal_ids:{type:'array',uniqueItems:true,items:{type:'string',format:'uuid'}},nombres:{type:'array',uniqueItems:true,items:{type:'string'}},chapetas:{type:'array',uniqueItems:true,items:{type:'integer',minimum:1}},
             }},
@@ -163,7 +163,7 @@ export function herramientasPlanificador(): unknown[] {
         } },
         { type: 'function', function: {
             name: HERRAMIENTA_CONDUCTIVIDAD,
-            description: 'Conductividad eléctrica de suelo por fecha operativa desde/hasta inclusivas y lote, sección propia. Promedio CE guardado (dS/m), distribución individual por árbol y pH separados, por registro. Sin fecha pide precisar. Nunca selecciona ni infiere ronda, promedia promedios de registros, acredita completitud por num_arboles, prescribe o captura. Lotes por IDs o nombres exactos; nombres repetidos exigen aclarar.',
+            description: 'Conductividad eléctrica de suelo por fecha operativa desde/hasta inclusivas y lote, sección propia. Por registro entrega separados promedio CE guardado (dS/m), distribución nativa por árbol en bandas baja/en rango/alta con porcentajes y promedio de medias alta/baja disponibles, y pH. Esa distribución es parte permitida de esta consulta; no usa agrupaciones laborales. Sin fecha pide precisar. Nunca selecciona ni infiere ronda, promedia promedios de registros, acredita completitud por num_arboles, prescribe o captura. Lotes por IDs o nombres exactos; nombres repetidos exigen aclarar.',
             parameters: { type: 'object', additionalProperties: false, properties: {
                 desde: { type: 'string' }, hasta: { type: 'string' },
                 lote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } },
@@ -207,7 +207,7 @@ export function herramientasPlanificador(): unknown[] {
             type: 'function',
             function: {
                 name: HERRAMIENTA_FUERA,
-                description: 'La pregunta o una parte no corresponde a las capacidades disponibles. Si hay partes sustentadas, añade una sola llamada a esta herramienta junto a sus consultas (máximo cuatro llamadas en total); se responderán por separado con aviso parcial fijo. El motivo no se publica ni autoriza cálculos nuevos.',
+                description: 'Portadora única cuando todas las partes de cobertura están fuera del contrato. Si alguna requiere aclarar, usa pedir_aclaracion. En solicitudes mixtas ejecuta solo las consultas sustentadas y declara las partes excluidas en cobertura, sin llamar esta portadora junto a consultas. Conservar NULL/AM/PM o pedir no proyectar son condiciones de una consulta admitida, no capacidades excluidas. El motivo no se publica ni autoriza cálculos nuevos.',
                 parameters: {
                     type: 'object',
                     additionalProperties: false,
@@ -505,8 +505,41 @@ export function normalizarLlamadasCobertura(llamadas: LlamadaHerramienta[]): { l
     if (!reparaciones.length) return { llamadas, reparaciones };
     return { llamadas: pares.map(p => ({ nombre: p.nombre, argumentos: JSON.stringify(p.args) })), reparaciones };
 }
-/** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan. */
-export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; exigirCobertura: true }): Plan {
+/** Historial citable no sustituye el inventario del turno actual. No interpreta el lenguaje. */
+function validarAnclaActual(cobertura: CoberturaPlan, preguntaActual: string): void {
+    const actual = normalizarTextoParte(preguntaActual);
+    if (!actual || !cobertura.partes.some(p => actual.includes(normalizarTextoParte(p.texto)))) throw new Error('turno_actual_sin_ancla');
+}
+// Gramática cerrada de intervalo: dos fechas aisladas también pueden describir hechos.
+const FECHA_ISO_PATRON = '\\d{4}-\\d{2}-\\d{2}';
+const INTERVALO_ISO_PATRON = new RegExp(`\\b(?:desde ${FECHA_ISO_PATRON} hasta ${FECHA_ISO_PATRON}|del ${FECHA_ISO_PATRON} al ${FECHA_ISO_PATRON}|(?:periodo|intervalo|rango)(?: (?:desde|del|de|al|entre))? ${FECHA_ISO_PATRON} (?:hasta|al|a|y) ${FECHA_ISO_PATRON})\\b`);
+/** Solo contrasta un intervalo ISO explícito citado del actual y una única operación vinculada.
+ * Varias operaciones pueden comparar días o períodos: no se infiere un intervalo común.
+ * Las fechas nunca se corrigen ni se extraen de palabras, aritmética o mensajes antiguos.
+ */
+function validarPeriodoActual(cobertura: CoberturaPlan, operaciones: ReturnType<typeof operacionesDelPlan>, preguntaActual: string): void {
+    const actual = normalizarTextoParte(preguntaActual);
+    for (const parte of cobertura.partes) {
+        const texto = normalizarTextoParte(parte.texto);
+        if (parte.disposicion !== 'consultar' || !actual.includes(texto) || !INTERVALO_ISO_PATRON.test(texto)) continue;
+        const fechas = parte.texto.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? [];
+        if (fechas.length !== 2 || !fechas.every(esFechaCalendario) || fechas[0] > fechas[1]) continue;
+        const vinculadas = operaciones.filter(o => o.parte_ids?.includes(parte.id));
+        if (vinculadas.length !== 1) continue;
+        const operacion = vinculadas[0];
+        if (operacion.tipo === 'hato' || operacion.tipo === 'faltantes_aplicacion') continue; // No ofrecen un filtro de período.
+        // La identidad de ronda conserva todas sus observaciones; sus fechas descriptivas
+        // no se convierten aquí en un filtro por fecha_inicio de ronda.
+        if (operacion.tipo === 'monitoreo' && (operacion.consulta.ronda_ids.length || operacion.consulta.rondas.length || operacion.consulta.seleccion_ronda !== undefined)) continue;
+        const consulta = operacion.consulta;
+        if (consulta.desde !== fechas[0] || consulta.hasta !== fechas[1]) throw new Error('periodo_actual_no_coincide');
+    }
+}
+/** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan.
+ * preguntaActual solo se aporta al planear un nuevo turno; los estados D26 se validan
+ * contra su pregunta guardada, sin reinterpretar la elección como una nueva consulta.
+ */
+export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; preguntaActual?: string; exigirCobertura: true }): Plan {
     if (contexto?.exigirCobertura) {
         try {
             if (!llamadas.length) throw new Error('sin_llamadas');
@@ -517,6 +550,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
             if (argumentos.some(a => !a || typeof a !== 'object' || Array.isArray(a)) || argumentos.slice(1).some(a => Object.prototype.hasOwnProperty.call(a, 'cobertura'))) throw new Error('metadato');
             if (argumentos[0].cobertura === undefined) throw new Error('sin_cobertura');
             const cobertura = validarInventarioDeclarado(argumentos[0].cobertura, contexto.pregunta);
+            if (contexto.preguntaActual !== undefined) validarAnclaActual(cobertura, contexto.preguntaActual);
             const limpias = llamadas.map((l, i) => {
                 const { cobertura: _cobertura, parte_ids: _partes, ...consulta } = argumentos[i];
                 return { nombre: l.nombre, argumentos: JSON.stringify(consulta) };
@@ -533,6 +567,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
             if (llamadas.some(l => l.nombre === HERRAMIENTA_FUERA || l.nombre === HERRAMIENTA_ACLARAR)) throw new Error('carrier_extra');
             const operaciones = operacionesDelPlan(base).map((o, i) => ({ ...o, parte_ids: argumentos[i].parte_ids as string[] }));
             validarCorrespondenciaPlan(cobertura, operaciones);
+            if (contexto.preguntaActual !== undefined) validarPeriodoActual(cobertura, operaciones, contexto.preguntaActual);
             return { tipo: 'operaciones', operaciones, cobertura };
         } catch (e) { throw new ErrorPlan(`cobertura_no_valida:${e instanceof Error ? e.message : 'desconocido'}`); }
     }
