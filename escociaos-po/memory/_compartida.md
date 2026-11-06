@@ -2472,3 +2472,12 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 |---|---|---|---|
 | 2026-10-29-jueves | 1 (ESCO-165) | **si** (2026-11-02, respuesta al sábado) | 0 |
 | **2026-11-05-jueves** | 1 (ESCO-172) | pendiente (sábado 11-07) | 0 |
+
+## Racha del viernes — 2026-11-06
+| Corrida | Conjunto elegible | FDS preparadas | Racha de vacios |
+|---|---|---|---|
+| 2026-11-06-viernes | 6 (5 despachados) | 3 (ESCO-166, 167, 172) | **0** |
+- Corrida cortada: el límite de uso de la API (HTTP 429, «5-hour limit») detuvo 4 de 5 agentes a mitad del trabajo; Santiago ordenó terminar. Lección: cinco agentes Opus en paralelo con suite completa cada uno pueden agotar la cuota. El trabajo parcial se guarda como commit WIP en su rama `claude/po-viernes-*` (sin PR) para que no se pierda con el contenedor. [corrida: 2026-11-06-viernes]
+- Ramas WIP para retomar el próximo viernes (no fusionar, no abrir PR sin verificar): ESCO-170 `62fd7ab7`, ESCO-173 `ee287822`, ESCO-174 `5b675235` (falta build), ESCO-168 `207b5b58`. [corrida: 2026-11-06-viernes]
+- La 189 está aplicada (`20261103001246`), así que ESCO-170 y ESCO-171 ya no están bloqueadas por ESCO-169. ESCO-171 depende del código de ESCO-170. [corrida: 2026-11-06-viernes]
+- La migración 191 (`191_monitoreo_ronda34_salto_s1.sql`) está en la rama `claude/practical-cerf-dc46q2`, viene de una sesión en vivo de Santiago, no tiene PR y no está aplicada. El siguiente número libre es 192. [corrida: 2026-11-06-viernes]
