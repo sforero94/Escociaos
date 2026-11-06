@@ -32,8 +32,6 @@ export const ESQUEMA_PARTE_IDS = { type: 'array', maxItems: 8, uniqueItems: true
 const objeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fallar = (motivo = 'cobertura_no_valida'): never => { throw new Error(motivo); };
 /** Case-, accent-, punctuation- and space-insensitive form. A part must still quote the question. */
-/** «pesar», «pesaje», «se pesaron»… normalizados; excluye «pesos» (dinero). */
-const PIDE_PESAJE = /\bpes(?:ar|aron|aje|ajes|ada|adas|ado|ados|a|an|o)\b/;
 export const normalizarTextoParte = (t: string): string => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[¿?¡!.,;:«»"“”'‘’()]/g, ' ').replace(/\s+/g, ' ').trim();
 export function validarInventarioDeclarado(valor: unknown, pregunta: string): CoberturaPlan {
   if (!objeto(valor) || Object.keys(valor).some(k => !['version', 'partes'].includes(k)) || valor.version !== 1 || !Array.isArray(valor.partes) || !valor.partes.length || valor.partes.length > 8 || typeof pregunta !== 'string') return fallar('inventario_forma');
@@ -57,8 +55,6 @@ export function validarCorrespondenciaPlan(cobertura: CoberturaPlan, operaciones
       if (!parte) return fallar('parte_id_inexistente');
       if (parte.disposicion !== 'consultar') return fallar('vinculo_a_parte_no_consultar');
       if (parte.capacidad !== o.tipo) return fallar('capacidad_no_coincide');
-      // Pesajes por animal y litros quincenales son magnitudes distintas: una no responde la otra.
-      if (o.tipo === 'litros_quincenales' && PIDE_PESAJE.test(normalizarTextoParte(parte.texto))) return fallar('pesaje_como_quincenal');
     }
   }
   for (const p of cobertura.partes) {

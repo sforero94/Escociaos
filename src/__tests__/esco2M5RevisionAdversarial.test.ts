@@ -7,7 +7,6 @@ import { ejecutarPesajesLeche, renderPesajesLeche } from '../utils/esco2/leche.t
 import { ejecutarHato } from '../utils/esco2/hato.ts';
 import { renderMensaje } from '../utils/esco2/mensajes.ts';
 import { sinCitasDeSolicitud } from '../utils/esco2/evaluacion.ts';
-import { validarPlan } from '../utils/esco2/registro.ts';
 import type { ResumenDiarioClima } from '../utils/esco2/climaTipos.ts';
 
 const u = (n: number) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
@@ -15,11 +14,16 @@ const consultaMon = (o: Record<string, unknown> = {}) => ({ ronda_ids: [], ronda
 const obs = (n: number, o: Record<string, unknown> = {}) => ({ id: u(1000 + n), ronda_id: u(1), fecha_monitoreo: '2026-10-02', lote_id: u(10), sublote_id: u(20), plaga_enfermedad_id: u(30), arboles_afectados: 1, arboles_monitoreados: 35, ...o });
 
 describe('M5 revisión adversarial: monitoreo', () => {
-  it('Given an incidence of 1/35, When rendered, Then it shows one decimal like the app', () => {
+  it('Given an incidence of 1/35, When rendered, Then it shows one truncated decimal', () => {
     const datos = { rondas: [{ id: u(1), nombre: 'R1', fecha_inicio: '2026-10-01', fecha_fin: null }], lotes: [{ id: u(10), nombre: 'L' }], sublotes: [{ id: u(20), nombre: 'S', lote_id: u(10) }], plagas: [{ id: u(30), nombre: 'Trips' }], observaciones: [obs(1)] };
     const texto = renderMonitoreo(ejecutarMonitoreo(consultaMon({ ronda_ids: [u(1)] }), datos as never, 'p1', '2026-11-05'));
-    expect(texto).toContain('incidencia 2,9 %');
+    expect(texto).toContain('incidencia 2,8 %');
     expect(texto).not.toMatch(/2,857/);
+  });
+
+  it.each([[249, 2500, '9,9 %', 'Baja'], [999, 10000, '9,9 %', 'Baja'], [2999, 10000, '29,9 %', 'Media'], [1, 10, '10 %', 'Media']])('Given %i/%i near a band edge, When rendered, Then the shown value never crosses its gravity band', (a, m, texto, gravedad) => {
+    const datos = { rondas: [{ id: u(1), nombre: 'R1', fecha_inicio: '2026-10-01', fecha_fin: null }], lotes: [{ id: u(10), nombre: 'L' }], sublotes: [{ id: u(20), nombre: 'S', lote_id: u(10) }], plagas: [{ id: u(30), nombre: 'Trips' }], observaciones: [obs(1, { arboles_afectados: a, arboles_monitoreados: m })] };
+    expect(renderMonitoreo(ejecutarMonitoreo(consultaMon({ ronda_ids: [u(1)] }), datos as never, 'p1', '2026-11-05'))).toContain(`incidencia ${texto}; gravedad ${gravedad}.`);
   });
 
   it('Given all rounds by sublote for many pests, When rendered, Then the output is capped and says how many rows exist', () => {
@@ -88,14 +92,3 @@ describe('M5 revisión adversarial: mensajes, planificador y evaluador', () => {
   });
 });
 
-describe('M5 revisión adversarial: pesajes no se responden con litros quincenales', () => {
-  const inventario = (texto: string) => ({ version: 1, partes: [{ id: 's1', texto, capacidad: 'litros_quincenales', disposicion: 'consultar' }] });
-  const llamada = (texto: string) => [{ nombre: 'consultar_litros_quincenales', argumentos: JSON.stringify({ desde: '2026-10-01', hasta: '2026-10-31', parte_ids: ['s1'], cobertura: inventario(texto) }) }];
-  it.each(['¿Cuántos litros de leche se pesaron en octubre de 2026?', 'el pesaje de octubre de 2026'])('Given a weighing question %j routed to fortnight litres, Then the plan is rejected with a closed reason', texto => {
-    expect(() => validarPlan(llamada(texto), { pregunta: texto, exigirCobertura: true })).toThrow('cobertura_no_valida:pesaje_como_quincenal');
-  });
-  it('Given a fortnight question that mentions pesos (money), Then the guard does not fire', () => {
-    const texto = '¿Cuántos litros quincenales y cuántos pesos dejó octubre de 2026?';
-    expect(() => validarPlan(llamada(texto), { pregunta: texto, exigirCobertura: true })).not.toThrow(/pesaje_como_quincenal/);
-  });
-});

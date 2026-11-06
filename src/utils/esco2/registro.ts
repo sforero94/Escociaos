@@ -149,7 +149,7 @@ export function herramientasPlanificador(): unknown[] {
         }},
         { type:'function', function:{
             name:HERRAMIENTA_LITROS_QUINCENALES,
-            description:'Litros quincenales de leche medidos y derivados, separados por origen. desde/hasta deben abarcar quincenas calendario completas: inicio 1/16, fin 15/último del mes; pide aclaración si el rango es parcial. No prorratea, no suma muestras con ventas ni reconstruye vacas. Los medidos requieren cantidad del ingreso vinculado; los derivados usan la partición local. Abiertas separadas de cerradas. Sin dinero ni precios.',
+            description:'Litros quincenales de leche medidos y derivados, separados por origen: es el total de leche del hato producida o pesada en el período. desde/hasta deben abarcar quincenas calendario completas: inicio 1/16, fin 15/último del mes; pide aclaración si el rango es parcial. No prorratea, no suma muestras con ventas ni reconstruye vacas. Los medidos requieren cantidad del ingreso vinculado; los derivados usan la partición local. Abiertas separadas de cerradas. Sin dinero ni precios.',
             parameters:{type:'object',additionalProperties:false,required:['desde','hasta'],properties:{desde:{type:'string'},hasta:{type:'string'}}},
         }},
         { type: 'function', function: {

@@ -117,6 +117,7 @@ export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonit
 }
 
 const MAX_FILAS_MONITOREO = 30;
+// La incidencia se trunca a un decimal: redondear haría ver 9,96 % como «10 % · Baja», contra las bandas 10/30.
 export function renderMonitoreo(r: ResultadoMonitoreo): string {
   if (r.estado === 'aclaracion') return r.motivo === 'ultima_ronda_ambigua' ? 'Hay varias rondas con la misma fecha de inicio más reciente. Indica qué ronda quieres consultar.' : '¿Qué ronda o período de inicio de rondas quieres consultar? Puedes pedir la última ronda global.';
   if (r.estado === 'no_resuelto') return 'No pude identificar una única ronda, lote, sublote o plaga. Indica el nombre exacto que aparece en la app; si hay nombres repetidos, precisa la identidad.';
@@ -131,7 +132,7 @@ export function renderMonitoreo(r: ResultadoMonitoreo): string {
     const intervalo = `Ronda: inicio ${formatLongDate(f.ronda_inicio)}; fin ${f.ronda_fin ? formatLongDate(f.ronda_fin) : 'sin fecha registrada'}.`;
     if (f.estado === 'no_revisado') out.push(`- ${alcance}: no revisado, sin observación registrada. No equivale a incidencia cero. ${intervalo}`);
     else if (f.estado === 'no_calculable') out.push(`- ${alcance}: incidencia y gravedad sin dato calculable. Hay observaciones incompatibles, un denominador inválido o vínculos no legibles; no se publica cero. ${intervalo}`);
-    else out.push(`- ${alcance}: incidencia ${numeroMensaje(Math.round(f.incidencia! * 10) / 10)} %; gravedad ${nombre(f.gravedad, 'sin dato')}. ${numeroMensaje(f.afectados!)} observaciones afectadas de ${numeroMensaje(f.muestreados!)} observaciones de árboles muestreados, en ${numeroMensaje(f.observaciones)} registros. ${intervalo} Fechas de observación: ${f.fechas.map(d => formatLongDate(d)).join(', ')}.`);
+    else out.push(`- ${alcance}: incidencia ${numeroMensaje(Math.floor(f.incidencia! * 10 + 1e-9) / 10)} %; gravedad ${nombre(f.gravedad, 'sin dato')}. ${numeroMensaje(f.afectados!)} observaciones afectadas de ${numeroMensaje(f.muestreados!)} observaciones de árboles muestreados, en ${numeroMensaje(f.observaciones)} registros. ${intervalo} Fechas de observación: ${f.fechas.map(d => formatLongDate(d)).join(', ')}.`);
   }
   if (r.filas.length > MAX_FILAS_MONITOREO) out.push(`Se muestran ${MAX_FILAS_MONITOREO} de ${numeroMensaje(r.filas.length)} filas; acota por ronda, lote, sublote o plaga para ver el resto.`);
   if (!r.filas.length) out.push('No hay observaciones de plagas con padres visibles en las rondas seleccionadas. Sin dato de incidencia; no equivale a cero.');
