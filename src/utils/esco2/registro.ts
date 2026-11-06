@@ -146,7 +146,7 @@ export function herramientasPlanificador(): unknown[] {
         } },
         { type: 'function', function: {
             name: HERRAMIENTA_CLIMA,
-            description: 'Historia climática observada del resumen diario, desde/hasta inclusivos. Variables cerradas y estación opcional exacta. Sin pronósticos, prescripciones ni lecturas en vivo. Devuelve cobertura por variable, cotas de lluvia separadas y procedencia; estaciones solapadas requieren aclaración.',
+            description: 'Historia climática observada del resumen diario, desde/hasta inclusivos. Variables cerradas y estación opcional por ID; ignora espacios exteriores solo si identifica una única estación raw. Una colisión necesita aclaración. Sin pronósticos, prescripciones ni lecturas en vivo. Devuelve cobertura por variable, cotas de lluvia separadas y procedencia; estaciones solapadas requieren aclaración.',
             parameters: { type: 'object', additionalProperties: false, required: ['desde','hasta'], properties: {
                 desde: {type:'string'}, hasta: {type:'string'}, station_id: {type:'string',minLength:1},
                 variables: {type:'array',minItems:1,uniqueItems:true,items:{type:'string',enum:[...VARIABLES_CLIMA]}},

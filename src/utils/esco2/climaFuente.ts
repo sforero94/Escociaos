@@ -20,10 +20,7 @@ export function validarFilasClima(filas: ResumenDiarioClima[]): void {
 export function fuenteClimaSupabase(cliente: ClienteDatos, opciones: { tamanoPagina?: number } = {}): FuenteClima {
   return {    
 async leerResumen(consulta: ConsultaClima) {
-      const filas = await leerFilasFijas(cliente, 'clima_resumen_diario', COLUMNAS_CLIMA, q => {
-        const periodo = q.gte('fecha', consulta.desde).lte('fecha', consulta.hasta);
-        return consulta.station_id ? periodo.eq('station_id', consulta.station_id) : periodo;
-      }, opciones.tamanoPagina, ['fecha', 'station_id']);
+      const filas = await leerFilasFijas(cliente, 'clima_resumen_diario', COLUMNAS_CLIMA, q => q.gte('fecha', consulta.desde).lte('fecha', consulta.hasta), opciones.tamanoPagina, ['fecha', 'station_id']);
       const salida = filas.map(f => {
         const copia = { ...f };
         for (const campo of numericas) if (typeof copia[campo] === 'string' && (copia[campo] as string).trim() && Number.isFinite(Number(copia[campo]))) copia[campo] = Number(copia[campo]);

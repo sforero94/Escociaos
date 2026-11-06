@@ -50,7 +50,16 @@ export function ejecutarClima(consulta: ConsultaClima, datos: ResumenDiarioClima
   if (hasta !== consulta.hasta) r.avisos.push('El período se recortó a hoy en Bogotá; no incluye pronósticos.');
   if (!Array.isArray(datos)) return { ...r, motivo: 'resumen_no_leido' };
   try { validarFilasClima(datos); } catch { return { ...r, motivo: 'resumen_no_leido' }; }
-  const seleccion = datos.filter(f => f.fecha >= consulta.desde && f.fecha <= hasta && (!consulta.station_id || f.station_id === consulta.station_id));
+  // Resolver sobre la ventana completa evita falsos vacíos por espacios en el ID
+  // capturado. Trim sirve solo para resolver una identidad, nunca para fusionarlas.
+  const ventana = datos.filter(f => f.fecha >= consulta.desde && f.fecha <= hasta);
+  let estacionResuelta = consulta.station_id;
+  if (consulta.station_id !== undefined) {
+    const candidatas = [...new Set(ventana.map(f => f.station_id))].filter(estacion => estacion.trim() === consulta.station_id!.trim()).sort();
+    if (candidatas.length > 1) return { ...r, estado: 'aclaracion', motivo: 'identidad_estacion_ambigua', estaciones: candidatas };
+    if (candidatas.length === 1) estacionResuelta = candidatas[0];
+  }
+  const seleccion = ventana.filter(f => estacionResuelta === undefined || f.station_id === estacionResuelta);
   r.estaciones = [...new Set(seleccion.map(f => f.station_id))].sort();
   if (!consulta.station_id) {
     const fechas = new Set<string>();
@@ -58,7 +67,7 @@ export function ejecutarClima(consulta: ConsultaClima, datos: ResumenDiarioClima
   }
   r.filas = seleccion.map(f => filaObservada(f, consulta.variables)).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.station_id.localeCompare(b.station_id));
   const dias = Math.round((aFechaUTC(hasta).getTime() - aFechaUTC(consulta.desde).getTime()) / 86400000) + 1;
-  const estaciones = consulta.station_id ? [consulta.station_id] : r.estaciones.length ? r.estaciones : [null];
+  const estaciones = estacionResuelta !== undefined ? [estacionResuelta] : r.estaciones.length ? r.estaciones : [null];
   r.resumen = estaciones.map(estacion => resumir(estacion, r.filas.filter(f => f.station_id === estacion), consulta.variables, dias));
   r.estado = !r.filas.length ? 'vacio_verificado' : r.resumen.some(s => Object.values(s.variables).some(v => v.cobertura.nulos_no_usables || v.cobertura.sin_fila || v.cobertura.calidad_desconocida)) || r.filas.some(f => f.cobertura_temporal !== 'completa') ? 'parcial' : 'ok';
   return r;
@@ -67,6 +76,7 @@ const ETIQUETAS: Record<VariableClima, string> = { temp_c_min: 'Temperatura mín
 const numero = (n: number | null) => n === null ? 'sin dato' : new Intl.NumberFormat('es-CO', { maximumFractionDigits: 3 }).format(n);
 const texto = (s: string) => s.replace(/\s+/g, ' ').replace(/[\\`*_[\]|<>]/g, '\\$&');
 export function renderClima(r: ResultadoClima): string {
+  if (r.estado === 'aclaracion' && r.motivo === 'identidad_estacion_ambigua') return `Hay identificadores de estación distintos que coinciden al quitar espacios exteriores: ${r.estaciones.map(s => texto(JSON.stringify(s).replace(/ /g, '␠'))).join(', ')} (␠ indica un espacio). No puedo elegir entre ellos. Precisa un período que permita distinguir la estación.`;
   if (r.estado === 'aclaracion') return `Hay estaciones con fechas solapadas. Indica la estación que quieres consultar: ${r.estaciones.map(texto).join(', ')}.`;
   if (r.estado === 'no_disponible') return 'No pude leer el resumen climático diario para ese período; no hay una observación verificada disponible.';
   const partes = [`Observaciones climáticas del ${r.alcance.desde} al ${r.alcance.hasta}, ambas fechas incluidas. Fuente: resumen diario.`, ...r.avisos];
