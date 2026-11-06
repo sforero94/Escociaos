@@ -15,6 +15,7 @@ import {
   formatearListaConY,
   construirPayloadCierreAplicacion,
 } from '../../utils/calculosCierreAplicacion';
+import { calcularFaltantesCierre, consolidarConsumoRegistrado } from '@/utils/stockAplicacion';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { AplicacionShell } from './shared/AplicacionShell';
@@ -64,6 +65,13 @@ interface LoteConArboles {
   lote_id: string;
   nombre: string;
   arboles: number;
+}
+
+/** Saldo vivo de `productos` para la verificación de stock antes del cierre (ESCO-165). */
+interface StockProducto {
+  /** null = la fila no trae saldo (sin dato, nunca 0). */
+  cantidad: number | null;
+  unidad: string | null;
 }
 
 interface DatosFinales {
@@ -133,6 +141,10 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
     fechaFinReal: obtenerFechaHoy(),
     observaciones: '',
   });
+
+  // Saldo `productos.cantidad_actual` de los insumos consumidos (ESCO-165). Se lee al cargar y se
+  // vuelve a leer justo antes de llamar al RPC, para no cerrar contra un saldo viejo.
+  const [stockProductos, setStockProductos] = useState<Map<string, StockProducto>>(new Map());
 
   const cargarDatos = useCallback(async () => {
     setLoading(true);
@@ -218,7 +230,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
 
           const { data: productos, error: errorProductos } = await supabase
             .from('productos')
-            .select('id, precio_unitario')
+            .select('id, precio_unitario, cantidad_actual, unidad_medida')
             .in('id', productosIds);
 
           if (errorProductos) {
@@ -248,6 +260,9 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           }
 
           const costosMap = new Map(productos.map((p) => [p.id, p.precio_unitario || 0]));
+          setStockProductos(
+            new Map(productos.map((p) => [p.id, { cantidad: p.cantidad_actual == null ? null : Number(p.cantidad_actual), unidad: p.unidad_medida ?? null }])),
+          );
 
           movimientosDiarios.forEach((mov) => {
             const productosDeMov = productosMovimientos.filter((p) => p.movimiento_diario_id === mov.id);
@@ -539,6 +554,32 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
         movimientos,
       });
 
+      // ESCO-165: saldo fresco justo antes del RPC. Si algún consumo supera el saldo, NO se llama
+      // a `fn_cerrar_aplicacion` (abortaría con un RAISE crudo): la pantalla muestra la lista.
+      const productosIds = payload.insumos_aplicados.map((i) => i.producto_id);
+      if (productosIds.length > 0) {
+        const { data: saldosFrescos, error: errorSaldos } = await supabase
+          .from('productos')
+          .select('id, cantidad_actual, unidad_medida')
+          .in('id', productosIds);
+        if (errorSaldos) {
+          throw new Error(`No se pudo verificar el inventario: ${errorSaldos.message}`);
+        }
+        const stockFresco = new Map<string, StockProducto>(
+          (saldosFrescos ?? []).map((p) => [p.id, { cantidad: p.cantidad_actual == null ? null : Number(p.cantidad_actual), unidad: p.unidad_medida ?? null }]),
+        );
+        setStockProductos(stockFresco);
+        const faltantes = calcularFaltantesCierre(
+          payload.insumos_aplicados,
+          new Map(Array.from(stockFresco, ([id, s]) => [id, s.cantidad])),
+        );
+        if (faltantes.length > 0) {
+          setConfirmDialogOpen(false);
+          toast.error('No hay inventario suficiente para cerrar. Revisa la lista de insumos.');
+          return;
+        }
+      }
+
       // `fn_cerrar_aplicacion` (migración 106) todavía no existe en el `database.ts` generado
       // (desactualizado, ver root CLAUDE.md) — mismo cast puntual que otros RPC nuevos ya usan
       // en el resto del repo (p.ej. `useGanadoInventario.ts`, `useProduccionHato.ts`), acotado
@@ -631,6 +672,16 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
     () => calcularExcepcionesCierre(resumenInsumos, registrosActivos, lotes, tieneTarea),
     [resumenInsumos, registrosActivos, lotes, tieneTarea],
   );
+
+  const faltantesStock = useMemo(
+    () =>
+      calcularFaltantesCierre(
+        consolidarConsumoRegistrado(movimientos),
+        new Map(Array.from(stockProductos, ([id, s]) => [id, s.cantidad])),
+      ),
+    [movimientos, stockProductos],
+  );
+  const cierreBloqueadoPorStock = faltantesStock.length > 0;
 
   const insumosParaDialogo = formatearListaConY(
     resumenInsumos.map((i) => `${i.nombre} (${formatearNumero(i.aplicado, 2)} ${i.unidad})`),
@@ -735,6 +786,39 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           costoPorArbol={costoPorArbol}
           onDescargarPDF={handleDescargarPDF}
         />
+
+        {cierreBloqueadoPorStock && (
+          <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/5 px-5 py-4">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-destructive">No se puede cerrar: falta inventario</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  El consumo registrado supera el saldo actual de estos insumos. Corrige los movimientos diarios o
+                  registra la entrada en Inventario antes de cerrar.
+                </p>
+                <ul className="mt-3 flex flex-col gap-2 text-sm">
+                  {faltantesStock.map((f) => {
+                    const unidad = stockProductos.get(f.producto_id)?.unidad ?? '';
+                    const decimales = f.saldo !== null && f.registrado - f.saldo < 0.01 ? 4 : 2;
+                    return (
+                      <li
+                        key={f.producto_id}
+                        className="flex flex-col gap-0.5 rounded-lg bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                      >
+                        <span className="font-medium">{f.producto_nombre}</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          Registrado {formatearNumero(f.registrado, decimales)} {unidad} · Saldo{' '}
+                          {f.saldo === null ? '—' : `${formatearNumero(f.saldo, decimales)} ${unidad}`}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer único, sin variantes por paso (W03-cierre-v2.md §2) */}
@@ -756,7 +840,7 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
           <Button
             type="button"
             className="flex-1 sm:flex-none"
-            disabled={confirmDialogOpen || procesando}
+            disabled={confirmDialogOpen || procesando || cierreBloqueadoPorStock}
             onClick={() => setConfirmDialogOpen(true)}
           >
             {procesando ? (
