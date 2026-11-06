@@ -16,6 +16,7 @@ Esta carpeta contiene documentación vigente para operar, mantener y extender el
 - [`PLAN_REPORTE_HTML_GEMINI.md`](./PLAN_REPORTE_HTML_GEMINI.md) — propuesta pendiente para el Reporte Semanal.
 - [`SPEC_TELEGRAM_BOT.md`](./SPEC_TELEGRAM_BOT.md) — especificación del bot de campo.
 - [`runbook_detector_deriva.md`](./runbook_detector_deriva.md) — rotar `SUPABASE_ACCESS_TOKEN` del detector de deriva y configurar `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (issue #293).
+- [`esco2/`](./esco2/) — Esco 2.0 (función `esco-consultas`): diseño por hitos M1–M5 y P0–P4, contratos de fuentes y de mensajes, resultados de QA y despliegues. Empezar por [`esco2/m3-funcion.md`](./esco2/m3-funcion.md) (contrato de la función) y [`esco2/p2-mensajes-contrato.md`](./esco2/p2-mensajes-contrato.md) (render determinista; desde #415 no hay compositor LLM).
 
 ## Contratos de implementación
 

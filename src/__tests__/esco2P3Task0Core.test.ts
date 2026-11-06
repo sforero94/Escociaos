@@ -7,7 +7,6 @@ import { renderMensaje } from '@/utils/esco2/mensajes';
 
 const config: ConfigModelos = {
   nombre: 'synthetic', planificador: { modelo: 'synthetic', esfuerzo: 'none' },
-  compositor: { modelo: 'never', esfuerzo: 'none' },
 };
 const datos: DatosLabores = {
   lotes: [{ id: 'l1', nombre: 'Norte', activo: true }],

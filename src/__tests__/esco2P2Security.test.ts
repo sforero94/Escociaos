@@ -24,7 +24,7 @@ describe('P2-v1 real handler authorization and caller-owned follow-up',()=>{
     expect(r.status).toBe(401);expect(h.solicitudes).toHaveLength(0);expect(h.traza.consultas).toEqual([]);
   });
   it('preserves deployed model configuration while removing factual composer calls',()=>{
-    expect(CONFIG_M3).toEqual({nombre:'m3',planificador:{modelo:'openai/gpt-6-luna',esfuerzo:'none'},compositor:{modelo:'openai/gpt-6-luna',esfuerzo:'none'},compositorReforzado:{modelo:'openai/gpt-6-sol',esfuerzo:'low'}});
+    expect(CONFIG_M3).toEqual({nombre:'m3',planificador:{modelo:'openai/gpt-6-luna',esfuerzo:'none'}});
   });
   it('server-issued D26 options accept only exact choice and unrelated reply retains pending state',async()=>{
     const h=await ambiguity();expect(h.body.origen).toBe('aclaracion');expect(typeof h.body.estadoToken).toBe('string');

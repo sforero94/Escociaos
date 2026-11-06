@@ -1,10 +1,13 @@
-// Guarda de trazabilidad numérica: cada número de la respuesta tiene que existir en
-// la evidencia estructurada (resultados del ejecutor, fechas del alcance, la fecha de
-// hoy o la propia pregunta). Un número que no aparece ahí no se publica.
+// Oráculo SOLO de pruebas (ESCO-173). Cada número de una respuesta tiene que existir en
+// la evidencia estructurada (resultados del ejecutor, fechas del alcance, la fecha de hoy
+// o la propia pregunta), y cada cifra obligatoria tiene que aparecer. Era la guarda en
+// tiempo de ejecución del compositor LLM; #415 retiró el compositor y producción ya no la
+// importa. Las pruebas la conservan para comprobar que el render determinista dice todas
+// las cifras obligatorias y no inventa ninguna.
 // Reutiliza el parser de `escoEvals/numeros.ts` (formato colombiano y ambigüedades).
 
-import { extraerTokensNumericos, fechaPresente } from '../escoEvals/numeros.ts';
-import type { ResultadoParte } from './tipos.ts';
+import { extraerTokensNumericos, fechaPresente } from '../utils/escoEvals/numeros.ts';
+import type { ResultadoParte } from '../utils/esco2/tipos.ts';
 
 const ISO_GLOBAL = /\b\d{4}-\d{2}-\d{2}\b/g;
 

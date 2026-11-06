@@ -20,7 +20,7 @@ const datos: DatosLabores = {
   ],
   registros: [{ id: 'r1', tarea_id: 'd', lote_id: 'L1', fecha_trabajo: '2026-05-20', fraccion_jornal: 1, costo_jornal: 90000 }],
 };
-const CONFIG: ConfigModelos = { nombre: 'prueba', planificador: { modelo: 'luna', esfuerzo: 'none' }, compositor: { modelo: 'luna', esfuerzo: 'none' } };
+const CONFIG: ConfigModelos = { nombre: 'prueba', planificador: { modelo: 'luna', esfuerzo: 'none' } };
 
 function respuesta(p: Partial<RespuestaLLM>): RespuestaLLM {
   return { texto: '', llamadas: [], uso: { entrada: 1, salida: 1, razonamiento: 0, costoUsd: 0 }, ms: 1, modelo: 'luna', finishReason: 'stop', ...p };

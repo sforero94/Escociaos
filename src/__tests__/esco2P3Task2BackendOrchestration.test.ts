@@ -5,7 +5,7 @@ import type { ClienteLLM } from '@/utils/esco2/llm';
 import { validarEstado, type EstadoTurno } from '@/utils/esco2/estado';
 import { validarPlan } from '@/utils/esco2/registro';
 
-const config: ConfigModelos = { nombre: 'synthetic', planificador: { modelo: 'synthetic', esfuerzo: 'none' }, compositor: { modelo: 'never', esfuerzo: 'none' } };
+const config: ConfigModelos = { nombre: 'synthetic', planificador: { modelo: 'synthetic', esfuerzo: 'none' } };
 const call = { nombre: 'consultar_aplicaciones', argumentos: JSON.stringify({ desde: '2026-11-01', hasta: '2026-11-04', base_fecha: 'sin_precisar' }) };
 const base = { pregunta: 'Consulta sintética', historial: [], hoy: '2026-11-04', config, fuente: { async catalogo(): Promise<never> { throw new Error('unread'); }, async registros() { return []; } } };
 describe('P3 Task 2 orchestration units', () => {

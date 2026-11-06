@@ -131,7 +131,7 @@ it('conserva la consulta efectiva que D26 transformó antes de ejecutarla', asyn
   const pregunta = 'Cosecha y Guadaña';
   const cobertura = { version: 1, partes: [{ id: 's1', texto: 'Cosecha', capacidad: 'labores', disposicion: 'consultar' }, { id: 's2', texto: 'Guadaña', capacidad: 'labores', disposicion: 'consultar' }] };
   const dominio = { proposito: 'jornales', desde: '2026-01-01', hasta: '2026-01-31', metricas: ['jornales'], agrupar_por: [] };
-  const r = await responderTurno({ pregunta, historial: [], hoy: '2026-02-01', modoCobertura: 'obligatoria', config: { nombre: 'synthetic', planificador: { modelo: 'synthetic', esfuerzo: 'none' }, compositor: { modelo: 'never', esfuerzo: 'none' } }, datos: {
+  const r = await responderTurno({ pregunta, historial: [], hoy: '2026-02-01', modoCobertura: 'obligatoria', config: { nombre: 'synthetic', planificador: { modelo: 'synthetic', esfuerzo: 'none' } }, datos: {
     tiposTareas: [{ id: 'tipo1', nombre: 'Recolección', categoria: 'Cosecha' }, { id: 'tipo2', nombre: 'Corte', categoria: null }],
     tareas: [{ id: 't1', nombre: 'Cosecha puntual', tipo_tarea_id: 'tipo1', estado: 'Programada', jornales_estimados: 2 }, { id: 't2', nombre: 'Guadaña', tipo_tarea_id: 'tipo2', estado: 'Programada', jornales_estimados: 2 }],
     lotes: [], registros: [{ id: 'r1', tarea_id: 't1', lote_id: null, fecha_trabajo: '2026-01-10', fraccion_jornal: 1, costo_jornal: 10 }, { id: 'r2', tarea_id: 't2', lote_id: null, fecha_trabajo: '2026-01-10', fraccion_jornal: 1, costo_jornal: 10 }],

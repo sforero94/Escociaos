@@ -13,7 +13,7 @@ import { resumenCatalogo, normalizar, resolverTareas } from './catalogo.ts';
 import { renderMensaje, validarMensajeFinal, mensajeAclaracion, mensajeDisposicion } from './mensajes.ts';
 import { ejecutarConsulta, SIN_LOTE_ETIQUETA } from './ejecutor.ts';
 import { OPCIONES_FECHA_APLICACIONES, type EstadoTurno } from './estado.ts';
-import type { ClienteLLM, Esfuerzo, MensajeLLM, RespuestaLLM } from './llm.ts';
+import type { ClienteLLM, MensajeLLM, RespuestaLLM } from './llm.ts';
 import { promptPlanificador } from './prompts.ts';
 import { fuenteEnMemoria, type FuenteLabores } from './fuente.ts';
 import { ErrorPlan, herramientasPlanificador, validarPlan } from './registro.ts';
@@ -32,16 +32,8 @@ import { construirCoberturaFinal, coberturaNoCertificada, validarCoberturaFinal,
 export const MAX_HISTORIAL_PLANIFICADOR = 6;
 export interface ConfigModelos {
     nombre: string;
-    planificador: {
-        modelo: string;
-        esfuerzo: Esfuerzo;
-    };
-    compositor: {
-        modelo: string;
-        esfuerzo: Esfuerzo;
-    };
-    /** D25: compositor para planes de varias partes o varios dominios. Sin él, siempre el habitual. */
-    compositorReforzado?: ModeloEtapa;
+    /** Único modelo del turno. #415 retiró el compositor (ESCO-173). */
+    planificador: ModeloEtapa;
 }
 export interface RegistroLlamada {
     etapa: 'planificador' | 'compositor' | 'recomposicion';
@@ -66,7 +58,7 @@ export interface ResultadoTurno {
     errorPlan: string | null;
     /** Closed reason code of a rejected plan (diagnostic only; never user text). */
     motivoPlan?: string;
-    /** D25: ruta del compositor. null si el turno no llegó a componer. */
+    /** D25: ruta del compositor. Siempre null desde #415; se conserva por la forma de la respuesta. */
     ruta: Ruta | null;
     /** Cambios deterministas aplicados al plan (D26). */
     ajustes: string[];

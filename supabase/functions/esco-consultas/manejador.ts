@@ -30,12 +30,10 @@ import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
 import { coberturaNoCertificada, validarCoberturaFinal, type ModoCobertura } from '../../../src/utils/esco2/cobertura.ts';
 export const NOMBRE_FUNCION = 'esco-consultas';
-/** D25: Luna sin razonamiento es la ruta habitual; Sol solo compone planes de varias partes. */
+/** D25: Luna sin razonamiento planifica. Sin compositor desde #415 (ESCO-173). */
 export const CONFIG_M3: ConfigModelos = {
     nombre: 'm3',
     planificador: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
-    compositor: { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' },
-    compositorReforzado: { modelo: 'openai/gpt-6-sol', esfuerzo: 'low' },
 };
 export const MAX_PREGUNTA = 1000;
 export const MAX_HISTORIAL = 12;

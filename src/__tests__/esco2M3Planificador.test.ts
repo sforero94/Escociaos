@@ -5,7 +5,6 @@ import { ErrorDatos, fuenteSupabase } from '../utils/esco2/fuente.ts';
 import type { ClienteLLM, RespuestaLLM, SolicitudLLM } from '../utils/esco2/llm.ts';
 import { rangoDelPlan, renderDeterminista, responderTurno, type ConfigModelos } from '../utils/esco2/nucleo.ts';
 import { responderTurnoDesdeFuenteLegadoSinCertificar as responderTurnoDesdeFuente } from './esco2CoberturaLegacy.ts';
-import { elegirRuta } from '../utils/esco2/ruteo.ts';
 import type { ConsultaLabores, DatosLabores, Plan, ResultadoParte } from '../utils/esco2/tipos.ts';
 import { clientePostgrestFalso } from './esco2PostgrestFalso.ts';
 
@@ -130,8 +129,6 @@ describe('D26: palabra que es categoría y tarea', () => {
 const CONFIG: ConfigModelos = {
   nombre: 'prueba',
   planificador: { modelo: 'luna', esfuerzo: 'none' },
-  compositor: { modelo: 'luna', esfuerzo: 'none' },
-  compositorReforzado: { modelo: 'sol', esfuerzo: 'low' },
 };
 
 function respuesta(p: Partial<RespuestaLLM>, modelo: string): RespuestaLLM {
@@ -185,17 +182,7 @@ describe('P2: modelo planificador conservado y composición factual retirada', (
     expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['luna']);
   });
 
-  it('la configuración histórica del compositor no altera la ruta determinista', async () => {
-    const llm = llmFalso([[{ tareas: ['guadaña'] }, { lotes: ['lote norte'] }]]);
-    const { compositorReforzado: _omitido, ...sinRefuerzo } = CONFIG;
-    await responderTurno({ pregunta: 'x', historial: [], hoy: '2026-06-01', datos, llm, config: sinRefuerzo });
-    expect(llm.solicitudes.map((s) => s.modelo)).toEqual(['luna']);
-  });
 
-  it('el modelo nunca elige: aclaración y fuera de alcance no tienen ruta', () => {
-    expect(elegirRuta({ tipo: 'aclaracion', aclaracion: { pregunta: '?', motivo: '' } })).toBe('habitual');
-    expect(elegirRuta(plan(c({}), c({}), c({})))).toBe('reforzada');
-  });
 });
 
 // --- Fuente paginada ------------------------------------------------------------

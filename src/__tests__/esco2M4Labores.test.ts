@@ -8,7 +8,7 @@ import { ejecutarConsulta, SIN_LOTE_ETIQUETA } from '../utils/esco2/ejecutor.ts'
 import { esAclaracionD26, puntuarCaso, puntuarIntento, type Ancla } from '../utils/esco2/evaluacion.ts';
 import { extraerFechas } from '../utils/esco2/fechasTexto.ts';
 import { fuenteSupabase } from '../utils/esco2/fuente.ts';
-import { cifrasObligatorias, evidenciaNumerica, verificarCifrasObligatorias, verificarNumeros } from '../utils/esco2/guardaNumerica.ts';
+import { cifrasObligatorias, evidenciaNumerica, verificarCifrasObligatorias, verificarNumeros } from './esco2GuardaNumerica.ts';
 import type { ClienteLLM, RespuestaLLM, SolicitudLLM } from '../utils/esco2/llm.ts';
 import { renderDeterminista, responderTurno, type ConfigModelos, type ResultadoTurno } from '../utils/esco2/nucleo.ts';
 import { ErrorPlan, herramientasPlanificador, validarPlan } from '../utils/esco2/registro.ts';
@@ -347,7 +347,6 @@ describe('cifras obligatorias: la guarda atrapa lo que la respuesta omite', () =
 const CONFIG: ConfigModelos = {
   nombre: 'prueba',
   planificador: { modelo: 'luna', esfuerzo: 'none' },
-  compositor: { modelo: 'luna', esfuerzo: 'none' },
 };
 
 function llmConTextos(consultas: Array<Partial<ConsultaLabores>>, textos: string[]): ClienteLLM & { solicitudes: SolicitudLLM[] } {

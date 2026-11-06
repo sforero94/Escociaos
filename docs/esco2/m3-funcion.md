@@ -16,6 +16,7 @@ POST /functions/v1/esco-consultas  { pregunta, historial? }
   5. catalog (tareas, tipos_tareas, lotes) → planner (Luna)
   6. validarPlan → D26 rule → registros_trabajo for the plan's date range
   7. executor → composer (Luna; Sol only by the D25 rule) → numeric guard
+     [since #415, 2026-11-04: executor → deterministic render; no composer, no guard]
   → 200 { respuesta, origen, hoy, ruta, ajustes, plan, resultados, llamadas, ms }
 ```
 
@@ -30,7 +31,7 @@ lets any authenticated session read (see the finding in `m3-rls.md`).
 | `supabase/functions/esco-consultas/index.ts` | Deno entry point: `Deno.serve` + `supabase-js` client with the user's JWT. ~30 lines. |
 | `supabase/functions/esco-consultas/manejador.ts` | HTTP handler with injected dependencies. No Deno or npm imports, so Vitest tests it as is. |
 | `src/utils/esco2/fuente.ts` | `FuenteLabores`: catalog before planning, registros after. Supabase source: fixed columns, paginated by rows received, fails unless it reads exactly the exact count. |
-| `src/utils/esco2/ruteo.ts` | D25 rule. |
+| `src/utils/esco2/ruteo.ts` | D25 rule. Since ESCO-173 only the `ModeloEtapa` and `Ruta` types remain (`elegirRuta` was removed with the composer). |
 | `src/utils/esco2/ambiguedad.ts` | D26 rule. |
 | `supabase/config.toml` | `[functions.esco-consultas] verify_jwt = true`. |
 | `.github/workflows/deteccion-deriva-despliegue.yml` | New matrix entry: `verify_jwt` true, anonymous `/health` must be 401, watched paths include `src/utils/esco2` and `src/utils/escoEvals/numeros.ts`. |
@@ -53,6 +54,17 @@ composer (and its one recomposition) run on Sol (`openai/gpt-6-sol`, effort low)
 never chooses its model. The cap of three model calls does not change.
 Cost effect: the planner rule "resumen → total + by task" always gives 2 parts, so every
 summary composes on Sol (about USD 0.003 per turn against 0.0002 on Luna).
+
+> **Superseded (#415, 2026-11-04; code removed by ESCO-173, 2026-11-06).** There is no
+> composer any more. `nucleo.ts` renders the answer deterministically from the executor
+> results (`mensajes.ts`, contract in [`p2-mensajes-contrato.md`](p2-mensajes-contrato.md)),
+> so the only model call of a turn is the planner (Luna; one retry on an invalid plan).
+> The Sol route, the recomposition, the numeric guard and the cost figures above no longer
+> apply. `ResultadoTurno.ruta` stays in the response shape and is always `null`.
+> ESCO-173 removed the dead code: `PROMPT_COMPOSITOR`, `mensajeCompositor`,
+> `mensajeRecomposicion`, `elegirRuta`, and the `compositor`/`compositorReforzado` fields
+> of `ConfigModelos`. The former numeric guard (`guardaNumerica.ts`) now lives only as a
+> test oracle in `src/__tests__/esco2GuardaNumerica.ts`.
 
 **D26 (cosecha and similar).** In code, after validation. A term is "double" when it
 resolves to exactly one category and also to at least one task. Signals come from the whole

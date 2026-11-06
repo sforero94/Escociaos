@@ -4,7 +4,7 @@ import { datos } from '../../scripts/esco2/fixtureSintetico.ts';
 import { ejecutarConsulta } from '../utils/esco2/ejecutor.ts';
 import { puntuarIntento, type Ancla } from '../utils/esco2/evaluacion.ts';
 import { extraerFechas } from '../utils/esco2/fechasTexto.ts';
-import { evidenciaNumerica, verificarCifrasObligatorias, verificarNumeros } from '../utils/esco2/guardaNumerica.ts';
+import { evidenciaNumerica, verificarCifrasObligatorias, verificarNumeros } from './esco2GuardaNumerica.ts';
 import type { ClienteLLM, RespuestaLLM } from '../utils/esco2/llm.ts';
 import { renderDeterminista, responderTurno, type ResultadoTurno } from '../utils/esco2/nucleo.ts';
 import type { ConsultaLabores } from '../utils/esco2/tipos.ts';
@@ -85,7 +85,7 @@ describe('labor review: D30 with no registered work', () => {
     const t = await responderTurno({
       pregunta: 'Jornales de proyectos especiales en mayo', historial: [], hoy: '2026-06-01',
       datos: { ...datos, registros: [] }, llm,
-      config: { nombre: 'test', planificador: { modelo: 'fake', esfuerzo: 'none' }, compositor: { modelo: 'fake', esfuerzo: 'none' } },
+      config: { nombre: 'test', planificador: { modelo: 'fake', esfuerzo: 'none' } },
     });
     expect(t.origen).toBe('determinista');
     expect(t.llamadas).toHaveLength(1);

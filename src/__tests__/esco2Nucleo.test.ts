@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolverLotes, resolverTareas } from '../utils/esco2/catalogo.ts';
 import { ejecutarConsulta, SIN_LOTE_ETIQUETA } from '../utils/esco2/ejecutor.ts';
-import { evidenciaNumerica, verificarNumeros } from '../utils/esco2/guardaNumerica.ts';
+import { evidenciaNumerica, verificarNumeros } from './esco2GuardaNumerica.ts';
 import type { ClienteLLM, RespuestaLLM, SolicitudLLM } from '../utils/esco2/llm.ts';
 import { responderTurno, type ConfigModelos } from '../utils/esco2/nucleo.ts';
 import { ErrorPlan, validarPlan } from '../utils/esco2/registro.ts';
@@ -197,7 +197,6 @@ describe('recorrido del turno', () => {
   const config: ConfigModelos = {
     nombre: 'falso',
     planificador: { modelo: 'falso', esfuerzo: 'none' },
-    compositor: { modelo: 'falso', esfuerzo: 'none' },
   };
   function falso(respuestas: Partial<RespuestaLLM>[]): ClienteLLM & { solicitudes: SolicitudLLM[] } {
     const solicitudes: SolicitudLLM[] = [];
