@@ -1,3 +1,4 @@
+import type { ConsultaConductividad } from './conductividadTipos.ts';
 // Registro único de operaciones. De aquí salen el esquema que ve el modelo y el
 // validador que corre antes de ejecutar: no hay una lista paralela que se desincronice.
 import { esFechaCalendario } from './fechaCalendario.ts';
@@ -30,6 +31,7 @@ export const HERRAMIENTA_LABOR_APLICACION = 'consultar_labor_aplicacion';
 export const HERRAMIENTA_CANTIDADES = 'consultar_cantidades_aplicacion';
 export const HERRAMIENTA_COSTOS = 'consultar_costos_aplicacion';
 export const HERRAMIENTA_FALTANTES = 'consultar_faltantes_aplicacion';
+export const HERRAMIENTA_CONDUCTIVIDAD = 'consultar_conductividad';
 export const HERRAMIENTA_MONITOREO = 'consultar_monitoreo';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
@@ -129,6 +131,15 @@ export function herramientasPlanificador(): unknown[] {
             parameters: { type: 'object', additionalProperties: false, properties: {
                 aplicacion_ids: { type: 'array', minItems: 1, items: { type: 'string', format: 'uuid' } },
                 aplicaciones: { type: 'array', minItems: 1, items: { type: 'string' } },
+            } },
+        } },
+        { type: 'function', function: {
+            name: HERRAMIENTA_CONDUCTIVIDAD,
+            description: 'Conductividad eléctrica de suelo por fecha operativa desde/hasta inclusivas y lote, sección propia. Promedio CE guardado (dS/m), distribución individual por árbol y pH separados, por registro. Sin fecha pide precisar. Nunca selecciona ni infiere ronda, promedia promedios de registros, acredita completitud por num_arboles, prescribe o captura. Lotes por IDs o nombres exactos; nombres repetidos exigen aclarar.',
+            parameters: { type: 'object', additionalProperties: false, properties: {
+                desde: { type: 'string' }, hasta: { type: 'string' },
+                lote_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } },
+                lotes: { type: 'array', uniqueItems: true, items: { type: 'string' } },
             } },
         } },
         { type: 'function', function: {
@@ -296,6 +307,20 @@ function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): Consult
     if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
     return selectorAplicaciones(a, 'faltantes');
 }
+function validarConsultaConductividad(a: Record<string, unknown>): ConsultaConductividad {
+    if (Object.keys(a).some(k => !['desde', 'hasta', 'lote_ids', 'lotes'].includes(k))) throw new ErrorPlan('argumento de conductividad no registrado');
+    const filtros: Record<string, string[]> = {};
+    for (const campo of ['lote_ids', 'lotes']) {
+        if (a[campo] !== undefined && (!Array.isArray(a[campo]) || (a[campo] as unknown[]).some(v => typeof v !== 'string' || !v.trim()))) throw new ErrorPlan('selector de conductividad inválido');
+        const valores = listaTextos(a[campo], campo).map(v => campo === 'lote_ids' ? v.toLowerCase() : v);
+        if (new Set(valores).size !== valores.length || campo === 'lote_ids' && valores.some(v => !esUuid(v))) throw new ErrorPlan('selector de conductividad inválido');
+        filtros[campo] = valores;
+    }
+    if (filtros.lote_ids.length && filtros.lotes.length) throw new ErrorPlan('selector de conductividad ambiguo');
+    const periodo = a.desde !== undefined || a.hasta !== undefined;
+    if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de conductividad inválido');
+    return { lote_ids: filtros.lote_ids, lotes: filtros.lotes, ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
+}
 function validarConsultaMonitoreo(a: Record<string, unknown>): ConsultaMonitoreo {
     if (Object.keys(a).some(k => !['ronda_ids', 'rondas', 'lote_ids', 'lotes', 'sublote_ids', 'sublotes', 'plaga_ids', 'plagas', 'agrupar_por', 'desde', 'hasta', 'seleccion_ronda'].includes(k))) throw new ErrorPlan('argumento de monitoreo no registrado');
     const filtros: Record<string, string[]> = {};
@@ -321,7 +346,7 @@ const canonicoCobertura = (v: unknown): string => JSON.stringify(v, (_k, x) => x
 const CAPACIDAD_DE_HERRAMIENTA: Record<string, string> = {
     [HERRAMIENTA_CONSULTAR]: 'labores', [HERRAMIENTA_APLICACIONES]: 'aplicaciones', [HERRAMIENTA_CANTIDADES]: 'cantidades_aplicacion',
     [HERRAMIENTA_COSTOS]: 'costos_aplicacion', [HERRAMIENTA_LABOR_APLICACION]: 'labor_aplicacion', [HERRAMIENTA_FALTANTES]: 'faltantes_aplicacion',
-    [HERRAMIENTA_MONITOREO]: 'monitoreo',
+    [HERRAMIENTA_MONITOREO]: 'monitoreo', [HERRAMIENTA_CONDUCTIVIDAD]: 'conductividad',
 };
 type ParteBruta = { id?: unknown; capacidad?: unknown; disposicion?: unknown };
 /** Une inventarios parciales que el modelo repartió entre llamadas (s1 en una, s2 en otra). */
@@ -459,7 +484,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
         throw new ErrorPlan(`más de ${MAX_CONSULTAS_POR_TURNO} operaciones en un turno`);
     const nombres = new Set(llamadas.map((l) => l.nombre));
     for (const n of nombres) {
-        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
+        if (![HERRAMIENTA_CONSULTAR, HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_ACLARAR, HERRAMIENTA_FUERA].includes(n))
             throw new ErrorPlan(`herramienta no registrada: ${n}`);
     }
     if (nombres.has(HERRAMIENTA_ACLARAR) && llamadas.length !== 1)
@@ -482,6 +507,6 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
     }
     const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
     const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_CONDUCTIVIDAD ? { tipo: 'conductividad', consulta: validarConsultaConductividad(parsear(l)) } : l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
     return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }

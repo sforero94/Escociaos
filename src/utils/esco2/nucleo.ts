@@ -1,3 +1,5 @@
+import { ejecutarConductividad } from './conductividad.ts';
+import type { CatalogoConductividad, FuenteConductividad, RegistroConductividad } from './conductividadTipos.ts';
 // Turno P2: catálogo → planificador validado (un reintento si inválido) → D26 con estado del servidor
 // → lectores fijos → cálculo y render factual deterministas. Sin composición factual LLM.
 import { aplicarReglaDoble, terminoDoble } from './ambiguedad.ts';
@@ -115,6 +117,7 @@ interface ArgsTurno {
     respuestaAclaracion?: string;
     fuenteAplicaciones?: FuenteAplicaciones;
     fuenteMonitoreo?: FuenteMonitoreo;
+    fuenteConductividad?: FuenteConductividad;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
 }
@@ -181,14 +184,16 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     }
     let inventarioPlaneado: DatosInventarioAplicaciones | undefined;
     let catalogoMonitoreo: CatalogoMonitoreo = {};
+    let catalogoConductividad: CatalogoConductividad = {};
     if (!args.estado?.pendiente) {
         // El catálogo laboral excluye aplicaciones sin tarea: leer el catálogo propio,
         // con el mismo lector fijo/JWT, antes de planear. Fallo conserva no leído.
         try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* El dominio no leído no bloquea los otros. */ }
         try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* No leído, no vacío. */ }
+        try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Dominio independiente. */ }
     }
     if (!catalogoDisponible && !args.estado?.pendiente) {
-        if (!Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas))
+        if (!Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
     let plan: Plan;
@@ -239,7 +244,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
     }
     else {
-        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo }) }, ...historial, { role: 'user', content: pregunta }];
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad }) }, ...historial, { role: 'user', content: pregunta }];
         // A follow-up («y la de octubre?») inherits subparts from the user's earlier messages
         // that the planner received, so a part may quote them. Assistant text never counts.
         const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
@@ -333,6 +338,14 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
         const o = operaciones[i], id = `p${i + 1}`;
+        if (o.tipo === 'conductividad') {
+            let registros: RegistroConductividad[] | undefined;
+            if (args.estado?.pendiente) try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }
+            // Una solicitud sin fecha pide precisar sin recorrer toda la historia CE.
+            if (o.consulta.desde && o.consulta.hasta) try { registros = await args.fuenteConductividad?.leerRegistros(); } catch { /* No leído, nunca vacío. */ }
+            resultados.push(ejecutarConductividad(o.consulta, { ...catalogoConductividad, registros }, id, hoy));
+            continue;
+        }
         if (o.tipo === 'monitoreo') {
             let observaciones: ObservacionMonitoreo[] | undefined;
             // Un estado pendiente de otro dominio no convierte este catálogo en vacío.
