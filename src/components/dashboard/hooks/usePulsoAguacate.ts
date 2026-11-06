@@ -65,7 +65,7 @@ export function usePulsoAguacate(): UsoPulsoAguacate {
           // `fecha_monitoreo` llega como timestamp ISO completo -- se
           // recorta a `AAAA-MM-DD` para que la comparación lexicográfica de
           // `calcularPulsoAguacate` (fechaMax) funcione igual que en el
-          // resto del módulo (mismo patrón que `PlagasKPICard`).
+          // resto del módulo (mismo patrón que `useSaludDatos.ts`).
           fecha_monitoreo: String(m.fecha_monitoreo).slice(0, 10),
           arboles_monitoreados: m.arboles_monitoreados,
           arboles_afectados: m.arboles_afectados,

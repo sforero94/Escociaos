@@ -42,7 +42,8 @@ export interface PulsoAguacateCardViewProps extends UsoPulsoAguacate {
  * Dato principal: la plaga de mayor incidencia de la RONDA más reciente
  * (agrupada siempre por `ronda_id`, nunca por `fecha_monitoreo` -- ver
  * `usePulsoAguacate.ts`); debajo, las siguientes con barra + incidencia.
- * Semántica de color invertida (subir = rojo), igual que `PlagasKPICard`.
+ * Semántica de color invertida (subir = rojo, bajar = verde): ésta es la
+ * referencia de ese patrón para plagas; `calculosDinero.ts` lo aplica al gasto.
  */
 export function PulsoAguacateCardView({ cargando, error, datos, onNavigate }: PulsoAguacateCardViewProps) {
   if (cargando) return <PulsoCardSkeleton />;
