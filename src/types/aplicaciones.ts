@@ -73,6 +73,28 @@ export interface ProductoEnMezcla {
   cantidad_total_necesaria: number;
   inventario_disponible?: number;
   cantidad_faltante?: number;
+
+  // Productos alternativos de esta línea (ESCO-170, tabla de la migración 189). Son
+  // opciones, no plan: NO suman a cantidad_total_necesaria ni a costos.
+  alternativos?: ProductoAlternativo[];
+}
+
+/**
+ * Un producto alternativo de una línea del plan, con su PROPIA dosis en la misma forma
+ * que la línea (por caneca en fumigación/drench, por tamaño de árbol en fertilización),
+ * porque la equivalencia con el principal no es uno a uno (decisión 1b, ESCO-165).
+ */
+export interface ProductoAlternativo {
+  producto_id: string;
+  producto_nombre: string;
+  producto_categoria: string;
+  producto_unidad: UnidadMedida;
+  dosis_por_caneca?: number;
+  unidad_dosis?: 'cc' | 'gramos';
+  dosis_grandes?: number;
+  dosis_medianos?: number;
+  dosis_pequenos?: number;
+  dosis_clonales?: number;
 }
 
 // Cálculos de Aplicación
