@@ -31,6 +31,7 @@ function seleccionarSublotes(consulta: ConsultaMonitoreo, sublotes: SubloteMonit
 const nombre = (v: string | null | undefined, base: string) => (v ?? base).replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&') || base;
 const numeroValido = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v);
 const contadoresValidos = (r: ObservacionMonitoreo) => numeroValido(r.arboles_afectados) && numeroValido(r.arboles_monitoreados) && r.arboles_monitoreados > 0 && r.arboles_afectados >= 0 && r.arboles_afectados <= r.arboles_monitoreados;
+const MAX_FILAS_MONITOREO = 30;
 
 export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonitoreo, id: string, hoy: string): ResultadoMonitoreo {
   const base: ResultadoMonitoreo = { tipo: 'monitoreo', id, consulta, estado: 'no_disponible', filas: [], excluidos: { sin_ronda: 0, padre_no_visible: 0, incompatibles: 0 }, avisos: [], fuente: 'lecturas_independientes', unidad: 'observaciones de árboles muestreados' };
@@ -91,7 +92,13 @@ export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonit
   } else if (agrupacionLote) {
     for (const l of lotes.filter(l => (!loteIds.length || loteIds.includes(l.id)) && (!subloteIds.length || sublotes.some(s => s.lote_id === l.id && subloteIds.includes(s.id))))) grupos.push({ lote_id: l.id, sublote_id: null });
   } else grupos.push({ lote_id: null, sublote_id: null });
-  for (const ronda of rondasElegidas) for (const plaga of plagasElegidas) for (const grupo of grupos) {
+  const filasTotales = rondasElegidas.length * plagasElegidas.length * grupos.length;
+  if (!Number.isSafeInteger(filasTotales)) return fallo('cantidad_grupos_no_calculable');
+  base.detalle = { filas_totales: filasTotales, filas_mostradas: Math.min(filasTotales, MAX_FILAS_MONITOREO), limitado: filasTotales > MAX_FILAS_MONITOREO };
+  // El detalle se acota antes de construir el producto de rondas/plagas/grupos.
+  // Las exclusiones y la disponibilidad ya se comprobaron sobre todas las observaciones.
+  detalle: for (const ronda of rondasElegidas) for (const plaga of plagasElegidas) for (const grupo of grupos) {
+    if (base.filas.length === MAX_FILAS_MONITOREO) break detalle;
     const miembros = candidatas.filter(x => x.r.ronda_id === ronda.id && x.r.plaga_enfermedad_id === plaga.id && (!agrupacionLote && !agrupacionSublote || x.r.lote_id === grupo.lote_id) && (!agrupacionSublote || x.r.sublote_id === grupo.sublote_id));
     const invalidas = miembros.filter(x => x.incompatible).length;
     const sinLectura = !miembros.length && noLegibles.some(x => x.ronda_id === ronda.id && x.plaga_id === plaga.id && (!agrupacionLote && !agrupacionSublote || x.lote_id === grupo.lote_id));
@@ -116,7 +123,6 @@ export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonit
   return { ...base, estado: contadorNoLeido ? 'no_disponible' : base.excluidos.padre_no_visible || base.excluidos.incompatibles || base.filas.some(f => f.estado === 'no_calculable') ? 'parcial' : 'ok' };
 }
 
-const MAX_FILAS_MONITOREO = 30;
 // La incidencia se trunca a un decimal: redondear haría ver 9,96 % como «10 % · Baja», contra las bandas 10/30.
 export function renderMonitoreo(r: ResultadoMonitoreo): string {
   if (r.estado === 'aclaracion') return r.motivo === 'ultima_ronda_ambigua' ? 'Hay varias rondas con la misma fecha de inicio más reciente. Indica qué ronda quieres consultar.' : '¿Qué ronda o período de inicio de rondas quieres consultar? Puedes pedir la última ronda global.';
@@ -134,7 +140,8 @@ export function renderMonitoreo(r: ResultadoMonitoreo): string {
     else if (f.estado === 'no_calculable') out.push(`- ${alcance}: incidencia y gravedad sin dato calculable. Hay observaciones incompatibles, un denominador inválido o vínculos no legibles; no se publica cero. ${intervalo}`);
     else out.push(`- ${alcance}: incidencia ${numeroMensaje(Math.floor(f.incidencia! * 10 + 1e-9) / 10)} %; gravedad ${nombre(f.gravedad, 'sin dato')}. ${numeroMensaje(f.afectados!)} observaciones afectadas de ${numeroMensaje(f.muestreados!)} observaciones de árboles muestreados, en ${numeroMensaje(f.observaciones)} registros. ${intervalo} Fechas de observación: ${f.fechas.map(d => formatLongDate(d)).join(', ')}.`);
   }
-  if (r.filas.length > MAX_FILAS_MONITOREO) out.push(`Se muestran ${MAX_FILAS_MONITOREO} de ${numeroMensaje(r.filas.length)} filas; acota por ronda, lote, sublote o plaga para ver el resto.`);
+  const filasTotales = r.detalle?.filas_totales ?? r.filas.length;
+  if (filasTotales > MAX_FILAS_MONITOREO) out.push(`Se muestran ${MAX_FILAS_MONITOREO} de ${numeroMensaje(filasTotales)} filas; acota por ronda, lote, sublote o plaga para ver el resto.`);
   if (!r.filas.length) out.push('No hay observaciones de plagas con padres visibles en las rondas seleccionadas. Sin dato de incidencia; no equivale a cero.');
   out.push(...r.avisos);
   if (r.excluidos.padre_no_visible) out.push(`${numeroMensaje(r.excluidos.padre_no_visible)} observaciones no se incorporaron por vínculos no legibles.`);
