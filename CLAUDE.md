@@ -981,6 +981,15 @@ acceptance remains open because exploratory findings require separate review. Se
   key `/health` 200, valid question 401 «sesión inválida». **M4 accepted** by Santiago the same day
   after Claude Code's adversarial check of #436: independent 12-scenario campaign, development 9/12
   automatic (12/12 manual), zero critical failures (`docs/esco2/m4-cierre-2026-11-05.md`).
+  Redeployed 2026-11-06 as **version 10** from clean `main` `f4905250` (PR #445: M5 read tools for
+  monitoring by round, soil CE, climate history with per-variable coverage, herd record and
+  reproductive state, milk weighings per animal and fortnight litres without money — Codex stack
+  #439–#444 plus Claude Code's adversarial fixes; 65 files), with Santiago's approval in chat:
+  `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `473a214e…`, anonymous `/health` 401, anon key
+  `/health` 200, valid question 401 «sesión inválida». **M5 accepted** the same day with fixes
+  (`docs/esco2/m5-cierre-2026-11-05.md` §6). A weighing question can never be answered with
+  fortnight litres (closed code `pesaje_como_quincenal`); a herd-wide weighing total is not
+  supported and asks for an animal.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
