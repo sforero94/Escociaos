@@ -1,4 +1,4 @@
-import type { EstadoReproductivoDerivado } from '../calculosHato.ts';
+import type { EstadoReproductivoDerivado, MetodoConfirmacionPrenez, TipoEstado } from '../calculosHato.ts';
 import type { AnimalHatoClasificado } from '../hatoCategorias.ts';
 import type { FilaHatoConfig } from '../hatoConfigDesdeTabla.ts';
 export interface ConsultaHato { animal_ids: string[]; nombres: string[]; chapetas: number[] }
@@ -21,9 +21,17 @@ export interface FuenteHato {
 export interface ParienteHato {
   estado: 'visible' | 'sin_vinculo' | 'no_legible' | 'no_leido'; nombre?: string | null; numero?: number | null;
 }
+export interface HechosReproduccionHato {
+  ultimo_parto_fecha?: string | null; ultimo_servicio_fecha?: string | null;
+  ultima_confirmacion_prenez_fecha?: string | null; ultima_confirmacion_prenez_metodo?: MetodoConfirmacionPrenez | null;
+  ultimo_secado_real_fecha?: string | null; ultimo_aborto_fecha?: string | null;
+  ultimo_chequeo_fecha?: string | null; ultimo_evento_fecha?: string | null;
+  ultimo_estado_chequeo?: TipoEstado | null;
+}
 export interface ReproduccionHato {
   estado: 'ok' | 'no_disponible'; num_partos: number | null;
   num_partos_estado: 'valor' | 'null_registrado' | 'no_leido' | 'sin_fila' | 'no_calculable';
+  hechos: HechosReproduccionHato | null;
   derivado: EstadoReproductivoDerivado | null;
   categoria: AnimalHatoClasificado['categoria']; categoria_origen: AnimalHatoClasificado['categoriaOrigen'];
   subetapa_ternera: AnimalHatoClasificado['subetapaTernera']; motivo?: string;

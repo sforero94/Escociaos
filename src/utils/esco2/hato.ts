@@ -6,7 +6,7 @@ import { formatLongDate } from '../formatPuro.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
 import { esUuid } from './aplicacionesTipos.ts';
 import { numeroMensaje } from './formatoMensaje.ts';
-import type { AnimalHato, ConsultaHato, DatosHato, ParienteHato, RegistroVistaHato, ReproduccionHato, ResultadoHato } from './hatoTipos.ts';
+import type { AnimalHato, ConsultaHato, DatosHato, HechosReproduccionHato, ParienteHato, RegistroVistaHato, ReproduccionHato, ResultadoHato } from './hatoTipos.ts';
 const normalizar = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 const nombre = (v: string | null | undefined, base = 'Animal sin nombre registrado') => (v ?? base).replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&') || base;
 const idsValidos = (rs: { id: string }[]) => rs.every(r => r && esUuid(r.id)) && new Set(rs.map(r => r.id.toLowerCase())).size === rs.length;
@@ -46,6 +46,20 @@ function vistaValida(r: RegistroVistaHato, a: Omit<AnimalHato, 'id'>, hoy: strin
   // Las lecturas son independientes: una discrepancia no se resuelve eligiendo una fuente.
   return (['etapa', 'estado', 'raza', 'etapa_forzada', 'fecha_nacimiento'] as const).every(k => r[k] === a[k]);
 }
+/** Hechos ya proyectados por la vista; no agrega historial ni completa fechas ausentes. */
+function hechosRegistrados(vista: RegistroVistaHato | undefined): HechosReproduccionHato | null {
+  if (!vista) return null;
+  const metodo = vista.ultima_confirmacion_prenez_metodo;
+  const estadoChequeo = opcion(vista.ultimo_estado_chequeo, ['vacia_apta', 'vacia_problema', 'fecha_heredada', 'desconocido', 'vacio']);
+  return {
+    ultimo_parto_fecha: fecha(vista.ultimo_parto_fecha), ultimo_servicio_fecha: fecha(vista.ultimo_servicio_fecha),
+    ultima_confirmacion_prenez_fecha: fecha(vista.ultima_confirmacion_prenez_fecha),
+    ultima_confirmacion_prenez_metodo: metodo === null || metodo === 'presuncion' || metodo === 'palpacion' ? metodo : undefined,
+    ultimo_secado_real_fecha: fecha(vista.ultimo_secado_real_fecha), ultimo_aborto_fecha: fecha(vista.ultimo_aborto_fecha),
+    ultimo_chequeo_fecha: fecha(vista.ultimo_chequeo_fecha), ultimo_evento_fecha: fecha(vista.ultimo_evento_fecha),
+    ultimo_estado_chequeo: estadoChequeo as HechosReproduccionHato['ultimo_estado_chequeo'],
+  };
+}
 function finitos(v: unknown): boolean {
   if (typeof v === 'number') return Number.isFinite(v);
   if (Array.isArray(v)) return v.every(finitos);
@@ -83,7 +97,7 @@ export function ejecutarHato(consulta: ConsultaHato, datos: DatosHato, id: strin
     const campos_no_leidos = Object.entries(ficha).filter(([, v]) => v === undefined).map(([k]) => k);
     const vista = estadosLeidos ? datos.estados!.find(r => r.animal_id === a.id) : undefined;
     const num_partos_estado: ReproduccionHato['num_partos_estado'] = !vista ? estadosLeidos ? 'sin_fila' : 'no_leido' : vista.num_partos === undefined ? 'no_leido' : vista.num_partos === null ? 'null_registrado' : entero(vista.num_partos) ? 'valor' : 'no_calculable';
-    const reproduccion: ReproduccionHato = { estado: 'no_disponible', num_partos_estado, num_partos: vista && entero(vista.num_partos) ? vista.num_partos : null, derivado: null, categoria: null, categoria_origen: null, subetapa_ternera: null };
+    const reproduccion: ReproduccionHato = { estado: 'no_disponible', hechos: hechosRegistrados(vista), num_partos_estado, num_partos: vista && entero(vista.num_partos) ? vista.num_partos : null, derivado: null, categoria: null, categoria_origen: null, subetapa_ternera: null };
     if (!vista) reproduccion.motivo = estadosLeidos ? 'sin_fila_vista' : 'vista_no_leida';
     else if (!vistaValida(vista, ficha, hoy)) reproduccion.motivo = 'hechos_no_calculables';
     else if (!configuracion) reproduccion.motivo = 'config_no_disponible';
@@ -121,13 +135,28 @@ export function renderHato(r: ResultadoHato): string {
     const repro = f.reproduccion;
     const disponibilidadPartos = { valor: '', null_registrado: 'NULL registrado', no_leido: 'campo no leído', sin_fila: 'sin fila visible tras lectura completa', no_calculable: 'dato no calculable' }[repro.num_partos_estado];
     out.push(repro.num_partos === null ? `  Partos registrados: ${disponibilidadPartos}; no representa cero.` : `  Partos registrados en la vista: ${numeroMensaje(repro.num_partos)}.`);
+    if (repro.hechos) {
+      const h = repro.hechos;
+      const fechas: [string, string | null | undefined][] = [
+        ['Último parto registrado', h.ultimo_parto_fecha], ['Último servicio registrado', h.ultimo_servicio_fecha],
+        ['Última marca de preñez registrada', h.ultima_confirmacion_prenez_fecha], ['Último secado real registrado', h.ultimo_secado_real_fecha],
+        ['Último aborto registrado', h.ultimo_aborto_fecha], ['Último chequeo registrado', h.ultimo_chequeo_fecha], ['Último evento registrado', h.ultimo_evento_fecha],
+      ];
+      for (const [etiqueta, value] of fechas) {
+        const registrado = value === undefined ? 'no leído' : value === null ? 'NULL registrado (sin fecha registrada)' : `${formatLongDate(value)}${value > r.fecha_referencia ? ' (posterior al corte; no se usa para derivar el estado actual)' : ''}`;
+        out.push(`  ${etiqueta}: ${registrado}.`);
+      }
+      const metodo = h.ultima_confirmacion_prenez_metodo === undefined ? 'no leído' : h.ultima_confirmacion_prenez_metodo === null ? 'NULL registrado (sin método registrado)' : h.ultima_confirmacion_prenez_metodo === 'palpacion' ? 'palpación' : 'presunción';
+      out.push(`  Método registrado de la marca de preñez: ${metodo}.`);
+      out.push(`  Estado del último chequeo registrado: ${campo(h.ultimo_estado_chequeo)}.`);
+    }
     if (repro.estado !== 'ok' || !repro.derivado) {
       const motivo = repro.motivo === 'sin_fila_vista' ? 'sin fila visible en la vista leída' : repro.motivo === 'vista_no_leida' ? 'vista no leída' : repro.motivo === 'config_no_disponible' ? 'configuración no disponible o incompatible' : 'hechos no leídos o no calculables';
       out.push(`  Estado reproductivo derivado no disponible: ${motivo}. La ficha conserva sus datos registrados.`);
       continue;
     }
     const d = repro.derivado;
-    const estado = d.estado === 'servida' ? 'Servida (presunción)' : etiquetaEstadoReproductivo(d.estado);
+    const estado = d.estado === 'servida' ? 'Servida (presunción)' : `${etiquetaEstadoReproductivo(d.estado)}${d.estado === 'parida_reciente' ? ' (posparto; parida reciente)' : ''}`;
     out.push(`  Estado reproductivo derivado: ${estado}; categoría ${repro.categoria ?? 'fuera del inventario activo'}${repro.categoria_origen ? ` (${repro.categoria_origen === 'calculado' ? 'calculada' : 'etapa manual'})` : ''}${repro.subetapa_ternera ? `; subetapa ${repro.subetapa_ternera}` : ''}.`);
     if (d.fecha_probable_parto) out.push(`  Parto probable calculado: ${formatLongDate(d.fecha_probable_parto)}.`);
     if (d.fecha_secar) out.push(`  Fecha de secado prevista por el motor: ${formatLongDate(d.fecha_secar)}.`);
