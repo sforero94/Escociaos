@@ -987,9 +987,15 @@ acceptance remains open because exploratory findings require separate review. Se
   #439–#444 plus Claude Code's adversarial fixes; 65 files), with Santiago's approval in chat:
   `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `473a214e…`, anonymous `/health` 401, anon key
   `/health` 200, valid question 401 «sesión inválida». **M5 accepted** the same day with fixes
-  (`docs/esco2/m5-cierre-2026-11-05.md` §6). A weighing question can never be answered with
-  fortnight litres (closed code `pesaje_como_quincenal`); a herd-wide weighing total is not
-  supported and asks for an animal.
+  (`docs/esco2/m5-cierre-2026-11-05.md` §6). v10 also shipped a guard (`pesaje_como_quincenal`)
+  that was **wrong** and was removed in v11 (below).
+  Redeployed 2026-11-06 as **version 11** from clean `main` `8d7d461c` (PR #447), with Santiago's
+  approval in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `151733db…`, anonymous `/health`
+  401, anon key `/health` 200, valid question 401 «sesión inválida». On this farm «¿cuántos litros
+  se pesaron en octubre?» means herd production, answered from fortnight litres (≈ 10.148 L);
+  `hato_pesajes_leche` is a weekly one-day sample per cow and never sums to monthly production.
+  The rule lives only in the `consultar_litros_quincenales` tool description: two variants that
+  touched the general planner prompt made unrelated labor cases worse (measured in §7).
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
