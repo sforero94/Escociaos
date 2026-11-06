@@ -974,6 +974,13 @@ acceptance remains open because exploratory findings require separate review. Se
   anonymous `/health` 401, anon key `/health` 200, valid question 401 «sesión inválida». The
   handler log now carries `errorPlan`/`motivoPlan` (closed codes only). On the frozen 8-scenario
   P3 set the M4 measurement went 15/24 → 24/24 (`docs/esco2/m4-reparacion-planificador-2026-11-05.md`).
+  Redeployed 2026-11-05 as **version 9** from clean `main` `5367e060` (PR #436: the coverage
+  normalizer now validates carrier links, carrier arguments and each partial inventory before it
+  repairs them, and the four-call limit applies to the original proposal), with Santiago's approval
+  in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `1a446e5c…`, anonymous `/health` 401, anon
+  key `/health` 200, valid question 401 «sesión inválida». **M4 accepted** by Santiago the same day
+  after Claude Code's adversarial check of #436: independent 12-scenario campaign, development 9/12
+  automatic (12/12 manual), zero critical failures (`docs/esco2/m4-cierre-2026-11-05.md`).
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
