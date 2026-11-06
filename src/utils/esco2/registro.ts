@@ -291,6 +291,17 @@ const CAPACIDAD_DE_HERRAMIENTA: Record<string, string> = {
 type ParteBruta = { id?: unknown; capacidad?: unknown; disposicion?: unknown };
 /** Une inventarios parciales que el modelo repartió entre llamadas (s1 en una, s2 en otra). */
 function fusionarInventarios(inventarios: unknown[]): unknown {
+    // La fusión solo puede eliminar repetición entre llamadas, nunca una forma inválida
+    // dentro de un inventario ni propiedades que el esquema cerrado no reconoce.
+    for (const inv of inventarios) {
+        const partes = (inv as { partes?: unknown } | null)?.partes;
+        if (!inv || typeof inv !== 'object' || Array.isArray(inv) || Object.keys(inv).some(k => !['version', 'partes'].includes(k)) || (inv as { version?: unknown }).version !== 1 || !Array.isArray(partes) || !partes.length || partes.length > 8) throw new Error('inventario_forma');
+        const ids = new Set<string>();
+        for (const parte of partes as ParteBruta[]) {
+            if (!parte || typeof parte !== 'object' || Array.isArray(parte) || typeof parte.id !== 'string' || !/^s[1-8]$/.test(parte.id) || ids.has(parte.id)) throw new Error('parte_forma');
+            ids.add(parte.id);
+        }
+    }
     if (new Set(inventarios.map(canonicoCobertura)).size === 1) return inventarios[0];
     const porId = new Map<string, unknown>();
     for (const inv of inventarios) {
@@ -334,6 +345,12 @@ export function normalizarLlamadasCobertura(llamadas: LlamadaHerramienta[]): { l
     const partes = (inventario as { partes?: ParteBruta[] } | undefined)?.partes;
     if (pares.some(p => portadora(p.nombre)) && pares.some(p => !portadora(p.nombre))) {
         if (!Array.isArray(partes) || !partes.some(p => p?.disposicion === 'fuera_de_contrato' || p?.disposicion === 'aclarar')) throw new Error('portadora_con_operaciones');
+        for (const p of pares.filter(p => portadora(p.nombre))) {
+            if (p.args.parte_ids !== undefined && (!Array.isArray(p.args.parte_ids) || p.args.parte_ids.length)) throw new Error('carrier');
+            const { cobertura: _cobertura, parte_ids: _partes, ...dominio } = p.args;
+            const permitidos = p.nombre === HERRAMIENTA_ACLARAR ? ['pregunta', 'motivo'] : ['motivo'];
+            if (Object.keys(dominio).some(k => !permitidos.includes(k)) || typeof dominio.motivo !== 'string' || p.nombre === HERRAMIENTA_ACLARAR && (typeof dominio.pregunta !== 'string' || !dominio.pregunta.trim())) throw new Error('argumentos_no_validos');
+        }
         pares = pares.filter(p => !portadora(p.nombre));
         reparaciones.push('portadora_descartada');
     }
@@ -364,6 +381,7 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
     if (contexto?.exigirCobertura) {
         try {
             if (!llamadas.length) throw new Error('sin_llamadas');
+            if (llamadas.length > MAX_CONSULTAS_POR_TURNO) throw new Error('limite');
             llamadas = normalizarLlamadasCobertura(llamadas).llamadas;
             if (llamadas.length > MAX_CONSULTAS_POR_TURNO) throw new Error('limite');
             const argumentos = llamadas.map(l => JSON.parse(l.argumentos) as Record<string, unknown>);
