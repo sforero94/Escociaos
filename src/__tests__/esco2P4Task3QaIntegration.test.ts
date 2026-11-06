@@ -68,7 +68,14 @@ describe('P4-3 QA: real HTTP, mandatory coverage, independent daily SQL/JWT sour
     expect(h.body.respuesta).not.toMatch(/90\s*mm|888\s*mm/);
   });
 
-  it.each([['2026-10-03',5],['2026-10-04',0]])('keeps %s rainfall %s as a measured lower bound',async(date,value)=>{
+  it('treats a 2026-10-04 lower bound of 0 as sin dato, never a dry day (CLAUDE.md 122)',async()=>{
+    const h=await execute({...base(),desde:'2026-10-04',hasta:'2026-10-04'});const r=climate(h.body);const f=row(r,'2026-10-04');
+    expect(f.valores.lluvia_total_mm).toBeNull();expect(f.lluvia_confianza).toBe('cobertura_parcial');expect(f.estados.lluvia_total_mm).toBe('no_usable');
+    expect(summary(r).lluvia).toMatchObject({cota_inferior_medida:null,dias_cota_inferior:0,dias_sin_dato:1});
+    expect(h.body.respuesta).toMatch(/sin dato usable de lluvia: 2026-10-04/);expect(h.body.respuesta).not.toMatch(/d[ií]a seco|no llovi[oó]|sin lluvia\b/i);
+  });
+
+  it.each([['2026-10-03',5]])('keeps %s rainfall %s as a measured lower bound',async(date,value)=>{
     const h=await execute({...base(),desde:date,hasta:date});const r=climate(h.body);const f=row(r,date);
     expect(f.valores.lluvia_total_mm).toBe(value);expect(f.lluvia_confianza).toBe('cobertura_parcial');
     expect(summary(r).lluvia).toMatchObject({cota_inferior_medida:value,dias_cota_inferior:1,dias_completos:0});

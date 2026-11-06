@@ -45,6 +45,7 @@ select(columnas, opciones) {
   it('cota cero no es día seco y congelado no participa en suma', () => {
     const r = ejecutarClima(consulta, [dia('2026-10-01', { lluvia_total_mm: 0, lluvia_confianza: 'cobertura_parcial' }), dia('2026-10-02', { lluvia_total_mm: 87, lluvia_confianza: 'contador_congelado' })], 'p1', '2026-11-06');
     expect(r.resumen[0].variables.lluvia_total_mm).toMatchObject({ promedio: null, min: null, max: null });
-    expect(r.resumen[0].lluvia).toMatchObject({ subtotal_dias_completos: null, cota_inferior_medida: 0, dias_completos: 0, dias_cota_inferior: 1, dias_sin_dato: 2 });
+    // CLAUDE.md 122: una cota inferior de 0 mm no informa nada; es sin dato, nunca día seco.
+    expect(r.resumen[0].lluvia).toMatchObject({ subtotal_dias_completos: null, cota_inferior_medida: null, dias_completos: 0, dias_cota_inferior: 0, dias_sin_dato: 3 });
   });
 });

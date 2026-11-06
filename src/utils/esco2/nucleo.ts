@@ -92,6 +92,7 @@ export const INSTRUCCION_REINTENTO: Record<string, string> = {
     parte_consultar_sin_operacion: 'Cada parte con disposicion consultar necesita una llamada que la cite en parte_ids. Si ninguna herramienta la responde, declárala fuera_de_contrato.',
     vinculo_a_parte_no_consultar: 'parte_ids solo puede citar partes con disposicion consultar.',
     capacidad_no_coincide: 'La capacidad de cada parte citada debe ser la de la herramienta que la cita.',
+    pesaje_como_quincenal: 'Una parte que pide pesajes usa consultar_pesajes_leche con un animal o se declara aclarar con capacidad pesajes_leche; nunca consultar_litros_quincenales.',
     parte_id_inexistente: 'parte_ids solo puede citar ids declarados en cobertura.',
     parte_ids_forma: 'Cada llamada ejecutable lleva parte_ids, una lista no vacía sin repetidos.',
     portadora_con_operaciones: 'No combines fuera_de_alcance ni pedir_aclaracion con consultas; declara esas partes solo en cobertura.',

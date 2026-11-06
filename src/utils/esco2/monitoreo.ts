@@ -4,7 +4,7 @@ import { formatLongDate } from '../formatPuro.ts';
 import { numeroMensaje } from './formatoMensaje.ts';
 import { esUuid } from './aplicacionesTipos.ts';
 import { esFechaCalendario } from './fechaCalendario.ts';
-import type { ConsultaMonitoreo, DatosMonitoreo, FilaMonitoreo, NombreMonitoreo, ObservacionMonitoreo, ResultadoMonitoreo } from './monitoreoTipos.ts';
+import type { ConsultaMonitoreo, DatosMonitoreo, FilaMonitoreo, NombreMonitoreo, ObservacionMonitoreo, ResultadoMonitoreo, SubloteMonitoreo } from './monitoreoTipos.ts';
 
 const normalizar = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 const idsValidos = (rows: { id: string }[]) => rows.every(r => r && esUuid(r.id)) && new Set(rows.map(r => r.id.toLowerCase())).size === rows.length;
@@ -20,6 +20,14 @@ function seleccionar(ids: string[], nombres: string[], catalogo: NombreMonitoreo
   }
   return { estado: 'ok', ids: [...new Set(elegidos)] };
 }
+/** Sublotes con el mismo nombre en lotes distintos: el lote pedido acota los nombres, nunca los IDs. */
+function seleccionarSublotes(consulta: ConsultaMonitoreo, sublotes: SubloteMonitoreo[], lotes: Seleccion): Seleccion {
+  const porId = seleccionar(consulta.sublote_ids, [], sublotes);
+  if (porId.estado !== 'ok' || !consulta.sublotes.length) return porId;
+  const ambito = lotes.estado === 'ok' && lotes.ids.length ? sublotes.filter(s => lotes.ids.includes(s.lote_id!)) : sublotes;
+  const porNombre = seleccionar([], consulta.sublotes, ambito);
+  return porNombre.estado !== 'ok' ? porNombre : { estado: 'ok', ids: [...new Set([...porId.ids, ...porNombre.ids])] };
+}
 const nombre = (v: string | null | undefined, base: string) => (v ?? base).replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]|<>]/g, '\\$&') || base;
 const numeroValido = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v);
 const contadoresValidos = (r: ObservacionMonitoreo) => numeroValido(r.arboles_afectados) && numeroValido(r.arboles_monitoreados) && r.arboles_monitoreados > 0 && r.arboles_afectados >= 0 && r.arboles_afectados <= r.arboles_monitoreados;
@@ -33,7 +41,7 @@ export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonit
   if (rondas.some(r => r.nombre === undefined || !esFechaCalendario(r.fecha_inicio) || r.fecha_fin === undefined || r.fecha_fin !== null && (!esFechaCalendario(r.fecha_fin) || r.fecha_fin < r.fecha_inicio!)) || [...lotes, ...sublotes, ...plagas].some(r => typeof r.nombre !== 'string') || sublotes.some(r => r.lote_id === undefined || r.lote_id === null)) return fallo('campo_catalogo_no_leido');
   const selecciones = [
     seleccionar(consulta.ronda_ids, consulta.rondas, rondas), seleccionar(consulta.lote_ids, consulta.lotes, lotes),
-    seleccionar(consulta.sublote_ids, consulta.sublotes, sublotes), seleccionar(consulta.plaga_ids, consulta.plagas, plagas),
+    seleccionarSublotes(consulta, sublotes, seleccionar(consulta.lote_ids, consulta.lotes, lotes)), seleccionar(consulta.plaga_ids, consulta.plagas, plagas),
   ];
   const problema = selecciones.find(s => s.estado !== 'ok');
   if (problema) return { ...base, estado: problema.estado, motivo: 'seleccion_no_resuelta' };
@@ -108,6 +116,7 @@ export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonit
   return { ...base, estado: contadorNoLeido ? 'no_disponible' : base.excluidos.padre_no_visible || base.excluidos.incompatibles || base.filas.some(f => f.estado === 'no_calculable') ? 'parcial' : 'ok' };
 }
 
+const MAX_FILAS_MONITOREO = 30;
 export function renderMonitoreo(r: ResultadoMonitoreo): string {
   if (r.estado === 'aclaracion') return r.motivo === 'ultima_ronda_ambigua' ? 'Hay varias rondas con la misma fecha de inicio más reciente. Indica qué ronda quieres consultar.' : '¿Qué ronda o período de inicio de rondas quieres consultar? Puedes pedir la última ronda global.';
   if (r.estado === 'no_resuelto') return 'No pude identificar una única ronda, lote, sublote o plaga. Indica el nombre exacto que aparece en la app; si hay nombres repetidos, precisa la identidad.';
@@ -117,13 +126,14 @@ export function renderMonitoreo(r: ResultadoMonitoreo): string {
   if (r.filtros_visibles?.lotes.length) out.push(`Lotes seleccionados: ${r.filtros_visibles.lotes.map(l => nombre(l, 'Lote sin nombre')).join(', ')}.`);
   if (r.filtros_visibles?.sublotes.length) out.push(`Sublotes seleccionados: ${r.filtros_visibles.sublotes.map(s => nombre(s, 'Sublote sin nombre')).join(', ')}.`);
   if (r.consulta.desde) out.push(`Rondas con inicio del ${formatLongDate(r.consulta.desde)} al ${formatLongDate(r.consulta.hasta!)}, ambas fechas incluidas.`);
-  for (const f of r.filas) {
+  for (const f of r.filas.slice(0, MAX_FILAS_MONITOREO)) {
     const alcance = [nombre(f.ronda, 'Ronda sin nombre'), ...(f.lote ? [nombre(f.lote, 'Lote sin nombre')] : []), ...(f.sublote ? [nombre(f.sublote, 'Sublote sin nombre')] : []), nombre(f.plaga, 'Plaga sin nombre')].join(' · ');
     const intervalo = `Ronda: inicio ${formatLongDate(f.ronda_inicio)}; fin ${f.ronda_fin ? formatLongDate(f.ronda_fin) : 'sin fecha registrada'}.`;
     if (f.estado === 'no_revisado') out.push(`- ${alcance}: no revisado, sin observación registrada. No equivale a incidencia cero. ${intervalo}`);
     else if (f.estado === 'no_calculable') out.push(`- ${alcance}: incidencia y gravedad sin dato calculable. Hay observaciones incompatibles, un denominador inválido o vínculos no legibles; no se publica cero. ${intervalo}`);
-    else out.push(`- ${alcance}: incidencia ${numeroMensaje(f.incidencia!)} %; gravedad ${nombre(f.gravedad, 'sin dato')}. ${numeroMensaje(f.afectados!)} observaciones afectadas de ${numeroMensaje(f.muestreados!)} observaciones de árboles muestreados, en ${numeroMensaje(f.observaciones)} registros. ${intervalo} Fechas de observación: ${f.fechas.map(d => formatLongDate(d)).join(', ')}.`);
+    else out.push(`- ${alcance}: incidencia ${numeroMensaje(Math.round(f.incidencia! * 10) / 10)} %; gravedad ${nombre(f.gravedad, 'sin dato')}. ${numeroMensaje(f.afectados!)} observaciones afectadas de ${numeroMensaje(f.muestreados!)} observaciones de árboles muestreados, en ${numeroMensaje(f.observaciones)} registros. ${intervalo} Fechas de observación: ${f.fechas.map(d => formatLongDate(d)).join(', ')}.`);
   }
+  if (r.filas.length > MAX_FILAS_MONITOREO) out.push(`Se muestran ${MAX_FILAS_MONITOREO} de ${numeroMensaje(r.filas.length)} filas; acota por ronda, lote, sublote o plaga para ver el resto.`);
   if (!r.filas.length) out.push('No hay observaciones de plagas con padres visibles en las rondas seleccionadas. Sin dato de incidencia; no equivale a cero.');
   out.push(...r.avisos);
   if (r.excluidos.padre_no_visible) out.push(`${numeroMensaje(r.excluidos.padre_no_visible)} observaciones no se incorporaron por vínculos no legibles.`);

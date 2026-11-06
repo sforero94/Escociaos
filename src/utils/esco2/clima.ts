@@ -1,6 +1,6 @@
 import { lluviaConfiableDeResumen, esCotaInferior } from '../escoClimaCalidad.ts';
 import { wm2ToEnergiaDiaria } from '../calculosRadiacion.ts';
-import { aFechaUTC, esFechaCalendario } from './fechaCalendario.ts';
+import { aFechaUTC, deFechaUTC, esFechaCalendario } from './fechaCalendario.ts';
 import { validarFilasClima } from './climaFuente.ts';
 import type { ConsultaClima, FilaClima, ResumenClima, ResumenDiarioClima, ResultadoClima, VariableClima } from './climaTipos.ts';
 const CONFIANZAS = new Set(['ok', 'contador_congelado', 'sin_time_piezo', 'cobertura_parcial', 'reconstruido']);
@@ -13,6 +13,8 @@ function filaObservada(f: ResumenDiarioClima, variables: VariableClima[]): FilaC
     const crudo = variable === 'energia_kwh_m2' ? f.radiacion_wm2_avg : f[variable];
     let valor = crudo;
     if (variable === 'lluvia_total_mm') valor = CONFIANZAS.has(f.lluvia_confianza) ? lluviaConfiableDeResumen(f) : null;
+    // Una cota inferior de 0 mm no informa nada (122): es sin dato, nunca un día seco.
+    if (variable === 'lluvia_total_mm' && valor === 0 && esCotaInferior(f)) valor = null;
     if (variable === 'horas_sol_duracion' && (cobertura_temporal === 'parcial' || valor !== null && (valor < 0 || valor > 24))) valor = null;
     if (variable === 'energia_kwh_m2') valor = crudo !== null && crudo >= 0 && cobertura_temporal === 'completa' ? wm2ToEnergiaDiaria(crudo) : null;
     if (variable !== 'temp_c_min' && variable !== 'temp_c_max' && variable !== 'temp_c_avg' && valor !== null && valor < 0) valor = null;
@@ -87,6 +89,16 @@ export function ejecutarClima(consulta: ConsultaClima, datos: ResumenDiarioClima
 const ETIQUETAS: Record<VariableClima, string> = { temp_c_min: 'Temperatura mínima (°C)', temp_c_max: 'Temperatura máxima (°C)', temp_c_avg: 'Temperatura media (°C)', humedad_pct_min: 'Humedad mínima (%)', humedad_pct_max: 'Humedad máxima (%)', humedad_pct_avg: 'Humedad media (%)', viento_kmh_avg: 'Viento medio (km/h)', rafaga_kmh_max: 'Ráfaga máxima (km/h)', viento_dir_predominante: 'Dirección predominante del viento (grados)', lluvia_total_mm: 'Lluvia (mm)', radiacion_wm2_avg: 'Radiación media (W/m²)', radiacion_wm2_max: 'Radiación máxima (W/m²)', uv_index_max: 'Índice UV (sin unidad)', horas_sol_duracion: 'Duración de sol (h)', energia_kwh_m2: 'Energía solar diaria (kWh/m²)' };
 const numero = (n: number | null) => n === null ? 'sin dato' : new Intl.NumberFormat('es-CO', { maximumFractionDigits: 3 }).format(n);
 const texto = (s: string) => s.replace(/\s+/g, ' ').replace(/[\\`*_[\]|<>]/g, '\\$&');
+const MAX_DIAS_LISTADOS = 31;
+function fechasDelRango(desde: string, hasta: string): string[] {
+  const out: string[] = [];
+  for (let t = aFechaUTC(desde).getTime(), fin = aFechaUTC(hasta).getTime(); t <= fin; t += 86400000) out.push(deFechaUTC(new Date(t)));
+  return out;
+}
+function listaDias(dias: string[]): string {
+  const visibles = dias.slice(0, MAX_DIAS_LISTADOS).join(', ');
+  return dias.length > MAX_DIAS_LISTADOS ? `${visibles} y ${dias.length - MAX_DIAS_LISTADOS} más` : visibles;
+}
 export function renderClima(r: ResultadoClima): string {
   if (r.estado === 'aclaracion' && r.motivo === 'identidad_estacion_ambigua') return `Hay identificadores de estación distintos que coinciden al quitar espacios exteriores: ${r.estaciones.map(s => texto(JSON.stringify(s).replace(/ /g, '␠'))).join(', ')} (␠ indica un espacio). No puedo elegir entre ellos. Precisa un período que permita distinguir la estación.`;
   if (r.estado === 'aclaracion') return `Hay estaciones con fechas solapadas. Indica la estación que quieres consultar: ${r.estaciones.map(texto).join(', ')}.`;
@@ -111,7 +123,16 @@ export function renderClima(r: ResultadoClima): string {
       partes.push(`Lluvia: subtotal de ${l.dias_completos} días con cobertura temporal completa: ${numero(l.subtotal_dias_completos)} mm; cota inferior medida de ${l.dias_cota_inferior} días: ${l.cota_inferior_medida === null ? 'sin dato' : `al menos ${numero(l.cota_inferior_medida)} mm`}; ${l.dias_sin_dato} días sin dato usable. Las cotas no son totales completos; una cota de cero no acredita ausencia de precipitación.`);
       if (l.dias_temporales_parciales) partes.push(`Lluvia observada en ${l.dias_temporales_parciales} días de cobertura temporal parcial: ${numero(l.subtotal_observado_temporal_parcial)} mm. La etiqueta de lluvia no acredita estos días como completos; se conserva la contradicción y este subtotal separado.`);
       if (l.dias_calidad_desconocida) partes.push(`Lluvia observada de ${l.dias_calidad_desconocida} días con calidad temporal desconocida: ${numero(l.subtotal_observado_calidad_desconocida)} mm, separada del subtotal completo.`);
-      const causas = [...new Set(r.filas.filter(f => f.station_id === resumen.station_id).map(f => f.lluvia_confianza))];
+      const propias = r.filas.filter(f => f.station_id === resumen.station_id);
+      const conFila = new Set(propias.map(f => f.fecha));
+      const sinDato = [...fechasDelRango(r.alcance.desde, r.alcance.hasta).filter(d => !conFila.has(d)), ...propias.filter(f => typeof f.valores.lluvia_total_mm !== 'number').map(f => f.fecha)].sort();
+      const conValor = propias.filter(f => typeof f.valores.lluvia_total_mm === 'number');
+      if (sinDato.length) partes.push(`Días sin dato usable de lluvia: ${listaDias(sinDato)}.`);
+      const cotasDias = conValor.filter(f => esCotaInferior(f)).map(f => f.fecha);
+      if (cotasDias.length) partes.push(`Días con solo cota inferior de lluvia: ${listaDias(cotasDias)}.`);
+      const parcialesDias = conValor.filter(f => !esCotaInferior(f) && f.cobertura_temporal !== 'completa').map(f => f.fecha);
+      if (parcialesDias.length) partes.push(`Días con lluvia observada y cobertura temporal parcial o desconocida: ${listaDias(parcialesDias)}.`);
+      const causas = [...new Set(propias.map(f => f.lluvia_confianza))];
       partes.push(`Procedencia de lluvia registrada: ${causas.map(texto).join(', ') || 'sin fila'}.`);
     }
   }

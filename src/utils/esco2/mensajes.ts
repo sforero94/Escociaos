@@ -39,7 +39,7 @@ export function mensajeAclaracion(categoria: string, tareas: string[] = [categor
     return `¿Quieres consultar ${tareas.length === 1 ? 'la tarea' : 'las tareas'} ${choices}${tail} o toda la categoría «${nombre(categoria, 'la categoría indicada')}»?`;
 }
 export function mensajeDisposicion(tipo: 'fuera_de_alcance' | 'aclaracion' | 'error_plan' | 'error_llm' | 'error_datos'): string {
-    const textos = { fuera_de_alcance: 'Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones: jornales, tareas programadas, fechas y estado actual, cantidades de productos, costos de una aplicación, labor vinculada y faltantes vigentes de insumos.', aclaracion: 'Necesito precisar tu consulta. Indica la entidad o el alcance que falta para poder responder.', error_plan: 'No pude entender tu consulta. ¿Qué período de labores quieres revisar?', error_llm: 'No pude procesar tu consulta en este momento. Inténtalo de nuevo.', error_datos: 'No pude leer los datos de labores en este momento. Inténtalo de nuevo.' };
+    const textos = { fuera_de_alcance: 'Esa consulta todavía no está disponible. Puedo consultar labores y aplicaciones (jornales, tareas, fechas y estado, cantidades, costos, labor vinculada y faltantes de insumos), monitoreo de plagas por ronda, conductividad del suelo, clima histórico observado, ficha y estado reproductivo del hato, pesajes de leche por animal y litros quincenales.', aclaracion: 'Necesito precisar tu consulta. Indica la entidad o el alcance que falta para poder responder.', error_plan: 'No pude entender tu consulta. Indica qué quieres consultar y el período.', error_llm: 'No pude procesar tu consulta en este momento. Inténtalo de nuevo.', error_datos: 'No pude leer los datos necesarios en este momento. Inténtalo de nuevo.' };
     return textos[tipo];
 }
 function periodo(r: ResultadoParte): string { return `Del ${fecha(r.alcance.desde)} al ${fecha(r.alcance.hasta)}, ambas fechas incluidas.`; }
@@ -291,7 +291,8 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         const inventario = cobertura.partes.map((p, i) => `- Parte ${i + 1}, solicitud del usuario: «${solicitudCitada(p.texto)}». ${disposiciones[p.disposicion]}${p.parcial ? ' Conservo los datos parciales sustentados.' : ''}`);
         parts.unshift(`Subpartes de tu solicitud:\n${inventario.join('\n')}`);
     }
-    if (parcialFueraDeAlcance || cobertura?.partes.some(p => p.disposicion !== 'respondida'))
+    // Una aclaración pura no muestra datos: no lleva el aviso de respuesta parcial.
+    if (parcialFueraDeAlcance || cobertura?.partes.some(p => p.disposicion !== 'respondida') && !cobertura.partes.every(p => p.disposicion === 'aclarar'))
         parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden únicamente a las partes sustentadas.');
     if (aviso)
         parts.push(avisos[aviso]);

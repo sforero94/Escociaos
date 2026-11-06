@@ -70,7 +70,9 @@ function configValida(datos: DatosHato): { config: HatoConfig; umbrales: Umbrale
   if (!Array.isArray(filas) || filas.some(f => !f || typeof f.clave !== 'string' || !f.clave.trim() || f.valor === undefined) || new Set(filas.map(f => f.clave)).size !== filas.length) return null;
   try {
     const config = construirHatoConfigDesdeFilas(filas), umbrales = construirUmbralesCategoriaHatoDesdeFilas(filas);
-    return finitos(config) && finitos(umbrales) ? { config, umbrales } : null;
+    const secados = Object.values(config.meses_secado_por_raza);
+    const enRango = config.meses_gestacion_default > 0 && secados.every(m => m >= 0 && m < config.meses_gestacion_default);
+    return finitos(config) && finitos(umbrales) && enRango ? { config, umbrales } : null;
   } catch { return null; }
 }
 export type SeleccionAnimalesHato = { estado: 'ok'; animales: AnimalHato[] } | { estado: 'aclaracion' | 'no_disponible' | 'no_resuelto'; motivo: string };

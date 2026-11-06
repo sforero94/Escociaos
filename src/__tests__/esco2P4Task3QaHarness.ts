@@ -5,8 +5,9 @@ import { p2Db } from './esco2P2Harness.ts';
 
 export const CLIMA_COLUMNAS = ['fecha','station_id','temp_c_min','temp_c_max','temp_c_avg','humedad_pct_min','humedad_pct_max','humedad_pct_avg','viento_kmh_avg','rafaga_kmh_max','viento_dir_predominante','lluvia_total_mm','lluvia_confianza','lluvia_mm_evento','radiacion_wm2_avg','radiacion_wm2_max','uv_index_max','horas_sol_duracion','lecturas_count','cobertura_hueco_max_min'];
 export const CLIMA_ORACLE = {
-  lluvia: { subtotal_dias_completos:5,cota_inferior_medida:5,dias_completos:3,dias_cota_inferior:2,dias_sin_dato:5 },
-  lluviaCobertura: {solicitados:10,usables:5,nulos_no_usables:4,sin_fila:1,calidad_desconocida:1},
+  // 2026-10-04 es una cota de 0 mm: sin dato (CLAUDE.md 122), no una cota medida.
+  lluvia: { subtotal_dias_completos:5,cota_inferior_medida:5,dias_completos:3,dias_cota_inferior:1,dias_sin_dato:6 },
+  lluviaCobertura: {solicitados:10,usables:4,nulos_no_usables:5,sin_fila:1,calidad_desconocida:1},
   temperatura: {promedio:45,min:10,max:80,cobertura:{solicitados:10,usables:8,nulos_no_usables:1,sin_fila:1,calidad_desconocida:1}},
   humedad: {promedio:450/7,min:0,max:100,cobertura:{solicitados:10,usables:7,nulos_no_usables:2,sin_fila:1,calidad_desconocida:1}},
 } as const;
