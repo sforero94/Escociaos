@@ -32,7 +32,10 @@ export function resolverReferenciaPoblacion(pregunta:string,_historial:MensajeHi
  // This finite guard distinguishes immediate attribute references from member references; it does not certify arbitrary language.
  const t=forma(pregunta);
  const atributos=/^\s+(?:fechas?|periodos?|rangos?|intervalos?|dias?|mes(?:es)?|semanas?|quincenas?|bases?|metricas?|variables?|agrupaciones|filtros?|condiciones|unidades)\b/;
- const match=[...t.matchAll(new RegExp(PATRON_REFERENCIA.source,'g'))].find(m=>!atributos.test(t.slice((m.index??0)+m[0].length)));
+ // F8: this guard only owns application and animal members. A demonstrative followed by another
+ // entity noun keeps the ordinary typed-context path instead of clarifying or binding the wrong population.
+ const otrasEntidades=/^\s+(?:lotes?|sublotes?|tareas?|labor(?:es)?|plagas?|enfermedades?|rondas?|monitoreos?|potreros?|fincas?|productos?|insumos?|empleados?|trabajadores?|contratistas?|categorias?|estaciones?|quincenas?|gastos?|ingresos?|compras?)\b/;
+ const match=[...t.matchAll(new RegExp(PATRON_REFERENCIA.source,'g'))].find(m=>{const resto=t.slice((m.index??0)+m[0].length);return !atributos.test(resto)&&!otrasEntidades.test(resto);});
  if(!match)return {tipo:'no_deictica'};
  const palabra=match[1]??match[2];const n=palabrasNumero[palabra]??(/^\d+$/.test(palabra)?Number(palabra):undefined);const entidad=entidadTexto(t);
  if(!estado)return {tipo:'aclaracion',motivo:'contexto_ausente'};
