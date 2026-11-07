@@ -76,10 +76,18 @@ function configValida(datos: DatosHato): { config: HatoConfig; umbrales: Umbrale
   } catch { return null; }
 }
 export type SeleccionAnimalesHato = { estado: 'ok'; animales: AnimalHato[] } | { estado: 'aclaracion' | 'no_disponible' | 'no_resuelto'; motivo: string };
-export function resolverSeleccionAnimalesHato(consulta: ConsultaHato, animalesLeidos: AnimalHato[] | undefined): SeleccionAnimalesHato {
-  if (!consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { estado: 'aclaracion', motivo: 'animal_sin_precisar' };
+export function resolverSeleccionAnimalesHato(consulta: ConsultaHato, animalesLeidos: AnimalHato[] | undefined, opciones:{permitirDerivados?:boolean}={}): SeleccionAnimalesHato {
+  if (!consulta.poblacion && !consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { estado: 'aclaracion', motivo: 'animal_sin_precisar' };
   if (!Array.isArray(animalesLeidos) || !idsValidos(animalesLeidos)) return { estado: 'no_disponible', motivo: 'fichas_no_leidas' };
   const animales = animalesLeidos;
+  if (consulta.poblacion) {
+    if (consulta.animal_ids.length || consulta.nombres.length || consulta.chapetas.length) return { estado: 'no_resuelto', motivo: 'selector_poblacional_ambiguo' };
+    const p = consulta.poblacion;
+    if (!opciones.permitirDerivados && (p.categorias?.length || p.estados_reproductivos?.length)) return {estado:'no_disponible',motivo:'selector_derivado_requiere_motor'};
+    const condiciones = [['estados', 'estado'], ['etapas', 'etapa'], ['finca_ids', 'finca_id']] as const;
+    if (condiciones.some(([filtro,campo]) => p[filtro]?.length && animales.some(a => a[campo] === undefined || a[campo] === null))) return { estado: 'no_disponible', motivo: 'selector_poblacional_no_leido' };
+    return { estado: 'ok', animales: animales.filter(a => condiciones.every(([filtro,campo]) => !p[filtro]?.length || p[filtro]!.includes(a[campo] as never))) };
+  }
   if (consulta.nombres.length && animales.some(a => a.nombre === undefined) || consulta.chapetas.length && animales.some(a => a.numero === undefined)) return { estado: 'no_disponible', motivo: 'selector_no_leido' };
   const ids = [...consulta.animal_ids];
   if (ids.some(i => !animales.some(a => a.id === i))) return { estado: 'no_disponible', motivo: 'animal_no_visible' };
@@ -95,9 +103,9 @@ export function resolverSeleccionAnimalesHato(consulta: ConsultaHato, animalesLe
 }
 export function ejecutarHato(consulta: ConsultaHato, datos: DatosHato, id: string, hoy: string): ResultadoHato {
   const base: ResultadoHato = { tipo: 'hato', id, consulta, fecha_referencia: hoy, estado: 'no_disponible', filas: [], fuente: 'lecturas_independientes' };
-  if (!consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { ...base, estado: 'aclaracion', motivo: 'animal_sin_precisar' };
+  if (!consulta.poblacion && !consulta.animal_ids.length && !consulta.nombres.length && !consulta.chapetas.length) return { ...base, estado: 'aclaracion', motivo: 'animal_sin_precisar' };
   if (!esFechaCalendario(hoy)) return { ...base, motivo: 'fichas_no_leidas' };
-  const seleccion = resolverSeleccionAnimalesHato(consulta, datos.animales);
+  const seleccion = resolverSeleccionAnimalesHato(consulta, datos.animales, {permitirDerivados:true});
   if (seleccion.estado !== 'ok') return { ...base, estado: seleccion.estado, motivo: seleccion.motivo };
   const animales = datos.animales!;
   const ids = seleccion.animales.map(a => a.id);
@@ -121,6 +129,10 @@ export function ejecutarHato(consulta: ConsultaHato, datos: DatosHato, id: strin
     } catch { reproduccion.motivo = 'derivado_no_calculable'; }
     const incompleta = campos_no_leidos.length > 0 || Object.values(parentescos).some(p => p.estado === 'no_leido' || p.estado === 'no_legible') || reproduccion.estado !== 'ok';
     base.filas.push({ animal_id: a.id, nombre: ficha.nombre ?? null, numero: ficha.numero ?? null, numero_provisional: esNumeroProvisional(ficha.numero ?? null), ficha: { ...ficha, campos_no_leidos, parentescos }, reproduccion, estado: incompleta ? 'parcial' : 'ok' });
+  }
+  if (consulta.poblacion?.categorias?.length || consulta.poblacion?.estados_reproductivos?.length) {
+    if (base.filas.some(f => f.reproduccion.estado !== 'ok')) return { ...base, estado: 'no_disponible', filas: [], motivo: 'selector_reproductivo_no_disponible' };
+    base.filas = base.filas.filter(f => (!consulta.poblacion!.categorias?.length || consulta.poblacion!.categorias.includes(f.reproduccion.categoria!)) && (!consulta.poblacion!.estados_reproductivos?.length || consulta.poblacion!.estados_reproductivos.includes(f.reproduccion.derivado!.estado)));
   }
   base.estado = base.filas.some(f => f.estado === 'parcial') ? 'parcial' : base.filas.length ? 'ok' : 'vacio_verificado';
   return base;

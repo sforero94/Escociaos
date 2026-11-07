@@ -1,3 +1,6 @@
+import { validarAnalisis, METRICAS_ANALITICAS } from './analitica.ts';
+import type { AnalisisConsulta } from './analiticaTipos.ts';
+import { validarDependencias } from './composicion.ts';
 import type { ConsultaPesajesLeche, ConsultaLitrosQuincenales } from './lecheTipos.ts';
 import type { ConsultaHato } from './hatoTipos.ts';
 import type { ConsultaConductividad } from './conductividadTipos.ts';
@@ -14,17 +17,8 @@ import type { ConsultaMonitoreo } from './monitoreoTipos.ts';
 import type { Agrupacion, ConsultaLabores, Metrica, OperacionConsulta, Plan, SinLote } from './tipos.ts';
 import { operacionesDelPlan } from './tipos.ts';
 import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, normalizarTextoParte, validarInventarioDeclarado, validarCorrespondenciaPlan, type CoberturaPlan } from './cobertura.ts';
-export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
-export const METRICAS: readonly Metrica[] = [
-    'jornales',
-    'costo',
-    'dias_con_registro',
-    'primer_registro',
-    'ultimo_registro',
-    'jornales_por_arbol',
-    'jornales_por_hectarea',
-    'costo_por_jornal',
-];
+import { AGRUPACIONES, METRICAS, METRICAS_RANKING } from './metricasLabores.ts';
+export { AGRUPACIONES, METRICAS, METRICAS_RANKING } from './metricasLabores.ts';
 export const SIN_LOTE: readonly SinLote[] = ['incluir', 'excluir', 'solo'];
 export const MAX_CONSULTAS_POR_TURNO = 4;
 export const MAX_AGRUPACIONES = 2;
@@ -42,9 +36,32 @@ export const HERRAMIENTA_MONITOREO = 'consultar_monitoreo';
 export const HERRAMIENTA_CLIMA = 'consultar_clima';
 export const HERRAMIENTA_ACLARAR = 'pedir_aclaracion';
 export const HERRAMIENTA_FUERA = 'fuera_de_alcance';
+export const ESTADOS_REPRODUCTIVOS_HATO = ['cria', 'novilla', 'servida', 'preñada', 'proxima_a_secar', 'seca', 'parida_reciente', 'vacia_por_servir', 'indeterminado', 'vendida', 'muerta', 'descartada'] as const;
+const FILTROS_POBLACION_HATO = { estados: ['activa', 'vendida', 'muerta', 'descartada'], etapas: ['ternera', 'novilla', 'vaca', 'toro'], categorias: ['ternera', 'novilla', 'hato', 'horro'], estados_reproductivos: [...ESTADOS_REPRODUCTIVOS_HATO] };
+export const ESQUEMA_POBLACION_HATO = { type: 'object', additionalProperties: false, properties: { ...Object.fromEntries(Object.entries(FILTROS_POBLACION_HATO).map(([k,vs]) => [k,{type:'array',uniqueItems:true,items:{type:'string',enum:vs}}])), finca_ids: { type:'array',uniqueItems:true,items:{type:'string',format:'uuid'} } } };
+function esquemaAnalisis(dominio:string):Record<string,unknown> {
+ const metricas=METRICAS_ANALITICAS[dominio];
+ const grupos:Record<string,string[]>={labores:[...AGRUPACIONES],clima:['dia','semana','mes'],conductividad:['lote'],pesajes_leche:['animal'],monitoreo:['lote','sublote','plaga']};
+ const condicion={oneOf:Object.entries(metricas).map(([m,u])=>({type:'object',additionalProperties:false,required:['metrica','operador','valor','unidad'],properties:{metrica:{type:'string',enum:[m]},unidad:{type:'string',enum:[u]},operador:{type:'string',enum:['gt','gte','lt','lte','eq']},valor:{type:'number'}}}))};
+ return {type:'object',additionalProperties:false,minProperties:1,properties:{agrupar_por:{type:'array',uniqueItems:true,maxItems:dominio==='clima'?1:2,items:{type:'string',enum:grupos[dominio]}},...(['conductividad','pesajes_leche','monitoreo'].includes(dominio)?{ultima_por_entidad:{type:'boolean',enum:[true]}}:{}),condiciones:{type:'array',minItems:1,maxItems:4,items:condicion},comparacion:{type:'object',additionalProperties:false,required:['metrica','izquierda','derecha'],properties:{metrica:{type:'string',enum:Object.keys(metricas)},izquierda:{type:'string',maxLength:2000},derecha:{type:'string',maxLength:2000}}}}};
+}
+/** Contextual schema type bounds inference without weakening domain execution types. */
+interface HerramientaRegistrada {
+    type: 'function';
+    function: {
+        name: string;
+        description: string;
+        parameters: {
+            type: 'object';
+            additionalProperties: boolean;
+            required?: string[];
+            properties: Record<string, unknown>;
+        };
+    };
+}
 /** Herramientas en formato OpenAI/OpenRouter. */
 export function herramientasPlanificador(): unknown[] {
-    const herramientas = [
+    const herramientas: HerramientaRegistrada[] = [
         {
             type: 'function',
             function: {
@@ -58,7 +75,7 @@ export function herramientasPlanificador(): unknown[] {
                         cohorte: { type: 'string', enum: ['trabajo_registrado', 'tarea_programada'] },
                         base_fecha: { type: 'string', enum: ['fecha_trabajo', 'fecha_estimada_inicio'] },
                         tarea_ids: { type: 'array', items: { type: 'string' } }, lote_ids: { type: 'array', items: { type: 'string' } },
-                        ranking: { type: 'object', additionalProperties: false, required: ['metrica', 'direccion', 'n', 'empates'], properties: { metrica: { type: 'string', enum: [...METRICAS] }, direccion: { type: 'string', enum: ['asc', 'desc'] }, n: { type: 'integer', minimum: 1, maximum: 50 }, empates: { type: 'string', enum: ['incluir', 'exactamente_n_por_id'] } } },
+                        ranking: { type: 'object', additionalProperties: false, required: ['metrica', 'direccion', 'n', 'empates'], properties: { metrica: { type: 'string', enum: [...METRICAS_RANKING] }, direccion: { type: 'string', enum: ['asc', 'desc'] }, n: { type: 'integer', minimum: 1, maximum: 50 }, empates: { type: 'string', enum: ['incluir', 'exactamente_n_por_id'] } } },
                         proposito: { type: 'string', description: 'Qué parte de la pregunta responde esta consulta, en pocas palabras.' },
                         desde: { type: 'string', description: 'Fecha inicial inclusiva AAAA-MM-DD.' },
                         hasta: { type: 'string', description: 'Fecha final inclusiva AAAA-MM-DD.' },
@@ -144,7 +161,7 @@ export function herramientasPlanificador(): unknown[] {
             name:HERRAMIENTA_PESAJES_LECHE,
             description:'Pesajes fechados de leche por animal visible y desde/hasta inclusivos. Selecciona animal_ids, nombres o chapetas, una clase de selector; sin selector pide precisar. Conserva AM/PM y NULL: son condiciones admitidas de la misma consulta. Suma muestras completas o históricas de solo total y promedia solo días pesados, sin turnos NULL convertidos a cero ni extrapolación. Pedir no proyectar respeta este contrato. No ventas, proyección ni litros por vaca del hato.',
             parameters:{type:'object',additionalProperties:false,required:['desde','hasta'],properties:{
-                desde:{type:'string'},hasta:{type:'string'},animal_ids:{type:'array',uniqueItems:true,items:{type:'string',format:'uuid'}},nombres:{type:'array',uniqueItems:true,items:{type:'string'}},chapetas:{type:'array',uniqueItems:true,items:{type:'integer',minimum:1}},
+                desde:{type:'string'},hasta:{type:'string'},animal_ids:{type:'array',uniqueItems:true,items:{type:'string',format:'uuid'}},nombres:{type:'array',uniqueItems:true,items:{type:'string'}},chapetas:{type:'array',uniqueItems:true,items:{type:'integer',minimum:1}}, poblacion: ESQUEMA_POBLACION_HATO,
             }},
         }},
         { type:'function', function:{
@@ -154,8 +171,9 @@ export function herramientasPlanificador(): unknown[] {
         }},
         { type: 'function', function: {
             name: HERRAMIENTA_HATO,
-            description: 'Ficha y estado reproductivo ACTUAL del hato lechero al corte Bogotá del servidor. Selección explícita de animales por animal_ids, nombres exactos o chapetas enteras, una sola clase de selector. Sin selector pide precisar; homónimos o chapetas repetidas exigen aclaración, nunca elegir por actividad o similitud. Ficha/parentescos por ID separados de reproducción calculada con vista y configuración estrictas. No notas, historial libre, producción, dinero, estado histórico, recomendaciones ni captura.',
+            description: 'Ficha y estado reproductivo ACTUAL del hato lechero al corte Bogotá del servidor. Selección explícita de animales por animal_ids, nombres exactos o chapetas enteras, una sola clase de selector. poblacion={} selecciona todas las fichas visibles; poblacion filtra estado, etapa, finca, categoría o estado reproductivo actual por motor. Selección poblacional y explícita son exclusivas. Sin selector pide precisar; homónimos o chapetas repetidas exigen aclaración, nunca elegir por actividad o similitud. Ficha/parentescos por ID separados de reproducción calculada con vista y configuración estrictas. No notas, historial libre, producción, dinero, estado histórico, recomendaciones ni captura.',
             parameters: { type: 'object', additionalProperties: false, properties: {
+                poblacion: ESQUEMA_POBLACION_HATO,
                 animal_ids: { type: 'array', uniqueItems: true, items: { type: 'string', format: 'uuid' } },
                 nombres: { type: 'array', uniqueItems: true, items: { type: 'string' } },
                 chapetas: { type: 'array', uniqueItems: true, items: { type: 'integer', minimum: 1 } },
@@ -217,7 +235,21 @@ export function herramientasPlanificador(): unknown[] {
             },
         },
     ];
-    return herramientas.map(h => ({ ...h, function: { ...h.function, parameters: { ...h.function.parameters, properties: { ...h.function.parameters.properties, cobertura: ESQUEMA_COBERTURA, parte_ids: ESQUEMA_PARTE_IDS } } } }));
+    return herramientas.map(h => {
+        const properties: Record<string, unknown> = { ...h.function.parameters.properties };
+        const capacidad = CAPACIDAD_DE_HERRAMIENTA[h.function.name];
+        if (capacidad in METRICAS_ANALITICAS) properties.analisis = esquemaAnalisis(capacidad);
+        if ([HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS].includes(h.function.name)) {
+            properties.aplicacion_ids = { type: 'array', minItems: 1, maxItems: 50, uniqueItems: true, items: { type: 'string', format: 'uuid' } };
+            properties.aplicaciones = { type: 'array', minItems: 1, maxItems: 50, uniqueItems: true, items: { type: 'string' } };
+        }
+        if ([HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_HATO, HERRAMIENTA_PESAJES_LECHE].includes(h.function.name)) {
+            properties.seleccion_de = { type: 'string', pattern: '^p[1-4]$', description: 'Resultado anterior de selección poblacional visible, p1..p4. Exclusivo con selectores explícitos. Aplicaciones para costos/cantidades/labor/faltantes; hato para ficha/pesajes.' };
+        }
+        properties.cobertura = ESQUEMA_COBERTURA;
+        properties.parte_ids = ESQUEMA_PARTE_IDS;
+        return { ...h, function: { ...h.function, parameters: { ...h.function.parameters, properties } } };
+    });
 }
 export interface LlamadaHerramienta {
     nombre: string;
@@ -281,7 +313,7 @@ function validarConsulta(a: Record<string, unknown>): ConsultaLabores {
     let ranking: ConsultaLabores['ranking'];
     if (a.ranking !== undefined) {
         const r = a.ranking as Record<string, unknown>;
-        if (!r || typeof r !== 'object' || Array.isArray(r) || Object.keys(r).some(k => !['metrica', 'direccion', 'n', 'empates'].includes(k)) || !['jornales', 'costo', 'dias_con_registro', 'jornales_por_arbol', 'jornales_por_hectarea', 'costo_por_jornal'].includes(String(r.metrica)) || !metricas.includes(String(r.metrica)) || !['asc', 'desc'].includes(String(r.direccion)) || !['incluir', 'exactamente_n_por_id'].includes(String(r.empates)) || typeof r.n !== 'number' || !Number.isInteger(r.n) || r.n < 1 || r.n > 50 || !agrupar.length || limite !== null)
+        if (!r || typeof r !== 'object' || Array.isArray(r) || Object.keys(r).some(k => !['metrica', 'direccion', 'n', 'empates'].includes(k)) || !METRICAS_RANKING.includes(r.metrica as Metrica) || !metricas.includes(String(r.metrica)) || !['asc', 'desc'].includes(String(r.direccion)) || !['incluir', 'exactamente_n_por_id'].includes(String(r.empates)) || typeof r.n !== 'number' || !Number.isInteger(r.n) || r.n < 1 || r.n > 50 || !agrupar.length || limite !== null)
             throw new ErrorPlan('ranking inválido');
         ranking = r as unknown as ConsultaLabores['ranking'];
     }
@@ -314,33 +346,38 @@ function validarConsultaAplicaciones(a: Record<string, unknown>): ConsultaAplica
     return { desde: a.desde, hasta: a.hasta, base_fecha: a.base_fecha as ConsultaAplicaciones['base_fecha'], aplicacion_ids: [...new Set(ids)], aplicaciones: listaTextos(a.aplicaciones, 'aplicaciones'), estados: [...new Set(estados)] as ConsultaAplicaciones['estados'] };
 }
 function validarConsultaCantidades(a: Record<string, unknown>): ConsultaCantidadesAplicacion {
-    if (Object.keys(a).some(k => !['aplicacion_id', 'aplicacion', 'desde', 'hasta'].includes(k))) throw new ErrorPlan('argumento de cantidades no registrado');
-    if ((a.aplicacion_id === undefined) === (a.aplicacion === undefined)) throw new ErrorPlan('cantidades exige un selector de aplicación');
+    if (Object.keys(a).some(k => !['aplicacion_id', 'aplicacion', 'aplicacion_ids', 'aplicaciones', 'seleccion_de', 'desde', 'hasta'].includes(k))) throw new ErrorPlan('argumento de cantidades no registrado');
+    const formas = ['aplicacion_id','aplicacion','aplicacion_ids','aplicaciones','seleccion_de'].filter(k => a[k] !== undefined);
+    if (formas.length !== 1) throw new ErrorPlan('cantidades exige un selector de aplicación');
     if (a.aplicacion_id !== undefined && !esUuid(a.aplicacion_id) || a.aplicacion !== undefined && (typeof a.aplicacion !== 'string' || !a.aplicacion.trim())) throw new ErrorPlan('selector de cantidades inválido');
+    if (a.seleccion_de !== undefined && (typeof a.seleccion_de !== 'string' || !/^p[1-4]$/.test(a.seleccion_de))) throw new ErrorPlan('dependencia inválida');
+    for (const k of ['aplicacion_ids','aplicaciones']) if (a[k] !== undefined && (!Array.isArray(a[k]) || !(a[k] as unknown[]).length || (a[k] as unknown[]).length > 50 || new Set(a[k] as unknown[]).size !== (a[k] as unknown[]).length || (a[k] as unknown[]).some(v => typeof v !== 'string' || !v.trim() || k === 'aplicacion_ids' && !esUuid(v)))) throw new ErrorPlan('selector plural inválido');
     const periodo = a.desde !== undefined || a.hasta !== undefined;
     if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período de ejecución inválido');
-    return { ...(a.aplicacion_id !== undefined ? { aplicacion_id: (a.aplicacion_id as string).toLowerCase() } : { aplicacion: (a.aplicacion as string).trim() }), ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
+    const selector = a.aplicacion_id !== undefined ? {aplicacion_id:(a.aplicacion_id as string).toLowerCase()} : a.aplicacion !== undefined ? {aplicacion:(a.aplicacion as string).trim()} : a.seleccion_de !== undefined ? {seleccion_de:a.seleccion_de as string} : a.aplicacion_ids !== undefined ? {aplicacion_ids:listaTextos(a.aplicacion_ids,'aplicacion_ids').map(v=>v.toLowerCase())} : {aplicaciones:listaTextos(a.aplicaciones,'aplicaciones')};
+    return { ...selector, ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
 }
 function validarConsultaCostos(a: Record<string, unknown>): ConsultaCostosAplicacion {
-    if (Object.keys(a).some(k => !['aplicacion_id', 'aplicacion', 'desde', 'hasta', 'incluir_plan'].includes(k))) throw new ErrorPlan('argumento de costos no registrado');
+    if (Object.keys(a).some(k => !['aplicacion_id', 'aplicacion', 'aplicacion_ids', 'aplicaciones', 'seleccion_de', 'desde', 'hasta', 'incluir_plan'].includes(k))) throw new ErrorPlan('argumento de costos no registrado');
     if (a.incluir_plan !== undefined && typeof a.incluir_plan !== 'boolean') throw new ErrorPlan('incluir_plan debe ser booleano');
     const { incluir_plan, ...selector } = a;
     return { ...validarConsultaCantidades(selector), ...(incluir_plan !== undefined ? { incluir_plan: incluir_plan as boolean } : {}) };
 }
-function selectorAplicaciones(a: Record<string, unknown>, que: string): { aplicacion_ids: string[]; aplicaciones: string[] } {
+function selectorAplicaciones(a: Record<string, unknown>, que: string): { aplicacion_ids: string[]; aplicaciones: string[]; seleccion_de?:string } {
+    if (a.seleccion_de !== undefined) { if (typeof a.seleccion_de !== 'string' || !/^p[1-4]$/.test(a.seleccion_de) || a.aplicacion_ids !== undefined || a.aplicaciones !== undefined) throw new ErrorPlan('dependencia inválida'); return {aplicacion_ids:[],aplicaciones:[],seleccion_de:a.seleccion_de}; }
     const ids = listaTextos(a.aplicacion_ids, 'aplicacion_ids'), nombres = listaTextos(a.aplicaciones, 'aplicaciones');
     if ((!ids.length && !nombres.length) || (ids.length && nombres.length) || ids.some(id => !esUuid(id)) || new Set(ids).size !== ids.length || new Set(nombres).size !== nombres.length) throw new ErrorPlan(`selector de aplicaciones inválido para ${que}`);
     return { aplicacion_ids: ids.map(id => id.toLowerCase()), aplicaciones: nombres };
 }
 function validarConsultaLaborAplicacion(a: Record<string, unknown>): ConsultaLaborAplicacion {
-    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones', 'desde', 'hasta'].includes(k))) throw new ErrorPlan('argumento laboral de aplicación no registrado');
+    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones', 'seleccion_de', 'desde', 'hasta'].includes(k))) throw new ErrorPlan('argumento laboral de aplicación no registrado');
     const selector = selectorAplicaciones(a, 'labor');
     const periodo = a.desde !== undefined || a.hasta !== undefined;
     if (periodo && (!esFechaCalendario(a.desde) || !esFechaCalendario(a.hasta) || a.desde > a.hasta)) throw new ErrorPlan('período laboral de aplicación inválido');
     return { ...selector, ...(periodo ? { desde: a.desde as string, hasta: a.hasta as string } : {}) };
 }
 function validarConsultaFaltantesAplicacion(a: Record<string, unknown>): ConsultaFaltantesAplicacion {
-    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
+    if (Object.keys(a).some(k => !['aplicacion_ids', 'aplicaciones', 'seleccion_de'].includes(k))) throw new ErrorPlan('argumento de faltantes no registrado');
     return selectorAplicaciones(a, 'faltantes');
 }
 function validarPeriodoLeche(a: Record<string, unknown>): ConsultaLitrosQuincenales {
@@ -356,7 +393,7 @@ function validarConsultaLitrosQuincenales(a: Record<string, unknown>): ConsultaL
     return validarPeriodoLeche(a);
 }
 function validarConsultaHato(a: Record<string, unknown>): ConsultaHato {
-    if (Object.keys(a).some(k => !['animal_ids', 'nombres', 'chapetas'].includes(k))) throw new ErrorPlan('argumento de hato no registrado');
+    if (Object.keys(a).some(k => !['animal_ids', 'nombres', 'chapetas', 'poblacion', 'seleccion_de'].includes(k))) throw new ErrorPlan('argumento de hato no registrado');
     const filtros: Record<string, string[]> = {};
     for (const campo of ['animal_ids', 'nombres']) {
         if (a[campo] !== undefined && (!Array.isArray(a[campo]) || (a[campo] as unknown[]).some(v => typeof v !== 'string' || !v.trim()))) throw new ErrorPlan('selector de hato inválido');
@@ -367,7 +404,17 @@ function validarConsultaHato(a: Record<string, unknown>): ConsultaHato {
     if (a.chapetas !== undefined && (!Array.isArray(a.chapetas) || a.chapetas.some(v => typeof v !== 'number' || !Number.isSafeInteger(v) || v < 1))) throw new ErrorPlan('chapeta inválida');
     const chapetas = (a.chapetas ?? []) as number[];
     if (new Set(chapetas).size !== chapetas.length || [filtros.animal_ids, filtros.nombres, chapetas].filter(v => v.length).length > 1) throw new ErrorPlan('selector de hato ambiguo');
-    return { animal_ids: filtros.animal_ids, nombres: filtros.nombres, chapetas };
+    if (a.seleccion_de !== undefined && (typeof a.seleccion_de !== 'string' || !/^p[1-4]$/.test(a.seleccion_de) || a.poblacion !== undefined || filtros.animal_ids.length || filtros.nombres.length || chapetas.length)) throw new ErrorPlan('dependencia de hato inválida');
+    let poblacion: ConsultaHato['poblacion'];
+    if (a.poblacion !== undefined) {
+        const p = a.poblacion;
+        if (!p || typeof p !== 'object' || Array.isArray(p) || Object.keys(p).some(k => ![...Object.keys(FILTROS_POBLACION_HATO), 'finca_ids'].includes(k)) || filtros.animal_ids.length || filtros.nombres.length || chapetas.length) throw new ErrorPlan('población de hato inválida');
+        for (const [k,v] of Object.entries(p)) {
+            if (!Array.isArray(v) || new Set(v).size !== v.length || v.some(x => typeof x !== 'string' || (k === 'finca_ids' ? !esUuid(x) : !(FILTROS_POBLACION_HATO as Record<string,readonly string[]>)[k].includes(x)))) throw new ErrorPlan('filtro de población de hato inválido');
+        }
+        poblacion = structuredClone(p) as ConsultaHato['poblacion'];
+    }
+    return { animal_ids: filtros.animal_ids, nombres: filtros.nombres, chapetas, ...(poblacion ? {poblacion} : {}), ...(a.seleccion_de ? {seleccion_de:a.seleccion_de as string}: {}) };
 }
 function validarConsultaConductividad(a: Record<string, unknown>): ConsultaConductividad {
     if (Object.keys(a).some(k => !['desde', 'hasta', 'lote_ids', 'lotes'].includes(k))) throw new ErrorPlan('argumento de conductividad no registrado');
@@ -559,6 +606,27 @@ function vincularDesgloseLotes(cobertura: CoberturaPlan, operaciones: OperacionC
  * contra su pregunta guardada, sin reinterpretar la elección como una nueva consulta.
  */
 export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunta: string; preguntaActual?: string; exigirCobertura: true }): Plan {
+    let argumentosAnalisis:Record<string,unknown>[]|undefined;
+    try { argumentosAnalisis=llamadas.map(l=>JSON.parse(l.argumentos) as Record<string,unknown>); } catch { /* Domain parser reports invalid JSON. */ }
+    if(argumentosAnalisis?.some(a=>a&&typeof a==='object'&&Object.prototype.hasOwnProperty.call(a,'analisis'))){
+        const limpias=llamadas.map((l,index)=>{const {analisis:_a,...resto}=argumentosAnalisis![index];return {...l,argumentos:JSON.stringify(resto)};});
+        const base=validarPlan(limpias,contexto);
+        if(base.tipo!=='operaciones'&&base.tipo!=='consultas')throw new ErrorPlan('analisis_sin_operacion');
+        const operaciones=operacionesDelPlan(base);
+        if(operaciones.length!==llamadas.length)throw new ErrorPlan('analisis_correspondencia_no_valida');
+        const conAnalisis=operaciones.map((o,index)=>{
+            const a=argumentosAnalisis![index].analisis;if(a===undefined)return o;
+            if(!validarAnalisis(a,o.tipo))throw new ErrorPlan('analisis_no_valido');
+            const an=a as AnalisisConsulta;
+            const metricas=an.condiciones?.map(c=>c.metrica)??[];if(an.comparacion)metricas.push(an.comparacion.metrica);
+            if(o.tipo==='labores'&&metricas.some(m=>!o.consulta.metricas.includes(m as Metrica))||o.tipo==='clima'&&metricas.some(m=>!o.consulta.variables.includes(m as never)))throw new ErrorPlan('metrica_analitica_no_consultada');
+            if(o.tipo==='labores'&&an.agrupar_por?.some(g=>!o.consulta.agrupar_por.includes(g as Agrupacion)))throw new ErrorPlan('agrupacion_analitica_no_consultada');
+            if(o.tipo==='monitoreo'&&an.ultima_por_entidad&&!o.consulta.agrupar_por.includes('sublote'))throw new ErrorPlan('ultima_por_entidad_exige_sublote');
+            return {...o,analisis:structuredClone(an)};
+        });
+        return {tipo:'operaciones',operaciones:conAnalisis,...(base.cobertura?{cobertura:base.cobertura}:{}),...(base.parcialFueraDeAlcance?{parcialFueraDeAlcance:true}:{})};
+    }
+
     if (contexto?.exigirCobertura) {
         try {
             if (!llamadas.length) throw new Error('sin_llamadas');
@@ -632,6 +700,8 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
     }
     const ejecutables = llamadas.filter(l => l.nombre !== HERRAMIENTA_FUERA);
     const parcial = fuera.length ? { parcialFueraDeAlcance: true as const } : {};
-    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_CLIMA, HERRAMIENTA_HATO, HERRAMIENTA_PESAJES_LECHE, HERRAMIENTA_LITROS_QUINCENALES].some(h => nombres.has(h))) return { tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_PESAJES_LECHE ? {tipo:'pesajes_leche',consulta:validarConsultaPesajesLeche(parsear(l))} : l.nombre === HERRAMIENTA_LITROS_QUINCENALES ? {tipo:'litros_quincenales',consulta:validarConsultaLitrosQuincenales(parsear(l))} : l.nombre === HERRAMIENTA_HATO ? { tipo: 'hato', consulta: validarConsultaHato(parsear(l)) } : l.nombre === HERRAMIENTA_CLIMA ? { tipo: 'clima', consulta: validarConsultaClima(parsear(l)) } : l.nombre === HERRAMIENTA_CONDUCTIVIDAD ? { tipo: 'conductividad', consulta: validarConsultaConductividad(parsear(l)) } : l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) };
+    if ([HERRAMIENTA_APLICACIONES, HERRAMIENTA_CANTIDADES, HERRAMIENTA_COSTOS, HERRAMIENTA_LABOR_APLICACION, HERRAMIENTA_FALTANTES, HERRAMIENTA_MONITOREO, HERRAMIENTA_CONDUCTIVIDAD, HERRAMIENTA_CLIMA, HERRAMIENTA_HATO, HERRAMIENTA_PESAJES_LECHE, HERRAMIENTA_LITROS_QUINCENALES].some(h => nombres.has(h))) return verificarPlanDependiente({ tipo: 'operaciones', ...parcial, operaciones: ejecutables.map(l => l.nombre === HERRAMIENTA_PESAJES_LECHE ? {tipo:'pesajes_leche',consulta:validarConsultaPesajesLeche(parsear(l))} : l.nombre === HERRAMIENTA_LITROS_QUINCENALES ? {tipo:'litros_quincenales',consulta:validarConsultaLitrosQuincenales(parsear(l))} : l.nombre === HERRAMIENTA_HATO ? { tipo: 'hato', consulta: validarConsultaHato(parsear(l)) } : l.nombre === HERRAMIENTA_CLIMA ? { tipo: 'clima', consulta: validarConsultaClima(parsear(l)) } : l.nombre === HERRAMIENTA_CONDUCTIVIDAD ? { tipo: 'conductividad', consulta: validarConsultaConductividad(parsear(l)) } : l.nombre === HERRAMIENTA_MONITOREO ? { tipo: 'monitoreo', consulta: validarConsultaMonitoreo(parsear(l)) } : l.nombre === HERRAMIENTA_FALTANTES ? { tipo: 'faltantes_aplicacion', consulta: validarConsultaFaltantesAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_LABOR_APLICACION ? { tipo: 'labor_aplicacion', consulta: validarConsultaLaborAplicacion(parsear(l)) } : l.nombre === HERRAMIENTA_COSTOS ? { tipo: 'costos_aplicacion', consulta: validarConsultaCostos(parsear(l)) } : l.nombre === HERRAMIENTA_APLICACIONES ? { tipo: 'aplicaciones', consulta: validarConsultaAplicaciones(parsear(l)) } : l.nombre === HERRAMIENTA_CANTIDADES ? { tipo: 'cantidades_aplicacion', consulta: validarConsultaCantidades(parsear(l)) } : { tipo: 'labores', consulta: validarConsulta(parsear(l)) }) });
     return { tipo: 'consultas', ...parcial, consultas: ejecutables.map((l) => validarConsulta(parsear(l))) };
 }
+
+function verificarPlanDependiente<T extends Plan>(p:T):T { if (p.tipo==='operaciones'||p.tipo==='consultas') validarDependencias(operacionesDelPlan(p)); return p; }

@@ -70,6 +70,7 @@ function deps(over: Partial<Dependencias> & { traza?: Traza; llm?: ClienteLLM } 
     ahora: () => new Date('2026-06-02T15:00:00Z'),
     registrar: (e) => eventos.push(e),
     // Fixture histórico de transporte/RLS: no acredita extracción de subpartes.
+    modoIntencion: 'legado_sin_certificar',
     modoCobertura: 'legado_sin_certificar',
     ...over,
   };

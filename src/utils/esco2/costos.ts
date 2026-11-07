@@ -8,7 +8,8 @@ import { dineroConDetalleMensaje as dineroMensaje, numeroMensaje } from './forma
 import type { EstadoCantidad, UnidadCantidad } from './cantidadesTipos.ts';
 import type { BloqueCongelado, BloqueValoracion, ConsultaCostosAplicacion, DatosCostosAplicacion, EstadoDatoCosto, FilaValorada, ResultadoCostosAplicacion } from './costosTipos.ts';
 const numero = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
-const limpiar = (n: number) => Number(n.toPrecision(12));
+// Preserve the source numeric representation. No significant-digit rounding before reconciliation.
+const limpiar = (n: number) => n;
 const unidad = (u: unknown): UnidadCantidad | null => u === 'Kilos' ? 'kg' : u === 'Litros' ? 'L' : u === 'Unidades' ? 'unidades' : null;
 const estadoNumero = (n: unknown): EstadoDatoCosto => numero(n) ? 'conocido' : n === null ? 'sin_dato' : 'no_leido';
 const validos = (rows: { id: string }[]) => rows.every(x => x && esUuid(x.id)) && new Set(rows.map(x => x.id)).size === rows.length;
@@ -102,6 +103,18 @@ function renderValoracion(b:BloqueValoracion,titulo:string):string[]{
   return out;
 }
 export function renderCostosAplicacion(r:ResultadoCostosAplicacion):string {
+  if(r.resultados_poblacion){
+    if(r.seleccion?.estado==='no_disponible')return 'No pude verificar la población de aplicaciones seleccionada. No equivale a una población vacía ni costo cero.';
+    if(!r.resultados_poblacion.length)return 'La selección anterior verificó una población vacía de aplicaciones. No se ejecutaron consultas singulares ni se infiere costo de otra población.';
+    const out=[`Costos de ${numeroMensaje(r.resultados_poblacion.length)} aplicaciones seleccionadas por sus IDs visibles. Cada base permanece separada.`];
+    for(const [clave,label] of [['congelado','costo congelado al cierre'],['ejecucion','valoración de insumos ejecutados a precio actual'],['plan','valoración del plan a precio actual']] as const){
+      const bs=r.resultados_poblacion.flatMap(x=>x[clave]?[x[clave]!]:[]);if(!bs.length)continue;
+      const completos=bs.every(b=>b.estado==='conocido'&&b.total!==null);const total=bs.reduce((n,b)=>n+(b.total??0),0);
+      out.push(completos&&Number.isFinite(total)?`Subtotal separado de ${label} para ${numeroMensaje(bs.length)} aplicaciones: ${dinero(total)}.`:`No hay subtotal completo verificable de ${label}; no se publica cero.`);
+    }
+    return [...out,...r.resultados_poblacion.map(renderCostosAplicacion)].join('\n\n');
+  }
+
   if(r.estado==='no_resuelto')return 'No pude resolver una única aplicación visible. Indica su nombre, código o ID.';
   if(!r.aplicacion)return 'No pude leer la aplicación ni verificar sus costos.';
   const nombre=r.aplicacion.nombre_aplicacion?.trim()?escapar(r.aplicacion.nombre_aplicacion):r.aplicacion.codigo_aplicacion?.trim()?escapar(r.aplicacion.codigo_aplicacion):`Aplicación sin nombre [${r.aplicacion.id}]`;

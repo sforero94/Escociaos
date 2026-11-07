@@ -52,6 +52,7 @@ export function ejecutarFaltantesAplicacion(c: ConsultaFaltantesAplicacion, d: D
 }
 function texto(v: string | null | undefined):string{return (v??'').replace(/\s+/g,' ').trim().replace(/[\\`*_[\]|<>]/g,'\\$&');}
 export function renderFaltantesAplicacion(r: ResultadoFaltantesAplicacion): string {
+  if(r.seleccion?.estado==='vacio_verificado')return 'La población seleccionada está vacía: no hay aplicaciones para esta consulta. No se leyó una población global ni se infieren datos de otras aplicaciones.';
   if(r.estado==='no_resuelto')return 'No pude resolver las aplicaciones indicadas. Precisa su nombre o código.';
   if(r.estado==='no_disponible')return 'No pude leer el plan completo para verificar los faltantes vigentes.';
   const out=[`Faltantes vigentes. Fecha de consulta en Bogotá: ${formatLongDate(r.fecha_consulta)}.`];

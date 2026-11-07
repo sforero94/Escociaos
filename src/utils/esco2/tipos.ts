@@ -1,3 +1,5 @@
+import type { AnalisisConsulta, ResultadoAnalisis } from './analiticaTipos.ts';
+import type { IntencionSolicitud } from './intencion.ts';
 import type { ConsultaPesajesLeche, ConsultaLitrosQuincenales, ResultadoPesajesLeche, ResultadoLitrosQuincenales } from './lecheTipos.ts';
 import type { ConsultaClima, ResultadoClima } from './climaTipos.ts';
 import type { ConsultaHato, ResultadoHato } from './hatoTipos.ts';
@@ -115,8 +117,8 @@ export type Plan = (
   | { tipo: 'consultas'; consultas: ConsultaLabores[]; parcialFueraDeAlcance?: true }
   | { tipo: 'operaciones'; operaciones: OperacionConsulta[]; parcialFueraDeAlcance?: true }
   | { tipo: 'aclaracion'; aclaracion: Aclaracion }
-  | { tipo: 'fuera_de_alcance'; motivo: string }) & { cobertura?: CoberturaPlan };
-export type OperacionConsulta = ({tipo:'pesajes_leche';consulta:ConsultaPesajesLeche}|{tipo:'litros_quincenales';consulta:ConsultaLitrosQuincenales}|{ tipo: 'hato'; consulta: ConsultaHato } | { tipo: 'conductividad'; consulta: ConsultaConductividad } | { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'monitoreo'; consulta: ConsultaMonitoreo } | { tipo: 'clima'; consulta: ConsultaClima } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones } | { tipo: 'cantidades_aplicacion'; consulta: ConsultaCantidadesAplicacion } | { tipo: 'costos_aplicacion'; consulta: ConsultaCostosAplicacion } | { tipo: 'labor_aplicacion'; consulta: ConsultaLaborAplicacion } | { tipo: 'faltantes_aplicacion'; consulta: ConsultaFaltantesAplicacion }) & { parte_ids?: string[] };
+  | { tipo: 'fuera_de_alcance'; motivo: string }) & { cobertura?: CoberturaPlan; intencion?: IntencionSolicitud };
+export type OperacionConsulta = ({tipo:'pesajes_leche';consulta:ConsultaPesajesLeche}|{tipo:'litros_quincenales';consulta:ConsultaLitrosQuincenales}|{ tipo: 'hato'; consulta: ConsultaHato } | { tipo: 'conductividad'; consulta: ConsultaConductividad } | { tipo: 'labores'; consulta: ConsultaLabores } | { tipo: 'monitoreo'; consulta: ConsultaMonitoreo } | { tipo: 'clima'; consulta: ConsultaClima } | { tipo: 'aplicaciones'; consulta: ConsultaAplicaciones } | { tipo: 'cantidades_aplicacion'; consulta: ConsultaCantidadesAplicacion } | { tipo: 'costos_aplicacion'; consulta: ConsultaCostosAplicacion } | { tipo: 'labor_aplicacion'; consulta: ConsultaLaborAplicacion } | { tipo: 'faltantes_aplicacion'; consulta: ConsultaFaltantesAplicacion }) & { parte_ids?: string[]; analisis?: AnalisisConsulta };
 export type PlanConsultas = Extract<Plan, { tipo: 'consultas' | 'operaciones' }>;
 export function operacionesDelPlan(plan: PlanConsultas): OperacionConsulta[] {
   return plan.tipo === 'consultas' ? plan.consultas.map(consulta => ({ tipo: 'labores', consulta })) : plan.operaciones;
@@ -127,7 +129,7 @@ export function planDeOperaciones(operaciones: OperacionConsulta[], parcialFuera
   const laborales = operaciones.filter((o): o is Extract<OperacionConsulta, { tipo: 'labores' }> => o.tipo === 'labores');
   return !cobertura && laborales.length === operaciones.length && operaciones.every(o => !o.parte_ids) ? { tipo: 'consultas', consultas: laborales.map(o => o.consulta), ...parcial } : { tipo: 'operaciones', operaciones, ...parcial, ...(cobertura ? { cobertura } : {}) };
 }
-export type ResultadoConsulta = ResultadoPesajesLeche | ResultadoLitrosQuincenales | ResultadoHato | ResultadoConductividad | ResultadoParte | ResultadoClima | ResultadoMonitoreo | ResultadoAplicaciones | ResultadoCantidadesAplicacion | ResultadoCostosAplicacion | ResultadoLaborAplicacion | ResultadoFaltantesAplicacion;
+export type ResultadoConsulta = (ResultadoPesajesLeche | ResultadoLitrosQuincenales | ResultadoHato | ResultadoConductividad | ResultadoParte | ResultadoClima | ResultadoMonitoreo | ResultadoAplicaciones | ResultadoCantidadesAplicacion | ResultadoCostosAplicacion | ResultadoLaborAplicacion | ResultadoFaltantesAplicacion) & {analisis?: ResultadoAnalisis; seleccion?:{de?:string;estado:'ok'|'vacio_verificado'|'no_disponible';ids:string[];motivo?:string}};
 export const esResultadoAplicaciones = (r: ResultadoConsulta): r is ResultadoAplicaciones => 'tipo' in r && r.tipo === 'aplicaciones';
 export const esResultadoCostos = (r: ResultadoConsulta): r is ResultadoCostosAplicacion => 'tipo' in r && r.tipo === 'costos_aplicacion';
 export const esResultadoCantidades = (r: ResultadoConsulta): r is ResultadoCantidadesAplicacion => 'tipo' in r && r.tipo === 'cantidades_aplicacion';
@@ -213,6 +215,7 @@ export interface ResultadoParte {
   filas: FilaResultado[];
   total: ValoresMetricas;
   particiones?: {con_lote:ValoresMetricas;sin_lote:ValoresMetricas};
+  poblacion?: { universo: 'seleccion_efectiva'; miembros: string[]; con_lote: { estado: 'seleccionado' | 'vacio_verificado' | 'excluido'; registros: number | null }; sin_lote: { estado: 'seleccionado' | 'vacio_verificado' | 'excluido'; registros: number | null } };
   /** D30: presente siempre que la consulta filtra por categoría de tarea. */
   estimados?: EstimadosCategoria;
   /** Por qué una métrica del total o de una fila es null, en palabras del sistema. */

@@ -33,7 +33,7 @@ const numeroValido = (v: unknown): v is number => typeof v === 'number' && Numbe
 const contadoresValidos = (r: ObservacionMonitoreo) => numeroValido(r.arboles_afectados) && numeroValido(r.arboles_monitoreados) && r.arboles_monitoreados > 0 && r.arboles_afectados >= 0 && r.arboles_afectados <= r.arboles_monitoreados;
 const MAX_FILAS_MONITOREO = 30;
 
-export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonitoreo, id: string, hoy: string): ResultadoMonitoreo {
+export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonitoreo, id: string, hoy: string, opciones: { ultimaPorEntidad?: boolean } = {}): ResultadoMonitoreo {
   const base: ResultadoMonitoreo = { tipo: 'monitoreo', id, consulta, estado: 'no_disponible', filas: [], excluidos: { sin_ronda: 0, padre_no_visible: 0, incompatibles: 0 }, avisos: [], fuente: 'lecturas_independientes', unidad: 'observaciones de árboles muestreados' };
   const fallo = (motivo: string): ResultadoMonitoreo => ({ ...base, motivo });
   if (!consulta.ronda_ids.length && !consulta.rondas.length && !consulta.desde && !consulta.seleccion_ronda) return { ...base, estado: 'aclaracion', motivo: 'ronda_sin_precisar' };
@@ -92,12 +92,36 @@ export function ejecutarMonitoreo(consulta: ConsultaMonitoreo, datos: DatosMonit
   } else if (agrupacionLote) {
     for (const l of lotes.filter(l => (!loteIds.length || loteIds.includes(l.id)) && (!subloteIds.length || sublotes.some(s => s.lote_id === l.id && subloteIds.includes(s.id))))) grupos.push({ lote_id: l.id, sublote_id: null });
   } else grupos.push({ lote_id: null, sublote_id: null });
-  const filasTotales = rondasElegidas.length * plagasElegidas.length * grupos.length;
+  // Select actual latest observations before constructing/capping the Cartesian detail.
+  // A later generated no_revisado row is not a recorded measurement.
+  const claveGrupo = (lote: string | null, sublote: string | null, plaga: string) => JSON.stringify([lote, sublote, plaga]);
+  const ultimaPorGrupo = new Map<string, { fecha: string; rondas: Set<string> }>();
+  let rondasSinObservacion = new Set<string>();
+  if (opciones.ultimaPorEntidad) {
+    if (!agrupacionSublote) return fallo('ultima_requiere_sublote');
+    if (contadorNoLeido || noLegibles.length) return fallo('ultima_poblacion_desconocida');
+    const rondaPorId = new Map(rondasElegidas.map(r => [r.id, r]));
+    for (const { r } of candidatas) {
+      const key = claveGrupo(r.lote_id!, r.sublote_id!, r.plaga_enfermedad_id!);
+      const fecha = rondaPorId.get(r.ronda_id!)!.fecha_inicio!;
+      const previa = ultimaPorGrupo.get(key);
+      if (!previa || fecha > previa.fecha) ultimaPorGrupo.set(key, { fecha, rondas: new Set([r.ronda_id!]) });
+      else if (fecha === previa.fecha) previa.rondas.add(r.ronda_id!);
+    }
+    const ultimaFecha = rondasElegidas.reduce((fecha, r) => r.fecha_inicio! > fecha ? r.fecha_inicio! : fecha, '');
+    rondasSinObservacion = new Set(rondasElegidas.filter(r => r.fecha_inicio === ultimaFecha).map(r => r.id));
+    base.avisos.push('La selección conserva la última ronda con observaciones por lote, sublote y plaga, incluidos empates y observaciones no calculables. Las combinaciones nunca observadas permanecen sin dato.');
+  }
+  const rondasDeGrupo = (grupo: { lote_id: string | null; sublote_id: string | null }, plaga: string) => ultimaPorGrupo.get(claveGrupo(grupo.lote_id, grupo.sublote_id, plaga))?.rondas ?? rondasSinObservacion;
+  const filasTotales = opciones.ultimaPorEntidad
+    ? plagasElegidas.reduce((n, p) => n + grupos.reduce((m, g) => m + rondasDeGrupo(g, p.id).size, 0), 0)
+    : rondasElegidas.length * plagasElegidas.length * grupos.length;
   if (!Number.isSafeInteger(filasTotales)) return fallo('cantidad_grupos_no_calculable');
   base.detalle = { filas_totales: filasTotales, filas_mostradas: Math.min(filasTotales, MAX_FILAS_MONITOREO), limitado: filasTotales > MAX_FILAS_MONITOREO };
   // El detalle se acota antes de construir el producto de rondas/plagas/grupos.
   // Las exclusiones y la disponibilidad ya se comprobaron sobre todas las observaciones.
   detalle: for (const ronda of rondasElegidas) for (const plaga of plagasElegidas) for (const grupo of grupos) {
+    if (opciones.ultimaPorEntidad && !rondasDeGrupo(grupo, plaga.id).has(ronda.id)) continue;
     if (base.filas.length === MAX_FILAS_MONITOREO) break detalle;
     const miembros = candidatas.filter(x => x.r.ronda_id === ronda.id && x.r.plaga_enfermedad_id === plaga.id && (!agrupacionLote && !agrupacionSublote || x.r.lote_id === grupo.lote_id) && (!agrupacionSublote || x.r.sublote_id === grupo.sublote_id));
     const invalidas = miembros.filter(x => x.incompatible).length;

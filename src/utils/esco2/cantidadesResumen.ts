@@ -1,7 +1,7 @@
 import type { BloqueResumenCantidades, EstadoResumenCantidad, ProductoResumenCantidad, RecipienteGuardado, ResumenCantidadesAplicacion, ResultadoCantidadesAplicacion, TotalResumenCantidad, UnidadCantidad, UnidadResumenCantidad } from './cantidadesTipos.ts';
 
 const valido = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
-const suma = (xs: number[]): number | null => { const n = xs.reduce((a, b) => a + b, 0); return Number.isFinite(n) ? Number(n.toPrecision(12)) : null; };
+const suma = (xs: number[]): number | null => { const n = xs.reduce((a, b) => a + b, 0); return Number.isFinite(n) ? n : null; };
 const unicos = (xs: string[]) => [...new Set(xs)];
 interface Aporte { unidad: UnidadResumenCantidad; cantidad: number | null; estado: EstadoResumenCantidad; motivos: string[]; fuentes: string[] }
 function total(rows: Aporte[], incomplete = false): TotalResumenCantidad {

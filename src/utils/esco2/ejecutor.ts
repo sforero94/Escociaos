@@ -23,7 +23,7 @@ export function metricas(registros: RegistroTrabajo[]): ValoresMetricas {
     const sinCosto = registros.some((r) => r.costo_jornal === null);
     return {
         jornales: r2(registros.reduce((s, r) => s + r.fraccion_jornal, 0)),
-        costo: sinCosto ? null : Math.round(registros.reduce((s, r) => s + (r.costo_jornal ?? 0), 0)),
+        costo: sinCosto ? null : registros.reduce((s, r) => s + (r.costo_jornal ?? 0), 0),
         dias_con_registro: new Set(fechas).size,
         primer_registro: fechas[0] ?? null,
         ultimo_registro: fechas[fechas.length - 1] ?? null,
@@ -299,7 +299,8 @@ export function ejecutarConsulta(c: ConsultaLabores, datos: DatosLabores, hoy: s
         id,
         proposito: 'Consulta de labores',
         semantica: sem,
-        particiones: { con_lote: proyectar(metricas(filtrados.filter(r => r.lote_id !== null)), c), sin_lote: proyectar(metricas(filtrados.filter(r => r.lote_id === null)), c) },
+        poblacion: { universo: 'seleccion_efectiva', miembros: filtrados.map(r => r.id).sort(), con_lote: { estado: alcance.sin_lote === 'solo' ? 'excluido' : filtrados.some(r => r.lote_id !== null) ? 'seleccionado' : 'vacio_verificado', registros: alcance.sin_lote === 'solo' ? null : filtrados.filter(r => r.lote_id !== null).length }, sin_lote: { estado: alcance.sin_lote === 'excluir' ? 'excluido' : filtrados.some(r => r.lote_id === null) ? 'seleccionado' : 'vacio_verificado', registros: alcance.sin_lote === 'excluir' ? null : filtrados.filter(r => r.lote_id === null).length } },
+        particiones: { con_lote: alcance.sin_lote === 'solo' ? {} : proyectar(metricas(filtrados.filter(r => r.lote_id !== null)), c), sin_lote: alcance.sin_lote === 'excluir' ? {} : proyectar(metricas(filtrados.filter(r => r.lote_id === null)), c) },
         estado: filtrados.length === 0 && filas.length === 0 ? 'sin_registros' : 'ok',
         alcance,
         no_resueltos: [],

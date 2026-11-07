@@ -1,5 +1,8 @@
 import type { AplicacionInventario } from './aplicacionesTipos.ts';
 export interface ConsultaCantidadesAplicacion {
+  seleccion_de?: string;
+  aplicacion_ids?: string[];
+  aplicaciones?: string[];
   aplicacion_id?: string;
   aplicacion?: string;
   desde?: string;
@@ -102,6 +105,8 @@ export interface BloqueResumenCantidades {
 export interface ResumenCantidadesAplicacion { plan: BloqueResumenCantidades; ejecucion: BloqueResumenCantidades }
 export interface ResultadoCantidadesAplicacion {
   tipo: 'cantidades_aplicacion'; id: string;
+  resultados_poblacion?: ResultadoCantidadesAplicacion[];
+  seleccion?: {de?:string;estado:'ok'|'vacio_verificado'|'no_disponible';ids:string[];motivo?:string};
   estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto';
   consulta: ConsultaCantidadesAplicacion;
   aplicacion?: AplicacionInventario;
