@@ -39,6 +39,8 @@ export interface ResultadoMonitoreo {
   tipo: 'monitoreo'; id: string; consulta: ConsultaMonitoreo;
   estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto' | 'aclaracion' | 'vacio_verificado';
   filas: FilaMonitoreo[];
+  /** Límite de detalle publicado, independiente de la disponibilidad de la fuente. */
+  detalle?: { filas_totales: number; filas_mostradas: number; limitado: boolean };
   filtros_visibles?: { lotes: string[]; sublotes: string[]; plagas: string[] };
   excluidos: { sin_ronda: number; padre_no_visible: number; incompatibles: number };
   avisos: string[];

@@ -11,7 +11,7 @@ import type { ConsultaFaltantesAplicacion } from './faltantesTipos.ts';
 import type { ConsultaCantidadesAplicacion } from './cantidadesTipos.ts';
 import { VARIABLES_CLIMA, VARIABLES_CLIMA_DEFAULT, type ConsultaClima } from './climaTipos.ts';
 import type { ConsultaMonitoreo } from './monitoreoTipos.ts';
-import type { Agrupacion, ConsultaLabores, Metrica, Plan, SinLote } from './tipos.ts';
+import type { Agrupacion, ConsultaLabores, Metrica, OperacionConsulta, Plan, SinLote } from './tipos.ts';
 import { operacionesDelPlan } from './tipos.ts';
 import { ESQUEMA_COBERTURA, ESQUEMA_PARTE_IDS, normalizarTextoParte, validarInventarioDeclarado, validarCorrespondenciaPlan, type CoberturaPlan } from './cobertura.ts';
 export const AGRUPACIONES: readonly Agrupacion[] = ['lote', 'tarea', 'categoria', 'tipo_tarea', 'dia', 'mes', 'semana'];
@@ -535,6 +535,25 @@ function validarPeriodoActual(cobertura: CoberturaPlan, operaciones: ReturnType<
         if (consulta.desde !== fechas[0] || consulta.hasta !== fechas[1]) throw new Error('periodo_actual_no_coincide');
     }
 }
+/** Una restricción pura de presentación puede referirse a un desglose ya nativo.
+ * No cambia herramientas, consultas, cifras ni dimensiones. Solo admite esta gramática
+ * completa y una única operación laboral de aplicación, que siempre desglosa por lote.
+ * Una parte compuesta, otra dimensión o varias operaciones no se reinterpretan.
+ */
+function vincularDesgloseLotes(cobertura: CoberturaPlan, operaciones: OperacionConsulta[], preguntaActual: string): { cobertura: CoberturaPlan; operaciones: OperacionConsulta[] } {
+    // Con más operaciones el fragmento podría modificar otra parte de la solicitud.
+    if (operaciones.length !== 1) return { cobertura, operaciones };
+    const candidatas = operaciones.filter(o => o.tipo === 'labor_aplicacion' && o.parte_ids?.some(id => cobertura.partes.some(p => p.id === id && p.capacidad === 'labor_aplicacion' && p.disposicion === 'consultar')));
+    if (candidatas.length !== 1) return { cobertura, operaciones };
+    const actual = normalizarTextoParte(preguntaActual);
+    const soloLotes = /^(?:y )?(?:por lotes?|(?:separa|separar|desglosa|desglosar|agrupa|agrupar)(?: (?:los )?lotes| por lotes?)|(?:separad[oa]s?|desglosad[oa]s?|agrupad[oa]s?) por lotes?)$/;
+    const ids = cobertura.partes.filter(p => p.disposicion === 'fuera_de_contrato' && actual.includes(normalizarTextoParte(p.texto)) && soloLotes.test(normalizarTextoParte(p.texto))).map(p => p.id);
+    if (!ids.length) return { cobertura, operaciones };
+    return {
+        cobertura: { ...cobertura, partes: cobertura.partes.map(p => ids.includes(p.id) ? { ...p, capacidad: 'labor_aplicacion', disposicion: 'consultar' } : p) },
+        operaciones: operaciones.map(o => o === candidatas[0] ? { ...o, parte_ids: [...o.parte_ids!, ...ids] } : o),
+    };
+}
 /** Convierte las llamadas del modelo en un plan validado, o lanza ErrorPlan.
  * preguntaActual solo se aporta al planear un nuevo turno; los estados D26 se validan
  * contra su pregunta guardada, sin reinterpretar la elección como una nueva consulta.
@@ -568,7 +587,9 @@ export function validarPlan(llamadas: LlamadaHerramienta[], contexto?: { pregunt
             const operaciones = operacionesDelPlan(base).map((o, i) => ({ ...o, parte_ids: argumentos[i].parte_ids as string[] }));
             validarCorrespondenciaPlan(cobertura, operaciones);
             if (contexto.preguntaActual !== undefined) validarPeriodoActual(cobertura, operaciones, contexto.preguntaActual);
-            return { tipo: 'operaciones', operaciones, cobertura };
+            const vinculadas = vincularDesgloseLotes(cobertura, operaciones, contexto.preguntaActual ?? contexto.pregunta);
+            validarCorrespondenciaPlan(vinculadas.cobertura, vinculadas.operaciones);
+            return { tipo: 'operaciones', ...vinculadas };
         } catch (e) { throw new ErrorPlan(`cobertura_no_valida:${e instanceof Error ? e.message : 'desconocido'}`); }
     }
     if (llamadas.length === 0)

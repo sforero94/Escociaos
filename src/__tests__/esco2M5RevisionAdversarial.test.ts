@@ -31,7 +31,9 @@ describe('M5 revisión adversarial: monitoreo', () => {
     const plagas = Array.from({ length: 8 }, (_, i) => ({ id: u(200 + i), nombre: `Plaga ${i}` }));
     const datos = { rondas, lotes: [{ id: u(10), nombre: 'L' }], sublotes: [{ id: u(20), nombre: 'S', lote_id: u(10) }], plagas, observaciones: rondas.flatMap((r, i) => plagas.map((pl, j) => obs(i * 10 + j, { ronda_id: r.id, plaga_enfermedad_id: pl.id }))) };
     const r = ejecutarMonitoreo(consultaMon({ seleccion_ronda: 'todas', agrupar_por: ['sublote'] }), datos as never, 'p1', '2026-11-05');
-    expect(r.filas.length).toBe(80);
+    // The public structured result is now capped too; the full product count remains explicit.
+    expect(r.filas.length).toBe(30);
+    expect(r.detalle).toEqual({ filas_totales: 80, filas_mostradas: 30, limitado: true });
     const texto = renderMonitoreo(r);
     expect(texto.split('\n').filter(l => l.startsWith('- ')).length).toBe(30);
     expect(texto).toContain('Se muestran 30 de 80 filas');
