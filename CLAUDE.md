@@ -1,5 +1,15 @@
 # CLAUDE.md — Escocia OS
 
+## Esco 2.0: M6 acceptance loop
+
+Before loop work, read [the loop protocol](docs/esco2/m6-loop-protocolo.md) and
+[iteration 0 architecture](docs/esco2/m6-loop-arquitectura.md). The implementation
+session uses DEV and synthetic controls only; SOMBRA belongs to a separate loop
+evaluator, and final held-out acceptance requires another D17 session. The bounded
+runtime permits up to four model calls per turn (two extraction attempts and two
+planning attempts); the evaluator must price that maximum before inference. These
+contracts do not authorize deployment, production writes, migrations, merge or pilot.
+
 ## Project Overview
 
 Escocia OS is a comprehensive agricultural management system for avocado (aguacate Hass) cultivation with GlobalGAP certification compliance. It is a single-page application built with React + TypeScript, backed by Supabase (PostgreSQL), and deployed on Vercel.

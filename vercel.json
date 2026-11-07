@@ -11,7 +11,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/m6-correccion-estructural": false
+      "codex/m6-correccion-estructural": false,
+      "codex/m6-loop-iteracion-0": false
     }
   }
 }

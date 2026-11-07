@@ -1,0 +1,55 @@
+# Esco 2.0 · Iteración 0 del loop M6
+
+Fecha: 2026-11-07. Base `c85ce43b` de #451; rama apilada `codex/m6-loop-iteracion-0`. Candidato de desarrollo para revisión. No hay una nueva aceptación M6 ni un resultado SOMBRA/HO pagado.
+
+## Cambios y límites
+
+| Hallazgo | Corrección del candidato | Evidencia requerida |
+|---|---|---|
+| F1 | Normalización local de intención y plan contra catálogos visibles; nombres e IDs equivalentes, aclaración ante identidad incierta | Positivos HTTP, ambigüedad, catálogo no leído, filtros contradictorios y D26 |
+| F2 | Un reintento del extractor por código cerrado; dos extracciones y dos planes como máximo | Reparación positiva, segundo fallo, transporte incierto y recibos registrados |
+| F3 | Se retira la afirmación de sustento semántico de una cita por sus offsets | Intervalo formalmente válido no acredita significado |
+| F4 | Cortes de historial en espacios seguros; cifras Unicode y pares UTF-16 completos | RED de cabeza/cola y positivos HTTP con separadores Unicode |
+| F5 | Seguimientos con población efectiva previa, token y nueva validación de visibilidad | Misma selección con token; aclaración sin token/vencido/parcial; expansión rechazada |
+| F6 | Guardas de despliegue para ambas ramas de revisión | Justificación expresa en PR; publicación no autoriza deploy |
+| F7 | Medición real queda a cargo de B en primera campaña | Costo/turno y p50/p95 pendientes; no se infieren desde tests |
+| F8 | La guardia de deícticos solo gobierna miembros de aplicaciones y animales; «esos dos lotes», «las mismas tareas» o «esas tres plagas» siguen el recorrido normal de #451 | 14 controles: 8 formulaciones de otras entidades con y sin estado, controles de aplicaciones/animales y fechas, y 3 casos HTTP en modo `obligatoria`; 11 RED sin la corrección |
+
+Los cambios visibles al modelo son candidatos pendientes de comparación pareada por B contra `c85ce43b`: tres repeticiones DEV y muestra SOMBRA. Las pruebas simuladas no prueban una mejora del modelo real.
+
+## Verificación del coordinador
+
+El coordinador repitió sobre el runtime final:
+
+| Verificación | Resultado |
+|---|---|
+| Suite completa | 8.644/8.644 pruebas, 418 archivos; incluye regresiones M4/M5/M6 y los 14 controles F8 |
+| Controles nuevos de I0 | 68/68 en nueve archivos: backend 19, QA 31, coordinador cuatro y F8 14 |
+| Tipos | `npm run typecheck`, aprobado |
+| Lint | Cero errores; 907 avisos existentes, sin avisos nuevos |
+| Build | `npm run build`, aprobado |
+| Replay DEV HTTP (sobre `6ab8f66d`) | 22 escenarios, 72 slots; 72/72 HTTP 200, cero excepciones, cero inferencias nuevas |
+| Igualdad del replay con histórico | 63/72 resultados, 69/72 coberturas y 60/72 textos; no es tasa de acierto |
+| Integridad de cambios | `git diff --check`, aprobado |
+
+Huella del grafo público de runtime en `6ab8f66d`, 73 archivos (F8 cambia `contextoPoblaciones.ts`; B recalcula la huella del SHA que congela):
+`46dbcb70ad617bb9ac26fffd38f023e990db836cd9400c4e516e49a093839eb2`.
+El arnés usa Node 24.14.1 con `--experimental-transform-types`; el modo de solo
+eliminación de tipos falló al cargar una propiedad de constructor TypeScript antes
+de ejecutar turnos. Se corrigió la configuración del arnés, no un dato ni un oráculo.
+
+El replay HTTP utiliza únicamente el DEV autorizado, captura fija y respuestas históricas. Su modo de intención es legado explícitamente no certificado: no inventa una extracción a partir de la referencia. Comparar con el histórico mide identidad del replay, no tasa de acierto, exactitud del extractor nuevo ni aceptación.
+
+## Custodia, campaña y presupuesto
+
+B construye SOMBRA en un chat independiente, sin acceder al HO; A no abre sus casos, referencias ni trazas. Agregados comunicados durante construcción: 50 escenarios, diez por dominio; 162 turnos-intento para tres repeticiones; mezcla 43 respondibles, cuatro parciales, dos aclaraciones y un rechazo. Captura privada mediante SELECT con Composio, 28 relaciones y 204 columnas. Esos conteos no significan que la campaña se haya ejecutado ni puntuado.
+
+La primera consulta de esquema fue rechazada por la revisión automática al faltar la cuenta explícita. No se ejecutó aquella lectura. B corrigió el parámetro por la misma vía D-L2 autorizada.
+
+La primera cota de B (USD 11,01) sumaba por adelantado el peor caso de toda la campaña: cuatro llamadas por turno con salida máxima y una comparación pareada de tres repeticiones. Decisión de Santiago del 2026-11-07: los topes siguen en USD 0,40 por iteración y USD 3,00 por el loop, en **gasto real**, con reserva por llamada, medición del costo real en DEV repetición 1, comparación pareada de una repetición y campaña escalonada ([protocolo](m6-loop-protocolo.md)). La autorización de USD 4 por campaña y USD 12 en total queda solo como respaldo, con el visto bueno de Santiago a una cifra medida. Costo nuevo de inferencia: **USD 0**. La puerta final requiere aprobación aparte. D-L3 solo bloquea la aceptación final.
+
+**Límite aceptado del historial.** Un texto de respuesta sin espacios seguros, o con cifras separadas por espacios, se reduce casi solo al aviso de extracto (8.007 → 238 caracteres en una sonda). El modo de fallo pierde contexto, no fabrica una cifra, y el formato colombiano de puntos lo hace raro. No se corrige en esta iteración; si una familia de la campaña lo muestra, se corrige con su reproducción.
+
+El protocolo y los criterios congelados están en [m6-loop-protocolo.md](m6-loop-protocolo.md); los contratos técnicos, en [m6-loop-arquitectura.md](m6-loop-arquitectura.md); los oráculos y la pista independiente de QA de implementación, en [m6-loop-i0-qa.md](m6-loop-i0-qa.md).
+
+Sin fusión, deploy, migraciones, cambios de secretos ni escrituras productivas. No se modifica legado ni Telegram; M7 y piloto siguen fuera de alcance.

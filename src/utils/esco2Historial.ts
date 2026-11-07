@@ -12,9 +12,20 @@ export function compactarRespuestaHistorial(texto: string): string {
   const disponible = MAX_CONTEXTO_MENSAJE - AVISO_EXTRACTO_HISTORIAL.length;
   const inicio = Math.floor(disponible * 0.7);
   const final = disponible - inicio;
-  // Keep UTF-16 surrogate pairs intact at both cuts.
-  const cabeza = texto.slice(0, inicio).replace(/[\uD800-\uDBFF]$/, '');
-  const cola = texto.slice(-final).replace(/^[\uDC00-\uDFFF]/, '');
+  // Cut only at whitespace, never inside a token (including a UTF-16 pair).
+  // A space between digits can itself be part of a formatted number.
+  let corteCabeza = 0;
+  let corteCola = texto.length;
+  const inicioCola = texto.length - final;
+  for (const espacio of texto.matchAll(/\s+/gu)) {
+    const desde = espacio.index;
+    const hasta = desde + espacio[0].length;
+    if (/\p{Decimal_Number}$/u.test(texto.slice(Math.max(0, desde - 2), desde)) && /^\p{Decimal_Number}/u.test(texto.slice(hasta, hasta + 2))) continue;
+    if (desde < inicio) corteCabeza = Math.min(hasta, inicio);
+    if (hasta > inicioCola && corteCola === texto.length) corteCola = Math.max(desde, inicioCola);
+  }
+  const cabeza = texto.slice(0, corteCabeza);
+  const cola = texto.slice(corteCola);
   return cabeza + AVISO_EXTRACTO_HISTORIAL + cola;
 }
 
