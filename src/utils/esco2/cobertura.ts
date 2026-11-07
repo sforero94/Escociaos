@@ -1,3 +1,4 @@
+import { verificarIntencionPlan } from './intencion.ts';
 // Inventario declarado de la solicitud. Valida correspondencia, nunca exhaustividad semántica.
 import type { OperacionConsulta, Plan, ResultadoConsulta } from './tipos.ts';
 import { resolverIdentidadAplicaciones } from './aplicacionesIdentidad.ts';
@@ -13,10 +14,12 @@ export interface ParteCubierta {
   id: string; texto: string; capacidad: CapacidadParte;
   disposicion: 'respondida' | 'fuente_no_disponible' | 'aclarar' | 'fuera_de_contrato';
   resultado_ids: string[]; parcial?: true;
+  verificacion?: {obligacion_id:string;poblacion:'seleccionada'|'desconocida';medidas:'completas'|'parciales';detalle:{filas_totales:number;filas_mostradas:number;completo:boolean}};
 }
 export interface CoberturaTurno {
   version: 1; estado: 'declarada_validada' | 'no_certificada';
   exhaustividad: 'no_certificada'; partes: ParteCubierta[];
+  pendientes_intencion?: {inicio:number;fin:number;motivo:'ambiguo'|'no_soportado'|'no_interpretado'}[];
 }
 export const coberturaNoCertificada = (): CoberturaTurno => ({ version: 1, estado: 'no_certificada', exhaustividad: 'no_certificada', partes: [] });
 export const ESQUEMA_COBERTURA = {
@@ -99,6 +102,7 @@ function disposicionResultado(r: ResultadoConsulta, o: OperacionConsulta): Pick<
 }
 export function construirCoberturaFinal(plan: Plan | null, resultados: ResultadoConsulta[], hoy?: string): CoberturaTurno {
   if (!plan?.cobertura) return coberturaNoCertificada();
+  if(plan.intencion) verificarIntencionPlan(plan.intencion,plan);
   const operaciones: OperacionConsulta[] = plan.tipo === 'operaciones' ? plan.operaciones : plan.tipo === 'consultas' ? plan.consultas.map(consulta => ({ tipo: 'labores' as const, consulta })) : [];
   validarCorrespondenciaPlan(plan.cobertura, operaciones);
   if (resultados.length !== operaciones.length || new Set(resultados.map(r => r.id)).size !== resultados.length) return fallar();
@@ -107,21 +111,32 @@ export function construirCoberturaFinal(plan: Plan | null, resultados: Resultado
     const propios = resultados.filter((_r, i) => operaciones[i].parte_ids?.includes(p.id));
     if (p.disposicion !== 'consultar') return { ...p, resultado_ids: [], disposicion: p.disposicion };
     const estados = resultados.flatMap((r, i) => operaciones[i].parte_ids?.includes(p.id) ? [disposicionResultado(r, operaciones[i])] : []);
-    const disposicion = estados.some(e => e.disposicion === 'aclarar') ? 'aclarar' : estados.some(e => e.disposicion === 'fuera_de_contrato') ? 'fuera_de_contrato' : estados.some(e => e.disposicion === 'fuente_no_disponible') ? 'fuente_no_disponible' : 'respondida';
-    return { id: p.id, texto: p.texto, capacidad: p.capacidad, disposicion, resultado_ids: propios.map(r => r.id), ...(disposicion === 'fuente_no_disponible' && estados.some(e => e.parcial) ? { parcial: true as const } : {}) };
+    let disposicion: ParteCubierta['disposicion'] = estados.some(e => e.disposicion === 'aclarar') ? 'aclarar' : estados.some(e => e.disposicion === 'fuera_de_contrato') ? 'fuera_de_contrato' : estados.some(e => e.disposicion === 'fuente_no_disponible') ? 'fuente_no_disponible' : 'respondida';
+    const ob=plan.intencion?.obligaciones.find(o=>`s${o.id.slice(1)}`===p.id);
+    let verificacion:ParteCubierta['verificacion'];
+    if(ob){
+      const detalles=propios.map(r=>ob.ranking&&!('tipo' in r)&&!r.analisis?{filas_totales:r.filas.length,filas_mostradas:r.filas.length}:detalleResultado(r));
+      const medidasCompletas=propios.every(r=>medidasDisponibles(r,ob.metricas));
+      const poblacionConocida=propios.every(r=>!('tipo' in r&&r.tipo==='aplicaciones'&&(r.excluidos.sin_fecha||r.excluidos.sin_estado))&&r.estado!=='no_disponible');
+      const detalle={filas_totales:detalles.reduce((n,d)=>n+d.filas_totales,0),filas_mostradas:detalles.reduce((n,d)=>n+d.filas_mostradas,0),completo:detalles.every(d=>d.filas_totales===d.filas_mostradas)};
+      verificacion={obligacion_id:ob.id,poblacion:poblacionConocida?'seleccionada':'desconocida',medidas:medidasCompletas?'completas':'parciales',detalle};
+      if(disposicion==='fuente_no_disponible'&&verificacion.poblacion==='seleccionada'&&medidasCompletas&&propios.every(r=>r.estado==='ok'||r.estado==='parcial'||r.estado==='vacio_verificado'||r.estado==='sin_registros'))disposicion='respondida';
+      if(disposicion==='respondida'&&(!medidasCompletas||!poblacionConocida||ob.detalle==='exhaustivo'&&!detalle.completo))disposicion='fuente_no_disponible';
+    }
+    return { id: p.id, texto: p.texto, capacidad: p.capacidad, disposicion, resultado_ids: propios.map(r => r.id), ...(verificacion?{verificacion}:{}), ...(disposicion === 'fuente_no_disponible' && (estados.some(e => e.parcial)||!!verificacion) ? { parcial: true as const } : {}) };
   });
-  return { version: 1, estado: 'declarada_validada', exhaustividad: 'no_certificada', partes };
+  return { version: 1, estado: 'declarada_validada', exhaustividad: 'no_certificada', partes, ...(plan.intencion?{pendientes_intencion:structuredClone(plan.intencion.residuales)}:{}) };
 }
 export function validarCoberturaFinal(cobertura: CoberturaTurno, plan: Plan | null, resultados: ResultadoConsulta[], hoy?: string): boolean {
   try { return canonico(cobertura) === canonico(construirCoberturaFinal(plan, resultados, hoy)); } catch { return false; }
 }
 export function validarFormaCoberturaFinal(c: CoberturaTurno, resultados: ResultadoConsulta[]): void {
-  if (!objeto(c) || Object.keys(c).some(k => !['version', 'estado', 'exhaustividad', 'partes'].includes(k)) || c.version !== 1 || c.exhaustividad !== 'no_certificada' || !Array.isArray(c.partes)) return fallar();
+  if (!objeto(c) || Object.keys(c).some(k => !['version', 'estado', 'exhaustividad', 'partes', 'pendientes_intencion'].includes(k)) || c.version !== 1 || c.exhaustividad !== 'no_certificada' || !Array.isArray(c.partes)) return fallar();
   if (c.estado === 'no_certificada') { if (c.partes.length) return fallar(); return; }
   if (c.estado !== 'declarada_validada' || !c.partes.length || c.partes.length > 8) return fallar();
   const usados = new Set<string>();
   c.partes.forEach((p, i) => {
-    if (!objeto(p) || Object.keys(p).some(k => !['id', 'texto', 'capacidad', 'disposicion', 'resultado_ids', 'parcial'].includes(k)) || p.id !== `s${i + 1}` || typeof p.texto !== 'string' || !p.texto.trim() || p.texto.length > 300 || !CAPACIDADES_PARTE.includes(p.capacidad) || !['respondida', 'fuente_no_disponible', 'aclarar', 'fuera_de_contrato'].includes(p.disposicion) || p.parcial !== undefined && p.parcial !== true || !Array.isArray(p.resultado_ids) || new Set(p.resultado_ids).size !== p.resultado_ids.length) return fallar();
+    if (!objeto(p) || Object.keys(p).some(k => !['id', 'texto', 'capacidad', 'disposicion', 'resultado_ids', 'parcial', 'verificacion'].includes(k)) || p.id !== `s${i + 1}` || typeof p.texto !== 'string' || !p.texto.trim() || p.texto.length > 300 || !CAPACIDADES_PARTE.includes(p.capacidad) || !['respondida', 'fuente_no_disponible', 'aclarar', 'fuera_de_contrato'].includes(p.disposicion) || p.parcial !== undefined && p.parcial !== true || !Array.isArray(p.resultado_ids) || new Set(p.resultado_ids).size !== p.resultado_ids.length) return fallar();
     if (p.disposicion === 'respondida' && !p.resultado_ids.length || p.parcial && p.disposicion !== 'fuente_no_disponible') return fallar();
     for (const id of p.resultado_ids) {
       const r = resultados.find(r => r.id === id);
@@ -130,4 +145,27 @@ export function validarFormaCoberturaFinal(c: CoberturaTurno, resultados: Result
     }
   });
   if (resultados.some(r => !usados.has(r.id))) return fallar();
+}
+
+function detalleResultado(r:ResultadoConsulta):{filas_totales:number;filas_mostradas:number}{
+ if(r.analisis)return {filas_totales:r.analisis.detalle.filas_totales,filas_mostradas:r.analisis.detalle.filas_mostradas};
+ if(!('tipo' in r))return {filas_totales:r.cobertura.grupos_totales,filas_mostradas:r.cobertura.grupos_mostrados};
+ if(r.tipo==='monitoreo'&&r.detalle)return r.detalle;
+ if(r.tipo==='hato')return {filas_totales:r.filas.length,filas_mostradas:Math.min(20,r.filas.length)};
+ if(r.tipo==='pesajes_leche'||r.tipo==='litros_quincenales'||r.tipo==='clima')return {filas_totales:r.filas.length,filas_mostradas:Math.min(30,r.filas.length)};
+ if(r.tipo==='conductividad')return {filas_totales:r.filas.length,filas_mostradas:Math.min(20,r.filas.length)};
+ if('filas' in r)return {filas_totales:r.filas.length,filas_mostradas:r.filas.length};
+ if(r.resultados_poblacion){const ds=r.resultados_poblacion.map(detalleResultado);return {filas_totales:ds.reduce((n,d)=>n+d.filas_totales,0),filas_mostradas:ds.reduce((n,d)=>n+d.filas_mostradas,0)};}
+ return {filas_totales:1,filas_mostradas:1};
+}
+function medidasDisponibles(r:ResultadoConsulta,metricas:string[]):boolean{
+ if(r.analisis){
+  if(r.analisis.estado==='no_disponible'||r.analisis.estado==='no_soportado')return false;
+  const requeridas=new Set([...metricas,...(r.analisis.comparacion?[r.analisis.comparacion.metrica]:[])]);
+  if(r.analisis.filas.some(f=>f.seleccion==='indeterminado'||[...requeridas].some(m=>f.metricas[m]&&f.metricas[m].estado!=='completo'))||r.analisis.comparacion?.delta===null)return false;
+ }
+ if('tipo' in r&&r.tipo==='conductividad')return ['ok','parcial','vacio_verificado'].includes(r.estado)&&r.filas.every(f=>metricas.every(m=>m==='distribucion'?f.distribucion!==null:m==='valor_ce'?f.valor_ce!==null:m==='ph'?f.ph!==null:false));
+ if('tipo' in r&&r.tipo==='hato')return ['ok','parcial','vacio_verificado'].includes(r.estado)&&r.filas.every(f=>metricas.every(m=>m==='ficha'?f.ficha.campos_no_leidos.length===0&&Object.values(f.ficha.parentescos).every(p=>p.estado==='visible'||p.estado==='sin_vinculo'):m==='reproduccion'?f.reproduccion.estado==='ok':false));
+ if('tipo' in r&&r.tipo==='clima')return r.resumen.every(s=>metricas.every(m=>{const v=s.variables[m as keyof typeof s.variables];return !!v&&v.cobertura.usables===v.cobertura.solicitados&&v.cobertura.calidad_desconocida===0&&s.cobertura_temporal.parcial===0&&s.cobertura_temporal.desconocida===0;}));
+ return !['parcial','no_disponible','no_resuelto','aclaracion'].includes(r.estado);
 }

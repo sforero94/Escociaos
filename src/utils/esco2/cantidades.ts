@@ -21,10 +21,9 @@ function problemas(campos: Record<string, unknown>): string[] {
 const PASO_REDONDEO = 0.01;
 const MOTIVO_NO_CONCILIA = 'conciliacion:no_coincide';
 const AVISO_CC_G = 'equivalencia_cc_g:';
-/** Removes binary-sum noise (0.1 + 0.2) from a sum of saved decimals; never used to round a published figure. */
-const limpiarSuma = (n: number) => Number(n.toPrecision(12));
-/** Saved sources also carry binary noise (463.99999999999994 stored for 464): display at 12 significant digits. */
-const valor = (n: number) => numeroMensaje(limpiarSuma(n));
+/** Keep finite source precision through grouping and valuation. Calculator tolerance is separate. */
+const limpiarSuma = (n: number) => n;
+const valor = (n: number) => numeroMensaje(n);
 function estadoDe(motivos: string[]): EstadoCantidad {
   return motivos.some(m => /no_leido|invalido|no_disponible/.test(m)) ? 'no_leido' : motivos.some(m => /incompatible/.test(m)) ? 'incompatible' : motivos.includes(MOTIVO_NO_CONCILIA) ? 'no_concilia' : motivos.length ? 'sin_dato' : 'conocido';
 }
@@ -213,6 +212,14 @@ function porLote(filas: CantidadPorLote[], recipientes: RecipienteGuardado[], ej
   });
 }
 export function renderCantidadesAplicacion(r: ResultadoCantidadesAplicacion): string {
+  if(r.resultados_poblacion){
+    if(r.seleccion?.estado==='no_disponible')return 'No pude verificar la población de aplicaciones seleccionada. No equivale a cantidades cero.';
+    if(!r.resultados_poblacion.length)return 'La selección anterior verificó una población vacía de aplicaciones. No se ejecutaron consultas singulares ni se infieren cantidades de otra población.';
+    const out=[`Cantidades de ${numeroMensaje(r.resultados_poblacion.length)} aplicaciones seleccionadas por sus IDs visibles. Plan y ejecución permanecen separados.`];
+    for(const [base,label] of [['plan','Plan completo guardado'],['ejecucion','Ejecución registrada']] as const)for(const p of r.resumen?.[base].productos??[])out.push(`${label}, ${escapar(p.producto_nombre??p.producto_id)}: ${textoTotalResumen(p)}.`);
+    return [...out,...r.resultados_poblacion.map(renderCantidadesAplicacion)].join('\n\n');
+  }
+
   if (r.estado === 'no_resuelto') return 'No pude identificar una sola aplicación entre las que puedes ver. Indica su código o su ID.';
   if (!r.aplicacion) return 'No pude leer la aplicación y sus cantidades. Esa lectura no equivale a cantidades cero.';
   const filas = [...r.plan.filas, ...r.ejecucion.filas];

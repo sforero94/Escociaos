@@ -7,7 +7,7 @@ import { formatLongDate } from '../formatPuro.ts';
 import type { RegistroTrabajo } from './tipos.ts';
 import type { ConsultaLaborAplicacion, DatosLaborAplicacion, FilaLaborAplicacion, ResultadoLaborAplicacion, TotalLaborAplicacion } from './laborAplicacionTipos.ts';
 const desconocido = (): TotalLaborAplicacion => ({ jornales: null, costo: null, costo_registrado: null, completo: false });
-const limpiar = (n: number) => Number(n.toPrecision(12));
+const limpiar = (n: number) => n;
 function total(registros: RegistroTrabajo[]): TotalLaborAplicacion {
   const v = metricas(registros);
   const costo = limpiar(registros.reduce((s, r) => s + (r.costo_jornal ?? 0), 0));
@@ -54,6 +54,7 @@ function texto(v: string | null | undefined): string { return (v ?? '').replace(
 function etiqueta(id: string, nombre: string | null | undefined, universo: { id: string; nombre?: string | null }[]): string { const n=texto(nombre); return !n ? id : universo.some(x => x.id !== id && texto(x.nombre) === n) ? `${n} (${id})` : n; }
 function valores(t: TotalLaborAplicacion): string { return `${t.jornales === null ? 'jornales no verificados' : `${numeroMensaje(limpiar(t.jornales))} ${t.jornales === 1 ? 'jornal registrado' : 'jornales registrados'}`}; ${t.costo === null ? `costo laboral incompleto${t.costo_registrado !== null ? ` (subtotal registrado: ${dineroMensaje(t.costo_registrado)})` : ''}` : `costo laboral registrado: ${dineroMensaje(t.costo)}`}`; }
 export function renderLaborAplicacion(r: ResultadoLaborAplicacion): string {
+  if(r.seleccion?.estado==='vacio_verificado')return 'La población seleccionada está vacía: no hay aplicaciones para esta consulta. No se leyó una población global ni se infieren datos de otras aplicaciones.';
   if (r.estado === 'no_resuelto') return 'No pude resolver las aplicaciones indicadas. Precisa su nombre o código.';
   if (r.estado === 'no_disponible') return 'No pude leer las aplicaciones para verificar su vínculo laboral.';
   const apps = r.filas.flatMap(f => f.aplicaciones).map(a => ({ id: a.id, nombre: a.nombre_aplicacion || a.codigo_aplicacion }));

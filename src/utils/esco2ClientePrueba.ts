@@ -1,3 +1,4 @@
+import { prepararHistorial } from './esco2Historial';
 import { getSupabase } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info';
 
@@ -37,15 +38,13 @@ export interface MensajePruebaEsco2 {
   texto: string;
 }
 
-/** Server limits (esco-consultas manejador.ts): 12 messages, 4000 characters each. */
+/** Shared context bounds; long assistant answers use an explicit extract marker. */
 export const MAX_HISTORIAL_PRUEBA = 12;
 export const MAX_TEXTO_HISTORIAL_PRUEBA = 4000;
 
 /** Append one finished turn and keep only what the server accepts. */
 export function agregarTurnoHistorial(historial: MensajePruebaEsco2[], pregunta: string, respuesta: string): MensajePruebaEsco2[] {
-  return [...historial, { rol: 'user' as const, texto: pregunta }, { rol: 'assistant' as const, texto: respuesta }]
-    .map(m => ({ rol: m.rol, texto: m.texto.slice(0, MAX_TEXTO_HISTORIAL_PRUEBA) }))
-    .slice(-MAX_HISTORIAL_PRUEBA);
+  return prepararHistorial([...historial, { rol: 'user' as const, texto: pregunta }, { rol: 'assistant' as const, texto: respuesta }]);
 }
 
 const ORIGENES = new Set(['compositor', 'recomposicion', 'determinista', 'aclaracion', 'fuera_de_alcance', 'error_plan', 'error_llm', 'error_datos']);
@@ -87,7 +86,7 @@ export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, s
     respuesta = await fetch(ENDPOINT_PRUEBA_ESCO2, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sesion.access_token}`, apikey: publicAnonKey },
-      body: JSON.stringify({ pregunta: texto, historial: (contexto.historial ?? []).slice(-MAX_HISTORIAL_PRUEBA).map(m => ({ rol: m.rol, texto: m.texto.slice(0, MAX_TEXTO_HISTORIAL_PRUEBA) })), estadoToken: contexto.estadoToken, respuestaAclaracion: contexto.respuestaAclaracion }),
+      body: JSON.stringify({ pregunta: texto, historial: prepararHistorial(contexto.historial ?? []), estadoToken: contexto.estadoToken, respuestaAclaracion: contexto.respuestaAclaracion }),
       signal,
     });
   } catch {

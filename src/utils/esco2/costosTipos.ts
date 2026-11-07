@@ -32,7 +32,9 @@ export interface BloqueCongelado {
   motivos: string[];
 }
 export interface ResultadoCostosAplicacion {
-  tipo: 'costos_aplicacion'; id: string; consulta: ConsultaCostosAplicacion;
+  tipo: 'costos_aplicacion'; id: string;
+  resultados_poblacion?: ResultadoCostosAplicacion[];
+  seleccion?: {de?:string;estado:'ok'|'vacio_verificado'|'no_disponible';ids:string[];motivo?:string}; consulta: ConsultaCostosAplicacion;
   estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto'; aplicacion?: AplicacionInventario;
   aplicacion_nombre_repetido?: boolean;
   congelado?: BloqueCongelado; ejecucion?: BloqueValoracion; plan?: BloqueValoracion;

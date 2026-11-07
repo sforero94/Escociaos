@@ -1,3 +1,4 @@
+import { renderAnalisis } from './analitica.ts';
 import { renderPesajesLeche,renderLitrosQuincenales } from './leche.ts';
 import { renderClima } from './clima.ts';
 import { renderHato } from './hato.ts';
@@ -165,6 +166,11 @@ function conciliacion(r: ResultadoParte): string[] {
         return [];
     const out: string[] = [];
     const p = r.particiones;
+    if (r.poblacion) {
+        out.push('La conciliación corresponde únicamente a la selección efectiva del período, tareas y filtros indicados.');
+        if (r.poblacion.sin_lote.estado === 'excluido') return [...out, 'Los registros sin lote están excluidos de esta selección; no se acredita cero en ese grupo.'];
+        if (r.poblacion.con_lote.estado === 'excluido') return [...out, 'Los registros con lote están excluidos de esta selección; no se acredita cero en ese grupo.'];
+    }
     if (typeof p.con_lote.jornales === 'number' && typeof p.sin_lote.jornales === 'number' && typeof r.total.jornales === 'number') {
         const a = p.con_lote.jornales, b = p.sin_lote.jornales, t = r.total.jornales;
         out.push(`Con lote: ${jornal(a)}; sin lote: ${jornal(b)}.${Math.abs(a + b - t) < 1e-8 ? ` Suman los ${jornal(t)} del total.` : ''}`);
@@ -280,7 +286,8 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         throw new Error('disposicion_parcial_no_valida');
     if (cobertura) validarFormaCoberturaFinal(cobertura, resultados);
     const parts = resultados.map((r, i) => {
-        const text = esResultadoPesajesLeche(r) ? renderPesajesLeche(r) : esResultadoLitrosQuincenales(r) ? renderLitrosQuincenales(r) : esResultadoHato(r) ? renderHato(r) : esResultadoClima(r) ? renderClima(r) : esResultadoConductividad(r) ? renderConductividad(r) : esResultadoMonitoreo(r) ? renderMonitoreo(r) : esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const textoFuente = esResultadoPesajesLeche(r) ? renderPesajesLeche(r) : esResultadoLitrosQuincenales(r) ? renderLitrosQuincenales(r) : esResultadoHato(r) ? renderHato(r) : esResultadoClima(r) ? renderClima(r) : esResultadoConductividad(r) ? renderConductividad(r) : esResultadoMonitoreo(r) ? renderMonitoreo(r) : esResultadoFaltantesAplicacion(r) ? renderFaltantesAplicacion(r) : esResultadoLaborAplicacion(r) ? renderLaborAplicacion(r) : esResultadoCostos(r) ? renderCostosAplicacion(r) : esResultadoCantidades(r) ? renderCantidadesAplicacion(r) : esResultadoAplicaciones(r) ? renderAplicaciones(r) : renderParte(r);
+        const text = `${textoFuente}${r.analisis ? `\n\n${renderAnalisis(r.analisis)}` : ''}`;
         if (resultados.length === 1)
             return text;
         const heading = `**Parte ${Number(r.id.slice(1)) || i + 1}: ${esResultadoPesajesLeche(r) ? 'Pesajes de leche' : esResultadoLitrosQuincenales(r) ? 'Litros quincenales' : esResultadoHato(r) ? 'Ficha y reproducción del hato' : esResultadoClima(r) ? 'Clima histórico observado' : esResultadoConductividad(r) ? 'Conductividad eléctrica del suelo' : esResultadoMonitoreo(r) ? 'Monitoreo por ronda' : esResultadoFaltantesAplicacion(r) ? 'Faltantes vigentes' : esResultadoLaborAplicacion(r) ? 'Labor vinculada a aplicaciones' : esResultadoCostos(r) ? 'Costos de la aplicación' : esResultadoCantidades(r) ? 'Cantidades de la aplicación' : esResultadoAplicaciones(r) ? 'Aplicaciones' : r.semantica?.cohorte === 'tarea_programada' ? 'Tareas programadas' : 'Labores registradas'}**`;
@@ -291,6 +298,7 @@ export function renderMensaje(resultados: ResultadoConsulta[], aviso?: AvisoMens
         const inventario = cobertura.partes.map((p, i) => `- Parte ${i + 1}, solicitud del usuario: «${solicitudCitada(p.texto)}». ${disposiciones[p.disposicion]}${p.parcial ? ' Conservo los datos parciales sustentados.' : ''}`);
         parts.unshift(`Subpartes de tu solicitud:\n${inventario.join('\n')}`);
     }
+    if(cobertura?.pendientes_intencion?.length)parts.push(`Quedan ${numero(cobertura.pendientes_intencion.length)} requisitos pendientes de interpretar o aclarar. Los resultados anteriores conservan únicamente las obligaciones sustentadas; la solicitud completa no está resuelta.`);
     // Una aclaración pura no muestra datos: no lleva el aviso de respuesta parcial.
     if (parcialFueraDeAlcance || cobertura?.partes.some(p => p.disposicion !== 'respondida') && !cobertura.partes.every(p => p.disposicion === 'aclarar'))
         parts.push('Respuesta parcial: hay partes de tu solicitud que no están disponibles en el alcance actual. Los datos mostrados corresponden únicamente a las partes sustentadas.');

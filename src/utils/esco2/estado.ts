@@ -1,3 +1,4 @@
+import { verificarIntencionPlan, type IntencionSolicitud } from './intencion.ts';
 // Ephemeral, caller-bound transport. Tokens carry no client-editable scope/history.
 import { validarPlan } from './registro.ts';
 import { operacionesDelPlan, type PlanConsultas } from './tipos.ts';
@@ -23,6 +24,8 @@ export interface PendienteFechaAplicaciones {
 }
 export interface EstadoTurno {
     version: 1;
+    intencion?: IntencionSolicitud;
+    intencionInicial?: IntencionSolicitud;
     decisiones?: Record<string, 'tarea' | 'categoria'>;
     plan: PlanConsultas;
     pendiente?: PendienteLabor | PendienteFechaAplicaciones;
@@ -53,6 +56,8 @@ export function validarEstado(estado: EstadoTurno): boolean {
         } else validarPlan([...operaciones.map(o => ({ nombre: herramientaDe[o.tipo], argumentos: JSON.stringify(o.consulta) })), ...(estado.plan.parcialFueraDeAlcance ? [{ nombre: 'fuera_de_alcance', argumentos: JSON.stringify({ motivo: 'parte_no_soportada' }) }] : [])]);
         if (estado.decisiones && Object.values(estado.decisiones).some(v => v !== 'tarea' && v !== 'categoria'))
             return false;
+        if (estado.intencionInicial && (estado.intencionInicial.version!==1 || !Array.isArray(estado.intencionInicial.obligaciones) || estado.intencionInicial.obligaciones.length>8)) return false;
+        if (estado.intencion) verificarIntencionPlan(estado.intencion, estado.plan);
         const p = estado.pendiente;
         if (!p) return true;
         if (!Number.isInteger(p.indice) || p.indice < 0 || p.indice >= operaciones.length || typeof p.pregunta !== 'string' || p.tipo !== undefined && !['labores', 'fecha_aplicaciones'].includes(p.tipo)) return false;

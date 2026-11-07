@@ -1,6 +1,6 @@
 import type { AplicacionInventario } from './aplicacionesTipos.ts';
 import type { RegistroTrabajo } from './tipos.ts';
-export interface ConsultaLaborAplicacion { aplicacion_ids: string[]; aplicaciones: string[]; desde?: string; hasta?: string }
+export interface ConsultaLaborAplicacion { seleccion_de?: string; aplicacion_ids: string[]; aplicaciones: string[]; desde?: string; hasta?: string }
 export interface DatosLaborAplicacion {
   seleccion: 'ok' | 'no_leido' | 'no_resuelto';
   aplicaciones?: AplicacionInventario[];
@@ -18,7 +18,7 @@ export interface FilaLaborAplicacion {
   compartida: boolean;
 }
 export interface ResultadoLaborAplicacion {
-  tipo: 'labor_aplicacion'; id: string; estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto';
+  tipo: 'labor_aplicacion'; id: string; seleccion?:{de?:string;estado:'ok'|'vacio_verificado'|'no_disponible';ids:string[];motivo?:string}; estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto';
   consulta: ConsultaLaborAplicacion; filas: FilaLaborAplicacion[]; total: TotalLaborAplicacion;
   fuente: 'lecturas_independientes';
 }

@@ -1,3 +1,6 @@
+import { ejecutarAnalisis } from './analitica.ts';
+import { resolverDependencia, seleccionarAplicacionesCompuestas, ejecutarCostosPoblacion, ejecutarCantidadesPoblacion } from './composicion.ts';
+import { herramientasIntencion, promptIntencion, validarIntencion, verificarIntencionPlan, type IntencionSolicitud } from './intencion.ts';
 import { ejecutarPesajesLeche,ejecutarLitrosQuincenales,periodoQuincenalAlineado,seleccionarQuincenasLeche } from './leche.ts';
 import type { FuenteLeche, PesajeLeche, QuincenaLeche, IngresoLitros } from './lecheTipos.ts';
 import { ejecutarClima } from './clima.ts';
@@ -44,7 +47,7 @@ export interface ConfigModelos {
     compositorReforzado?: ModeloEtapa;
 }
 export interface RegistroLlamada {
-    etapa: 'planificador' | 'compositor' | 'recomposicion';
+    etapa: 'intencion' | 'planificador' | 'compositor' | 'recomposicion';
     modelo: string;
     ms: number;
     entrada: number;
@@ -54,6 +57,8 @@ export interface RegistroLlamada {
 }
 export interface ResultadoTurno {
     respuesta: string;
+    intencion?: IntencionSolicitud;
+    intencionInicial?: IntencionSolicitud;
     cobertura: CoberturaTurno;
     estado?: EstadoTurno;
     opcionesAclaracion?: {
@@ -80,6 +85,7 @@ export interface ResultadoTurno {
 }
 /** Closed retry instructions, one per rejection reason. No model or user text enters here. */
 export const INSTRUCCION_REINTENTO: Record<string, string> = {
+    discrepancia_intencion: 'El plan debe conservar todas las obligaciones y condiciones de la intención previa inmutable. No omitas población, métricas, período, base temporal, agrupación ni condiciones.',
     sin_cobertura: 'La primera llamada debe llevar cobertura con todas las subpartes.',
     inventario_forma: 'cobertura lleva solo version:1 y partes, una lista de una a ocho partes.',
     carrier: 'fuera_de_alcance o pedir_aclaracion van solos, con parte_ids vacío; usa pedir_aclaracion solo si alguna parte tiene disposicion aclarar.',
@@ -101,6 +107,7 @@ export const INSTRUCCION_REINTENTO: Record<string, string> = {
 };
 /** Maps an ErrorPlan message to a closed reason code. */
 export function motivoRechazoPlan(mensaje: string): string {
+    if (mensaje.startsWith('discrepancia_intencion:')) return 'discrepancia_intencion';
     if (mensaje.startsWith('cobertura_no_valida:')) {
         const codigo = mensaje.slice('cobertura_no_valida:'.length);
         return /^[a-z_]+$/.test(codigo) ? codigo : 'cobertura_no_valida';
@@ -131,6 +138,7 @@ interface ArgsTurno {
     fuenteLeche?: FuenteLeche;
     /** Solo integración interna: el recorrido real exige cobertura por defecto. */
     modoCobertura?: ModoCobertura;
+    modoIntencion?: 'obligatoria' | 'legado_sin_certificar';
 }
 /** Wrapper puro de compatibilidad de motores: sin manifest no certifica cobertura. */
 export function responderTurno(args: ArgsTurno & {
@@ -168,7 +176,10 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         ...(args.estado?.plan ? [{ role: 'system' as const, content: `Contexto aceptado por el servidor: ${JSON.stringify(args.estado.plan)}` }] : []),
     ];
     const llamadas: RegistroLlamada[] = [];
-    const salida = (o: Omit<ResultadoTurno, 'llamadas' | 'ms' | 'cobertura'> & { cobertura?: CoberturaTurno }): ResultadoTurno => ({ cobertura: coberturaNoCertificada(), ...o, llamadas, ms: Date.now() - inicio });
+    let intencion: IntencionSolicitud | undefined = args.estado?.intencion;
+    let intencionInicial: IntencionSolicitud | undefined = args.estado?.intencionInicial ?? args.estado?.intencion;
+    const usarPendiente = !!args.estado?.pendiente && (!!args.respuestaAclaracion || args.modoIntencion !== 'obligatoria');
+    const salida = (o: Omit<ResultadoTurno, 'llamadas' | 'ms' | 'cobertura'> & { cobertura?: CoberturaTurno }): ResultadoTurno => ({ cobertura: coberturaNoCertificada(), ...(intencion ? { intencion, intencionInicial } : {}), ...o, llamadas, ms: Date.now() - inicio });
     const base: Pick<ResultadoTurno, 'plan' | 'errorPlan' | 'resultados' | 'guarda' | 'ruta' | 'ajustes'> = {
         plan: null,
         errorPlan: null,
@@ -197,7 +208,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     let catalogoMonitoreo: CatalogoMonitoreo = {};
     let catalogoConductividad: CatalogoConductividad = {};
     let catalogoHato: CatalogoHato = {};
-    if (!args.estado?.pendiente) {
+    if (!usarPendiente) {
         // El catálogo laboral excluye aplicaciones sin tarea: leer el catálogo propio,
         // con el mismo lector fijo/JWT, antes de planear. Fallo conserva no leído.
         try { inventarioPlaneado = await args.fuenteAplicaciones?.leer('fecha_inicio_planeada'); } catch { /* El dominio no leído no bloquea los otros. */ }
@@ -205,12 +216,24 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         try { catalogoConductividad = await args.fuenteConductividad?.catalogo() ?? {}; } catch { /* Dominio independiente. */ }
         try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
     }
-    if (!catalogoDisponible && !args.estado?.pendiente) {
+    if (!catalogoDisponible && !usarPendiente) {
         if (!args.fuenteClima && !args.fuenteLeche && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes) && !Array.isArray(catalogoHato.animales))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
+    if (args.modoIntencion === 'obligatoria' && !usarPendiente) {
+        try {
+            const r = await llm.completar({ modelo: config.planificador.modelo, esfuerzo: config.planificador.esfuerzo, mensajes: [{ role: 'system', content: promptIntencion(hoy) }, ...(args.estado?.intencion ? [{role:'system' as const,content:`Contexto tipado previo ligado al usuario: ${JSON.stringify(args.estado.intencion)}. Solo completa referencias no modificadas por el mensaje actual; no sustituye evidencia del turno actual.`}]:[]), ...args.historial.map((m, indice) => ({ role: 'user' as const, content: m.rol === 'user' ? `Historial usuario [${indice}]: ${m.texto}` : `Historial [${indice}]: respuesta del asistente omitida` })), { role: 'user', content: pregunta }], herramientas: herramientasIntencion(), toolChoice: 'required', maxTokens: 3000 });
+            llamadas.push(registrar('intencion', r));
+            if (r.finishReason === 'length' || r.llamadas.length !== 1 || r.llamadas[0].nombre !== 'declarar_intencion') throw new ErrorPlan('intencion_no_valida:llamada_exclusiva');
+            intencion = validarIntencion(JSON.parse(r.llamadas[0].argumentos), pregunta, args.historial);
+            intencionInicial = structuredClone(intencion);
+        } catch (e) {
+            return salida({ ...base, respuesta: mensajeDisposicion(e instanceof ErrorPlan || e instanceof SyntaxError ? 'error_plan' : 'error_llm'), origen: e instanceof ErrorPlan || e instanceof SyntaxError ? 'error_plan' : 'error_llm', errorPlan: e instanceof ErrorPlan || e instanceof SyntaxError ? 'intencion_no_valida' : 'extractor_no_disponible', motivoPlan: 'intencion_no_valida' });
+        }
+    }
+    if (args.modoIntencion === 'obligatoria' && !intencion) return salida({ ...base, respuesta: 'No pude recuperar la intención de la consulta anterior. Repite tu consulta completa.', origen: 'error_plan', errorPlan: 'estado_sin_intencion' });
     let plan: Plan;
-    const pendiente = args.estado?.pendiente;
+    const pendiente = usarPendiente ? args.estado?.pendiente : undefined;
     const decisiones = pendiente ? { ...args.estado?.decisiones } : {};
     if (pendiente) {
         const saved = structuredClone(args.estado!.plan);
@@ -225,7 +248,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
                 resultado.requiere_eleccion = true;
                 if (!saved.cobertura) return salida({ ...base, plan: saved, resultados: [resultado], respuesta: renderMensaje([resultado], undefined, saved.parcialFueraDeAlcance), origen: 'aclaracion', estado: args.estado, opcionesAclaracion: pendiente.opciones });
             }
-            if (choice) operacion.consulta.base_fecha = choice.base_fecha;
+            if (choice) { operacion.consulta.base_fecha = choice.base_fecha; if(intencion)intencion=refinarIntencionAclaracion(intencion,operacion,'fecha_aplicaciones'); }
             plan = saved;
         } else {
           if (operacion?.tipo !== 'labores') return salida({ ...base, respuesta: mensajeDisposicion('error_plan'), origen: 'error_plan', errorPlan: 'estado_no_valido' });
@@ -252,12 +275,13 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
         else
             c.categorias.push(...choice.categorias!);
+        if(intencion)intencion=refinarIntencionAclaracion(intencion,operacion,'labores');
         }
         plan = saved;
         }
     }
     else {
-        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad, hato: catalogoHato }) }, ...historial, { role: 'user', content: pregunta }];
+        const mensajes: MensajeLLM[] = [{ role: 'system', content: promptPlanificador(hoy, { ...resumenCatalogo({ ...catalogo, registros: [] }, inventarioPlaneado?.aplicaciones), monitoreo: catalogoMonitoreo, conductividad: catalogoConductividad, hato: catalogoHato }) }, ...historial, ...(intencion ? [{ role: 'system' as const, content: `Intención extraída previamente e inmutable: ${JSON.stringify(intencion)}. Conserva o1 como parte s1, o2 como s2 y así sucesivamente. No cambies obligaciones ni condiciones. Vincula las operaciones con parte_ids. Solo el plan puede reintentarse; la intención no se modifica.` }] : []), { role: 'user', content: pregunta }];
         // A follow-up can inherit context and quote earlier user messages, but at least
         // one declared part must quote this turn. Assistant text never counts.
         const textoCitable = [...historial.filter(m => m.role === 'user').map(m => m.content), pregunta].join(' | ');
@@ -273,6 +297,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             }
             try {
                 validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, preguntaActual: pregunta, exigirCobertura: true } : undefined);
+                if (intencion) verificarIntencionPlan(intencion, validado);
                 break;
             }
             catch (e) {
@@ -286,6 +311,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         }
         plan = validado!;
     }
+    if (intencion) plan.intencion = intencion;
     if (plan.tipo === 'fuera_de_alcance' || plan.tipo === 'aclaracion') {
         const cobertura = construirCoberturaFinal(plan, [], hoy);
         const respuesta = cobertura.estado === 'declarada_validada' ? renderMensaje([], undefined, undefined, cobertura) : mensajeDisposicion(plan.tipo);
@@ -301,7 +327,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const planLabor: Plan = { tipo: 'consultas', consultas: laborales.map(x => x.o.consulta) };
     const d26 = catalogoDisponible ? aplicarReglaDoble(planLabor, catalogo, [], decisionesLabor) : { plan: planLabor, ajustes: [] };
     base.ajustes = d26.ajustes;
-    let estado: EstadoTurno = { version: 1, plan: original, decisiones };
+    let estado: EstadoTurno = { version: 1, plan: original, decisiones, ...(intencion ? {intencion,intencionInicial} : {}) };
     let opciones: {
         id: string;
         etiqueta: string;
@@ -350,13 +376,51 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         return salida({ ...base, plan, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: catalogoDisponible ? 'registros_no_disponibles' : 'catalogo_no_disponible' });
     const resultados: ResultadoConsulta[] = [];
     for (let i = 0; i < operaciones.length; i++) {
-        const o = operaciones[i], id = `p${i + 1}`;
+        const originalOperacion = operaciones[i], id = `p${i + 1}`;
+        let o = originalOperacion;
+        if ((o.tipo==='costos_aplicacion'||o.tipo==='cantidades_aplicacion') && (o.consulta.seleccion_de||o.consulta.aplicacion_ids||o.consulta.aplicaciones)) {
+            const seleccion=seleccionarAplicacionesCompuestas(o.consulta,resultados,inventarioPlaneado?.aplicaciones);
+            resultados.push(o.tipo==='costos_aplicacion'?await ejecutarCostosPoblacion(o.consulta,seleccion,args.fuenteAplicaciones,id,hoy):await ejecutarCantidadesPoblacion(o.consulta,seleccion,args.fuenteAplicaciones,id,hoy));
+            continue;
+        }
+        if ((o.tipo==='labor_aplicacion'||o.tipo==='faltantes_aplicacion') && o.consulta.seleccion_de) {
+            const seleccion=resolverDependencia(o.consulta.seleccion_de,resultados,'aplicaciones');
+            if(seleccion.estado==='ok')o={...o,consulta:{...o.consulta,aplicacion_ids:seleccion.ids,aplicaciones:[],seleccion_de:undefined}} as typeof o;
+            else {
+                const r=o.tipo==='labor_aplicacion'?ejecutarLaborAplicacion(o.consulta,{seleccion:'no_leido'},id,hoy):ejecutarFaltantesAplicacion(o.consulta,{seleccion:'no_leido'},id,hoy);
+                if(seleccion.estado==='vacio_verificado'){
+                    r.estado='ok';
+                    if(r.tipo==='labor_aplicacion')r.total={jornales:0,costo:0,costo_registrado:0,completo:true};
+                    else {r.completo=true;r.aplicaciones=[];}
+                }
+                r.seleccion=seleccion;resultados.push(r);continue;
+            }
+        }
+        if ((o.tipo==='hato'||o.tipo==='pesajes_leche') && o.consulta.seleccion_de) {
+            const seleccion=resolverDependencia(o.consulta.seleccion_de,resultados,'animales');
+            if(seleccion.estado==='vacio_verificado'){ const consulta={...o.consulta,animal_ids:[],nombres:[],chapetas:[],poblacion:{},seleccion_de:undefined}; const r=o.tipo==='hato'?ejecutarHato(consulta,{animales:[]},id,hoy):ejecutarPesajesLeche(consulta as typeof o.consulta & {desde:string;hasta:string},{animales:[],pesajes:[]},id,hoy); r.consulta=o.consulta;resultados.push({...r,seleccion});continue; }
+            if(seleccion.estado==='ok')o={...o,consulta:{...o.consulta,animal_ids:seleccion.ids,nombres:[],chapetas:[],poblacion:undefined,seleccion_de:undefined}} as typeof o;
+            else {resultados.push(o.tipo==='hato'?ejecutarHato(o.consulta,{},id,hoy):ejecutarPesajesLeche(o.consulta,{},id,hoy));continue;}
+        }
+
         if (o.tipo === 'pesajes_leche') {
             let pesajes: PesajeLeche[] | undefined;
             if (args.estado?.pendiente) try { catalogoHato=await args.fuenteHato?.catalogo()??{}; } catch { /* Padre no leído. */ }
             const hasta=o.consulta.hasta>hoy?hoy:o.consulta.hasta;
-            if (o.consulta.desde<=hasta && (o.consulta.animal_ids.length||o.consulta.nombres.length||o.consulta.chapetas.length)) try { pesajes=await args.fuenteLeche?.leerPesajes({...o.consulta,hasta}); } catch { /* No leído, no vacío. */ }
-            resultados.push(ejecutarPesajesLeche(o.consulta,{animales:catalogoHato.animales,pesajes},id,hoy));
+            if (o.consulta.desde<=hasta && (o.consulta.poblacion || o.consulta.animal_ids.length||o.consulta.nombres.length||o.consulta.chapetas.length)) try { pesajes=await args.fuenteLeche?.leerPesajes({...o.consulta,hasta}); } catch { /* No leído, no vacío. */ }
+            if(o.consulta.poblacion?.categorias?.length||o.consulta.poblacion?.estados_reproductivos?.length){
+                let estados:RegistroVistaHato[]|undefined,config:DatosHato['config'];
+                const lecturas=await Promise.allSettled([args.fuenteHato?.leerEstadoActual(),args.fuenteHato?.leerConfig()]);
+                if(lecturas[0].status==='fulfilled')estados=lecturas[0].value;if(lecturas[1].status==='fulfilled')config=lecturas[1].value;
+                const seleccion=ejecutarHato(o.consulta,{...catalogoHato,estados,config},id,hoy);
+                if(!['ok','parcial','vacio_verificado'].includes(seleccion.estado))resultados.push({...ejecutarPesajesLeche(o.consulta,{},id,hoy),estado:'no_disponible',motivo:'poblacion_reproductiva_no_disponible'});
+                else {
+                    const consulta={...o.consulta,poblacion:undefined,animal_ids:seleccion.filas.map(f=>f.animal_id),nombres:[],chapetas:[]};
+                    const vacia=seleccion.estado==='vacio_verificado';
+                    const r=ejecutarPesajesLeche(vacia?{...consulta,poblacion:{}}:consulta,{animales:vacia?[]:catalogoHato.animales,pesajes:vacia?[]:pesajes},id,hoy);
+                    r.consulta=o.consulta;resultados.push(r);
+                }
+            }else resultados.push(ejecutarPesajesLeche(o.consulta,{animales:catalogoHato.animales,pesajes},id,hoy));
             continue;
         }
         if (o.tipo === 'litros_quincenales') {
@@ -371,7 +435,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         if (o.tipo === 'hato') {
             let estados: RegistroVistaHato[] | undefined, config: DatosHato['config'];
             if (args.estado?.pendiente) try { catalogoHato = await args.fuenteHato?.catalogo() ?? {}; } catch { /* Ficha independiente. */ }
-            if (o.consulta.animal_ids.length || o.consulta.nombres.length || o.consulta.chapetas.length) {
+            if (o.consulta.poblacion || o.consulta.animal_ids.length || o.consulta.nombres.length || o.consulta.chapetas.length) {
                 const lecturas = await Promise.allSettled([args.fuenteHato?.leerEstadoActual(), args.fuenteHato?.leerConfig()]);
                 if (lecturas[0].status === 'fulfilled') estados = lecturas[0].value;
                 if (lecturas[1].status === 'fulfilled') config = lecturas[1].value;
@@ -397,7 +461,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             // Un estado pendiente de otro dominio no convierte este catálogo en vacío.
             if (args.estado?.pendiente) try { catalogoMonitoreo = await args.fuenteMonitoreo?.catalogo() ?? {}; } catch { /* Fuente independiente. */ }
             try { observaciones = await args.fuenteMonitoreo?.leerObservaciones(); } catch { /* No leído, no cero. */ }
-            resultados.push(ejecutarMonitoreo(o.consulta, { ...catalogoMonitoreo, observaciones }, id, hoy));
+            resultados.push(ejecutarMonitoreo(o.consulta, { ...catalogoMonitoreo, observaciones }, id, hoy, {ultimaPorEntidad:o.analisis?.ultima_por_entidad===true}));
         } else if (o.tipo === 'costos_aplicacion') {
             let fuenteCostos;
             try { fuenteCostos = await args.fuenteAplicaciones?.leerCostos?.(o.consulta); } catch { /* Unread costs remain local to this operation. */ }
@@ -427,8 +491,12 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             resultados.push(r);
         } else resultados.push(blocked.has(i) ? resultadoPendiente(o.consulta, id, preguntas.get(i)) : ejecutarConsulta(consultasLabor.get(i) ?? o.consulta, datos, hoy, id));
     }
+    resultados.forEach((r,index)=>{ const op=operaciones[index];const de=('seleccion_de' in op.consulta)?op.consulta.seleccion_de:undefined; if(de)r.seleccion=resolverDependencia(de,resultados.slice(0,index),['hato','pesajes_leche'].includes(op.tipo)?'animales':'aplicaciones'); });
+    resultados.forEach((r,index)=>{ if ('consulta' in r && 'seleccion_de' in operaciones[index].consulta && operaciones[index].consulta.seleccion_de) r.consulta=structuredClone(operaciones[index].consulta) as typeof r.consulta; });
+    resultados.forEach((r,index)=>{const a=operaciones[index].analisis;if(a)r.analisis=ejecutarAnalisis(a,r);});
     const operacionesEfectivas = original.cobertura ? operaciones.map((o, i) => o.tipo === 'labores' && !blocked.has(i) ? { ...o, consulta: consultasLabor.get(i) ?? o.consulta } : o) : operaciones;
     const planFinal = planDeOperaciones(operacionesEfectivas, original.parcialFueraDeAlcance, original.cobertura);
+    if (intencion) planFinal.intencion = intencion;
     if (original.cobertura) estado.plan = planFinal;
     let cobertura: CoberturaTurno;
     try { cobertura = construirCoberturaFinal(planFinal, resultados, hoy); }
@@ -439,3 +507,20 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     return salida({ ...base, plan: planFinal, cobertura, resultados, respuesta, origen: estado.pendiente ? 'aclaracion' : 'determinista', estado, opcionesAclaracion: opciones });
 }
 export { SIN_LOTE_ETIQUETA };
+
+/** Only a server-stored structured choice can refine the ambiguous dimension. */
+function refinarIntencionAclaracion(original:IntencionSolicitud,operacion:ReturnType<typeof operacionesDelPlan>[number],tipo:'labores'|'fecha_aplicaciones'):IntencionSolicitud {
+ const i=structuredClone(original);
+ for(const ob of i.obligaciones){
+  if(!operacion.parte_ids?.includes(`s${ob.id.slice(1)}`))continue;
+  if(tipo==='fecha_aplicaciones'&&operacion.tipo==='aplicaciones'&&ob.periodo.tipo==='sin_precisar')ob.periodo={tipo:'intervalo',desde:operacion.consulta.desde,hasta:operacion.consulta.hasta,base_fecha:operacion.consulta.base_fecha};
+  if(tipo==='labores'&&operacion.tipo==='labores'){
+   const c=operacion.consulta;
+   const filtros=(ob.poblacion.filtros??[]).filter(f=>!['tarea_ids','tareas','categorias'].includes(f.campo));
+   if(ob.poblacion.tipo==='explicita'&&ob.poblacion.entidad==='lotes')filtros.push(...(ob.poblacion.ids?[{campo:'lote_ids',valores:ob.poblacion.ids}]:[{campo:'lotes',valores:ob.poblacion.nombres??[]} ]));
+   for(const [campo,valores] of [['tarea_ids',c.tarea_ids??[]],['tareas',c.tareas],['categorias',c.categorias]] as const)if(valores.length)filtros.push({campo,valores});
+   ob.poblacion={tipo:'todas_visibles',entidad:'labores',sin_lote:ob.poblacion.sin_lote??c.sin_lote,filtros};
+  }
+ }
+ return i;
+}

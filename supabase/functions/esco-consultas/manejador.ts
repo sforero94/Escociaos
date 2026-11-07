@@ -1,3 +1,4 @@
+import { compactarRespuestaHistorial, prepararHistorial, MAX_RESPUESTA_TRANSPORTE } from '../../../src/utils/esco2Historial.ts';
 import { fuenteLecheSupabase } from '../../../src/utils/esco2/lecheFuente.ts';
 import { fuenteClimaSupabase } from '../../../src/utils/esco2/climaFuente.ts';
 import { fuenteHatoSupabase } from '../../../src/utils/esco2/hatoFuente.ts';
@@ -55,6 +56,8 @@ export interface ClienteUsuario extends ClienteDatos {
 export interface Dependencias {
     /** Compatibilidad de pruebas de motores. El índice productivo no fija este campo. */
     modoCobertura?: ModoCobertura;
+    /** Historical replay only; the production index never supplies this field. */
+    modoIntencion?: 'obligatoria' | 'legado_sin_certificar';
     env(nombre: string): string | undefined;
     /** Cliente de Supabase que actúa como el usuario dueño del JWT. */
     crearClienteUsuario(jwt: string): ClienteUsuario;
@@ -99,7 +102,7 @@ export function validarSolicitud(cuerpo: unknown): Solicitud {
             throw new ErrorSolicitud(`historial: lista de máximo ${MAX_HISTORIAL} mensajes`);
         for (const m of c.historial) {
             const r = m as Record<string, unknown>;
-            if (typeof m !== 'object' || m === null || (r.rol !== 'user' && r.rol !== 'assistant') || typeof r.texto !== 'string' || r.texto.length > MAX_TEXTO_HISTORIAL) {
+            if (typeof m !== 'object' || m === null || (r.rol !== 'user' && r.rol !== 'assistant') || typeof r.texto !== 'string' || r.texto.length > (r.rol === 'assistant' ? MAX_RESPUESTA_TRANSPORTE : MAX_TEXTO_HISTORIAL)) {
                 throw new ErrorSolicitud('historial: cada mensaje es { rol: "user" | "assistant", texto }');
             }
             historial.push({ rol: r.rol, texto: r.texto });
@@ -164,6 +167,8 @@ export function cuerpoRespuesta(t: ResultadoTurno, hoy: string) {
         ruta: t.ruta,
         ajustes: t.ajustes,
         plan: t.plan,
+        intencion: t.intencion,
+        intencionInicial: t.intencionInicial,
         resultados: t.resultados,
         llamadas: t.llamadas.map((l) => ({ etapa: l.etapa, modelo: l.modelo, ms: l.ms, entrada: l.entrada, salida: l.salida, costoUsd: l.costoUsd })),
         ms: t.ms,
@@ -213,7 +218,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         pregunta: solicitud.pregunta,
         estado,
         respuestaAclaracion: estado ? solicitud.respuestaAclaracion : undefined,
-        historial: solicitud.historial,
+        historial: prepararHistorial(solicitud.historial),
         hoy,
         fuente: fuenteSupabase(cliente),
         fuenteAplicaciones: fuenteAplicacionesSupabase(cliente),
@@ -225,6 +230,7 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
         llm,
         config: CONFIG_M3,
         modoCobertura: deps.modoCobertura,
+        modoIntencion: deps.modoIntencion ?? 'obligatoria',
     });
     // Traza mínima: sin la pregunta ni la respuesta (datos de la finca), sin ids de filas.
     deps.registrar?.({
@@ -257,5 +263,8 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     const valida = turno.resultados.length || declarada ? validarMensajeFinal(respuestaFinal, turno.resultados, avisoFinal, parcial, turno.cobertura) : operativa !== undefined ? respuestaFinal === `${mensajeDisposicion(disposicion!)}\n\n${renderMensaje([], avisoFinal)}` : true;
     if (!valida)
         return json(500, { error: mensajeDisposicion('error_datos') });
-    return json(200, { ...cuerpoRespuesta(turno, hoy), respuesta: respuestaFinal, estadoToken, opcionesAclaracion: estadoToken ? turno.opcionesAclaracion : undefined, avisoEstado: avisoTamano ?? avisoEstado });
+    // A valid response can always return as assistant history. Oversize is explicit.
+    if (respuestaFinal.length > MAX_RESPUESTA_TRANSPORTE)
+        return json(413, { error: 'El detalle supera el límite de respuesta. Reduce el período o la población.' });
+    return json(200, { ...cuerpoRespuesta(turno, hoy), respuesta: respuestaFinal, historialRespuesta: compactarRespuestaHistorial(respuestaFinal), historialCompactado: solicitud.historial.some(m => m.rol === 'assistant' && m.texto.length > MAX_TEXTO_HISTORIAL), estadoToken, opcionesAclaracion: estadoToken ? turno.opcionesAclaracion : undefined, avisoEstado: avisoTamano ?? avisoEstado });
 }

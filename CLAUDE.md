@@ -1154,3 +1154,15 @@ El resto es igual: voz activa, una idea por frase, máximo 20 palabras (procedim
 palabras en un grupo nominal.
 
 Las mismas excepciones aplican: esto no cambia nada de lo que se escribe al repositorio.
+
+## Esco 2.0 M6 correction candidate
+
+The M6 correction branch is development, not independent acceptance. See
+[`docs/esco2/m6-correccion-resultado.md`](docs/esco2/m6-correccion-resultado.md),
+[architecture](docs/esco2/m6-correccion-arquitectura.md) and [QA](docs/esco2/m6-qa.md).
+Production HTTP requires a separate intention extraction before planning; only
+historical test/replay dependencies may select `modoIntencion: 'legado_sin_certificar'`.
+Closed operations retain caller JWT/RLS, deterministic arithmetic and visible-ID
+selection dependencies. History transport and model context have separate limits.
+A replay is not a new model measurement; release and independent D17 acceptance
+remain gated. Do not open evaluator sessions or private held-out material.

@@ -1,7 +1,7 @@
 import type { AplicacionInventario } from './aplicacionesTipos.ts';
 import type { MezclaCantidad, ProductoPlanCantidad, UnidadCantidad, EstadoCantidad } from './cantidadesTipos.ts';
-export interface ConsultaFaltantesAplicacion { aplicacion_ids: string[]; aplicaciones: string[] }
+export interface ConsultaFaltantesAplicacion { seleccion_de?: string; aplicacion_ids: string[]; aplicaciones: string[] }
 export interface ProductoInventarioFaltante { id: string; nombre?: string | null; unidad_medida?: string | null; cantidad_actual?: number | null }
 export interface DatosFaltantesAplicacion { seleccion: 'ok' | 'no_leido' | 'no_resuelto'; aplicaciones?: AplicacionInventario[]; mezclas?: MezclaCantidad[]; productos_plan?: ProductoPlanCantidad[]; inventario?: ProductoInventarioFaltante[] }
 export interface FilaFaltantesAplicacion { producto_id: string; producto_nombre?: string | null; unidad: UnidadCantidad | null; necesidad: number | null; stock: number | null; faltante: number | null; estado: Exclude<EstadoCantidad, 'no_concilia'> | 'inventario_no_disponible'; motivos: string[] }
-export interface ResultadoFaltantesAplicacion { tipo: 'faltantes_aplicacion'; id: string; estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto'; consulta: ConsultaFaltantesAplicacion; aplicaciones: AplicacionInventario[]; filas: FilaFaltantesAplicacion[]; completo: boolean; fecha_consulta: string; motivos: string[]; fuente: 'lecturas_independientes' }
+export interface ResultadoFaltantesAplicacion { tipo: 'faltantes_aplicacion'; id: string; seleccion?:{de?:string;estado:'ok'|'vacio_verificado'|'no_disponible';ids:string[];motivo?:string}; estado: 'ok' | 'parcial' | 'no_disponible' | 'no_resuelto'; consulta: ConsultaFaltantesAplicacion; aplicaciones: AplicacionInventario[]; filas: FilaFaltantesAplicacion[]; completo: boolean; fecha_consulta: string; motivos: string[]; fuente: 'lecturas_independientes' }

@@ -1,7 +1,8 @@
 import type { EstadoReproductivoDerivado, MetodoConfirmacionPrenez, TipoEstado } from '../calculosHato.ts';
 import type { AnimalHatoClasificado } from '../hatoCategorias.ts';
 import type { FilaHatoConfig } from '../hatoConfigDesdeTabla.ts';
-export interface ConsultaHato { animal_ids: string[]; nombres: string[]; chapetas: number[] }
+export interface PoblacionHato { estados?: ('activa' | 'vendida' | 'muerta' | 'descartada')[]; etapas?: ('ternera' | 'novilla' | 'vaca' | 'toro')[]; finca_ids?: string[]; categorias?: string[]; estados_reproductivos?: string[] }
+export interface ConsultaHato { seleccion_de?: string; animal_ids: string[]; nombres: string[]; chapetas: number[]; poblacion?: PoblacionHato }
 // undefined = campo no leído; null = NULL registrado. Identidad por UUID, nunca chapeta.
 export interface AnimalHato {
   id: string; numero?: number | null; nombre?: string | null; sexo?: string | null;
