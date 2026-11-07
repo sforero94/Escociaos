@@ -1,3 +1,5 @@
+import type {PoblacionPrevia} from './contextoPoblaciones.ts';
+import {esUuid} from './aplicacionesTipos.ts';
 import { verificarIntencionPlan, type IntencionSolicitud } from './intencion.ts';
 // Ephemeral, caller-bound transport. Tokens carry no client-editable scope/history.
 import { validarPlan } from './registro.ts';
@@ -26,6 +28,7 @@ export interface EstadoTurno {
     version: 1;
     intencion?: IntencionSolicitud;
     intencionInicial?: IntencionSolicitud;
+    poblacionesPrevias?: PoblacionPrevia[];
     decisiones?: Record<string, 'tarea' | 'categoria'>;
     plan: PlanConsultas;
     pendiente?: PendienteLabor | PendienteFechaAplicaciones;
@@ -54,6 +57,7 @@ export function validarEstado(estado: EstadoTurno): boolean {
             if (estado.plan.parcialFueraDeAlcance) return false;
             validarPlan(operaciones.map((o, i) => ({ nombre: herramientaDe[o.tipo], argumentos: JSON.stringify({ ...o.consulta, parte_ids: o.parte_ids, ...(i === 0 ? { cobertura: { version: cobertura.version, partes: cobertura.partes } } : {}) }) })), { pregunta: cobertura.pregunta, exigirCobertura: true });
         } else validarPlan([...operaciones.map(o => ({ nombre: herramientaDe[o.tipo], argumentos: JSON.stringify(o.consulta) })), ...(estado.plan.parcialFueraDeAlcance ? [{ nombre: 'fuera_de_alcance', argumentos: JSON.stringify({ motivo: 'parte_no_soportada' }) }] : [])]);
+        if(estado.poblacionesPrevias&&(!Array.isArray(estado.poblacionesPrevias)||estado.poblacionesPrevias.length>4||estado.poblacionesPrevias.some(p=>!p||!/^p[1-4]$/.test(p.operacion_id)||!['animales','aplicaciones'].includes(p.entidad)||!['completa','parcial'].includes(p.estado)||!Array.isArray(p.ids)||p.ids.length>50||p.ids.some(id=>!esUuid(id))||new Set(p.ids).size!==p.ids.length)))return false;
         if (estado.decisiones && Object.values(estado.decisiones).some(v => v !== 'tarea' && v !== 'categoria'))
             return false;
         if (estado.intencionInicial && (estado.intencionInicial.version!==1 || !Array.isArray(estado.intencionInicial.obligaciones) || estado.intencionInicial.obligaciones.length>8)) return false;

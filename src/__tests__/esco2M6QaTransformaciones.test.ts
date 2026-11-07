@@ -87,14 +87,14 @@ describe('M6 QA: transformations belong to the upstream intention', () => {
     const condition = { metrica: 'valor_ce', operador: 'gt', valor: 1, unidad: 'L' };
     const body = await execute(ce, obligation('conductividad', 'lotes', 'fecha_monitoreo', ['valor_ce'], { condiciones: [condition] }), 'consultar_conductividad', { ...dates, analisis: { condiciones: [condition] } });
     expect(body.origen).toBe('error_plan');
-    expect(body.llamadas.map((l: { etapa: string }) => l.etapa)).toEqual(['intencion']);
+    expect(body.llamadas.map((l: { etapa: string }) => l.etapa)).toEqual(['intencion', 'intencion']);
   });
 
   it('does not accept a numeric condition on a nonnumeric ficha metric merely because the domain advertises that metric', async () => {
     const ob = obligation('hato', 'animales', 'fecha', ['ficha'], { periodo: { tipo: 'actual' }, condiciones: [{ metrica: 'ficha', operador: 'gt', valor: 1, unidad: 'animales' }] });
     const body = await execute(ce, ob, 'consultar_hato', { poblacion: {} });
     expect(body.origen).toBe('error_plan');
-    expect(body.llamadas.map((l: { etapa: string }) => l.etapa)).toEqual(['intencion']);
+    expect(body.llamadas.map((l: { etapa: string }) => l.etapa)).toEqual(['intencion', 'intencion']);
   });
 
   it('retains the positive numeric threshold with its registered physical unit', async () => {

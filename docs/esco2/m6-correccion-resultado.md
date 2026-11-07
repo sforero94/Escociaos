@@ -30,7 +30,7 @@ Esta entrega no recalifica esos resultados ni convierte el replay en una tasa nu
 
 | Frente | Cambio comprobable |
 |---|---|
-| Intención y cobertura | Extracción previa exclusiva, contrato inmutable, evidencia literal, población, período/base, métricas, agrupaciones, condiciones, ranking, última observación y comparación. El plan no puede omitir o añadir transformaciones ni reescribir obligaciones. Residuales visibles. |
+| Intención y cobertura | Extracción previa exclusiva, contrato inmutable, intervalos de evidencia formalmente válidos (sin certificar sustento semántico), población, período/base, métricas, agrupaciones, condiciones, ranking, última observación y comparación. El plan no puede omitir o añadir transformaciones ni reescribir obligaciones. Residuales visibles. |
 | Población | Excluido, seleccionado, desconocido y vacío verificado permanecen separados. Una partición excluida no publica métricas cero. La conciliación declara selección efectiva. |
 | Composición | Dependencias tipadas de resultados anteriores por IDs visibles, máximo cuatro operaciones y cincuenta miembros. Varias operaciones pueden pertenecer a una obligación. Cantidades y costos plurales conservan cada aplicación y base; vacíos válidos no disparan una lectura global. |
 | Hato | Poblaciones por campos registrados o clasificación del motor existente, identidad por ID y aclaración de nombres/chapetas ambiguos. Un filtro reproductivo exige vista/configuración legibles; presunta no se vuelve confirmada ni se inventa historia. |
@@ -107,6 +107,11 @@ sigue efímero por instancia, con TTL y límites existentes. La compilación loc
 acredita despliegue, acceso real del usuario ni aceptación funcional independiente.
 
 ## Propuesta concreta de siguiente evaluación
+
+Propuesta histórica para `c85ce43b`. El encargo posterior del 2026-11-07 se rige por
+[`m6-loop-protocolo.md`](m6-loop-protocolo.md): hasta **cuatro** llamadas normales
+(dos extracciones y dos planes), cota recalculada por B y autorización D-L1/D-L2
+delimitada. Las cifras de tres llamadas y 216 de abajo describen únicamente aquella versión.
 
 1. Otro evaluador, en otra sesión y con custodia D17, toma el SHA final de esta entrega.
    No recibe contexto de implementación ni transfiere su reserva a estos agentes.

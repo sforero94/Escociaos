@@ -1,3 +1,6 @@
+import {poblacionesDesdeResultados,resolverReferenciaPoblacion,verificarReferenciaPoblacion} from './contextoPoblaciones.ts';
+import { MAX_INTENTOS_EXTRACTOR, motivoRechazoIntencion, instruccionReintentoIntencion } from './intencionReintento.ts';
+import { normalizarIdentidadIntencionPlan } from './identidadIntencion.ts';
 import { ejecutarAnalisis } from './analitica.ts';
 import { resolverDependencia, seleccionarAplicacionesCompuestas, ejecutarCostosPoblacion, ejecutarCantidadesPoblacion } from './composicion.ts';
 import { herramientasIntencion, promptIntencion, validarIntencion, verificarIntencionPlan, type IntencionSolicitud } from './intencion.ts';
@@ -220,15 +223,27 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
         if (!args.fuenteClima && !args.fuenteLeche && !Array.isArray(inventarioPlaneado?.aplicaciones) && !Array.isArray(catalogoMonitoreo.rondas) && !Array.isArray(catalogoConductividad.lotes) && !Array.isArray(catalogoHato.animales))
             return salida({ ...base, respuesta: mensajeDisposicion('error_datos'), origen: 'error_datos', errorPlan: 'catalogo_no_disponible' });
     }
+    const referenciaPrevia=args.modoIntencion==='obligatoria'&&!usarPendiente?resolverReferenciaPoblacion(pregunta,args.historial,args.estado,{aplicaciones:inventarioPlaneado?.aplicaciones,animales:catalogoHato.animales}):{tipo:'no_deictica' as const};
+    if(referenciaPrevia.tipo==='aclaracion')return salida({...base,respuesta:'Necesito que indiques de nuevo la selección de entidades. No tengo una población anterior completa, única y todavía visible para resolver esa referencia.',origen:'aclaracion'});
     if (args.modoIntencion === 'obligatoria' && !usarPendiente) {
-        try {
-            const r = await llm.completar({ modelo: config.planificador.modelo, esfuerzo: config.planificador.esfuerzo, mensajes: [{ role: 'system', content: promptIntencion(hoy) }, ...(args.estado?.intencion ? [{role:'system' as const,content:`Contexto tipado previo ligado al usuario: ${JSON.stringify(args.estado.intencion)}. Solo completa referencias no modificadas por el mensaje actual; no sustituye evidencia del turno actual.`}]:[]), ...args.historial.map((m, indice) => ({ role: 'user' as const, content: m.rol === 'user' ? `Historial usuario [${indice}]: ${m.texto}` : `Historial [${indice}]: respuesta del asistente omitida` })), { role: 'user', content: pregunta }], herramientas: herramientasIntencion(), toolChoice: 'required', maxTokens: 3000 });
-            llamadas.push(registrar('intencion', r));
-            if (r.finishReason === 'length' || r.llamadas.length !== 1 || r.llamadas[0].nombre !== 'declarar_intencion') throw new ErrorPlan('intencion_no_valida:llamada_exclusiva');
-            intencion = validarIntencion(JSON.parse(r.llamadas[0].argumentos), pregunta, args.historial);
-            intencionInicial = structuredClone(intencion);
-        } catch (e) {
-            return salida({ ...base, respuesta: mensajeDisposicion(e instanceof ErrorPlan || e instanceof SyntaxError ? 'error_plan' : 'error_llm'), origen: e instanceof ErrorPlan || e instanceof SyntaxError ? 'error_plan' : 'error_llm', errorPlan: e instanceof ErrorPlan || e instanceof SyntaxError ? 'intencion_no_valida' : 'extractor_no_disponible', motivoPlan: 'intencion_no_valida' });
+        const mensajesIntencion:MensajeLLM[]=[{role:'system',content:promptIntencion(hoy)},...(referenciaPrevia.tipo==='resuelta'?[{role:'system' as const,content:`Población previa verificada, ligada a esta sesión y revalidada contra visibilidad actual: ${JSON.stringify({entidad:referenciaPrevia.entidad,ids:referenciaPrevia.ids})}. La referencia del mensaje actual conserva exactamente esos miembros; no incluye otras entidades visibles.`}]:[]),...(args.estado?.intencion?[{role:'system' as const,content:`Contexto tipado previo ligado al usuario: ${JSON.stringify(args.estado.intencion)}. Solo completa referencias no modificadas por el mensaje actual; no sustituye evidencia del turno actual.`}]:[]),...args.historial.map((m,indice)=>({role:'user' as const,content:m.rol==='user'?`Historial usuario [${indice}]: ${m.texto}`:`Historial [${indice}]: respuesta del asistente omitida`})),{role:'user',content:pregunta}];
+        for(let intento=0;intento<MAX_INTENTOS_EXTRACTOR;intento++){
+            let r:RespuestaLLM;
+            try{
+                r=await llm.completar({modelo:config.planificador.modelo,esfuerzo:config.planificador.esfuerzo,mensajes:mensajesIntencion,herramientas:herramientasIntencion(),toolChoice:'required',maxTokens:3000});
+                llamadas.push(registrar('intencion',r));
+            }catch{return salida({...base,respuesta:mensajeDisposicion('error_llm'),origen:'error_llm',errorPlan:'extractor_no_disponible'});}
+            try{
+                if(r.finishReason==='length')throw new ErrorPlan('intencion_no_valida:salida_truncada');
+                if(r.llamadas.length!==1||r.llamadas[0].nombre!=='declarar_intencion')throw new ErrorPlan('intencion_no_valida:llamada_exclusiva');
+                intencion=validarIntencion(JSON.parse(r.llamadas[0].argumentos),pregunta,args.historial);
+                intencionInicial=structuredClone(intencion);break;
+            }catch(e){
+                const motivo=motivoRechazoIntencion(e);
+                if(motivo===null)return salida({...base,respuesta:mensajeDisposicion('error_llm'),origen:'error_llm',errorPlan:'extractor_no_disponible'});
+                if(intento===MAX_INTENTOS_EXTRACTOR-1)return salida({...base,respuesta:mensajeDisposicion('error_plan'),origen:'error_plan',errorPlan:'intencion_no_valida',motivoPlan:`intencion_no_valida:${motivo}`});
+                mensajesIntencion.push({role:'system',content:instruccionReintentoIntencion(motivo)});
+            }
         }
     }
     if (args.modoIntencion === 'obligatoria' && !intencion) return salida({ ...base, respuesta: 'No pude recuperar la intención de la consulta anterior. Repite tu consulta completa.', origen: 'error_plan', errorPlan: 'estado_sin_intencion' });
@@ -297,7 +312,15 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
             }
             try {
                 validado = validarPlan(rPlan.llamadas, exigirCobertura ? { pregunta: textoCitable, preguntaActual: pregunta, exigirCobertura: true } : undefined);
-                if (intencion) verificarIntencionPlan(intencion, validado);
+                if (intencion) {
+                    const identidad=normalizarIdentidadIntencionPlan(intencion,validado,{labores:catalogoDisponible?catalogo:undefined,aplicaciones:inventarioPlaneado?.aplicaciones,hato:catalogoHato,monitoreo:catalogoMonitoreo,conductividad:catalogoConductividad});
+                    if(identidad.tipo==='no_disponible')return salida({...base,respuesta:'No pude leer el catálogo visible necesario para resolver la identidad solicitada. No equivale a una población vacía.',origen:'error_datos',errorPlan:'identidad_catalogo_no_disponible'});
+                    if(identidad.tipo==='aclaracion'&&!identidad.d26)return salida({...base,respuesta:'Necesito que precises la entidad solicitada: el nombre no identifica una única entidad visible. Indica su nombre exacto o su identificador.',origen:'aclaracion'});
+                    if(identidad.tipo==='ok'){intencion=identidad.intencionCanonica;validado=identidad.planCanonico;}
+                    else if(identidad.intencionCanonica&&identidad.planCanonico){intencion=identidad.intencionCanonica;validado=identidad.planCanonico;}
+                    if(!verificarReferenciaPoblacion(referenciaPrevia,intencion))return salida({...base,respuesta:'La referencia conserva únicamente la población anterior verificada. Indica explícitamente otra selección si quieres cambiar sus miembros.',origen:'aclaracion'});
+                    verificarIntencionPlan(intencion, validado);
+                }
                 break;
             }
             catch (e) {
@@ -497,6 +520,7 @@ export async function responderTurnoDesdeFuente(args: ArgsTurno & {
     const operacionesEfectivas = original.cobertura ? operaciones.map((o, i) => o.tipo === 'labores' && !blocked.has(i) ? { ...o, consulta: consultasLabor.get(i) ?? o.consulta } : o) : operaciones;
     const planFinal = planDeOperaciones(operacionesEfectivas, original.parcialFueraDeAlcance, original.cobertura);
     if (intencion) planFinal.intencion = intencion;
+    estado.poblacionesPrevias=poblacionesDesdeResultados(resultados);
     if (original.cobertura) estado.plan = planFinal;
     let cobertura: CoberturaTurno;
     try { cobertura = construirCoberturaFinal(planFinal, resultados, hoy); }

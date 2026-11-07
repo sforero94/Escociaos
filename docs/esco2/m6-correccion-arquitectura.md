@@ -39,7 +39,7 @@ Forma conceptual de `IntencionSolicitud`, versión 1:
 
 Una operación referencia obligaciones sin redefinirlas. El comparador puro proyecta su contrato efectivo y exige identidad de población, período/base temporal, métricas, agrupaciones y condiciones. No basta la igualdad de `consulta` con el resultado ni que la cita aparezca en la pregunta. Una omisión o discrepancia conserva la obligación pendiente y prohíbe marcarla respondida. Una parte soportada puede conservar una respuesta sustantiva mientras otra pide aclaración.
 
-**Límite explícito:** dos llamadas al mismo modelo no certifican comprensión independiente del lenguaje natural. El sistema verifica cumplimiento de la intención extraída, evidencia literal y residuales declarados. Las pruebas con proveedor simulado verifican esa separación y sus invariantes; la exactitud del extractor real requiere una nueva medición autorizada. No se anuncia exhaustividad semántica universal ni se usa el segundo plan para corregir retroactivamente la intención inicial.
+**Límite explícito:** dos etapas del mismo modelo no certifican comprensión independiente del lenguaje natural. El sistema verifica cumplimiento de la intención extraída, intervalos válidos dentro del texto y residuales declarados. Validar esos intervalos no demuestra que el fragmento citado sustente semánticamente cada obligación. Las pruebas con proveedor simulado verifican esa separación y sus invariantes; la exactitud del extractor real requiere una nueva medición autorizada. No se anuncia exhaustividad semántica universal ni se usa el segundo plan para corregir retroactivamente la intención inicial.
 
 ## Evidencia de población, medida y presentación
 
