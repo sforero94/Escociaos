@@ -724,6 +724,63 @@ export type Database = {
           },
         ]
       }
+      aplicaciones_productos_alternativos: {
+        Row: {
+          aplicacion_producto_id: string
+          created_at: string
+          created_by: string | null
+          dosis_clonales: number | null
+          dosis_grandes: number | null
+          dosis_medianos: number | null
+          dosis_pequenos: number | null
+          dosis_por_caneca: number | null
+          id: string
+          producto_id: string
+          unidad_dosis: string | null
+        }
+        Insert: {
+          aplicacion_producto_id: string
+          created_at?: string
+          created_by?: string | null
+          dosis_clonales?: number | null
+          dosis_grandes?: number | null
+          dosis_medianos?: number | null
+          dosis_pequenos?: number | null
+          dosis_por_caneca?: number | null
+          id?: string
+          producto_id: string
+          unidad_dosis?: string | null
+        }
+        Update: {
+          aplicacion_producto_id?: string
+          created_at?: string
+          created_by?: string | null
+          dosis_clonales?: number | null
+          dosis_grandes?: number | null
+          dosis_medianos?: number | null
+          dosis_pequenos?: number | null
+          dosis_por_caneca?: number | null
+          id?: string
+          producto_id?: string
+          unidad_dosis?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aplicaciones_productos_alternativos_aplicacion_producto_id_fkey"
+            columns: ["aplicacion_producto_id"]
+            isOneToOne: false
+            referencedRelation: "aplicaciones_productos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aplicaciones_productos_alternativos_producto_id_fkey"
+            columns: ["producto_id"]
+            isOneToOne: false
+            referencedRelation: "productos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           created_at: string

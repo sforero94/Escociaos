@@ -108,3 +108,17 @@ no tiene CHECK >= 0, así que el RPC lo valida él mismo antes de escribir nada)
 `fraccion_jornal` es un ENUM en BD (no numeric) — el payload lo manda como STRING
 (`reg.fraccion_jornal.toString()`, igual que la versión no transaccional), y el RPC solo hace
 `::fraccion_jornal` sobre ese texto sin reformatearlo.
+
+## Productos alternativos (ESCO-165 · migración 189)
+
+Una línea del plan (`aplicaciones_productos`) puede llevar 0..n **alternativos**
+(`aplicaciones_productos_alternativos`), cada uno con su propia dosis en la forma de la línea
+(por caneca en fumigación/drench, por tamaño de árbol en fertilización). Reglas que no se ven en el código:
+
+- **Son opciones, no plan.** No suman a `cantidad_total_necesaria`, a la lista de compras ni a costos.
+  El producto real usado sigue naciendo en `movimientos_diarios_productos`.
+- **La calculadora guarda borrando y reinsertando las líneas**, y la tabla cuelga de ellas con
+  `ON DELETE CASCADE`: los alternativos se reinsertan contra el id NUEVO de cada línea
+  (`construirFilasAlternativos`, `src/utils/productosAlternativos.ts`). Si una línea con alternativos no
+  vuelve del INSERT, lanza — nunca escribe sobre otra línea.
+- Las aplicaciones ya planeadas no se migran (supuesto 9.c): sin alternativos, la línea se comporta como siempre.
