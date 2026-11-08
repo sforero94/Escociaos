@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
-import { Separator } from '../ui/separator';
 import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
 import {
   Dialog,

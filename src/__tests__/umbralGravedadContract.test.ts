@@ -80,8 +80,6 @@ const INVENTARIO: Record<string, Papel> = {
   // un guardia de render, no un corte.
   'src/components/monitoreo/RegistroMonitoreo.tsx': 'otro',
   'src/components/monitoreo/DashboardMonitoreoV3.tsx': 'otro',
-  // Prioridad de una tarea de Labores, no gravedad de una plaga.
-  'src/components/dashboard/AlertList.tsx': 'otro',
   // Agrega `gravedad_texto` ya guardado en `monitoreos`; nunca lo deriva.
   'src/supabase/functions/server/chat.tsx': 'otro',
   'supabase/functions/make-server-1ccce916/chat.tsx': 'otro',
