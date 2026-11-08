@@ -167,3 +167,30 @@ describe('guard: inventario web usa el guardado atómico', () => {
     ).toBe(true);
   });
 });
+
+// ESCO-167 (decisión A de Santiago, 2026-11-06: «167 - A»): la importación por
+// CSV tampoco puede escribir un saldo inicial. Insertaba `cantidad_actual` sin
+// ninguna fila en `movimientos_inventario`, así que la primera compra posterior
+// sumaba encima de un saldo que ningún movimiento explicaba. El saldo inicial
+// entra sólo por una compra o por un Ajuste, igual que en el formulario.
+describe('importación CSV de productos — no escribe saldo de inventario', () => {
+  const raiz = join(__dirname, '..', '..');
+  const arbolesEdge = [
+    'src/supabase/functions/server/importar-productos.tsx',
+    'supabase/functions/make-server-1ccce916/importar-productos.tsx',
+  ];
+
+  it.each(arbolesEdge)('%s no asigna cantidad_actual al producto', (ruta) => {
+    const fuente = readFileSync(join(raiz, ruta), 'utf8');
+    expect(fuente).not.toMatch(/producto\.cantidad_actual\s*=/);
+    expect(fuente).not.toMatch(/fila\.cantidad_actual/);
+  });
+
+  it('la plantilla CSV no ofrece la columna cantidad_actual', () => {
+    const fuente = readFileSync(
+      join(raiz, 'src/components/inventory/ImportarProductosCSV.tsx'),
+      'utf8',
+    );
+    expect(fuente).not.toMatch(/'cantidad_actual'/);
+  });
+});
