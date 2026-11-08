@@ -65,7 +65,6 @@ export function ImportarProductosCSV() {
       'presentacion_kg_l',
       'precio_por_presentacion',
       'precio_unitario',
-      'cantidad_actual',
       'stock_minimo',
       'activo'
     ];
@@ -113,7 +112,6 @@ export function ImportarProductosCSV() {
       '20',
       '150000',
       '7500',
-      '100',
       '20',
       'true'
     ];
@@ -130,6 +128,7 @@ export function ImportarProductosCSV() {
       '# 8. Los campos vacíos se dejan sin contenido (no escribir "null" o "vacío")',
       '# 9. El sistema es flexible con mayúsculas/minúsculas y acentos (ej: "edafico" = "Edáfico", "liquido" = "Líquido")',
       '# 10. IMPORTANTE: Ejecuta primero el script SQL /sql/agregar_categorias_productos.sql en Supabase para agregar las categorías faltantes',
+      '# 11. El saldo inicial (cantidad actual) no se importa: regístralo con una compra o con un movimiento de Ajuste',
       ''
     ];
 

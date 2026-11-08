@@ -170,7 +170,6 @@ interface ProductoCSV {
   presentacion_kg_l?: number;
   precio_por_presentacion?: number;
   precio_unitario?: number;
-  cantidad_actual?: number;
   stock_minimo?: number;
   activo?: boolean;
 }
@@ -448,8 +447,9 @@ export async function procesarCSV(csvData: string) {
       const precio_unitario = parseNumber(fila.precio_unitario);
       if (precio_unitario !== null) producto.precio_unitario = precio_unitario;
 
-      const cantidad_actual = parseNumber(fila.cantidad_actual);
-      if (cantidad_actual !== null) producto.cantidad_actual = cantidad_actual;
+      // ESCO-167: el saldo de inventario no entra por CSV. Sin una fila en
+      // movimientos_inventario, la primera compra sumaría encima de un saldo
+      // que nada explica. El saldo inicial se registra con una compra o un Ajuste.
 
       const stock_minimo = parseNumber(fila.stock_minimo);
       if (stock_minimo !== null) producto.stock_minimo = stock_minimo;
