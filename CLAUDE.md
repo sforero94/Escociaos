@@ -1023,6 +1023,10 @@ Report: `escociaos-po/reports/2026-11-07-sabado-respuesta.md`.
   `hato_pesajes_leche` is a weekly one-day sample per cow and never sums to monthly production.
   The rule lives only in the `consultar_litros_quincenales` tool description: two variants that
   touched the general planner prompt made unrelated labor cases worse (measured in §7).
+  Redeployed 2026-11-08 as **version 12** from `de18f61b` (PR #464 branch, not yet merged: adds the selectable
+  `motor: 'sql'` mode — Esco SQL loop over the `v_esco_*` views and RPC `esco_sql_lectura`, migration 192), with Santiago's
+  approval in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `5b1ea753…`, anonymous `/health` 401. Without `motor` the
+  behavior is the v11 one. Deployed from the PR branch, so `main` is behind production until the PR merges.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no
