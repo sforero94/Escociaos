@@ -28,6 +28,7 @@ import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } fr
 import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
+import { manejarSql } from './manejadorSql.ts';
 import { coberturaNoCertificada, validarCoberturaFinal, type ModoCobertura } from '../../../src/utils/esco2/cobertura.ts';
 export const NOMBRE_FUNCION = 'esco-consultas';
 /** D25: Luna sin razonamiento es la ruta habitual; Sol solo compone planes de varias partes. */
@@ -79,6 +80,8 @@ export interface Solicitud {
     historial: MensajeHistorial[];
     estadoToken?: string;
     respuestaAclaracion?: string;
+    /** 'sql' = loop de SQL de lectura (migración 192). Ausente o 'actual' = motor de planificación. */
+    motor?: 'actual' | 'sql';
 }
 export class ErrorSolicitud extends Error {
 }
@@ -87,7 +90,7 @@ export function validarSolicitud(cuerpo: unknown): Solicitud {
         throw new ErrorSolicitud('el cuerpo debe ser un objeto JSON');
     const c = cuerpo as Record<string, unknown>;
     for (const k of Object.keys(c))
-        if (!['pregunta', 'historial', 'estadoToken', 'respuestaAclaracion'].includes(k))
+        if (!['pregunta', 'historial', 'estadoToken', 'respuestaAclaracion', 'motor'].includes(k))
             throw new ErrorSolicitud(`campo no admitido: ${k}`);
     if (typeof c.pregunta !== 'string' || !c.pregunta.trim())
         throw new ErrorSolicitud('falta la pregunta');
@@ -111,7 +114,9 @@ export function validarSolicitud(cuerpo: unknown): Solicitud {
         throw new ErrorSolicitud('respuestaAclaracion inválida');
     if (c.respuestaAclaracion !== undefined && !c.estadoToken)
         throw new ErrorSolicitud('la aclaración requiere estadoToken');
-    return { pregunta: c.pregunta.trim(), historial, estadoToken: c.estadoToken as string | undefined, respuestaAclaracion: c.respuestaAclaracion as string | undefined };
+    if (c.motor !== undefined && c.motor !== 'actual' && c.motor !== 'sql')
+        throw new ErrorSolicitud('motor inválido');
+    return { pregunta: c.pregunta.trim(), historial, estadoToken: c.estadoToken as string | undefined, respuestaAclaracion: c.respuestaAclaracion as string | undefined, motor: c.motor as 'actual' | 'sql' | undefined };
 }
 function claveAnonima(env: Dependencias['env']): string | undefined {
     const anon = env('SUPABASE_ANON_KEY');
@@ -200,6 +205,11 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     }
     const ahora = deps.ahora?.() ?? new Date();
     const hoy = fechaBogota(ahora);
+    if (solicitud.motor === 'sql') {
+        const llmSql = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco SQL esco-consultas')))(apiKey);
+        const salida = await manejarSql({ cliente, llm: llmSql, pregunta: solicitud.pregunta, historial: solicitud.historial, hoy, registrar: deps.registrar });
+        return json(salida.estado, salida.cuerpo);
+    }
     const estado = solicitud.estadoToken ? leerEstado(solicitud.estadoToken, acceso.usuarioId, ahora.getTime()) : undefined;
     const avisoEstado: AvisoMensaje | undefined = solicitud.estadoToken && !estado ? 'contexto_no_disponible' : undefined;
     if (avisoEstado && solicitud.respuestaAclaracion) {

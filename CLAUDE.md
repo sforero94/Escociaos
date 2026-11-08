@@ -529,6 +529,7 @@ Sequential SQL migrations live in `src/sql/migrations/` (numbered from 001; the 
 - **189**: `aplicaciones_productos_alternativos` — **Applied to production**, ledger `20261103001246` (ESCO-169, part F2 of ESCO-165, PR #399; do not reapply). The file header still says "ESCRITA, SIN APLICAR" and is not edited. New table: alternative products of one plan line (`aplicaciones_productos`), each with its own dosis in the same five dosis columns, valid only for that application; `UNIQUE (aplicacion_producto_id, producto_id)` and a CHECK that at least one dosis is set. RLS 044 pattern: SELECT `authenticated`, INSERT/UPDATE/DELETE Gerencia + Administrador via `(SELECT get_user_role())`; `anon` has nothing. **`ON DELETE CASCADE` from `aplicaciones_productos`**: the calculadora saves by delete-and-reinsert of the lines, so it must reinsert the alternatives with the **new** line id (ESCO-170), or they are lost. Zero domain rows at apply; 0 rows on 2026-11-06.
 - **190**: `select_lotes_registros_trabajo_activo` — see "Esco 2.0 update — 2026-11-03" below (ledger `20261104182847`).
 - **191**: `monitoreo_ronda34_salto_s1` — see "Migration ledger update — 2026-11-08" below (ESCO-166, clase datos).
+- **192**: `esco_sql_vistas_y_rpc` — **Aplicada a producción 2026-11-08**, ledger `20261108202809` (prototipo Esco SQL, PR #464; go de Santiago en sesión; no reaplicar). La cabecera del fichero dice «ESCRITA, SIN APLICAR» y no se edita. Verificado tras aplicar contra el catálogo vivo: 10 vistas, las 10 con `security_invoker`, `esco_sql_lectura` `SECURITY INVOKER` con `search_path` pineado, EXECUTE solo `authenticated`/`service_role`, `anon` sin EXECUTE ni SELECT, las 10 vistas devuelven filas, `get_advisors` sin hallazgos nuevos. Orden obligatorio: la función `esco-consultas` con `motor: 'sql'` se despliega después (sin la migración responde 503). 10 vistas `v_esco_*` con `security_invoker = true` (una regla de negocio por vista: jornales por fracción, gastos confirmados, producción consolidada, lluvia confiable…) y la RPC `esco_sql_lectura(p_sql)` (`SECURITY INVOKER`, solo Gerencia, una sentencia SELECT/WITH, transacción de solo lectura, máx. 500 filas). Motor en `src/utils/escoSql/`, modo `motor: 'sql'` de `esco-consultas` (el motor actual sigue por defecto). El límite de tiempo efectivo es el `statement_timeout` del rol `authenticated` (8 s): la RPC no puede acortar la sentencia en curso (medido con `po_sonda`). Actualiza esta entrada contra el ledger vivo cuando se aplique.
 
 ### Hato Lechero Module (`/hato-lechero`)
 
@@ -1022,6 +1023,10 @@ Report: `escociaos-po/reports/2026-11-07-sabado-respuesta.md`.
   `hato_pesajes_leche` is a weekly one-day sample per cow and never sums to monthly production.
   The rule lives only in the `consultar_litros_quincenales` tool description: two variants that
   touched the general planner prompt made unrelated labor cases worse (measured in §7).
+  Redeployed 2026-11-08 as **version 12** from `de18f61b` (PR #464 branch, not yet merged: adds the selectable
+  `motor: 'sql'` mode — Esco SQL loop over the `v_esco_*` views and RPC `esco_sql_lectura`, migration 192), with Santiago's
+  approval in chat: `ACTIVE`, `verify_jwt = true`, `ezbr_sha256` `5b1ea753…`, anonymous `/health` 401. Without `motor` the
+  behavior is the v11 one. Deployed from the PR branch, so `main` is behind production until the PR merges.
   The local `/esco2-prueba` screen is excluded from the production build.
   The legacy function remains v295. `esco-consultas` is separate from
   `make-server-1ccce916`: it imports the core in `src/utils/esco2/` directly (single source, no

@@ -23,9 +23,24 @@ export interface ResultadoPruebaEsco2 {
   ms?: number;
   estadoToken?: string;
   opcionesAclaracion?: { id: string; etiqueta: string }[];
+  /** Solo motor SQL: las consultas que hizo el modelo, para el desplegable de la pantalla. */
+  consultas?: ConsultaPruebaSql[];
 }
 
+export interface ConsultaPruebaSql {
+  sql: string;
+  proposito: string;
+  n_filas: number | null;
+  truncado: boolean;
+  error: string | null;
+  filas_muestra: Record<string, unknown>[];
+}
+
+export type MotorPruebaEsco2 = 'actual' | 'sql';
+
 export interface ContextoPruebaEsco2 {
+  /** 'sql' usa el loop de SQL de lectura (migración 192). Por defecto, el motor actual. */
+  motor?: MotorPruebaEsco2;
   estadoToken?: string;
   respuestaAclaracion?: string;
   /** Prior turns of this screen, so a follow-up keeps its period, lots and tasks. */
@@ -87,7 +102,7 @@ export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, s
     respuesta = await fetch(ENDPOINT_PRUEBA_ESCO2, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sesion.access_token}`, apikey: publicAnonKey },
-      body: JSON.stringify({ pregunta: texto, historial: (contexto.historial ?? []).slice(-MAX_HISTORIAL_PRUEBA).map(m => ({ rol: m.rol, texto: m.texto.slice(0, MAX_TEXTO_HISTORIAL_PRUEBA) })), estadoToken: contexto.estadoToken, respuestaAclaracion: contexto.respuestaAclaracion }),
+      body: JSON.stringify({ pregunta: texto, historial: (contexto.historial ?? []).slice(-MAX_HISTORIAL_PRUEBA).map(m => ({ rol: m.rol, texto: m.texto.slice(0, MAX_TEXTO_HISTORIAL_PRUEBA) })), estadoToken: contexto.estadoToken, respuestaAclaracion: contexto.respuestaAclaracion, ...(contexto.motor === 'sql' ? { motor: 'sql' } : {}) }),
       signal,
     });
   } catch {
@@ -107,6 +122,27 @@ export async function ejecutarPruebaEsco2(pregunta: string, usuarioId: string, s
     error: typeof datos.error === 'string' ? limpiar(datos.error).slice(0, 500) : 'El servidor rechazó la solicitud.',
   };
 
+  if (contexto.motor === 'sql' && respuesta.ok) {
+    const consultas = Array.isArray(datos.consultas) ? (datos.consultas as ConsultaPruebaSql[]) : null;
+    const ok = typeof datos.respuesta === 'string' && datos.respuesta.trim().length > 0 && consultas !== null
+      && typeof datos.ms === 'number' && Number.isFinite(datos.ms);
+    if (!ok) return { http: respuesta.status, valida: false, error: 'La respuesta del motor SQL no cumple el contrato.' };
+    return {
+      http: respuesta.status,
+      valida: true,
+      respuesta: limpiar(datos.respuesta as string),
+      origen: 'sql',
+      ms: datos.ms as number,
+      consultas: consultas!.map(c => ({
+        sql: limpiar(String(c.sql ?? '')),
+        proposito: limpiar(String(c.proposito ?? '')),
+        n_filas: typeof c.n_filas === 'number' ? c.n_filas : null,
+        truncado: c.truncado === true,
+        error: typeof c.error === 'string' ? limpiar(c.error) : null,
+        filas_muestra: Array.isArray(c.filas_muestra) ? c.filas_muestra : [],
+      })),
+    };
+  }
   const formaValida = respuesta.status === 200
     && typeof datos.respuesta === 'string' && datos.respuesta.trim().length > 0
     && typeof datos.origen === 'string' && ORIGENES.has(datos.origen)
