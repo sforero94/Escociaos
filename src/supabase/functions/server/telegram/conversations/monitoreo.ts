@@ -834,7 +834,12 @@ export async function monitoreoConversation(
             .limit(1)
             .single();
 
-          if (ultimaRonda && !ultimaRonda.fecha_fin) {
+          if (
+            ultimaRonda && ultimaRonda.fecha_fin && fechaMonitoreo >= String(ultimaRonda.fecha_inicio).slice(0, 10) && fechaMonitoreo <= String(ultimaRonda.fecha_fin).slice(0, 10)
+          ) {
+            // Closed ronda, fecha inside its window: reuse it (ESCO-172)
+            rondaId = ultimaRonda.id;
+          } else if (ultimaRonda && !ultimaRonda.fecha_fin) {
             const { data: ultimoReg } = await supabase
               .from("monitoreos")
               .select("fecha_monitoreo")
