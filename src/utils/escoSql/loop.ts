@@ -7,10 +7,8 @@
 //
 // Puro y probable: el modelo (`llm`) y la base (`ejecutarSql`) llegan inyectados.
 //
-// El cliente de OpenRouter (esco2/llm.ts) solo transporta mensajes de texto, así que el
-// intercambio herramienta→resultado viaja como un turno de texto del asistente ("Consulta
-// N: propósito + SQL") seguido de un turno del usuario con el resultado. Funciona igual de
-// bien para un loop de pocas vueltas y evita tocar el cliente compartido.
+// Protocolo de herramientas estándar (assistant.tool_calls + mensajes role 'tool'). Se probó
+// primero emular el intercambio con turnos de texto y el modelo repetía la misma consulta.
 
 import type { ClienteLLM, Esfuerzo, MensajeLLM } from '../esco2/llm.ts';
 import { construirPrompt } from './prompt.ts';
@@ -188,28 +186,38 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
     const llamadas = r.llamadas.filter((l) => l.nombre === 'consultar_sql');
     if (!llamadas.length || !puedeConsultar) return terminar(r.texto);
 
-    for (const llamada of llamadas) {
-      if (consultas.length >= MAX_CONSULTAS) break;
+    // Protocolo de herramientas de OpenAI: el turno del asistente lleva sus llamadas y cada una
+    // recibe su mensaje 'tool'. Todas las llamadas deben quedar respondidas, aunque no se ejecuten.
+    const ids = llamadas.map((_, i) => `call_${consultas.length + i + 1}`);
+    mensajes.push({
+      role: 'assistant',
+      content: r.texto ?? '',
+      tool_calls: llamadas.map((l, i) => ({ id: ids[i], type: 'function' as const, function: { name: 'consultar_sql', arguments: l.argumentos } })),
+    });
+    for (const [i, llamada] of llamadas.entries()) {
+      const responder = (content: string) => mensajes.push({ role: 'tool', tool_call_id: ids[i], content });
+      if (consultas.length >= MAX_CONSULTAS) {
+        responder(`No ejecutada: ya usaste las ${MAX_CONSULTAS} consultas permitidas.`);
+        continue;
+      }
       const n = consultas.length + 1;
       const args = leerArgumentos(llamada.argumentos);
       if (!args) {
         consultas.push({ sql: llamada.argumentos.slice(0, 500), proposito: '', n_filas: null, truncado: false, error: 'argumentos inválidos', filas_muestra: [] });
-        mensajes.push({ role: 'assistant', content: `Consulta ${n}: (argumentos inválidos)` });
-        mensajes.push({ role: 'user', content: `Error: la llamada a consultar_sql no traía {sql, proposito} válidos. Vuelve a intentar.` });
+        responder('Error: la llamada a consultar_sql no traía {sql, proposito} válidos. Vuelve a intentar.');
         continue;
       }
-      mensajes.push({ role: 'assistant', content: `Consulta ${n} — ${args.proposito}\n${args.sql}` });
       try {
         const res = await entrada.ejecutarSql(args.sql);
         consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: res.n_filas, truncado: res.truncado, error: null, filas_muestra: res.filas.slice(0, FILAS_MUESTRA) });
-        mensajes.push({ role: 'user', content: textoResultado(n, res) });
+        responder(textoResultado(n, res));
       } catch (e) {
         // Sin permiso (42501) o un error de PostgREST (PGRST*: la función no existe, etc.) no son
         // errores de la consulta: el modelo no puede arreglarlos, así que no se le muestran.
         if (e instanceof ErrorAccesoSql || (e instanceof ErrorSql && (e.codigo === '42501' || e.codigo?.startsWith('PGRST')))) throw e;
         const mensaje = e instanceof Error ? e.message : String(e);
         consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: null, truncado: false, error: mensaje, filas_muestra: [] });
-        mensajes.push({ role: 'user', content: `Error de Postgres en la consulta ${n}: ${mensaje}\nCorrige la consulta o, si no se puede, explica qué no pudiste averiguar.` });
+        responder(`Error de Postgres en la consulta ${n}: ${mensaje}\nCorrige la consulta o, si no se puede, explica qué no pudiste averiguar.`);
       }
     }
 

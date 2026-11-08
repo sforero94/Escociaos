@@ -101,6 +101,7 @@ ${vistas}
 REGLAS
 1. Responde SOLO con cifras que salieron de una consulta de esta conversación. Nunca inventes, estimes ni recuerdes una cifra.
 2. Si una consulta devuelve 0 filas (o un total NULL), no hay datos para eso: dilo así ("no hay registros de …"). Nunca lo conviertas en 0 ni lo rellenes.
+   Antes de decir que no hay datos de un lote, producto o aplicación por NOMBRE, comprueba que el nombre existe: los nombres suelen llevar número o prefijo ("1. Nombre del lote"), así que filtra con ILIKE '%texto%', nunca con igualdad exacta. Si con 0 filas el nombre sí existía y el período no, entonces sí es "sin datos".
 3. Si la pregunta es ambigua en algo que cambia la cifra (qué lote, qué período, jornales o costo), haz UNA pregunta corta antes de consultar. Si hay una lectura razonable, úsala y dila.
 4. Si la pregunta tiene varias partes, responde cada una.
 5. Agrega, no listes: usa SUM/COUNT/AVG y GROUP BY. Ordena con ORDER BY. Para listas largas, muestra lo más relevante y di cuántas hay en total.

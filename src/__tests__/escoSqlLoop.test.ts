@@ -52,6 +52,18 @@ describe('Esco SQL — loop', () => {
     expect(solicitudes[0].herramientas).toHaveLength(1);
   });
 
+  it('usa el protocolo de herramientas: cada llamada del asistente recibe su mensaje tool, también las no ejecutadas', async () => {
+    const llamadas = Array.from({ length: 5 }, (_, i) => ({ nombre: 'consultar_sql', argumentos: JSON.stringify({ sql: `select ${i}`, proposito: 'x' }) }));
+    const { llm, solicitudes } = modelo({ texto: '', llamadas, uso: USO, ms: 1, modelo: 'm', finishReason: 'tool_calls' }, texto('ok'));
+    await responderPregunta({ pregunta: 'q', llm, ejecutarSql: async () => ok([{ x: 1 }]), hoy: HOY });
+    const m = solicitudes[1].mensajes;
+    const asistente = m.find((x) => x.role === 'assistant' && x.tool_calls);
+    expect(asistente?.tool_calls).toHaveLength(5);
+    const tools = m.filter((x) => x.role === 'tool');
+    expect(tools.map((t) => t.tool_call_id)).toEqual(asistente!.tool_calls!.map((c) => c.id));
+    expect(tools[4].content).toContain('No ejecutada');
+  });
+
   it('muestra el error de Postgres al modelo y deja que corrija', async () => {
     const { llm, solicitudes } = modelo(consulta('select * from v_esco_jornalez'), consulta('select count(*) n from v_esco_jornales'), texto('Hay 40 registros.'));
     const ejecutarSql = vi
@@ -201,6 +213,7 @@ describe('Esco SQL — prompt', () => {
     expect(p).toContain('SOLO con cifras que salieron de una consulta');
     expect(p).toContain('Nunca lo conviertas en 0');
     expect(p).toContain('$95M');
+    expect(p).toContain("ILIKE '%texto%'");
   });
 });
 

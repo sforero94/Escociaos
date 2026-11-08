@@ -5,8 +5,12 @@ import type { LlamadaHerramienta } from './registro.ts';
 export type Esfuerzo = 'none' | 'low' | 'medium';
 
 export interface MensajeLLM {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  /** Solo role 'assistant': llamadas a herramientas que pidió el modelo (formato OpenAI). */
+  tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+  /** Solo role 'tool': a qué llamada responde. */
+  tool_call_id?: string;
 }
 
 export interface SolicitudLLM {
