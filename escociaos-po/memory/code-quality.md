@@ -139,3 +139,5 @@ esta corrida** — filado como hallazgo contra la operacion.
 - Dos pruebas dependen del reloj (supabaseGuardHook '<1000ms', escoFamiliasContratoIndependent timeout 5 s): fallan solo con lint/tsc en paralelo. Correr la suite sola. [corrida: 2026-11-05-jueves]
 - calculosReporteAplicacion.ts sin prueba pero solo tiene helpers de división/formato; no re-reportar como crítico. database.ts sin tablas 186/187/189; regenerar dentro de ESCO-170 si F2 lee alternativos. [corrida: 2026-11-05-jueves]
 - Líneas base: lint 0 errores / 907 warnings (921 el 10-09) · tsc limpio · 320 ficheros / 7.567 pruebas · `as any` cliente 71 · npm audit --omit=dev 9 (sin cambio) · npm outdated 53. [corrida: 2026-11-05-jueves]
+
+- **No re-filar**: code-quality/esco2/compositor-muerto (ESCO-173) quedó cerrada como Obsoleto. Santiago la descartó el 2026-11-08: «Ignora esco 173 - estoy trabajando en un revamp». No vuelvas a proponer limpiezas de código muerto en `src/utils/esco2/` ni en `docs/esco2/` mientras dure el revamp de Esco 2.0; es un área activa del dueño. [corrida: 2026-11-06-viernes]
