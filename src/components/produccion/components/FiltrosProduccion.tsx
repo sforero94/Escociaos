@@ -1,103 +1,171 @@
-import { useState } from 'react';
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../ui/select';
-import { Filter, X, Check } from 'lucide-react';
+import { Filter, X, Check, AlertTriangle } from 'lucide-react';
 import type {
   FiltrosProduccion as FiltrosType,
   LoteProduccion,
-  CosechaTipo,
   MetricaProduccion,
+  CosechaIdentidad,
+  VistaProduccion,
+  CosechaTipo,
 } from '../../../types/produccion';
 import {
-  ANOS_DISPONIBLES,
   METRICA_LABELS,
   getLoteCode,
   getLoteColor,
 } from '../../../types/produccion';
+import {
+  anosCampanaDeCosechas,
+  cosechasCompatiblesConAnos,
+  resolverSeleccionCosechas,
+} from '@/utils/calculosProduccionAnalisis';
 
 interface FiltrosProduccionProps {
   filtros: FiltrosType;
   lotes: LoteProduccion[];
+  anosDisponibles: number[];
+  cosechasDisponibles: CosechaIdentidad[];
   onFiltrosChange: (filtros: FiltrosType) => void;
+}
+
+function proyectarFiltros(
+  base: FiltrosType,
+  disponibles: CosechaIdentidad[],
+): FiltrosType {
+  const seleccion = resolverSeleccionCosechas(disponibles, base);
+  const cosechas =
+    seleccion.estado === 'ok'
+      ? seleccion.cosechas
+      : seleccion.estado === 'incompatible'
+        ? []
+        : [];
+  const anos = anosCampanaDeCosechas(cosechas);
+  const tipos = Array.from(new Set(cosechas.map((c) => c.tipo)));
+  const cosecha_tipo: CosechaTipo | 'Ambas' =
+    tipos.length === 1 ? tipos[0] : 'Ambas';
+  return { ...base, anos, cosecha_tipo };
 }
 
 export function FiltrosProduccion({
   filtros,
   lotes,
+  anosDisponibles,
+  cosechasDisponibles,
   onFiltrosChange,
 }: FiltrosProduccionProps) {
-  const [expanded, setExpanded] = useState(false);
+  const compatibles = cosechasCompatiblesConAnos(
+    cosechasDisponibles,
+    filtros.anos_movimiento,
+  );
+  const seleccion = resolverSeleccionCosechas(cosechasDisponibles, filtros);
 
-  // Toggle ano en el array
-  const toggleAno = (ano: number) => {
-    const nuevosAnos = filtros.anos.includes(ano)
-      ? filtros.anos.filter((a) => a !== ano)
-      : [...filtros.anos, ano].sort();
-    onFiltrosChange({ ...filtros, anos: nuevosAnos });
+  const emit = (parcial: Partial<FiltrosType>) => {
+    const next = proyectarFiltros({ ...filtros, ...parcial }, cosechasDisponibles);
+    onFiltrosChange(next);
   };
 
-  // Toggle lote en el array
+  const toggleAno = (ano: number) => {
+    const anos_movimiento = filtros.anos_movimiento.includes(ano)
+      ? filtros.anos_movimiento.filter((a) => a !== ano)
+      : [...filtros.anos_movimiento, ano].sort((a, b) => a - b);
+
+    // Si la cosecha deja de ser compatible, limpiar selección (mock: → Todas).
+    const nuevasCompatibles = cosechasCompatiblesConAnos(
+      cosechasDisponibles,
+      anos_movimiento,
+    );
+    const keysOk = filtros.cosecha_keys.filter((k) =>
+      nuevasCompatibles.some((c) => c.key === k),
+    );
+    emit({
+      anos_movimiento,
+      cosecha_keys: keysOk.length === filtros.cosecha_keys.length ? keysOk : [],
+    });
+  };
+
+  const toggleCosecha = (key: string) => {
+    if (filtros.vista === 'una') {
+      emit({ cosecha_keys: [key] });
+      return;
+    }
+    const cosecha_keys = filtros.cosecha_keys.includes(key)
+      ? filtros.cosecha_keys.filter((k) => k !== key)
+      : [...filtros.cosecha_keys, key];
+    emit({ cosecha_keys });
+  };
+
   const toggleLote = (loteId: string) => {
-    const nuevosLotes = filtros.lote_ids.includes(loteId)
+    const lote_ids = filtros.lote_ids.includes(loteId)
       ? filtros.lote_ids.filter((l) => l !== loteId)
       : [...filtros.lote_ids, loteId];
-    onFiltrosChange({ ...filtros, lote_ids: nuevosLotes });
+    emit({ lote_ids });
   };
 
-  // Cambiar tipo de cosecha
-  const handleCosechaTipoChange = (value: string) => {
-    onFiltrosChange({
-      ...filtros,
-      cosecha_tipo: value as CosechaTipo | 'Ambas',
-    });
+  const setVista = (vista: VistaProduccion) => {
+    if (vista === 'una' && filtros.cosecha_keys.length > 1) {
+      emit({ vista, cosecha_keys: [filtros.cosecha_keys[filtros.cosecha_keys.length - 1]] });
+      return;
+    }
+    emit({ vista });
   };
 
-  // Cambiar metrica
-  const handleMetricaChange = (value: string) => {
-    onFiltrosChange({
-      ...filtros,
-      metrica: value as MetricaProduccion,
-    });
-  };
-
-  // Limpiar filtros
   const limpiarFiltros = () => {
-    onFiltrosChange({
-      anos: [2023, 2024, 2025, 2026],
-      cosecha_tipo: 'Ambas',
-      lote_ids: [],
-      metrica: 'kg_totales',
-    });
+    onFiltrosChange(
+      proyectarFiltros(
+        {
+          vista: filtros.vista,
+          anos_movimiento: [],
+          cosecha_keys: [],
+          lote_ids: [],
+          metrica: 'kg_totales',
+          anos: [],
+          cosecha_tipo: 'Ambas',
+        },
+        cosechasDisponibles,
+      ),
+    );
   };
 
-  // Verificar si hay filtros activos
   const hayFiltrosActivos =
-    filtros.anos.length < ANOS_DISPONIBLES.length ||
-    filtros.cosecha_tipo !== 'Ambas' ||
+    filtros.anos_movimiento.length > 0 ||
+    filtros.cosecha_keys.length > 0 ||
     filtros.lote_ids.length > 0 ||
     filtros.metrica !== 'kg_totales';
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      {/* Header con toggle */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-5 md:p-6 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Filter className="w-5 h-5 text-primary" />
           <h3 className="font-semibold text-gray-900">Filtros</h3>
           {hayFiltrosActivos && (
-            <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full">
+            <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-md">
               Activos
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {(
+              [
+                { id: 'una', label: 'Una cosecha' },
+                { id: 'varias', label: 'Comparar' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setVista(opt.id)}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filtros.vista === opt.id
+                    ? 'bg-primary text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           {hayFiltrosActivos && (
             <Button
               variant="ghost"
@@ -109,153 +177,167 @@ export function FiltrosProduccion({
               Limpiar
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? 'Menos filtros' : 'Mas filtros'}
-          </Button>
         </div>
       </div>
 
-      {/* Filtros principales - siempre visibles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Anos */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div>
-          <Label className="text-sm text-gray-600 mb-2 block">Anos</Label>
+          <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
+            Año del movimiento
+          </Label>
           <div className="flex flex-wrap gap-2">
-            {ANOS_DISPONIBLES.map((ano) => (
+            {anosDisponibles.length === 0 ? (
+              <span className="text-sm text-gray-400">Sin registros aún</span>
+            ) : (
+              anosDisponibles.map((ano) => (
+                <button
+                  key={ano}
+                  type="button"
+                  onClick={() => toggleAno(ano)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                    filtros.anos_movimiento.includes(ano)
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-primary/50'
+                  }`}
+                >
+                  {ano}
+                </button>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            No es el año del nombre de campaña. P. ej. Principal 2027 aparece en 2026.
+          </p>
+        </div>
+
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
+            Cosecha{filtros.vista === 'varias' ? 's' : ''}
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {compatibles.length === 0 ? (
+              <span className="text-sm text-gray-400">Sin cosechas compatibles</span>
+            ) : (
+              compatibles.map((c) => {
+                const selected =
+                  filtros.cosecha_keys.includes(c.key) ||
+                  (filtros.cosecha_keys.length === 0 &&
+                    seleccion.estado === 'ok' &&
+                    seleccion.cosechas.some((x) => x.key === c.key) &&
+                    filtros.vista === 'una' &&
+                    seleccion.cosechas[0]?.key === c.key);
+                const explicit =
+                  filtros.cosecha_keys.includes(c.key) ||
+                  (filtros.vista === 'una' &&
+                    filtros.cosecha_keys.length === 0 &&
+                    seleccion.estado === 'ok' &&
+                    seleccion.cosechas[0]?.key === c.key);
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => toggleCosecha(c.key)}
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                      explicit
+                        ? 'bg-primary text-white border-primary'
+                        : selected
+                          ? 'bg-primary/10 text-primary border-primary/30'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-primary/50'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {filtros.vista === 'varias' && (
+            <p className="text-xs text-gray-400 mt-2">
+              Multiselección. Vacío = todas las compatibles con el año.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
+            Métrica
+          </Label>
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {(Object.keys(METRICA_LABELS) as MetricaProduccion[]).map((metrica) => (
               <button
-                key={ano}
-                onClick={() => toggleAno(ano)}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                  filtros.anos.includes(ano)
-                    ? 'bg-primary text-white border-primary'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary/50'
+                key={metrica}
+                type="button"
+                onClick={() => emit({ metrica })}
+                className={`flex-1 px-2 py-2 text-xs font-medium transition-colors ${
+                  filtros.metrica === metrica
+                    ? 'bg-primary text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
                 }`}
               >
-                {ano}
+                {METRICA_LABELS[metrica]}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Tipo de cosecha */}
         <div>
-          <Label className="text-sm text-gray-600 mb-2 block">Cosecha</Label>
-          <Select
-            value={filtros.cosecha_tipo}
-            onValueChange={handleCosechaTipoChange}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Ambas">Todas</SelectItem>
-              <SelectItem value="Principal">Principal</SelectItem>
-              <SelectItem value="Traviesa">Traviesa</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Metrica */}
-        <div>
-          <Label className="text-sm text-gray-600 mb-2 block">Metrica</Label>
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-            {(Object.keys(METRICA_LABELS) as MetricaProduccion[]).map(
-              (metrica) => (
-                <button
-                  key={metrica}
-                  onClick={() => handleMetricaChange(metrica)}
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-                    filtros.metrica === metrica
-                      ? 'bg-primary text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {METRICA_LABELS[metrica]}
-                </button>
-              )
-            )}
-          </div>
-        </div>
-
-        {/* Resumen de lotes */}
-        <div>
-          <Label className="text-sm text-gray-600 mb-2 block">Lotes</Label>
-          <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+          <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
+            Lotes
+          </Label>
+          <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 mb-2">
             {filtros.lote_ids.length === 0
               ? 'Todos los lotes'
               : `${filtros.lote_ids.length} seleccionado(s)`}
           </div>
-        </div>
-      </div>
-
-      {/* Filtros expandidos - selector de lotes */}
-      {expanded && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <Label className="text-sm text-gray-600 mb-3 block">
-            Seleccionar Lotes
-          </Label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
             {lotes.map((lote) => {
               const codigo = getLoteCode(lote.nombre);
               const color = getLoteColor(lote.nombre);
               const isSelected = filtros.lote_ids.includes(lote.id);
-
               return (
                 <button
                   key={lote.id}
+                  type="button"
                   onClick={() => toggleLote(lote.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
-                    isSelected
-                      ? 'border-transparent shadow-sm'
-                      : 'border-gray-200 hover:border-gray-300'
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm transition-all ${
+                    isSelected ? 'border-transparent' : 'border-gray-200 hover:border-gray-300'
                   }`}
                   style={{
                     backgroundColor: isSelected ? `${color}20` : undefined,
                     borderColor: isSelected ? color : undefined,
                   }}
                 >
-                  <div
-                    className="w-3 h-3 rounded-full"
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: color }}
                   />
-                  <span
-                    className={`text-sm font-medium ${isSelected ? '' : 'text-gray-700'}`}
-                    style={{ color: isSelected ? color : undefined }}
-                  >
-                    {codigo}
-                  </span>
-                  {isSelected && <Check className="w-4 h-4" style={{ color }} />}
+                  <span style={{ color: isSelected ? color : undefined }}>{codigo}</span>
+                  {isSelected && <Check className="w-3.5 h-3.5" style={{ color }} />}
                 </button>
               );
             })}
           </div>
+        </div>
+      </div>
 
-          {/* Acciones rapidas */}
-          <div className="flex gap-2 mt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onFiltrosChange({ ...filtros, lote_ids: [] })}
-            >
-              Todos
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                onFiltrosChange({
-                  ...filtros,
-                  lote_ids: lotes.map((l) => l.id),
-                })
-              }
-            >
-              Ninguno
-            </Button>
+      {seleccion.estado === 'incompatible' && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Selección incompatible</p>
+            <p className="mt-0.5">{seleccion.mensaje}</p>
+            {seleccion.sugeridas.length > 0 && (
+              <p className="mt-1 text-amber-800/80">
+                Compatibles: {seleccion.sugeridas.map((c) => c.label).join(', ')}
+              </p>
+            )}
           </div>
+        </div>
+      )}
+
+      {seleccion.estado === 'vacio' && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          {seleccion.mensaje}
         </div>
       )}
     </div>

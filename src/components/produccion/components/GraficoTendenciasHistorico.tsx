@@ -134,7 +134,7 @@ export function GraficoTendenciasHistorico({
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis
-              dataKey="cosecha"
+              dataKey="cosecha_label"
               stroke="#9ca3af"
               tick={{ fontSize: 12 }}
               tickMargin={10}

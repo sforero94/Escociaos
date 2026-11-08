@@ -1,4 +1,4 @@
-import { Package, TreeDeciduous, DollarSign } from 'lucide-react';
+import { Package, TreeDeciduous, DollarSign, LandPlot } from 'lucide-react';
 import type { KPIProduccion } from '../../../types/produccion';
 import type { DatosCostoKg } from '../hooks/useCostoKg';
 import { ANO_MIN_LOTE } from '../hooks/useCostoKg';
@@ -6,16 +6,13 @@ import { ANO_MIN_LOTE } from '../hooks/useCostoKg';
 interface KPICardsProduccionProps {
   kpis: KPIProduccion | null;
   loading?: boolean;
-  /**
-   * Resultado del motor de costo para el período seleccionado.
-   * - Para años >= 2026: resultados por lote (promedio ponderado por kg).
-   * - Para 2023–2025: fallback nivel finca.
-   * - null mientras carga, o cuando los años no tienen datos.
-   */
   datosCosto?: DatosCostoKg | null;
   loadingCosto?: boolean;
-  /** Años seleccionados (para saber si hay alguno >= 2026) */
+  /** Años de campaña derivados (para costo/kg). */
   anosSeleccionados?: number[];
+  /** Si true, kg/árbol o t/ha no tienen denominador válido. */
+  rendimientoSinDato?: boolean;
+  tonHaSinDato?: boolean;
 }
 
 interface KPICardProps {
@@ -24,7 +21,6 @@ interface KPICardProps {
   subtitulo: string;
   icono: React.ElementType;
   colorClase: string;
-  /** Texto pequeño adicional (disclaimer) */
   nota?: string;
 }
 
@@ -59,17 +55,12 @@ function KPICardSkeleton() {
   );
 }
 
-/**
- * Calcula el costo/kg ponderado por kg a partir de los resultados del motor.
- * Devuelve null si no hay datos suficientes.
- */
 function calcularCostoKgPonderado(
   datosCosto: DatosCostoKg | null | undefined,
   anosSeleccionados: number[],
 ): { valor: number | null; esFallback: boolean; texto: string } {
   if (!datosCosto) return { valor: null, esFallback: false, texto: '—' };
 
-  // Fallback finca para años < 2026
   if (datosCosto.fallback) {
     const v = datosCosto.fallback.costo_kg;
     return {
@@ -79,7 +70,6 @@ function calcularCostoKgPonderado(
     };
   }
 
-  // Promedio ponderado por kg de los lotes
   if (datosCosto.resultados.length > 0) {
     const totalKg = datosCosto.resultados.reduce((s, r) => s + r.kg_totales, 0);
     const totalCosto = datosCosto.resultados.reduce((s, r) => s + r.costo_total, 0);
@@ -91,7 +81,6 @@ function calcularCostoKgPonderado(
     };
   }
 
-  // Años seleccionados todos < 2026 → sin datos de costo/kg por lote
   if (anosSeleccionados.every((a) => a < ANO_MIN_LOTE)) {
     return { valor: null, esFallback: false, texto: '—' };
   }
@@ -105,11 +94,13 @@ export function KPICardsProduccion({
   datosCosto = null,
   loadingCosto = false,
   anosSeleccionados = [],
+  rendimientoSinDato = false,
+  tonHaSinDato = false,
 }: KPICardsProduccionProps) {
   if (loading || !kpis) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[...Array(3)].map((_, i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        {[...Array(4)].map((_, i) => (
           <KPICardSkeleton key={i} />
         ))}
       </div>
@@ -121,7 +112,6 @@ export function KPICardsProduccion({
     anosSeleccionados,
   );
 
-  // Subtítulo del costo/kg varía según disponibilidad
   let costoKgSubtitulo = 'Costo por kg cosechado';
   let costoKgNota: string | undefined;
   if (loadingCosto) {
@@ -140,18 +130,38 @@ export function KPICardsProduccion({
 
   const cards = [
     {
-      titulo: 'Produccion Total',
+      titulo: 'Producción registrada',
       valor: `${kpis.produccion_total_kg.toLocaleString('es-CO')} kg`,
       subtitulo: `Periodo: ${kpis.periodo}`,
       icono: Package,
-      colorClase: 'from-green-500 to-green-600',
+      colorClase: 'from-primary to-primary-dark',
+      nota: 'kg_totales · no suma etapas',
     },
     {
-      titulo: 'Rendimiento Promedio',
-      valor: `${kpis.rendimiento_promedio_kg_arbol.toLocaleString('es-CO', { minimumFractionDigits: 2 })} kg/arbol`,
-      subtitulo: 'Promedio ponderado',
+      titulo: 'Rendimiento',
+      valor: rendimientoSinDato
+        ? 'Sin dato'
+        : `${kpis.rendimiento_promedio_kg_arbol.toLocaleString('es-CO', {
+            minimumFractionDigits: 2,
+          })} kg/árbol`,
+      subtitulo: rendimientoSinDato
+        ? 'Sin árboles vinculados a la campaña'
+        : 'Promedio ponderado',
       icono: TreeDeciduous,
-      colorClase: 'from-blue-500 to-blue-600',
+      colorClase: 'from-emerald-600 to-emerald-700',
+    },
+    {
+      titulo: 'Toneladas / ha',
+      valor: tonHaSinDato
+        ? 'Sin dato'
+        : `${kpis.ton_por_ha_promedio.toLocaleString('es-CO', {
+            minimumFractionDigits: 2,
+          })} t/ha`,
+      subtitulo: tonHaSinDato
+        ? 'Sin área válida para el corte'
+        : 'Con área de lotes con dato',
+      icono: LandPlot,
+      colorClase: 'from-sky-600 to-sky-700',
     },
     {
       titulo: 'Costo/Kg',
@@ -164,7 +174,7 @@ export function KPICardsProduccion({
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
       {cards.map((card, index) => (
         <KPICard key={index} {...card} />
       ))}

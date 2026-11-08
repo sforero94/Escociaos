@@ -6,6 +6,18 @@
 
 export type CosechaTipo = 'Principal' | 'Traviesa';
 export type MetricaProduccion = 'kg_totales' | 'kg_por_arbol' | 'ton_por_ha';
+export type VistaProduccion = 'una' | 'varias';
+
+/** Identidad de campaña independiente del año de movimiento. */
+export interface CosechaIdentidad {
+  /** Clave estable: "Principal:2027" */
+  key: string;
+  tipo: CosechaTipo;
+  /** Año de la campaña (nombre), no del movimiento. */
+  ano: number;
+  label: string;
+  code: string;
+}
 
 // ============================================================================
 // DATABASE ENTITY TYPES
@@ -53,18 +65,38 @@ export interface SubloteProduccion {
 // FILTER TYPES
 // ============================================================================
 
+/**
+ * Filtros del tablero analítico (#463).
+ * - `anos_movimiento`: años calendario del movimiento (no del nombre de campaña).
+ * - `cosecha_keys`: identidades "Principal:2027" / "Traviesa:2026".
+ * - `anos` / `cosecha_tipo` se conservan como proyección para Rentabilidad y
+ *   consultas que aún filtran por columnas de campaña.
+ */
 export interface FiltrosProduccion {
-  anos: number[];
-  cosecha_tipo: CosechaTipo | 'Ambas';
+  vista: VistaProduccion;
+  /** Años calendario de movimiento seleccionados. Vacío = sin restricción. */
+  anos_movimiento: number[];
+  /** Identidades de cosecha seleccionadas. Vacío = todas las compatibles. */
+  cosecha_keys: string[];
   lote_ids: string[];
   metrica: MetricaProduccion;
+  /**
+   * Años de campaña derivados (produccion.ano). Se recalculan al resolver
+   * cosechas; se mantienen en el estado para consumidores legacy (Rentabilidad).
+   */
+  anos: number[];
+  /** Compat: 'Ambas' si hay varios tipos; si no, el tipo único. */
+  cosecha_tipo: CosechaTipo | 'Ambas';
 }
 
 export const FILTROS_PRODUCCION_DEFAULT: FiltrosProduccion = {
-  anos: [2023, 2024, 2025, 2026],
-  cosecha_tipo: 'Ambas',
+  vista: 'una',
+  anos_movimiento: [],
+  cosecha_keys: [],
   lote_ids: [],
   metrica: 'kg_totales',
+  anos: [],
+  cosecha_tipo: 'Ambas',
 };
 
 // ============================================================================
@@ -265,17 +297,26 @@ export interface ParametrosCostoKg {
 // CONSTANTS
 // ============================================================================
 
-export const ANOS_DISPONIBLES = [2023, 2024, 2025, 2026];
+/**
+ * @deprecated Preferir `derivarAnosMovimiento` / datos vivos. Se mantiene
+ * solo como fallback vacío de UI mientras cargan opciones dinámicas.
+ */
+export const ANOS_DISPONIBLES: number[] = [];
 
-export const COSECHAS_ORDEN: string[] = [
-  'P23',
-  'T23',
-  'P24',
-  'T24',
-  'P25',
-  'T25',
-  'P26',
-];
+/**
+ * @deprecated Preferir `derivarCosechasDisponibles` / orden dinámico.
+ */
+export const COSECHAS_ORDEN: string[] = [];
+
+/** Colores de serie por cosecha en comparación multicampaña. */
+export const COSECHA_SERIES_COLORS = [
+  '#73991C', // primary olive
+  '#94A3B8', // slate
+  '#3B82F6', // blue
+  '#D97706', // amber
+  '#0F766E', // teal
+  '#7C3AED', // violet
+] as const;
 
 // Lote colors for charts (from prototype)
 export const LOT_COLORS: Record<string, string> = {
@@ -331,7 +372,7 @@ export function getLoteColor(nombreLote: string): string {
 }
 
 /**
- * Format cosecha label (e.g., 2023, "Principal" -> "P23")
+ * Format cosecha code (e.g., 2027, "Principal" -> "P27")
  */
 export function formatCosechaCode(ano: number, tipo: CosechaTipo): string {
   const tipoAbrev = tipo === 'Principal' ? 'P' : 'T';
@@ -339,10 +380,11 @@ export function formatCosechaCode(ano: number, tipo: CosechaTipo): string {
 }
 
 /**
- * Format cosecha label for display (e.g., 2023, "Principal" -> "Principal 23")
+ * Format cosecha label for display (e.g., 2027, "Principal" -> "Principal 2027")
+ * Alineado con etiquetas de finanzas / issue #463.
  */
 export function formatCosechaLabel(ano: number, tipo: CosechaTipo): string {
-  return `${tipo} ${String(ano).slice(-2)}`;
+  return `${tipo} ${ano}`;
 }
 
 /**

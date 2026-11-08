@@ -68,12 +68,32 @@ export function GraficoCalidadCosecha({
 }: GraficoCalidadCosechaProps) {
   if (loading) return <ChartSkeleton />;
 
-  // No mostrar si no hay data ninguna
-  if (!data || data.length === 0) return null;
+  const tieneCalidad =
+    data?.some((d) => d.kg_exportacion > 0 || d.kg_nacional > 0) ?? false;
 
-  // Solo mostrar si al menos un punto tiene desglose de calidad
-  const tieneCalidad = data.some((d) => d.kg_exportacion > 0 || d.kg_nacional > 0);
-  if (!tieneCalidad) return null;
+  if (!data || data.length === 0 || !tieneCalidad) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6 h-full">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+            <BarChart2 className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Calidades y clasificacion
+            </h3>
+            <p className="text-sm text-gray-500">
+              Sin desglose exportacion/nacional para el corte
+            </p>
+          </div>
+        </div>
+        <div className="h-[220px] flex items-center justify-center text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg">
+          No hay kg_exportacion / kg_nacional en los registros seleccionados.
+          Los porcentajes solo se informan con denominador explicito.
+        </div>
+      </div>
+    );
+  }
 
   const tieneSinDesglose = data.some((d) => d.kg_sin_desglose > 0);
 
