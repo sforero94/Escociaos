@@ -14,6 +14,20 @@ export type { CEDistribucion } from './calculosConductividad.ts';
 
 const GAP_DIAS_NUEVA_RONDA = 5;
 
+/**
+ * ESCO-172: una ronda cerrada sigue recibiendo lecturas cuya fecha cae dentro de su
+ * ventana [fecha_inicio, fecha_fin] (planillas de la misma visita tecleadas después
+ * del cierre). Nunca para una fecha posterior al cierre. Compara AAAA-MM-DD.
+ */
+export function fechaDentroDeRondaCerrada(
+  fecha: string,
+  ronda: { fecha_inicio: string; fecha_fin: string | null },
+): boolean {
+  if (!ronda.fecha_fin) return false;
+  const dia = fecha.slice(0, 10);
+  return dia >= String(ronda.fecha_inicio).slice(0, 10) && dia <= String(ronda.fecha_fin).slice(0, 10);
+}
+
 export async function asignarRonda(supabase: SupabaseClient, fecha: string): Promise<string> {
   // Get the most recent ronda
   const { data: ultimaRonda } = await supabase
@@ -24,6 +38,11 @@ export async function asignarRonda(supabase: SupabaseClient, fecha: string): Pro
     .single();
 
   if (ultimaRonda) {
+    // Closed ronda: reuse it only when fecha falls inside its window (ESCO-172)
+    if (fechaDentroDeRondaCerrada(fecha, ultimaRonda)) {
+      return ultimaRonda.id;
+    }
+
     // Check if fecha is within GAP_DIAS_NUEVA_RONDA of the last activity in this ronda
     // Use fecha_fin if closed, otherwise check the latest monitoring date in that ronda
     const fechaRef = ultimaRonda.fecha_fin || ultimaRonda.fecha_inicio;
