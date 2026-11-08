@@ -47,6 +47,9 @@ import type {
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { usaCanecas, unidadAplicacion } from '@/utils/calculosAplicaciones';
 import { formatearNumero, formatShortDate } from '@/utils/format';
+import { fetchCoberturaAplicacion } from '@/utils/fetchCoberturaAplicacion';
+import { describirFaltanteCobertura } from '@/utils/coberturaAplicacion';
+import type { ResultadoCoberturaLinea } from '@/utils/stockAplicacion';
 
 interface DailyMovementsDashboardProps {
   aplicacion: Aplicacion;
@@ -180,6 +183,10 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
   const [productosPlanificados, setProductosPlanificados] = useState<ProductoEnMezcla[]>([]);
   const [resumen, setResumen] = useState<ResumenMovimientoDiario[]>([]);
   const [alertas, setAlertas] = useState<AlertaMovimiento[]>([]);
+  // ESCO-171: cobertura que queda en cada línea con productos alternativos (avisos NO bloqueantes).
+  const [cobertura, setCobertura] = useState<ResultadoCoberturaLinea[]>([]);
+  const [productosEnAlternativos, setProductosEnAlternativos] = useState<ReadonlySet<string>>(new Set());
+  const [errorCobertura, setErrorCobertura] = useState(false);
   const [canecasTotales, setCanecasTotales] = useState<{
     planeadas: number;
     utilizadas: number;
@@ -202,7 +209,7 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
   useEffect(() => {
     calcularResumen();
     calcularCanecasTotales();
-  }, [movimientos, productosPlanificados]);
+  }, [movimientos, productosPlanificados, productosEnAlternativos]);
 
   const loadData = async () => {
     try {
@@ -211,6 +218,7 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
         loadMovimientos(),
         loadProductosPlanificados(),
         loadCanecasPlaneadas(),
+        loadCobertura(),
       ]);
     } catch {
       // individual loaders handle their own errors
@@ -349,6 +357,20 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
     }
   };
 
+  const loadCobertura = async () => {
+    try {
+      const resultado = await fetchCoberturaAplicacion(aplicacion.id, aplicacion.tipo_aplicacion);
+      setCobertura(resultado.lineas);
+      setProductosEnAlternativos(resultado.productosEnLineasConAlternativos);
+      setErrorCobertura(false);
+    } catch {
+      // Un error de lectura nunca se muestra como «todo cubierto»: se avisa que no se pudo calcular.
+      setCobertura([]);
+      setProductosEnAlternativos(new Set());
+      setErrorCobertura(true);
+    }
+  };
+
   const loadCanecasPlaneadas = async () => {
     try {
       const { data: calculosData, error } = await supabase
@@ -422,8 +444,15 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
       });
     });
 
+    // Productos de líneas con alternativos: solo se registra lo usado, sin comparar contra un plan
+    // por producto (el plan repite la misma necesidad bajo cada uno y se puede usar un alternativo).
+    resumenMap.forEach(item => {
+      if (productosEnAlternativos.has(item.producto_id)) item.sin_comparacion = true;
+    });
+
     // Generar alertas
     resumenMap.forEach(item => {
+      if (item.sin_comparacion) return;
       if (item.cantidad_planeada === 0 && item.total_utilizado > 0) {
         nuevasAlertas.push({
           tipo: 'warning',
@@ -486,7 +515,7 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
 
       if (error) throw error;
 
-      await loadMovimientos();
+      await Promise.all([loadMovimientos(), loadCobertura()]);
     } catch {
       toast.error('Error al eliminar el movimiento');
     }
@@ -645,6 +674,43 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
             </div>
           )}
 
+          {/* Cobertura de las líneas con productos alternativos (ESCO-171). Avisa, nunca bloquea. */}
+          {(cobertura.length > 0 || errorCobertura) && (
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <Package className="size-[18px] text-primary" />
+                <h3 className="text-[0.92rem] font-semibold text-foreground">Cobertura de productos alternativos</h3>
+              </div>
+              {errorCobertura ? (
+                <p className="text-sm text-muted-foreground">
+                  No se pudo calcular la cobertura de los productos alternativos. Recarga la página para reintentar.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {cobertura.map(linea =>
+                    linea.alcanza ? (
+                      <div key={linea.linea_id} className="rounded-lg bg-muted px-3 py-2.5">
+                        <p className="text-sm font-medium text-foreground">{linea.nombre} (y sus alternativos)</p>
+                        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                          Quedan {formatearNumero(linea.pendientes, 2)} {linea.unidad} por hacer · la bodega cubre{' '}
+                          {formatearNumero(linea.cobertura, 2)} {linea.unidad}
+                        </p>
+                      </div>
+                    ) : (
+                      <Alert key={linea.linea_id} variant="warning">
+                        <AlertTriangle />
+                        <AlertTitle>{linea.nombre}</AlertTitle>
+                        <AlertDescription>
+                          {describirFaltanteCobertura(linea, n => formatearNumero(n, 2))}
+                        </AlertDescription>
+                      </Alert>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-5 md:grid-cols-2">
             {/* Alertas */}
             {alertas.length > 0 && (
@@ -694,18 +760,21 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
                               <div>
                                 <p className="text-sm font-medium text-foreground">{item.producto_nombre}</p>
                                 <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                                  {formatearNumero(item.total_utilizado, 2)} / {formatearNumero(item.cantidad_planeada, 2)}{' '}
-                                  {item.producto_unidad}
+                                  {item.sin_comparacion
+                                    ? `${formatearNumero(item.total_utilizado, 2)} ${item.producto_unidad} registrados`
+                                    : `${formatearNumero(item.total_utilizado, 2)} / ${formatearNumero(item.cantidad_planeada, 2)} ${item.producto_unidad}`}
                                 </p>
                               </div>
-                              <BadgeProgreso
-                                excede={item.excede_planeado}
-                                porcentaje={item.porcentaje_usado}
-                                delta={item.diferencia}
-                                decimalesDelta={2}
-                              />
+                              {!item.sin_comparacion && (
+                                <BadgeProgreso
+                                  excede={item.excede_planeado}
+                                  porcentaje={item.porcentaje_usado}
+                                  delta={item.diferencia}
+                                  decimalesDelta={2}
+                                />
+                              )}
                             </div>
-                            <BarraProgreso porcentaje={item.porcentaje_usado} estado={estado} />
+                            {!item.sin_comparacion && <BarraProgreso porcentaje={item.porcentaje_usado} estado={estado} />}
                           </div>
                         );
                       })}
@@ -843,6 +912,7 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
         onSuccess={() => {
           setFormOpen(false);
           loadMovimientos();
+          loadCobertura();
         }}
       />
 

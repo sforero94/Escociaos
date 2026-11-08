@@ -122,3 +122,22 @@ Una línea del plan (`aplicaciones_productos`) puede llevar 0..n **alternativos*
   (`construirFilasAlternativos`, `src/utils/productosAlternativos.ts`). Si una línea con alternativos no
   vuelve del INSERT, lanza — nunca escribe sobre otra línea.
 - Las aplicaciones ya planeadas no se migran (supuesto 9.c): sin alternativos, la línea se comporta como siempre.
+
+### Ejecución con alternativos (ESCO-171)
+
+- **El formulario de movimiento diario tiene una fila por LÍNEA.** Con alternativos, un selector ofrece
+  principal + alternativos **en orden alfabético**, cada uno con su saldo de bodega. **Sin sugerencia,
+  sin ranking y sin opción preseleccionada**: David escoge a criterio (Santiago, 2026-11-02). No agregues
+  «el de menor saldo primero» ni marques el principal. Un movimiento (un lote, un día) = un producto por
+  línea; la pura `validarSeleccionLineas` (`src/utils/lineasMovimientoDiario.ts`) lo garantiza también para
+  borradores restaurados.
+- **Cobertura (avisos NO bloqueantes)**: `calcularCoberturaLinea` en `src/utils/stockAplicacion.ts`, fórmulas
+  del PRD §5 a 4 decimales; el armado vive en `src/utils/coberturaAplicacion.ts` y la lectura en
+  `fetchCoberturaAplicacion.ts`. Aparece en `IniciarEjecucionModal` (dentro del «Iniciar de todos modos»
+  que ya existía) y en el tablero de movimientos. Lo registrado se atribuye a la **mezcla del lote** del
+  movimiento, no al producto a secas. Una línea sin plan guardado en `aplicaciones_calculos` se omite: sin
+  dato, nunca un aviso inventado. **Una lectura fallida nunca se muestra como «todo cubierto».**
+- **Los productos de una línea con alternativos no se comparan contra un plan por producto** en el Resumen
+  del tablero (`sin_comparacion`): el plan repite la misma necesidad bajo cada uno y lo usado puede ser un
+  alternativo. Sin esto, un alternativo usado salía como «utilizado sin planificación previa».
+- El cierre (ESCO-165 F1) sigue igual: compara lo registrado de cada producto contra su saldo.
