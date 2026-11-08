@@ -3,7 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { ENDPOINT_PRUEBA_ESCO2, agregarTurnoHistorial, cerrarSesionPruebaEsco2, ejecutarPruebaEsco2, type MensajePruebaEsco2, type ResultadoPruebaEsco2 } from '../../utils/esco2ClientePrueba';
+import { ENDPOINT_PRUEBA_ESCO2, agregarTurnoHistorial, cerrarSesionPruebaEsco2, ejecutarPruebaEsco2, type MensajePruebaEsco2, type MotorPruebaEsco2, type ResultadoPruebaEsco2 } from '../../utils/esco2ClientePrueba';
+import { textoHistorialSql } from '../../utils/escoSql/loop';
 
 const PREGUNTA_INICIAL = '¿Cuántos jornales se registraron ayer? Sin desglose por persona.';
 
@@ -22,6 +23,8 @@ export function Esco2AccessCheck() {
 
 function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
   const [pregunta, setPregunta] = useState(PREGUNTA_INICIAL);
+  // Motor: el actual (planificador) o el loop de SQL de lectura. Cambiarlo reinicia la conversación.
+  const [motor, setMotor] = useState<MotorPruebaEsco2>('actual');
   const [estado, setEstado] = useState<EstadoPrueba>({ tipo: 'pendiente' });
   const [conversacion, setConversacion] = useState<Pick<ResultadoPruebaEsco2, 'estadoToken' | 'opcionesAclaracion'>>({});
   // Prior turns, sent so a follow-up keeps its period, lots and tasks. Cleared with the context.
@@ -98,11 +101,12 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
         ...(conversacion.estadoToken ? { estadoToken: conversacion.estadoToken } : {}),
         ...(respuestaAclaracion ? { respuestaAclaracion } : {}),
         ...(historial.length ? { historial } : {}),
+        ...(motor === 'sql' ? { motor } : {}),
       });
       if (peticion.current === controlador && !controlador.signal.aborted) {
         setEstado({ tipo: 'respuesta', resultado });
         setConversacion(resultado.valida ? { estadoToken: resultado.estadoToken, opcionesAclaracion: resultado.opcionesAclaracion } : {});
-        if (resultado.valida && resultado.respuesta) setHistorial(previo => agregarTurnoHistorial(previo, texto, resultado.respuesta!));
+        if (resultado.valida && resultado.respuesta) setHistorial(previo => agregarTurnoHistorial(previo, texto, motor === 'sql' ? textoHistorialSql(resultado.respuesta!, resultado.consultas ?? []) : resultado.respuesta!));
       }
     } catch {
       if (peticion.current === controlador) {
@@ -134,6 +138,19 @@ function PruebaSesion({ usuarioId, rol }: { usuarioId: string; rol: string }) {
         </section>
 
         <form onSubmit={comprobar} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="motor-esco2">Motor</Label>
+            <select
+              id="motor-esco2"
+              value={motor}
+              disabled={enCurso || cambiandoCuenta}
+              onChange={e => { setMotor(e.target.value as MotorPruebaEsco2); setConversacion({}); setHistorial([]); setEstado({ tipo: 'pendiente' }); }}
+              className="block min-h-11 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="actual">Motor: actual</option>
+              <option value="sql">Motor: SQL</option>
+            </select>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="pregunta-esco2">Pregunta de prueba</Label>
             <Textarea id="pregunta-esco2" value={pregunta} onChange={e => { setPregunta(e.target.value); setErrorPregunta(''); }} maxLength={1000} disabled={enCurso || cambiandoCuenta} rows={3} aria-invalid={Boolean(errorPregunta)} aria-describedby={errorPregunta ? 'error-pregunta-esco2' : undefined} />
@@ -176,7 +193,33 @@ function Resultado({ resultado }: { resultado: ResultadoPruebaEsco2 }) {
       <p>{resultado.valida ? 'Respuesta válida recibida. Revisa las cifras; la aceptación funcional sigue pendiente.' : resultado.http === 403 ? 'El servidor rechazó el acceso.' : 'La prueba no obtuvo una respuesta funcional válida.'}</p>
       {resultado.error ? <p role="alert" className="text-destructive">{resultado.error}</p> : null}
       {resultado.respuesta ? <p className="whitespace-pre-wrap leading-relaxed">{resultado.respuesta}</p> : null}
+      {resultado.consultas ? <ConsultasSql consultas={resultado.consultas} /> : null}
       {resultado.origen ? <p className="text-sm text-muted-foreground">Origen: {resultado.origen}. Ruta: {resultado.ruta ?? 'Sin composición'}. Duración: {resultado.ms ?? 'Sin confirmar'} ms.</p> : null}
     </>
+  );
+}
+
+function ConsultasSql({ consultas }: { consultas: NonNullable<ResultadoPruebaEsco2['consultas']> }) {
+  return (
+    <details className="rounded-lg border bg-muted/30 p-3 text-sm">
+      <summary className="cursor-pointer font-medium">Consultas usadas ({consultas.length})</summary>
+      <ol className="mt-3 space-y-4">
+        {consultas.map((c, i) => (
+          <li key={i} className="space-y-1">
+            <p className="font-medium">{i + 1}. {c.proposito || 'Sin propósito'}</p>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-background p-2 text-xs">{c.sql}</pre>
+            {c.error ? <p role="alert" className="text-destructive">Error de Postgres: {c.error}</p> : (
+              <p className="text-muted-foreground">
+                {c.n_filas ?? 0} fila(s){c.truncado ? ' — TRUNCADO a 500 filas' : ''}.
+                {c.n_filas === 0 ? ' Sin datos.' : ''}
+              </p>
+            )}
+            {c.filas_muestra.length ? (
+              <pre className="max-h-48 overflow-auto rounded bg-background p-2 text-xs">{JSON.stringify(c.filas_muestra, null, 1)}</pre>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
