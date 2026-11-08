@@ -329,6 +329,11 @@ export interface ResumenMovimientoDiario {
   diferencia: number;
   porcentaje_usado: number;
   excede_planeado: boolean;
+  /**
+   * El producto pertenece a una línea con alternativos (ESCO-171): no se compara contra un plan
+   * por producto, solo se muestra lo registrado. La cobertura de la línea va aparte.
+   */
+  sin_comparacion?: boolean;
 }
 
 export interface AlertaMovimiento {

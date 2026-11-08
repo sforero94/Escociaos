@@ -57,11 +57,14 @@ describe('DailyMovementForm — bloque de productos', () => {
     expect(fuente).toContain('errorProductos');
   });
 
-  it('la precarga conserva las cantidades ya digitadas del mismo producto', () => {
-    expect(fuente).toContain('const cantidadesPrevias = new Map(');
-    expect(fuente).toContain("cantidadesPrevias.get(producto.producto_id) ?? ''");
-    // Y descarta precargas que perdieron la carrera al cambiar de lote.
-    expect(fuente).toContain('if (token !== precargaTokenRef.current) return;');
+  it('la precarga conserva lo ya digitado: delega en construirFilaLinea, que reutiliza la cantidad previa', () => {
+    // ESCO-171: la precarga ya no consulta la red (saldo, unidad y presentación llegan en cada
+    // línea), así que es síncrona y no hay precargas que pierdan una carrera. La conservación
+    // de la cantidad vive en la función pura, probada en lineasMovimientoDiario.test.ts.
+    expect(fuente).toContain('construirFilaLinea(linea, prev)');
+    expect(fuente).not.toContain('precargaTokenRef');
+    const helper = readFileSync(resolve(__dirname, '../utils/lineasMovimientoDiario.ts'), 'utf8');
+    expect(helper).toContain("const cantidad = previa?.cantidad_utilizada ?? '';");
   });
 
   it('el perfil del responsable se busca por `usuarios.id`, que ES el uid de auth', () => {

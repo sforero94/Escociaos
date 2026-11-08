@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import {
@@ -61,6 +61,14 @@ import type {
 import { JornalFractionMatrix } from '../shared/JornalFractionMatrix';
 import { calculateLaborCost, calculateContractorCost } from '../../utils/laborCosts';
 import { formatearNumero } from '@/utils/format';
+import {
+  construirFilaLinea,
+  seleccionarOpcionLinea,
+  validarSeleccionLineas,
+  type FilaLineaMovimiento,
+  type LineaPlanMovimiento,
+  type OpcionProductoLinea,
+} from '../../utils/lineasMovimientoDiario';
 
 interface DailyMovementFormProps {
   aplicacion: Aplicacion;
@@ -69,14 +77,8 @@ interface DailyMovementFormProps {
   onSuccess: () => void;
 }
 
-interface ProductoFormulario {
-  producto_id: string;
-  producto_nombre: string;
-  producto_categoria: string;
-  cantidad_utilizada: string;
-  unidad_producto: string; // unidad_medida del producto desde BD (Litros o Kilos)
-  presentacion_kg_l?: number; // SOLO para fertilización: cuántos Kg por bulto
-}
+/** Una fila por LÍNEA del plan (ESCO-171): con alternativos, el producto lo escoge David del selector. */
+type ProductoFormulario = FilaLineaMovimiento;
 
 interface ErroresCampo {
   fecha?: string;
@@ -184,8 +186,6 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
   // pasa a false cuando cargarDatosAplicacion termina (con exito o con error).
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [errorProductos, setErrorProductos] = useState<string | null>(null);
-  // Token para descartar precargas obsoletas cuando el lote cambia rapido.
-  const precargaTokenRef = useRef(0);
 
   // Worker tracking (employees + contractors)
   const [empleadosDisponibles, setEmpleadosDisponibles] = useState<Empleado[]>([]);
@@ -350,6 +350,7 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
         const { data: productosData, error: errorProductosQuery } = await supabase
           .from('aplicaciones_productos')
           .select(`
+            id,
             mezcla_id,
             producto_id,
             producto_nombre,
@@ -361,19 +362,90 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
 
         if (errorProductosQuery) throw errorProductosQuery;
 
+        // Alternativos de cada línea (ESCO-171). Una línea sin alternativos sigue siendo una fila fija.
+        const idsLineas = (productosData || []).map((p) => p.id);
+        const alternativosPorLinea = new Map<string, string[]>();
+        if (idsLineas.length > 0) {
+          const { data: alternativosData, error: errorAlternativos } = await supabase
+            .from('aplicaciones_productos_alternativos')
+            .select('aplicacion_producto_id, producto_id')
+            .in('aplicacion_producto_id', idsLineas);
+          if (errorAlternativos) throw errorAlternativos;
+          (alternativosData || []).forEach((a) => {
+            const lista = alternativosPorLinea.get(a.aplicacion_producto_id) ?? [];
+            lista.push(a.producto_id);
+            alternativosPorLinea.set(a.aplicacion_producto_id, lista);
+          });
+        }
+
+        // Datos vivos de todos los productos que se pueden escoger: saldo en bodega, unidad,
+        // categoría y (fertilización) kg por bulto. Una sola consulta.
+        const idsProductos = Array.from(
+          new Set([
+            ...(productosData || []).map((p) => p.producto_id),
+            ...Array.from(alternativosPorLinea.values()).flat(),
+          ]),
+        );
+        const infoProductos = new Map<string, { nombre: string; categoria: string; unidad: string; saldo: number | null; presentacion: number | undefined }>();
+        if (idsProductos.length > 0) {
+          const { data: infoData, error: errorInfo } = await supabase
+            .from('productos')
+            .select('id, nombre, categoria, unidad_medida, cantidad_actual, presentacion_kg_l')
+            .in('id', idsProductos);
+          if (errorInfo) {
+            // Mismo criterio de siempre: sin presentación el guardado de fertilización avisa.
+            console.error('Failed to fetch productos para el movimiento:', errorInfo);
+          }
+          (infoData || []).forEach((p) => {
+            infoProductos.set(p.id, {
+              nombre: p.nombre,
+              categoria: p.categoria,
+              unidad: p.unidad_medida,
+              saldo: p.cantidad_actual ?? null,
+              presentacion: p.presentacion_kg_l ?? undefined,
+            });
+          });
+        }
+
+        const opcionDe = (productoId: string, respaldo: { nombre: string; categoria: string; unidad: string }): OpcionProductoLinea => {
+          const info = infoProductos.get(productoId);
+          return {
+            producto_id: productoId,
+            producto_nombre: info?.nombre ?? respaldo.nombre,
+            producto_categoria: info?.categoria ?? respaldo.categoria,
+            producto_unidad: info?.unidad ?? respaldo.unidad,
+            saldo: info?.saldo ?? null,
+            presentacion_kg_l: info?.presentacion,
+          };
+        };
+
         // Organizar productos por mezcla
         const productosPorMezclaTemp: Record<string, any[]> = {};
         (productosData || []).forEach((p: any) => {
           if (!productosPorMezclaTemp[p.mezcla_id]) {
             productosPorMezclaTemp[p.mezcla_id] = [];
           }
+          const principal = opcionDe(p.producto_id, {
+            nombre: p.producto_nombre,
+            categoria: p.producto_categoria,
+            unidad: p.producto_unidad,
+          });
+          const linea: LineaPlanMovimiento = {
+            linea_id: p.id,
+            // El nombre y la categoría del plan mandan sobre el catálogo en el principal (como antes).
+            principal: { ...principal, producto_nombre: p.producto_nombre, producto_categoria: p.producto_categoria, producto_unidad: p.producto_unidad },
+            alternativos: (alternativosPorLinea.get(p.id) ?? []).map((idAlt) =>
+              opcionDe(idAlt, { nombre: 'Producto sin nombre', categoria: '', unidad: p.producto_unidad }),
+            ),
+          };
           productosPorMezclaTemp[p.mezcla_id].push({
             producto_id: p.producto_id,
             producto_nombre: p.producto_nombre,
             producto_categoria: p.producto_categoria,
             producto_unidad: p.producto_unidad,
             cantidad_total_necesaria: p.cantidad_total_necesaria,
-            mezcla_id: p.mezcla_id
+            mezcla_id: p.mezcla_id,
+            linea,
           });
         });
 
@@ -389,7 +461,8 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
               producto_categoria: p.producto_categoria,
               producto_unidad: p.producto_unidad,
               cantidad_total_necesaria: p.cantidad_total_necesaria,
-              mezcla_id: p.mezcla_id
+              mezcla_id: p.mezcla_id,
+              linea: (productosPorMezclaTemp[p.mezcla_id] || []).find((x: any) => x.linea.linea_id === p.id)?.linea,
             });
           }
         });
@@ -408,56 +481,27 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
     }
   };
 
-  // 🆕 Precargar todos los productos de la mezcla que aplica al lote elegido.
-  // Conserva las cantidades ya digitadas (mismo producto_id) para que cambiar de
-  // lote no borre lo que el usuario venía escribiendo.
-  const precargarProductos = async (productos: any[]) => {
-    const token = ++precargaTokenRef.current;
-
-    // presentacion_kg_l SOLO se usa en fertilización, y se pide en una sola
-    // consulta: antes era un select por producto, en serie.
-    const presentaciones = new Map<string, number>();
-    if (aplicacion.tipo_aplicacion === 'Fertilización') {
-      const ids = productos.map(p => p.producto_id).filter(Boolean);
-      if (ids.length > 0) {
-        try {
-          const { data, error: errorProductosQuery } = await supabase
-            .from('productos')
-            .select('id, presentacion_kg_l')
-            .in('id', ids);
-
-          if (errorProductosQuery) {
-            console.error('Failed to fetch productos presentacion_kg_l:', errorProductosQuery);
-          } else {
-            (data || []).forEach((p: any) => {
-              if (p.presentacion_kg_l != null) {
-                presentaciones.set(p.id, p.presentacion_kg_l);
-              }
-            });
-          }
-        } catch (err) {
-          console.error('Failed to fetch productos presentacion_kg_l:', err);
-        }
-      }
-    }
-
-    // Una precarga posterior ya ganó la carrera: descartamos esta.
-    if (token !== precargaTokenRef.current) return;
-
-    setProductosAgregados(prev => {
-      const cantidadesPrevias = new Map(
-        prev.map(p => [p.producto_id, p.cantidad_utilizada])
-      );
-
-      return productos.map(producto => ({
-        producto_id: producto.producto_id,
-        producto_nombre: producto.producto_nombre,
-        producto_categoria: producto.producto_categoria,
-        cantidad_utilizada: cantidadesPrevias.get(producto.producto_id) ?? '',
-        unidad_producto: producto.producto_unidad,
-        presentacion_kg_l: presentaciones.get(producto.producto_id)
-      }));
-    });
+  // 🆕 Precargar una fila por LÍNEA de la mezcla que aplica al lote elegido.
+  // Conserva lo ya digitado (cantidad y, en líneas con alternativos, el producto escogido) para
+  // que cambiar de lote no borre lo que el usuario venía escribiendo. Saldo, unidad y presentación
+  // ya vienen en cada línea (se leen una sola vez en cargarDatosAplicacion).
+  const precargarProductos = (productos: any[]) => {
+    setProductosAgregados(prev =>
+      productos.map(producto => {
+        const linea: LineaPlanMovimiento = producto.linea ?? {
+          linea_id: producto.producto_id,
+          principal: {
+            producto_id: producto.producto_id,
+            producto_nombre: producto.producto_nombre,
+            producto_categoria: producto.producto_categoria,
+            producto_unidad: producto.producto_unidad,
+            saldo: null,
+          },
+          alternativos: [],
+        };
+        return construirFilaLinea(linea, prev);
+      })
+    );
   };
 
   const cargarUsuarioActual = async () => {
@@ -575,6 +619,12 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
     setProductosAgregados(nuevosProductos);
   };
 
+  // ESCO-171: en una línea con alternativos, David escoge el producto. Una fila por línea, así
+  // que dos productos de la misma línea en un movimiento no se pueden armar desde el selector.
+  const seleccionarProductoLinea = (index: number, productoId: string) => {
+    setProductosAgregados(prev => prev.map((fila, i) => (i === index ? seleccionarOpcionLinea(fila, productoId) : fila)));
+  };
+
   // Pre-existente y sin uso desde la UI — se conserva tal cual (ver nota en agregarProducto).
   const actualizarUnidadProducto = (index: number, unidad: 'cc' | 'L') => {
     const nuevosProductos = [...productosAgregados];
@@ -616,10 +666,13 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
     if (productosAgregados.length === 0) {
       errores.productos = 'Debes agregar al menos un producto';
     } else {
+      const errorSeleccion = validarSeleccionLineas(productosAgregados);
       const productoInvalido = productosAgregados.find(
         p => !p.cantidad_utilizada || parseFloat(p.cantidad_utilizada) <= 0
       );
-      if (productoInvalido) {
+      if (errorSeleccion) {
+        errores.productos = errorSeleccion;
+      } else if (productoInvalido) {
         errores.productos = `El producto "${productoInvalido.producto_nombre}" necesita una cantidad válida`;
       }
     }
@@ -1258,8 +1311,35 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
           {productosAgregados.length > 0 ? (
             <div className="flex flex-col gap-3">
               {productosAgregados.map((producto, index) => (
-                <Field key={index}>
-                  <FieldLabel>{producto.producto_nombre}</FieldLabel>
+                <Field key={producto.linea_id ?? index}>
+                  {producto.opciones && producto.opciones.length > 1 ? (
+                    <>
+                      <FieldLabel>{producto.linea_nombre ?? producto.producto_nombre} — escoge el producto</FieldLabel>
+                      {/* ESCO-171: principal y alternativos en orden alfabético, cada uno con su saldo.
+                          Sin opción preseleccionada ni sugerencia: David escoge a criterio. */}
+                      <Select
+                        value={producto.producto_id}
+                        onValueChange={(valor) => seleccionarProductoLinea(index, valor)}
+                        disabled={loading}
+                      >
+                        <SelectTrigger className="w-full" aria-label={`Producto de la línea ${producto.linea_nombre ?? producto.producto_nombre}`}>
+                          <SelectValue placeholder="Escoge el producto" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {producto.opciones.map((opcion) => (
+                            <SelectItem key={opcion.producto_id} value={opcion.producto_id}>
+                              {opcion.producto_nombre} ·{' '}
+                              {opcion.saldo === null
+                                ? 'saldo sin dato'
+                                : `saldo ${formatearNumero(opcion.saldo, 2)} ${opcion.producto_unidad}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
+                  ) : (
+                    <FieldLabel>{producto.producto_nombre}</FieldLabel>
+                  )}
                   <div className="flex items-center gap-2">
                     <InputGroup className="flex-1">
                       <InputGroupInput
@@ -1268,6 +1348,7 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
                         min="0"
                         value={producto.cantidad_utilizada}
                         onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
                         placeholder="0"
                         disabled={loading}
                       />

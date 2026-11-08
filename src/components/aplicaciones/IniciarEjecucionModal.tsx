@@ -18,6 +18,8 @@ import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
 import type { Aplicacion } from '../../types/aplicaciones';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { formatearNumero } from '@/utils/format';
+import { fetchCoberturaAplicacion } from '@/utils/fetchCoberturaAplicacion';
+import { describirFaltanteCobertura } from '@/utils/coberturaAplicacion';
 
 interface IniciarEjecucionModalProps {
   aplicacion: Aplicacion;
@@ -47,6 +49,8 @@ export function IniciarEjecucionModal({
   const [productosFaltantes, setProductosFaltantes] = useState<ProductoFaltante[]>([]);
   const [stockValidado, setStockValidado] = useState(false);
   const [showConfirmStockInsuficiente, setShowConfirmStockInsuficiente] = useState(false);
+  // ESCO-171: líneas con productos alternativos cuya cobertura conjunta no alcanza (no bloquea).
+  const [avisosCobertura, setAvisosCobertura] = useState<string[]>([]);
 
   /**
    * VALIDAR STOCK SUFICIENTE
@@ -56,6 +60,7 @@ export function IniciarEjecucionModal({
       setValidandoStock(true);
       setError(null);
       setProductosFaltantes([]);
+      setAvisosCobertura([]);
 
 
       // 1. Cargar productos necesarios de todas las mezclas
@@ -77,7 +82,7 @@ export function IniciarEjecucionModal({
 
       const { data: productosNecesarios, error: errorProductos } = await supabase
         .from('aplicaciones_productos')
-        .select('producto_id, producto_nombre, cantidad_total_necesaria, producto_unidad')
+        .select('id, producto_id, producto_nombre, cantidad_total_necesaria, producto_unidad')
         .in('mezcla_id', mezclasIds);
 
       if (errorProductos) {
@@ -89,10 +94,25 @@ export function IniciarEjecucionModal({
         return true;
       }
 
+      // 1b. Líneas con productos alternativos (ESCO-171): se miden por la cobertura CONJUNTA de la
+      // línea, no producto por producto — comparar el principal contra su propio saldo da falsos
+      // faltantes cuando David la completa con los alternativos.
+      let cobertura;
+      try {
+        cobertura = await fetchCoberturaAplicacion(aplicacion.id, aplicacion.tipo_aplicacion);
+      } catch {
+        throw new Error('Error al calcular la cobertura de los productos alternativos');
+      }
+      const avisos = cobertura.lineas
+        .filter(l => !l.alcanza)
+        .map(l => describirFaltanteCobertura(l, n => formatearNumero(n, 2)));
+
       // 2. Consolidar cantidades por producto (puede haber duplicados en diferentes mezclas)
       const necesidadesPorProducto = new Map<string, { nombre: string; cantidad: number; unidad: string }>();
 
-      productosNecesarios.forEach(p => {
+      const lineasSinAlternativos = productosNecesarios.filter(p => !cobertura.idsLineasConAlternativos.has(p.id));
+
+      lineasSinAlternativos.forEach(p => {
         const actual = necesidadesPorProducto.get(p.producto_id);
         if (actual) {
           actual.cantidad += p.cantidad_total_necesaria || 0;
@@ -107,6 +127,11 @@ export function IniciarEjecucionModal({
 
       // 3. Cargar stock actual de productos
       const productosIds = Array.from(necesidadesPorProducto.keys());
+      if (productosIds.length === 0) {
+        setAvisosCobertura(avisos);
+        setStockValidado(avisos.length === 0);
+        return avisos.length === 0;
+      }
 
       const { data: productosStock, error: errorStock } = await supabase
         .from('productos')
@@ -137,8 +162,9 @@ export function IniciarEjecucionModal({
       });
 
       // 5. Resultado
-      if (faltantes.length > 0) {
+      if (faltantes.length > 0 || avisos.length > 0) {
         setProductosFaltantes(faltantes);
+        setAvisosCobertura(avisos);
         setStockValidado(false);
         return false;
       }
@@ -207,13 +233,26 @@ export function IniciarEjecucionModal({
   };
 
   // Build a description that lists the products with insufficient stock
-  const confirmStockDescription = productosFaltantes.length > 0
-    ? `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n` +
-      productosFaltantes.map(
-        (p) => `${p.nombre}: necesita ${formatearNumero(p.necesario, 2)} ${p.unidad}, disponible ${formatearNumero(p.disponible, 2)} ${p.unidad}`
-      ).join(' / ') +
-      '\n\nEsta acción no se puede deshacer.'
-    : 'Esta acción no se puede deshacer.';
+  const lineasAviso = [
+    ...(productosFaltantes.length > 0
+      ? [
+          `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n` +
+            productosFaltantes
+              .map(
+                (p) =>
+                  `${p.nombre}: necesita ${formatearNumero(p.necesario, 2)} ${p.unidad}, disponible ${formatearNumero(p.disponible, 2)} ${p.unidad}`,
+              )
+              .join(' / '),
+        ]
+      : []),
+    ...(avisosCobertura.length > 0
+      ? [`${avisosCobertura.length} línea(s) con productos alternativos no alcanzan:\n` + avisosCobertura.join('\n')]
+      : []),
+  ];
+  const confirmStockDescription =
+    lineasAviso.length > 0
+      ? lineasAviso.join('\n\n') + '\n\nEsta acción no se puede deshacer.'
+      : 'Esta acción no se puede deshacer.';
 
   return (
     <>

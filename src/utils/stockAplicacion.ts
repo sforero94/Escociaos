@@ -76,3 +76,154 @@ export function calcularFaltantesCierre(
   }
   return faltantes;
 }
+
+// ============================================================================
+// COBERTURA DE UNA LÍNEA CON PRODUCTOS ALTERNATIVOS (ESCO-171, PRD §5)
+// ============================================================================
+//
+// Una línea del plan puede completarse con el principal o con cualquiera de sus alternativos
+// (cada uno con su dosis). El stock por producto da falsos faltantes (el plan repite 3,13 bajo
+// cada uno de tres correctores de pH y la bodega tiene 3,76 entre los tres), así que la línea se
+// mide en UNIDADES de aplicación (canecas o bultos de mezcla):
+//
+//   unidades que cubre un producto = saldo ÷ dosis por unidad
+//   cobertura de la línea          = Σ unidades de principal + alternativos
+//   unidades ya hechas             = Σ (registrado de cada producto ÷ su dosis)
+//   unidades pendientes            = planeadas − hechas
+//   aviso si cobertura < pendientes            (todo a 4 decimales)
+//
+// «Dosis por unidad» se expresa como `requerimiento ÷ unidades planeadas`, donde `requerimiento`
+// es lo que ese producto necesitaría (en L o kg) para cubrir TODA la línea. Así la misma fórmula
+// vale para fumigación/drench (por caneca) y fertilización (por tamaño de árbol), y para convertir
+// cc/g a L/kg no hay nada que hacer aparte. NO es un ranking ni una sugerencia: solo avisa.
+
+/** Orden alfabético en español, sin distinguir mayúsculas ni tildes. El formulario NO sugiere ni
+ * prioriza un producto (decisión de Santiago, 2026-11-02): David escoge a criterio. */
+export function ordenarOpcionesAlfabeticamente<T extends { producto_nombre: string }>(opciones: readonly T[]): T[] {
+  return [...opciones].sort((a, b) =>
+    a.producto_nombre.localeCompare(b.producto_nombre, 'es', { sensitivity: 'base' }),
+  );
+}
+
+/** Convierte lo registrado a la unidad base (L / kg). `movimientos_diarios_productos` ya guarda en
+ * L/kg; 'cc' y 'g' solo existen en filas históricas (misma regla que `CierreAplicacion`). */
+export function cantidadEnUnidadBase(cantidad: number, unidad: string | null | undefined): number {
+  return unidad === 'cc' || unidad === 'g' ? cantidad / 1000 : cantidad;
+}
+
+export interface DosisProducto {
+  dosis_por_caneca?: number | null;
+  dosis_grandes?: number | null;
+  dosis_medianos?: number | null;
+  dosis_pequenos?: number | null;
+  dosis_clonales?: number | null;
+}
+
+export interface BaseCalculoLinea {
+  /** Σ canecas planeadas de los lotes de la mezcla (fumigación / drench). */
+  canecas: number;
+  /** Σ árboles por tamaño de los lotes de la mezcla (fertilización). */
+  arboles: { grandes: number; medianos: number; pequenos: number; clonales: number };
+}
+
+/**
+ * Cantidad (L o kg) que un producto necesitaría para cubrir TODA la línea con su dosis.
+ * Mismas fórmulas que `calcularFumigacion` / `calcularFertilizacion` (dosis en cc/g → ÷1000),
+ * pero sin el redondeo por lote: aquí solo se usa para repartir la cobertura.
+ */
+export function requerimientoDeLinea(
+  porCaneca: boolean,
+  dosis: DosisProducto,
+  base: BaseCalculoLinea,
+): number {
+  if (porCaneca) {
+    return ((dosis.dosis_por_caneca ?? 0) * base.canecas) / 1000;
+  }
+  return (
+    ((dosis.dosis_grandes ?? 0) * base.arboles.grandes +
+      (dosis.dosis_medianos ?? 0) * base.arboles.medianos +
+      (dosis.dosis_pequenos ?? 0) * base.arboles.pequenos +
+      (dosis.dosis_clonales ?? 0) * base.arboles.clonales) /
+    1000
+  );
+}
+
+export interface OpcionCobertura {
+  producto_id: string;
+  producto_nombre: string;
+  /** L / kg que este producto necesitaría para cubrir toda la línea. <= 0 = sin dosis: no cuenta. */
+  requerimiento: number;
+  /** `productos.cantidad_actual`; null = sin dato (nunca se trata como 0 en silencio). */
+  saldo: number | null;
+  /** Ya registrado en movimientos diarios, en L / kg. */
+  registrado: number;
+}
+
+export interface LineaCoberturaInput {
+  linea_id: string;
+  unidad: 'canecas' | 'bultos';
+  /** Unidades (canecas o bultos de mezcla) planeadas para la línea. */
+  unidadesPlaneadas: number;
+  /** El principal y sus alternativos. El orden no importa para el cálculo. */
+  opciones: OpcionCobertura[];
+  /** Nombre con el que se rotula la línea en el aviso (el principal del plan). */
+  nombre: string;
+}
+
+export interface ResultadoCoberturaLinea {
+  linea_id: string;
+  nombre: string;
+  unidad: 'canecas' | 'bultos';
+  planeadas: number;
+  hechas: number;
+  pendientes: number;
+  cobertura: number;
+  /** pendientes − cobertura cuando no alcanza; 0 si alcanza. */
+  faltan: number;
+  alcanza: boolean;
+  /** Productos de la línea sin saldo conocido: no aportan cobertura y el aviso debe decirlo. */
+  productosSinSaldo: string[];
+  /** Productos sin dosis calculable: su stock y su consumo no se pueden convertir a unidades. */
+  productosSinDosis: string[];
+}
+
+export function calcularCoberturaLinea(linea: LineaCoberturaInput): ResultadoCoberturaLinea {
+  const planeadas = redondear4(linea.unidadesPlaneadas);
+  let hechasCruda = 0;
+  let coberturaCruda = 0;
+  const productosSinSaldo: string[] = [];
+  const productosSinDosis: string[] = [];
+
+  for (const op of linea.opciones) {
+    if (!(op.requerimiento > 0) || !(linea.unidadesPlaneadas > 0)) {
+      productosSinDosis.push(op.producto_nombre);
+      continue;
+    }
+    const unidadesPorKgL = linea.unidadesPlaneadas / op.requerimiento;
+    hechasCruda += op.registrado * unidadesPorKgL;
+    if (op.saldo === null || Number.isNaN(op.saldo)) {
+      productosSinSaldo.push(op.producto_nombre);
+    } else {
+      coberturaCruda += Math.max(0, op.saldo) * unidadesPorKgL;
+    }
+  }
+
+  const hechas = redondear4(hechasCruda);
+  const pendientes = redondear4(Math.max(0, planeadas - hechas));
+  const cobertura = redondear4(coberturaCruda);
+  const alcanza = cobertura >= pendientes;
+
+  return {
+    linea_id: linea.linea_id,
+    nombre: linea.nombre,
+    unidad: linea.unidad,
+    planeadas,
+    hechas,
+    pendientes,
+    cobertura,
+    faltan: alcanza ? 0 : redondear4(pendientes - cobertura),
+    alcanza,
+    productosSinSaldo,
+    productosSinDosis,
+  };
+}
