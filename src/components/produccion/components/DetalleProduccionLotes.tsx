@@ -1,3 +1,12 @@
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { ComparacionLoteCosecha } from '@/utils/calculosProduccionAnalisis';
 import type { CosechaIdentidad } from '../../../types/produccion';
 
@@ -35,7 +44,7 @@ export function DetalleProduccionLotes({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-x-auto">
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Detalle por lote</h3>
         <p className="text-sm text-gray-500 mt-1">
@@ -44,60 +53,59 @@ export function DetalleProduccionLotes({
         </p>
       </div>
 
-      <table className="w-full min-w-[720px] text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-gray-400 border-b border-gray-100">
-            <th className="py-3 pr-3 font-medium">Lote</th>
-            <th className="py-3 pr-3 font-medium">Producción kg</th>
-            <th className="py-3 pr-3 font-medium">Clasificado kg</th>
-            <th className="py-3 pr-3 font-medium">Despachado kg</th>
-            <th className="py-3 pr-3 font-medium">Diferencia kg</th>
-            <th className="py-3 font-medium">Respaldo</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="min-w-[720px]">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Lote</TableHead>
+            <TableHead>Producción kg</TableHead>
+            <TableHead>Clasificado kg</TableHead>
+            <TableHead>Despachado kg</TableHead>
+            <TableHead>Diferencia kg</TableHead>
+            <TableHead>Respaldo</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody striped>
           {filas.map((fila) => {
             const prod =
               cosechaActiva != null ? fila.por_cosecha[cosechaActiva.key] : null;
             return (
-              <tr
-                key={fila.lote_id}
-                className="border-b border-gray-50 text-gray-800"
-              >
-                <td className="py-3 pr-3 font-medium">{fila.lote_nombre}</td>
-                <td className="py-3 pr-3 font-mono">
+              <TableRow key={fila.lote_id} className="text-gray-800">
+                <TableCell className="font-medium">{fila.lote_nombre}</TableCell>
+                <TableCell className="font-mono">
                   {prod != null ? prod.toLocaleString('es-CO') : 'Sin dato'}
-                </td>
-                <td className="py-3 pr-3 text-gray-400">Sin dato</td>
-                <td className="py-3 pr-3 text-gray-400">Sin dato</td>
-                <td className="py-3 pr-3 text-gray-400">Sin dato</td>
-                <td className="py-3 text-gray-500">Registro produccion</td>
-              </tr>
+                </TableCell>
+                <TableCell className="text-gray-400">Sin dato</TableCell>
+                <TableCell className="text-gray-400">Sin dato</TableCell>
+                <TableCell className="text-gray-400">Sin dato</TableCell>
+                <TableCell className="text-gray-500">Registro produccion</TableCell>
+              </TableRow>
             );
           })}
-          {filas.length > 0 && (
-            <tr className="text-gray-900 font-medium">
-              <td className="py-3 pr-3">Total · no sumar etapas</td>
-              <td className="py-3 pr-3 font-mono">
-                {total != null ? Math.round(total).toLocaleString('es-CO') : '—'}
-              </td>
-              <td className="py-3 pr-3 text-gray-400 font-normal">Sin dato</td>
-              <td className="py-3 pr-3 text-gray-400 font-normal">Sin dato</td>
-              <td className="py-3 pr-3 text-gray-400 font-normal">Sin dato</td>
-              <td className="py-3 text-gray-500 font-normal">
-                Solo producción registrada
-              </td>
-            </tr>
-          )}
           {filas.length === 0 && (
-            <tr>
-              <td colSpan={6} className="py-10 text-center text-gray-500">
+            <TableRow>
+              <TableCell colSpan={6} className="py-10 text-center text-gray-500">
                 Sin filas para el filtro actual.
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+        {filas.length > 0 && (
+          <TableFooter>
+            <TableRow className="text-gray-900">
+              <TableCell>Total · no sumar etapas</TableCell>
+              <TableCell className="font-mono">
+                {total != null ? Math.round(total).toLocaleString('es-CO') : '—'}
+              </TableCell>
+              <TableCell className="text-gray-400 font-normal">Sin dato</TableCell>
+              <TableCell className="text-gray-400 font-normal">Sin dato</TableCell>
+              <TableCell className="text-gray-400 font-normal">Sin dato</TableCell>
+              <TableCell className="text-gray-500 font-normal">
+                Solo producción registrada
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        )}
+      </Table>
 
       <p className="mt-4 text-xs text-gray-400">
         En el producto, cada cifra abrirá sus movimientos y fuente. No se fuerza
