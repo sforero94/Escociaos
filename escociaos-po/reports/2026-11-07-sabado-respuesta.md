@@ -72,3 +72,13 @@ Ninguno por esta sesión.
 - Línea de memoria del buscador: no aplica (ninguna propuesta `no`).
 - Una conexión de Composio para Supabase quedó en estado `initiated` al listar cuentas
   (`supabase_ptisan-jackye`, sin uso). No afecta a `escocia-os`.
+
+## 7. Adenda — 2026-11-08, misma sesión
+
+- Santiago dijo «fusionar #453». Antes de fusionar: abierto, verde (`verificacion` y Vercel), head `8eb927f`.
+  Fusionado con squash: `082e8b9` en `main`. El archivo de la 191 ya está en `main`; la ventana de 7 días
+  del §6 quedó cerrada.
+- La entrada de la 191 se agregó a `CLAUDE.md` raíz (sección «Migration ledger update — 2026-11-08»).
+- Este reporte y esa entrada llegan a `main` por PR desde `claude/youthful-cori-cf20zp`.
+- ESCO-170 y ESCO-171: Santiago pidió el prompt para una sesión de implementación aparte. Se lo entregó
+  en el chat. No se tocó ninguna ficha ni rama.
