@@ -19,6 +19,7 @@ import type {
   Mezcla,
   CalculosPorLote,
   ListaCompras,
+  ProductoAlternativo,
 } from '../../types/aplicaciones';
 
 // Importar componentes de pasos
@@ -26,6 +27,11 @@ import { PasoConfiguracion } from './PasoConfiguracion';
 import type { EstadoAsignacionMezcla } from './PasoMezcla';
 import { PasoListaCompras } from './PasoListaCompras';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import {
+  agruparAlternativosPorLinea,
+  construirFilasAlternativos,
+  validarAlternativos,
+} from '@/utils/productosAlternativos';
 
 // ============================================================================
 // CONFIGURACIÓN DE PASOS — 2, no 3 (W01-calculadora-v2.md). "Configuración" y "Mezcla"
@@ -141,6 +147,25 @@ export function CalculadoraAplicaciones() {
 
           if (errorProductos) throw errorProductos;
 
+          // 4b. Alternativos de cada línea (ESCO-170). Cuelgan del id de la línea.
+          const idsLineas = (productos || []).map((p) => p.id);
+          let alternativosPorLinea = new Map<string, ProductoAlternativo[]>();
+          if (idsLineas.length > 0) {
+            const { data: alternativos, error: errorAlternativos } = await supabase
+              .from('aplicaciones_productos_alternativos')
+              .select(
+                `
+                aplicacion_producto_id, producto_id, dosis_por_caneca, unidad_dosis,
+                dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales,
+                productos ( nombre, categoria, unidad_medida )
+              `,
+              )
+              .in('aplicacion_producto_id', idsLineas);
+
+            if (errorAlternativos) throw errorAlternativos;
+            alternativosPorLinea = agruparAlternativosPorLinea(alternativos || []);
+          }
+
           return {
             id: mezcla.id,
             numero_orden: mezcla.numero_mezcla,
@@ -157,6 +182,7 @@ export function CalculadoraAplicaciones() {
               dosis_pequenos: p.dosis_pequenos || undefined,
               dosis_clonales: p.dosis_clonales || undefined,
               cantidad_total_necesaria: p.cantidad_total_necesaria || 0,
+              alternativos: alternativosPorLinea.get(p.id) ?? [],
             })),
             lotes_asignados: [] as string[],
           };
@@ -406,6 +432,12 @@ export function CalculadoraAplicaciones() {
       return false;
     }
 
+    const errorAlternativos = validarAlternativos(state.mezclas, tipo);
+    if (errorAlternativos) {
+      setValidationError(errorAlternativos);
+      return false;
+    }
+
     setValidationError('');
     return true;
   };
@@ -646,8 +678,25 @@ export function CalculadoraAplicaciones() {
           producto_unidad: producto.producto_unidad,
         }));
 
-        const { error: errorProductos } = await supabase.from('aplicaciones_productos').insert(productosData);
+        const { data: lineasInsertadas, error: errorProductos } = await supabase
+          .from('aplicaciones_productos')
+          .insert(productosData)
+          .select('id, producto_id');
         if (errorProductos) throw errorProductos;
+
+        // Alternativos (ESCO-170): la reinserción de las líneas borró los anteriores por
+        // ON DELETE CASCADE, así que se escriben contra el id NUEVO de cada línea.
+        const alternativosData = construirFilasAlternativos(
+          mezcla.productos,
+          lineasInsertadas || [],
+          state.configuracion?.tipo,
+        );
+        if (alternativosData.length > 0) {
+          const { error: errorAlternativos } = await supabase
+            .from('aplicaciones_productos_alternativos')
+            .insert(alternativosData);
+          if (errorAlternativos) throw errorAlternativos;
+        }
       }
 
       // =============================================================

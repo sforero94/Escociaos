@@ -28,9 +28,11 @@ import {
 } from '../../utils/calculosAplicaciones';
 import { formatearNumero } from '../../utils/format';
 import { cn } from '../ui/utils';
+import { crearAlternativo } from '../../utils/productosAlternativos';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
+  ProductoAlternativo,
   ProductoEnMezcla,
   CalculosPorLote,
   ProductoCatalogo,
@@ -371,6 +373,64 @@ export function MezclaPlanSection({
     recalcular(actualizadas);
   };
 
+  /**
+   * ALTERNATIVOS (ESCO-170) — opciones de una línea, cada una con su dosis. No suman a
+   * necesidades ni costos: `recalcular` solo mira `producto_id` de las líneas.
+   */
+  const actualizarAlternativosDeLinea = (
+    mezclaId: string,
+    productoId: string,
+    cambio: (alternativos: ProductoAlternativo[]) => ProductoAlternativo[],
+  ) => {
+    const actualizadas = mezclas.map((m) =>
+      m.id === mezclaId
+        ? {
+            ...m,
+            productos: m.productos.map((p) =>
+              p.producto_id === productoId ? { ...p, alternativos: cambio(p.alternativos ?? []) } : p,
+            ),
+          }
+        : m,
+    );
+    recalcular(actualizadas);
+  };
+
+  const agregarAlternativo = (mezclaId: string, productoId: string, alternativoId: string) => {
+    const producto = productosCatalogo.find((p) => p.id === alternativoId);
+    if (!producto) return;
+    if (alternativoId === productoId) {
+      toast('Un alternativo no puede ser el mismo producto principal');
+      return;
+    }
+    const linea = mezclas.find((m) => m.id === mezclaId)?.productos.find((p) => p.producto_id === productoId);
+    if (linea?.alternativos?.some((a) => a.producto_id === alternativoId)) {
+      toast('Este alternativo ya está en la línea');
+      return;
+    }
+    actualizarAlternativosDeLinea(mezclaId, productoId, (alts) => [
+      ...alts,
+      crearAlternativo(producto, usaDosisPorCaneca),
+    ]);
+  };
+
+  const quitarAlternativo = (mezclaId: string, productoId: string, alternativoId: string) => {
+    actualizarAlternativosDeLinea(mezclaId, productoId, (alts) =>
+      alts.filter((a) => a.producto_id !== alternativoId),
+    );
+  };
+
+  const actualizarDosisAlternativo = (
+    mezclaId: string,
+    productoId: string,
+    alternativoId: string,
+    campo: string,
+    valor: number,
+  ) => {
+    actualizarAlternativosDeLinea(mezclaId, productoId, (alts) =>
+      alts.map((a) => (a.producto_id === alternativoId ? { ...a, [campo]: valor } : a)),
+    );
+  };
+
   const actualizarDosis = (mezclaId: string, productoId: string, campo: string, valor: number) => {
     const actualizadas = mezclas.map((m) =>
       m.id === mezclaId
@@ -445,6 +505,15 @@ export function MezclaPlanSection({
                 setConfirmEliminarProducto({ mezclaId: mezcla.id, productoId, nombre })
               }
               onActualizarDosis={(productoId, campo, valor) => actualizarDosis(mezcla.id, productoId, campo, valor)}
+              onAgregarAlternativo={(productoId, alternativoId) =>
+                agregarAlternativo(mezcla.id, productoId, alternativoId)
+              }
+              onQuitarAlternativo={(productoId, alternativoId) =>
+                quitarAlternativo(mezcla.id, productoId, alternativoId)
+              }
+              onActualizarDosisAlternativo={(productoId, alternativoId, campo, valor) =>
+                actualizarDosisAlternativo(mezcla.id, productoId, alternativoId, campo, valor)
+              }
               onEliminarMezcla={() => setConfirmEliminarMezclaId(mezcla.id)}
               onReintentarAsignacion={onReintentarAsignacion}
               onCrearNuevaMezcla={mezcla.numero_orden === Math.max(...mezclas.map((m) => m.numero_orden)) ? crearMezcla : undefined}
@@ -495,6 +564,9 @@ interface MezclaCardProps {
   onAgregarProducto: (productoId: string) => void;
   onQuitarProducto: (productoId: string, nombre: string) => void;
   onActualizarDosis: (productoId: string, campo: string, valor: number) => void;
+  onAgregarAlternativo: (productoId: string, alternativoId: string) => void;
+  onQuitarAlternativo: (productoId: string, alternativoId: string) => void;
+  onActualizarDosisAlternativo: (productoId: string, alternativoId: string, campo: string, valor: number) => void;
   onEliminarMezcla: () => void;
   onReintentarAsignacion?: () => void;
   onCrearNuevaMezcla?: () => void;
@@ -512,6 +584,9 @@ function MezclaCard({
   onAgregarProducto,
   onQuitarProducto,
   onActualizarDosis,
+  onAgregarAlternativo,
+  onQuitarAlternativo,
+  onActualizarDosisAlternativo,
   onEliminarMezcla,
   onReintentarAsignacion,
   onCrearNuevaMezcla,
@@ -717,6 +792,18 @@ function MezclaCard({
                     </span>
                   </span>
                 </div>
+
+                <AlternativosLinea
+                  producto={producto}
+                  usaDosisPorCaneca={usaDosisPorCaneca}
+                  productosCatalogo={productosCatalogo}
+                  cargandoProductos={cargandoProductos}
+                  onAgregar={(alternativoId) => onAgregarAlternativo(producto.producto_id, alternativoId)}
+                  onQuitar={(alternativoId) => onQuitarAlternativo(producto.producto_id, alternativoId)}
+                  onActualizarDosis={(alternativoId, campo, valor) =>
+                    onActualizarDosisAlternativo(producto.producto_id, alternativoId, campo, valor)
+                  }
+                />
               </div>
             );
           })}
@@ -775,6 +862,171 @@ function MezclaCard({
           Filtra por nombre, categoría o estado físico. Un producto ya agregado no vuelve a aparecer en la lista.
         </FieldDescription>
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ALTERNATIVOS DE UNA LÍNEA (ESCO-170)
+// ============================================================================
+
+const CAMPOS_DOSIS_TAMANO = [
+  ['dosis_grandes', 'Grandes'],
+  ['dosis_medianos', 'Medianos'],
+  ['dosis_pequenos', 'Pequeños'],
+  ['dosis_clonales', 'Clonales'],
+] as const satisfies readonly (readonly [
+  keyof Pick<ProductoAlternativo, 'dosis_grandes' | 'dosis_medianos' | 'dosis_pequenos' | 'dosis_clonales'>,
+  string,
+])[];
+
+interface AlternativosLineaProps {
+  producto: ProductoEnMezcla;
+  usaDosisPorCaneca: boolean;
+  productosCatalogo: ProductoCatalogo[];
+  cargandoProductos: boolean;
+  onAgregar: (alternativoId: string) => void;
+  onQuitar: (alternativoId: string) => void;
+  onActualizarDosis: (alternativoId: string, campo: string, valor: number) => void;
+}
+
+/**
+ * Productos que pueden reemplazar al principal de esta línea, cada uno con su propia dosis.
+ * Son opciones: no suman al total necesario ni al costo estimado — el plan es el principal.
+ */
+function AlternativosLinea({
+  producto,
+  usaDosisPorCaneca,
+  productosCatalogo,
+  cargandoProductos,
+  onAgregar,
+  onQuitar,
+  onActualizarDosis,
+}: AlternativosLineaProps) {
+  const [comboAbierto, setComboAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const alternativos = producto.alternativos ?? [];
+
+  const disponibles = productosCatalogo.filter(
+    (p) => p.id !== producto.producto_id && !alternativos.some((a) => a.producto_id === p.id),
+  );
+
+  return (
+    <div className="mt-3 border-t border-border pt-3 space-y-2.5">
+      <div>
+        <p className="text-xs font-bold text-foreground">Alternativos</p>
+        <p className="text-xs text-muted-foreground">
+          Productos que pueden reemplazar a {producto.producto_nombre}. No suman al total necesario ni al costo.
+        </p>
+      </div>
+
+      {alternativos.map((alt) => (
+        <div key={alt.producto_id} className="rounded-md border border-dashed border-border p-3">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{alt.producto_nombre}</p>
+              <p className="text-xs text-muted-foreground">{alt.producto_categoria}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onQuitar(alt.producto_id)}
+              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+              aria-label={`Quitar alternativo ${alt.producto_nombre}`}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {usaDosisPorCaneca ? (
+            <Field className="max-w-xs">
+              <FieldLabel htmlFor={`alt-dosis-caneca-${producto.producto_id}-${alt.producto_id}`}>
+                Dosis por caneca
+              </FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  id={`alt-dosis-caneca-${producto.producto_id}-${alt.producto_id}`}
+                  type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
+                  min={0}
+                  step="0.01"
+                  value={alt.dosis_por_caneca ?? ''}
+                  onChange={(e) =>
+                    onActualizarDosis(alt.producto_id, 'dosis_por_caneca', parseFloat(e.target.value) || 0)
+                  }
+                />
+                <InputGroupAddon align="inline-end">{alt.unidad_dosis === 'cc' ? 'cc' : 'g'}</InputGroupAddon>
+              </InputGroup>
+            </Field>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {CAMPOS_DOSIS_TAMANO.map(([campo, etiqueta]) => (
+                <Field key={campo}>
+                  <FieldLabel
+                    htmlFor={`alt-${campo}-${producto.producto_id}-${alt.producto_id}`}
+                    className="text-xs"
+                  >
+                    {etiqueta}
+                  </FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id={`alt-${campo}-${producto.producto_id}-${alt.producto_id}`}
+                      type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
+                      min={0}
+                      step="0.01"
+                      value={alt[campo] ?? ''}
+                      onChange={(e) => onActualizarDosis(alt.producto_id, campo, parseFloat(e.target.value) || 0)}
+                    />
+                    <InputGroupAddon align="inline-end">{alt.producto_unidad === 'Litros' ? 'cc' : 'g'}</InputGroupAddon>
+                  </InputGroup>
+                </Field>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      <Popover open={comboAbierto} onOpenChange={setComboAbierto}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" disabled={cargandoProductos}>
+            <Plus className="w-3.5 h-3.5" />
+            Agregar alternativo
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="p-0 w-80 max-w-[calc(100vw-2rem)]">
+          <Command>
+            <CommandInput placeholder="Buscar producto..." value={busqueda} onValueChange={setBusqueda} />
+            <CommandList>
+              <CommandEmpty>Ningún producto coincide con "{busqueda}".</CommandEmpty>
+              <CommandGroup>
+                {disponibles.map((p) => (
+                  <CommandItem
+                    key={p.id}
+                    value={p.display_nombre}
+                    onSelect={() => {
+                      onAgregar(p.id);
+                      setBusqueda('');
+                      setComboAbierto(false);
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.display_nombre}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Stock: {formatearNumero(p.cantidad_actual)} {p.unidad_medida}
+                      </p>
+                    </div>
+                    {p.permitido_gerencia === false && (
+                      <Badge variant="destructive" className="flex-shrink-0">
+                        Restringido
+                      </Badge>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
