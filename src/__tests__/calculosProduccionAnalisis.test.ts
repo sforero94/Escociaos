@@ -86,10 +86,10 @@ describe('resolverSeleccionCosechas', () => {
     { ano: 2027, cosecha_tipo: 'Principal' },
   ]);
 
-  it('vista una toma una sola cosecha (la más reciente compatible)', () => {
+  it('sin filtro de año agrupa por cosecha (vista una = la más reciente)', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'una',
-      anos_movimiento: [2026],
+      anos_movimiento: [],
       cosecha_keys: [],
     });
     expect(res.estado).toBe('ok');
@@ -99,10 +99,26 @@ describe('resolverSeleccionCosechas', () => {
     }
   });
 
-  it('vista varias permite multiselección explícita', () => {
+  it('vista varias sin keys expone todas las cosechas (no un bucket de año)', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
-      anos_movimiento: [2026],
+      anos_movimiento: [],
+      cosecha_keys: [],
+    });
+    expect(res.estado).toBe('ok');
+    if (res.estado === 'ok') {
+      expect(res.cosechas.map((c) => c.label)).toEqual([
+        'Principal 2026',
+        'Traviesa 2026',
+        'Principal 2027',
+      ]);
+    }
+  });
+
+  it('vista varias permite multiselección explícita por identidad de cosecha', () => {
+    const res = resolverSeleccionCosechas(disponibles, {
+      vista: 'varias',
+      anos_movimiento: [],
       cosecha_keys: ['Principal:2027', 'Principal:2026'],
     });
     expect(res.estado).toBe('ok');
@@ -114,8 +130,20 @@ describe('resolverSeleccionCosechas', () => {
     }
   });
 
+  it('el año de movimiento solo acota; no reagrupa el resultado', () => {
+    const res = resolverSeleccionCosechas(disponibles, {
+      vista: 'varias',
+      anos_movimiento: [2026],
+      cosecha_keys: ['Principal:2027'],
+    });
+    expect(res.estado).toBe('ok');
+    if (res.estado === 'ok') {
+      expect(res.cosechas.map((c) => c.label)).toEqual(['Principal 2027']);
+    }
+  });
+
   it('reporta incompatibilidad en vez de ocultar en silencio', () => {
-    // 2027 admite Principal 2027; Traviesa 2026 no es compatible con ese año.
+    // 2027 admite Principal 2027; Traviesa 2026 no es visible con ese acote.
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
       anos_movimiento: [2027],
@@ -124,12 +152,12 @@ describe('resolverSeleccionCosechas', () => {
     expect(res.estado).toBe('incompatible');
     if (res.estado === 'incompatible') {
       expect(res.cosechas).toHaveLength(0);
-      expect(res.mensaje).toMatch(/no corresponde/i);
+      expect(res.mensaje).toMatch(/cosecha/i);
       expect(res.sugeridas.map((c) => c.label)).toContain('Principal 2027');
     }
   });
 
-  it('estado vacío cuando el año no tiene cosechas en datos', () => {
+  it('estado vacío cuando el año no deja cosechas visibles', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
       anos_movimiento: [2024],
@@ -145,6 +173,26 @@ describe('resolverSeleccionCosechas', () => {
         identidadFromParts('Traviesa', 2026),
       ]),
     ).toEqual([2026, 2027]);
+  });
+});
+
+describe('proyectarInicial (cosecha-first)', () => {
+  it('parte de la cosecha más reciente sin filtro de año calendario', async () => {
+    const { proyectarInicial } = await import(
+      '@/components/produccion/utils/proyectarFiltrosInicial'
+    );
+    const { FILTROS_PRODUCCION_DEFAULT } = await import('@/types/produccion');
+    const disponibles = derivarCosechasDisponibles([
+      { ano: 2026, cosecha_tipo: 'Principal' },
+      { ano: 2027, cosecha_tipo: 'Principal' },
+    ]);
+    const init = proyectarInicial(FILTROS_PRODUCCION_DEFAULT, {
+      cosechas: disponibles,
+      anos_movimiento: [2025, 2026, 2027],
+    });
+    expect(init.anos_movimiento).toEqual([]);
+    expect(init.cosecha_keys).toEqual(['Principal:2027']);
+    expect(init.anos).toEqual([2027]);
   });
 });
 

@@ -53,7 +53,7 @@ export function FiltrosProduccion({
   cosechasDisponibles,
   onFiltrosChange,
 }: FiltrosProduccionProps) {
-  const compatibles = cosechasCompatiblesConAnos(
+  const visibles = cosechasCompatiblesConAnos(
     cosechasDisponibles,
     filtros.anos_movimiento,
   );
@@ -69,13 +69,14 @@ export function FiltrosProduccion({
       ? filtros.anos_movimiento.filter((a) => a !== ano)
       : [...filtros.anos_movimiento, ano].sort((a, b) => a - b);
 
-    // Si la cosecha deja de ser compatible, limpiar selección (mock: → Todas).
-    const nuevasCompatibles = cosechasCompatiblesConAnos(
+    // El año solo acota la lista; si una cosecha queda fuera, se limpia la key
+    // (no se reagrupa el análisis por calendario).
+    const nuevasVisibles = cosechasCompatiblesConAnos(
       cosechasDisponibles,
       anos_movimiento,
     );
     const keysOk = filtros.cosecha_keys.filter((k) =>
-      nuevasCompatibles.some((c) => c.key === k),
+      nuevasVisibles.some((c) => c.key === k),
     );
     emit({
       anos_movimiento,
@@ -103,19 +104,25 @@ export function FiltrosProduccion({
 
   const setVista = (vista: VistaProduccion) => {
     if (vista === 'una' && filtros.cosecha_keys.length > 1) {
-      emit({ vista, cosecha_keys: [filtros.cosecha_keys[filtros.cosecha_keys.length - 1]] });
+      emit({
+        vista,
+        cosecha_keys: [filtros.cosecha_keys[filtros.cosecha_keys.length - 1]],
+      });
       return;
     }
     emit({ vista });
   };
 
   const limpiarFiltros = () => {
+    const ordenadas = visibles.length > 0 ? visibles : cosechasDisponibles;
+    const ultima = ordenadas[ordenadas.length - 1];
     onFiltrosChange(
       proyectarFiltros(
         {
           vista: filtros.vista,
           anos_movimiento: [],
-          cosecha_keys: [],
+          cosecha_keys:
+            filtros.vista === 'una' && ultima ? [ultima.key] : [],
           lote_ids: [],
           metrica: 'kg_totales',
           anos: [],
@@ -128,9 +135,9 @@ export function FiltrosProduccion({
 
   const hayFiltrosActivos =
     filtros.anos_movimiento.length > 0 ||
-    filtros.cosecha_keys.length > 0 ||
     filtros.lote_ids.length > 0 ||
-    filtros.metrica !== 'kg_totales';
+    filtros.metrica !== 'kg_totales' ||
+    (filtros.vista === 'varias' && filtros.cosecha_keys.length > 0);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 md:p-6 space-y-5">
@@ -181,9 +188,52 @@ export function FiltrosProduccion({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* Cosecha primero: unidad de agrupación del tablero */}
+        <div className="md:col-span-2">
+          <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
+            Cosecha{filtros.vista === 'varias' ? 's' : ''} · unidad de análisis
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {visibles.length === 0 ? (
+              <span className="text-sm text-gray-400">Sin cosechas visibles</span>
+            ) : (
+              visibles.map((c) => {
+                const explicit = filtros.cosecha_keys.includes(c.key);
+                const efectiva =
+                  seleccion.estado === 'ok' &&
+                  seleccion.cosechas.some((x) => x.key === c.key);
+                const activa =
+                  explicit ||
+                  (filtros.cosecha_keys.length === 0 && efectiva);
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => toggleCosecha(c.key)}
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                      activa
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-primary/50'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            KPIs, lotes y series se agrupan por cosecha (p. ej. Principal 2027),
+            no por año calendario.
+            {filtros.vista === 'varias'
+              ? ' Multiselección; vacío = todas las visibles.'
+              : ''}
+          </p>
+        </div>
+
         <div>
           <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
-            Año del movimiento
+            Año del movimiento · opcional
           </Label>
           <div className="flex flex-wrap gap-2">
             {anosDisponibles.length === 0 ? (
@@ -206,56 +256,9 @@ export function FiltrosProduccion({
             )}
           </div>
           <p className="text-xs text-gray-400 mt-2">
-            No es el año del nombre de campaña. P. ej. Principal 2027 aparece en 2026.
+            Solo acota qué cosechas se listan. No cambia el eje del análisis.
+            Principal 2027 puede aparecer al filtrar 2026.
           </p>
-        </div>
-
-        <div>
-          <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
-            Cosecha{filtros.vista === 'varias' ? 's' : ''}
-          </Label>
-          <div className="flex flex-wrap gap-2">
-            {compatibles.length === 0 ? (
-              <span className="text-sm text-gray-400">Sin cosechas compatibles</span>
-            ) : (
-              compatibles.map((c) => {
-                const selected =
-                  filtros.cosecha_keys.includes(c.key) ||
-                  (filtros.cosecha_keys.length === 0 &&
-                    seleccion.estado === 'ok' &&
-                    seleccion.cosechas.some((x) => x.key === c.key) &&
-                    filtros.vista === 'una' &&
-                    seleccion.cosechas[0]?.key === c.key);
-                const explicit =
-                  filtros.cosecha_keys.includes(c.key) ||
-                  (filtros.vista === 'una' &&
-                    filtros.cosecha_keys.length === 0 &&
-                    seleccion.estado === 'ok' &&
-                    seleccion.cosechas[0]?.key === c.key);
-                return (
-                  <button
-                    key={c.key}
-                    type="button"
-                    onClick={() => toggleCosecha(c.key)}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      explicit
-                        ? 'bg-primary text-white border-primary'
-                        : selected
-                          ? 'bg-primary/10 text-primary border-primary/30'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-primary/50'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                );
-              })
-            )}
-          </div>
-          {filtros.vista === 'varias' && (
-            <p className="text-xs text-gray-400 mt-2">
-              Multiselección. Vacío = todas las compatibles con el año.
-            </p>
-          )}
         </div>
 
         <div>
@@ -280,16 +283,16 @@ export function FiltrosProduccion({
           </div>
         </div>
 
-        <div>
+        <div className="md:col-span-2 xl:col-span-4">
           <Label className="text-xs uppercase tracking-wide text-gray-500 mb-2 block">
             Lotes
           </Label>
-          <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 mb-2">
-            {filtros.lote_ids.length === 0
-              ? 'Todos los lotes'
-              : `${filtros.lote_ids.length} seleccionado(s)`}
-          </div>
-          <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+              {filtros.lote_ids.length === 0
+                ? 'Todos los lotes'
+                : `${filtros.lote_ids.length} seleccionado(s)`}
+            </div>
             {lotes.map((lote) => {
               const codigo = getLoteCode(lote.nombre);
               const color = getLoteColor(lote.nombre);
@@ -328,7 +331,7 @@ export function FiltrosProduccion({
             <p className="mt-0.5">{seleccion.mensaje}</p>
             {seleccion.sugeridas.length > 0 && (
               <p className="mt-1 text-amber-800/80">
-                Compatibles: {seleccion.sugeridas.map((c) => c.label).join(', ')}
+                Cosechas visibles: {seleccion.sugeridas.map((c) => c.label).join(', ')}
               </p>
             )}
           </div>

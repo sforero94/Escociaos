@@ -5,43 +5,44 @@ import type {
 } from '@/types/produccion';
 import {
   anosCampanaDeCosechas,
-  resolverSeleccionCosechas,
+  ordenarCosechas,
 } from '@/utils/calculosProduccionAnalisis';
 
 export { anosCampanaDeCosechas };
 
 /**
- * Inicializa filtros con el catálogo vivo: prioriza el año de movimiento más
- * reciente y deja la cosecha efectiva a la resolución (Principal siguiente
- * incluida cuando aplica).
+ * Inicializa filtros con el catálogo vivo: la unidad es la cosecha más reciente.
+ * No aplica filtro de año de movimiento por defecto (ese acote es opcional).
  */
 export function proyectarInicial(
   base: FiltrosProduccion,
   catalogo: { cosechas: CosechaIdentidad[]; anos_movimiento: number[] },
 ): FiltrosProduccion {
-  const anoMovimiento =
-    catalogo.anos_movimiento.length > 0
-      ? [catalogo.anos_movimiento[catalogo.anos_movimiento.length - 1]]
-      : [];
+  const ordenadas = ordenarCosechas(catalogo.cosechas);
+  const ultima = ordenadas[ordenadas.length - 1];
+  const vista = base.vista || 'una';
 
-  const next: FiltrosProduccion = {
-    ...base,
-    anos_movimiento: anoMovimiento,
-    cosecha_keys: [],
-    vista: base.vista || 'una',
-  };
+  // Una cosecha → la más reciente. Varias → sin keys (todas las cosechas).
+  // Nunca partimos de un año calendario como eje.
+  const cosecha_keys =
+    vista === 'una' && ultima ? [ultima.key] : [];
 
-  const seleccion = resolverSeleccionCosechas(catalogo.cosechas, next);
-  const cosechas = seleccion.estado === 'ok' ? seleccion.cosechas : [];
-  const anos = anosCampanaDeCosechas(cosechas);
-  const tipos = Array.from(new Set(cosechas.map((c) => c.tipo)));
+  const cosechasEfectivas =
+    vista === 'una' && ultima
+      ? [ultima]
+      : ordenadas;
+
+  const anos = anosCampanaDeCosechas(cosechasEfectivas);
+  const tipos = Array.from(new Set(cosechasEfectivas.map((c) => c.tipo)));
   const cosecha_tipo: CosechaTipo | 'Ambas' =
     tipos.length === 1 ? tipos[0] : 'Ambas';
 
   return {
-    ...next,
+    ...base,
+    vista,
+    anos_movimiento: [],
+    cosecha_keys,
     anos,
     cosecha_tipo,
-    cosecha_keys: cosechas.map((c) => c.key),
   };
 }

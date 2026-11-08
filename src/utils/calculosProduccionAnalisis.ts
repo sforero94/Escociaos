@@ -1,14 +1,15 @@
 /**
  * Lógica pura del tablero analítico de Producción (issue #463).
  *
- * Separación clave:
- * - Identidad de cosecha = `{tipo, ano}` → "Principal 2027" (año de campaña).
- * - Año de movimiento = año calendario de la fecha del movimiento.
+ * Unidad de agrupación = cosecha (`Principal 2027`), nunca el año calendario.
  *
- * La tabla `produccion` hoy solo guarda el año de campaña (`ano`), sin fecha de
- * movimiento. Por eso el filtro de años usa la asociación de producto ya usada
- * en finanzas (`opcionesCosecha`): en el año calendario Y pueden circular
- * Principal Y, Traviesa Y y Principal Y+1. No inventa kilos ni fechas.
+ * - Identidad de cosecha = `{tipo, ano}` → etiqueta "Principal 2027".
+ * - Año de movimiento = filtro opcional (cuándo cayó el movimiento). No es el
+ *   eje de KPIs, series ni comparación.
+ *
+ * Sin fecha de movimiento en `produccion`, el filtro de años solo acota qué
+ * cosechas se listan (regla finanzas: en Y → Principal Y, Traviesa Y,
+ * Principal Y+1). No inventa kilos ni fechas, ni reagrupa por calendario.
  */
 
 import type {
@@ -157,25 +158,25 @@ export function cosechasCompatiblesConAnos(
 }
 
 /**
- * Resuelve la selección efectiva de cosechas.
- * - Vista "una": como máximo una; si hay varias seleccionadas, toma la más reciente.
- * - Vista "varias": permite N; si ninguna, usa todas las compatibles.
- * - Si la selección no intersecta con las compatibles del año → estado incompatible
- *   (no se ocultan resultados en silencio: se reporta y se ofrecen sugeridas).
+ * Resuelve la selección efectiva de cosechas (siempre identidades de campaña).
+ * - Vista "una": una sola cosecha; si hay varias keys, toma la más reciente.
+ * - Vista "varias": N cosechas; si ninguna key, todas las visibles.
+ * - `anos_movimiento` solo acota el catálogo visible; no reagrupa resultados.
+ * - Selección fuera del acote de año → incompatible (explícito, sin ocultar).
  */
 export function resolverSeleccionCosechas(
   disponibles: CosechaIdentidad[],
   filtros: Pick<EstadoFiltroProduccion, 'vista' | 'anos_movimiento' | 'cosecha_keys'>,
 ): EstadoSeleccionCosecha {
-  const compatibles = cosechasCompatiblesConAnos(disponibles, filtros.anos_movimiento);
+  const visibles = cosechasCompatiblesConAnos(disponibles, filtros.anos_movimiento);
 
-  if (compatibles.length === 0) {
+  if (visibles.length === 0) {
     return {
       estado: 'vacio',
       cosechas: [],
       mensaje:
         filtros.anos_movimiento.length > 0
-          ? `No hay cosechas registradas compatibles con el año de movimiento ${filtros.anos_movimiento.join(', ')}.`
+          ? `Ninguna cosecha registrada queda visible con el filtro de año de movimiento ${filtros.anos_movimiento.join(', ')}. Quita el año o elige otra cosecha.`
           : 'No hay cosechas registradas en producción.',
     };
   }
@@ -185,20 +186,20 @@ export function resolverSeleccionCosechas(
     .filter((c): c is CosechaIdentidad => Boolean(c));
 
   const interseccion = seleccionadas.filter((c) =>
-    compatibles.some((x) => x.key === c.key),
+    visibles.some((x) => x.key === c.key),
   );
 
   if (seleccionadas.length > 0 && interseccion.length === 0) {
     return {
       estado: 'incompatible',
       cosechas: [],
-      sugeridas: compatibles,
+      sugeridas: visibles,
       mensaje:
-        'La cosecha seleccionada no corresponde a los años de movimiento filtrados. Revisa la selección o elige una cosecha compatible.',
+        'La cosecha elegida queda fuera del filtro opcional de año de movimiento. El análisis se agrupa por cosecha: ajusta el año o cambia la cosecha.',
     };
   }
 
-  let efectivas = interseccion.length > 0 ? interseccion : compatibles;
+  let efectivas = interseccion.length > 0 ? interseccion : visibles;
 
   if (filtros.vista === 'una') {
     efectivas = [efectivas[efectivas.length - 1]];

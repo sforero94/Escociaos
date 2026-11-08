@@ -249,8 +249,8 @@ export function ProduccionDashboard() {
               </p>
               <h1 className="text-foreground mb-2">Análisis de producción</h1>
               <p className="text-brand-brown/70 max-w-xl">
-                Compara una o varias cosechas sin confundir el año del movimiento
-                con el nombre de la campaña.
+                La unidad de análisis es la cosecha (Principal 2027, Traviesa
+                2026…). El año del movimiento solo acota la lista; no agrupa.
               </p>
             </div>
             <Button

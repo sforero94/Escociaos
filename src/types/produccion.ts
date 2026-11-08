@@ -67,22 +67,27 @@ export interface SubloteProduccion {
 
 /**
  * Filtros del tablero analítico (#463).
- * - `anos_movimiento`: años calendario del movimiento (no del nombre de campaña).
- * - `cosecha_keys`: identidades "Principal:2027" / "Traviesa:2026".
- * - `anos` / `cosecha_tipo` se conservan como proyección para Rentabilidad y
- *   consultas que aún filtran por columnas de campaña.
+ * Eje de agrupación = `cosecha_keys` (identidad de campaña).
+ * `anos_movimiento` es filtro opcional que solo acota el catálogo visible.
+ * `anos` / `cosecha_tipo` son proyección para Rentabilidad / queries legacy.
  */
 export interface FiltrosProduccion {
   vista: VistaProduccion;
-  /** Años calendario de movimiento seleccionados. Vacío = sin restricción. */
+  /**
+   * Filtro opcional por año calendario del movimiento.
+   * No es el eje de KPIs ni de series; vacío = sin acote.
+   */
   anos_movimiento: number[];
-  /** Identidades de cosecha seleccionadas. Vacío = todas las compatibles. */
+  /**
+   * Identidades de cosecha seleccionadas ("Principal:2027").
+   * Unidad de análisis. Vacío = todas las visibles.
+   */
   cosecha_keys: string[];
   lote_ids: string[];
   metrica: MetricaProduccion;
   /**
-   * Años de campaña derivados (produccion.ano). Se recalculan al resolver
-   * cosechas; se mantienen en el estado para consumidores legacy (Rentabilidad).
+   * Años de campaña derivados de las cosechas efectivas (produccion.ano).
+   * Nunca se interpretan como año de movimiento.
    */
   anos: number[];
   /** Compat: 'Ambas' si hay varios tipos; si no, el tipo único. */
