@@ -930,6 +930,25 @@ the web exercise of 30 questions completed on stable v282. Functional Faithfulne
 acceptance remains open because exploratory findings require separate review. See
 `docs/security-review/technical-closeout.md`; this receipt authorizes no action.
 
+## Migration ledger update — 2026-11-08
+
+Migration `191_monitoreo_ronda34_salto_s1` (ESCO-166, clase datos) was **applied to
+production 2026-11-08**, ledger version `20261108002243` (the ledger name carries no
+number prefix: `monitoreo_ronda34_salto_s1`). Do not reapply. Authorized by Santiago,
+present, in the Saturday reply session: «166 Aplicar». The file reached `main` after
+the apply (PR #453, `082e8b9`). It cleans up the Salto de Tequendama Sublote 1 capture
+of 2026-10-30 that David saved as Piedra Paula S1 in Ronda 33 and re-captured on
+2026-11-04 as a Ronda 34 of its own: deletes the 2 misplaced `monitoreos` rows, moves
+the 2 good Salto S1 rows into Ronda 33, deletes the empty Ronda 34 and renames Ronda 35
+to «Ronda 34» (a new ronda is named `Ronda ${count + 1}`, so without the rename the next
+one would repeat «Ronda 35»). Rehearsed with `po_sonda` (rolled back) and applied
+verbatim. Verified after applying: Piedra Paula S1 6 → 4 rows, Salto S1 0 → 2 in Ronda 33,
+Ronda 33 = 16 rows over 6 sublotes, 35 → 34 rondas, 0 orphaned `monitoreos`, `monitoreos`
+4.346 → 4.344. Backup in `respaldos.backup_191_monitoreos` (4 rows) and
+`respaldos.backup_191_rondas_monitoreo` (2 rows), the only record of what was deleted:
+`monitoreos` is traced by no `*_correcciones` table. Rollback at the foot of the file.
+Report: `escociaos-po/reports/2026-11-07-sabado-respuesta.md`.
+
 ## Esco 2.0 update — 2026-11-03
 
 - **New edge function `esco-consultas`** (Esco 2.0 M3, D27), deployed 2026-11-03 as version 1
