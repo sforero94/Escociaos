@@ -40,9 +40,10 @@ jobs:
       matrix:
         include:
           - slug: make-server-1ccce916
-            path: supabase/functions/make-server-1ccce916
+            path: supabase/functions/make-server-1ccce916 src/utils/escoSql/formato.ts src/utils/escoSql/bloques.ts src/utils/escoSql/respuesta.ts src/utils/formatPuro.ts
             verify_jwt: 'false'
             health_anon: '200'
+            expected_secret: ESCO_TELEGRAM_SECRET
           # Esco 2.0 (M3, D27). Importa el nucleo de src/utils/esco2 y el parser de
           # src/utils/escoEvals/numeros.ts: un commit ahi tambien exige redesplegar.
           # verify_jwt=true, asi que el GET anonimo a /health debe dar 401 del gateway.

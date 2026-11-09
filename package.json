@@ -48,6 +48,7 @@
       "devDependencies": {
             "@electric-sql/pglite": "0.5.10",
             "@grammyjs/conversations": "2.1.1",
+            "@resvg/resvg-wasm": "2.6.2",
             "@tailwindcss/node": "^4.3.3",
             "@tailwindcss/vite": "^4.3.3",
             "@types/node": "^20.10.0",

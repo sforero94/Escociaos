@@ -145,7 +145,8 @@ describe('Telegram gate wiring feeding the shared minimized loop', () => {
   });
   it('requires active Telegram membership, consultas module and fresh linked identity before shared loop', () => {
     const text = noComments(source('telegram/bot.ts'));
-    const start = text.indexOf('bot.on("message:text"');
+    // P5 adds a separate adapter before the final fallback; inspect the legacy fallback itself.
+    const start = text.lastIndexOf('bot.on("message:text"');
     const body = text.slice(start, text.indexOf('const cohortHandle', start));
     expect(text.slice(0, text.indexOf('bot.use(conversations'))).toMatch(/\.eq\("telegram_id", ctx\.from\.id\)[\s\S]*?\.eq\("activo", true\)/);
     const moduleGate = body.indexOf('modulos_permitidos?.includes("consultas")');

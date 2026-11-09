@@ -552,3 +552,18 @@ describe('P4 secreto de Telegram en detector de deriva', () => {
     finally { globalThis.fetch = anterior; }
   });
 });
+
+
+describe('P5 dependencias compartidas del bot y presencia del secreto', () => {
+  it('vigila los módulos compartidos que consume make-server y mantiene JWT apagado', () => {
+    const wf = readFileSync(fileURLToPath(new URL('../.github/workflows/deteccion-deriva-despliegue.yml', import.meta.url)), 'utf8');
+    const fila = wf.slice(wf.indexOf('- slug: make-server-1ccce916'), wf.indexOf('- slug: esco-consultas'));
+    expect(fila).toContain('src/utils/escoSql/formato.ts');
+    expect(fila).toContain('src/utils/escoSql/bloques.ts');
+    expect(fila).toContain('src/utils/escoSql/respuesta.ts');
+    expect(fila).toContain('src/utils/formatPuro.ts');
+    expect(fila).toContain("verify_jwt: 'false'");
+    expect(fila).toContain("health_anon: '200'");
+    expect(fila).toContain('expected_secret: ESCO_TELEGRAM_SECRET');
+  });
+});

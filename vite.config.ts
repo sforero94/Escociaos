@@ -41,6 +41,7 @@
         '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
         '@jsr/supabase__supabase-js@2.49.8': '@jsr/supabase__supabase-js',
         '@jsr/supabase__supabase-js@2': '@jsr/supabase__supabase-js',
+        '@esco-sql': path.resolve(__dirname, './src/utils/escoSql'),
         '@': path.resolve(__dirname, './src'),
       },
     },
