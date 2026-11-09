@@ -1,5 +1,5 @@
 import type { ResumenEtapasCosecha, ResumenProduccionCosecha } from '@/utils/calculosProduccionAnalisis';
-import { formatoFechaCorte, formatoKgEtapa, textoDiferenciaEtapas } from '@/utils/calculosProduccionAnalisis';
+import { formatoCambioNeto, formatoFechaCorte, formatoKgEtapa, NOTA_CAMBIO_NETO } from '@/utils/calculosProduccionAnalisis';
 
 interface PanelEtapasProduccionProps {
   resumenes: ResumenProduccionCosecha[];
@@ -58,17 +58,14 @@ export function PanelEtapasProduccion({
       destacada: false,
     },
     {
-      titulo: 'Diferencia por revisar',
+      titulo: 'Cambio neto %',
       valor:
         vista === 'varias'
           ? null
           : loading
             ? '…'
-            : textoDiferenciaEtapas(
-                etapaUna?.diferencia_entrada_clasificacion_kg ?? null,
-                etapaUna?.diferencia_sin_despacho_kg ?? null,
-              ),
-      subtitulo: 'Una diferencia no es necesariamente merma. Las etapas no se suman.',
+            : formatoCambioNeto(etapaUna?.despachado.kg ?? null, entrada),
+      subtitulo: NOTA_CAMBIO_NETO,
       destacada: false,
     },
   ];
@@ -100,9 +97,9 @@ export function PanelEtapasProduccion({
                     } else if (card.titulo === 'Despachado') {
                       valor = formatoKgEtapa(etapa?.despachado.kg ?? null);
                     } else {
-                      valor = textoDiferenciaEtapas(
-                        etapa?.diferencia_entrada_clasificacion_kg ?? null,
-                        etapa?.diferencia_sin_despacho_kg ?? null,
+                      valor = formatoCambioNeto(
+                        etapa?.despachado.kg ?? null,
+                        r.tiene_registros ? r.produccion_kg : null,
                       );
                     }
                   }
@@ -116,9 +113,9 @@ export function PanelEtapasProduccion({
               </ul>
             ) : (
               <p
-                className={`mt-1 font-semibold tabular-nums leading-tight ${
-                  card.titulo === 'Diferencia por revisar' ? 'text-base' : 'text-2xl'
-                } ${card.valor === 'Sin dato' ? 'text-brand-brown/40' : 'text-foreground'}`}
+                className={`mt-1 text-2xl font-semibold tabular-nums leading-tight ${
+                  card.valor === 'Sin dato' ? 'text-brand-brown/40' : 'text-foreground'
+                }`}
               >
                 {card.valor}
               </p>

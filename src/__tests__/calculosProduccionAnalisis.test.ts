@@ -19,7 +19,8 @@ import {
   construirEvolucionSemanal,
   construirVistaEtapas,
   formatoKgEtapa,
-  textoDiferenciaEtapas,
+  cambioNetoPorcentaje,
+  formatoCambioNeto,
   conciliarEtapas,
   semanaIsoDeFecha,
   GAPS_PRODUCCION_ANALISIS,
@@ -562,9 +563,8 @@ describe('etapas por lote', () => {
     expect(pp.despachado_kg).toBe(1932);
     expect(pp.fecha_clasificado).toBe('2026-10-23');
     expect(pp.fecha_despachado).toBe('2026-10-27');
-    expect(textoDiferenciaEtapas(pp.diferencia_entrada_clasificacion_kg, pp.diferencia_sin_despacho_kg)).toMatch(
-      /entrada y clasificado/,
-    );
+    expect(formatoCambioNeto(pp.despachado_kg, 2057.95)).toBe('−6,1 %');
+    expect(formatoCambioNeto(cosecha.despachado.kg, 16203.28)).toBe('−1,0 %');
   });
 
   it('una cosecha sin filas queda en Sin dato y no rellena con cero', () => {
@@ -608,5 +608,9 @@ describe('etapas por lote', () => {
     expect(au.fecha_clasificado).toBe('2026-10-27');
     expect(au.despachado_kg).toBeNull();
     expect(au.diferencia_sin_despacho_kg).toBeNull();
+    expect(formatoCambioNeto(au.despachado_kg, 80)).toBe('Sin dato');
+    expect(cambioNetoPorcentaje(10, 0)).toBeNull();
+    expect(cambioNetoPorcentaje(null, 100)).toBeNull();
+    expect(formatoCambioNeto(588, 584.4)).toBe('+0,6 %');
   });
 });

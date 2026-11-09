@@ -775,6 +775,38 @@ export function formatoKgEtapa(valor: number | null): string {
   })} kg`;
 }
 
+/**
+ * Cambio neto = despachado / entrada − 1.
+ * Null si falta un lado o la entrada es 0. No usa el clasificado.
+ */
+export function cambioNetoPorcentaje(
+  despachadoKg: number | null | undefined,
+  entradaKg: number | null | undefined,
+): number | null {
+  if (despachadoKg == null || entradaKg == null || entradaKg === 0) return null;
+  if (!Number.isFinite(despachadoKg) || !Number.isFinite(entradaKg)) return null;
+  return despachadoKg / entradaKg - 1;
+}
+
+/** Porcentaje con un decimal y signo. Ej. 1.932 / 2.057,95 → −6,1 %. */
+export function formatoCambioNeto(
+  despachadoKg: number | null | undefined,
+  entradaKg: number | null | undefined,
+): string {
+  const ratio = cambioNetoPorcentaje(despachadoKg, entradaKg);
+  if (ratio == null) return 'Sin dato';
+  const pct = Math.round(ratio * 1000) / 10;
+  const texto = Math.abs(pct).toLocaleString('es-CO', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  if (pct > 0) return `+${texto} %`;
+  if (pct < 0) return `−${texto} %`;
+  return `${texto} %`;
+}
+
+export const NOTA_CAMBIO_NETO = 'despachado / entrada − 1; cortes distintos';
+
 /** Las dos diferencias se nombran aparte. No se suman entre sí ni con las etapas. */
 export function textoDiferenciaEtapas(
   entradaClasificado: number | null,

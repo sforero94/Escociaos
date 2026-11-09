@@ -1,7 +1,8 @@
 import {
   formatoFechaCorte,
   formatoKgEtapa,
-  textoDiferenciaEtapas,
+  formatoCambioNeto,
+  NOTA_CAMBIO_NETO,
   type ResumenEtapasCosecha,
   type ResumenProduccionCosecha,
 } from '@/utils/calculosProduccionAnalisis';
@@ -36,9 +37,9 @@ export function ConciliacionEtapasGap({
             corteEntrada: formatoFechaCorte(corteEntrada[resumen.cosecha.key]),
             corteClasificado: etiquetaCorte(etapa?.clasificado.fechas_corte ?? []),
             corteDespachado: etiquetaCorte(etapa?.despachado.fechas_corte ?? []),
-            diferencia: textoDiferenciaEtapas(
-              etapa?.diferencia_entrada_clasificacion_kg ?? null,
-              etapa?.diferencia_sin_despacho_kg ?? null,
+            cambioNeto: formatoCambioNeto(
+              etapa?.despachado.kg ?? null,
+              resumen.tiene_registros ? resumen.produccion_kg : null,
             ),
           };
         })
@@ -51,7 +52,7 @@ export function ConciliacionEtapasGap({
             corteEntrada: null as string | null,
             corteClasificado: 'Sin fecha de corte',
             corteDespachado: 'Sin fecha de corte',
-            diferencia: 'Sin dato',
+            cambioNeto: 'Sin dato',
           },
         ];
 
@@ -116,15 +117,15 @@ export function ConciliacionEtapasGap({
       </div>
 
       <div className="mt-5 rounded-lg bg-[#F7FAF2] border border-primary/10 px-4 py-3 text-sm text-foreground">
-        <p className="font-medium">Diferencia por revisar</p>
+        <p className="font-medium" title={NOTA_CAMBIO_NETO}>Cambio neto %</p>
         {bloques.map((bloque) => (
           <p key={bloque.label} className="mt-1 text-brand-brown/80 leading-relaxed">
             {bloques.length > 1 ? `${bloque.label}: ` : ''}
-            {bloque.diferencia}
+            {bloque.cambioNeto}
           </p>
         ))}
         <p className="mt-1 text-brand-brown/70 leading-relaxed">
-          Una diferencia no es necesariamente merma. El clasificado son canastas × 20 kg.
+          {NOTA_CAMBIO_NETO}. El clasificado son canastas × 20 kg.
         </p>
       </div>
     </section>
