@@ -27,6 +27,7 @@ import {
   FileBarChart,
   Target,
   Syringe,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -136,6 +137,7 @@ const NAV: NavEntry[] = [
       { id: 'fin-configuracion', label: 'Configuración', icon: Settings, path: '/finanzas/configuracion' },
     ],
   },
+  { id: 'esco-sql', label: 'Esco SQL (beta)', icon: Sparkles, path: '/esco-sql', soloGerencia: true },
   { id: 'settings', label: 'Configuración', icon: Wrench, path: '/configuracion', cardStyle: true },
 ];
 
