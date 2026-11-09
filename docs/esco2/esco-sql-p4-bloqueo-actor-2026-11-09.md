@@ -3,11 +3,16 @@
 Fecha: 2026-11-09. Base inspeccionada: `main` `5839ff62` (P1, PR #472).
 Alcance: §6.2 y P4 del [plan aprobado, PR #471](https://github.com/sforero94/Escociaos/blob/7425dc3828ec1937f9f710950e95bf94cfe65df6/docs/esco2/plan-migracion-esco2-sql.md).
 
-**P4 no está implementada ni aceptada.** La prueba previa refutó el aislamiento
+**Diagnóstico del diseño anterior.** Santiago aprobó después la revisión de D2
+para trabajo local; el [candidato de ejecutor compartido](esco-sql-p4-ejecutor-compartido.md)
+documenta su implementación y sus puertas productivas pendientes. Este apartado
+conserva la evidencia del bloqueo previo, no el estado actual de implementación.
+
+**Estado en ese checkpoint:** P4 no estaba implementada ni aceptada. La prueba previa refutó el aislamiento
 que D2 esperaba obtener mediante una RPC `SECURITY INVOKER` que ejecuta
-`SET LOCAL ROLE authenticated` y luego `esco_sql_lectura`. La migración 194 sigue
-reservada y no se ha escrito ni aplicado. El runtime, los secretos y los flags
-siguen sin cambios de P4.
+`SET LOCAL ROLE authenticated` y luego `esco_sql_lectura`. La migración 194 seguía
+reservada y no se había escrito ni aplicado. El runtime, los secretos y los flags
+seguían sin cambios de P4 en ese corte.
 
 ## Resultado comprobado
 

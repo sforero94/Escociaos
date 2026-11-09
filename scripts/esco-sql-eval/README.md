@@ -12,6 +12,18 @@ escrita a mano. Es el baseline de Esco 2.0 (PR #464).
 - Un juez LLM (`openai/gpt-6-sol`) califica cada respuesta contra la verdad. Es un juez, no un oráculo: revisa
   a mano una muestra de sus veredictos antes de creerle un porcentaje.
 
+## P4: límite del ejecutor inyectado
+
+El candidato P4 conserva `consultar_sql({sql, proposito})`, pero el manejador convierte
+el SQL a una estructura validada y llama a las RPC `esco_sql_consultar_v1` o
+`esco_sql_consultar_actor_v1`. PostgreSQL valida y compila esa estructura de nuevo.
+Este runner sigue inyectando un ejecutor de consultas Composio: **no recorre esas
+RPC ni su compilador**. Sus porcentajes anteriores no aceptan P4 ni acreditan
+compatibilidad con el nuevo subconjunto. Antes de otra campaña, el evaluador debe
+congelar y verificar una ruta que ejercite el candidato exacto. Las pruebas locales
+de P4 usan el manejador, parser, RPC y compilador reales con datos sintéticos.
+No se ha corrido otra campaña por esta actualización; held conserva el gate D6.
+
 ## Privacidad: el banco NO va en el repo
 
 El repo es público. El banco usa nombres reales (lotes, productos, aplicaciones) y los resultados traen cifras

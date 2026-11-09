@@ -28,6 +28,7 @@ import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } fr
 import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
+import { validarPuertaTelegram } from './puertaServicio.ts';
 import { manejarSql, tieneRpc } from './manejadorSql.ts';
 import { coberturaNoCertificada, validarCoberturaFinal, type ModoCobertura } from '../../../src/utils/esco2/cobertura.ts';
 export const NOMBRE_FUNCION = 'esco-consultas';
@@ -59,6 +60,8 @@ export interface Dependencias {
     env(nombre: string): string | undefined;
     /** Cliente de Supabase que actúa como el usuario dueño del JWT. */
     crearClienteUsuario(jwt: string): ClienteUsuario;
+    /** Solo se crea después de comprobar credencial y secreto de Telegram. */
+    crearClienteServicio?(): ClienteUsuario;
     crearLLM?(apiKey: string): ClienteLLM;
     ahora?(): Date;
     registrar?(evento: Record<string, unknown>): void;
@@ -82,15 +85,16 @@ export interface Solicitud {
     respuestaAclaracion?: string;
     /** 'sql' = loop de SQL de lectura (migración 192). Ausente o 'actual' = motor de planificación. */
     motor?: 'actual' | 'sql';
+    usuario_id?: string;
 }
 export class ErrorSolicitud extends Error {
 }
-export function validarSolicitud(cuerpo: unknown): Solicitud {
+export function validarSolicitud(cuerpo: unknown, permitirActor = false): Solicitud {
     if (typeof cuerpo !== 'object' || cuerpo === null || Array.isArray(cuerpo))
         throw new ErrorSolicitud('el cuerpo debe ser un objeto JSON');
     const c = cuerpo as Record<string, unknown>;
     for (const k of Object.keys(c))
-        if (!['pregunta', 'historial', 'estadoToken', 'respuestaAclaracion', 'motor'].includes(k))
+        if (!['pregunta', 'historial', 'estadoToken', 'respuestaAclaracion', 'motor', ...(permitirActor ? ['usuario_id'] : [])].includes(k))
             throw new ErrorSolicitud(`campo no admitido: ${k}`);
     if (typeof c.pregunta !== 'string' || !c.pregunta.trim())
         throw new ErrorSolicitud('falta la pregunta');
@@ -116,7 +120,9 @@ export function validarSolicitud(cuerpo: unknown): Solicitud {
         throw new ErrorSolicitud('la aclaración requiere estadoToken');
     if (c.motor !== undefined && c.motor !== 'actual' && c.motor !== 'sql')
         throw new ErrorSolicitud('motor inválido');
-    return { pregunta: c.pregunta.trim(), historial, estadoToken: c.estadoToken as string | undefined, respuestaAclaracion: c.respuestaAclaracion as string | undefined, motor: c.motor as 'actual' | 'sql' | undefined };
+    if (permitirActor && (c.motor !== 'sql' || typeof c.usuario_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.usuario_id)))
+        throw new ErrorSolicitud('la puerta de servicio requiere motor sql y usuario_id válido');
+    return { pregunta: c.pregunta.trim(), historial, usuario_id: permitirActor ? c.usuario_id as string : undefined, estadoToken: c.estadoToken as string | undefined, respuestaAclaracion: c.respuestaAclaracion as string | undefined, motor: c.motor as 'actual' | 'sql' | undefined };
 }
 function claveAnonima(env: Dependencias['env']): string | undefined {
     const anon = env('SUPABASE_ANON_KEY');
@@ -143,7 +149,13 @@ export async function autorizarGerencia(cliente: ClienteUsuario, jwt: string): P
     const id = data?.user?.id;
     if (error || !id)
         return { ok: false, estado: 401, motivo: 'sesión inválida' };
-    const r: RespuestaPostgrest = await cliente.from('usuarios').select('id,rol,activo').eq('id', id);
+    return autorizarPerfilGerencia(cliente, id);
+}
+
+async function autorizarPerfilGerencia(cliente: ClienteUsuario, id: string): Promise<{ ok: true; usuarioId: string } | { ok: false; estado: 401 | 403; motivo: string }> {
+    let r: RespuestaPostgrest;
+    try { r = await cliente.from('usuarios').select('id,rol,activo').eq('id', id); }
+    catch { return { ok: false, estado: 403, motivo: 'no se pudo leer el perfil' }; }
     if (r.error)
         return { ok: false, estado: 403, motivo: 'no se pudo leer el perfil' };
     const filas = (r.data ?? []) as Array<{
@@ -190,15 +202,24 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     if (!m)
         return json(401, { error: 'falta el token de sesión' });
     const jwt = m[1];
+    const puerta = validarPuertaTelegram(jwt, req.headers.get('x-esco-telegram-secret'), {
+        credencialServicio: deps.env('SUPABASE_SERVICE_ROLE_KEY'),
+        secretoTelegram: deps.env('ESCO_TELEGRAM_SECRET'),
+    });
+    if (puerta.tipo === 'error') return json(puerta.estado, { error: puerta.estado === 503 ? 'La puerta de Telegram no está configurada' : 'credencial de servicio inválida' });
+    const esServicio = puerta.tipo === 'servicio';
+    if (esServicio && !deps.crearClienteServicio) return json(503, { error: 'La puerta de Telegram no está disponible' });
     let solicitud: Solicitud;
     try {
-        solicitud = validarSolicitud(await req.json());
+        solicitud = validarSolicitud(await req.json(), esServicio);
     }
     catch (e) {
         return json(400, { error: e instanceof ErrorSolicitud ? e.message : 'el cuerpo no es JSON válido' });
     }
-    const cliente = deps.crearClienteUsuario(jwt);
-    const acceso = await autorizarGerencia(cliente, jwt);
+    const cliente = esServicio ? deps.crearClienteServicio!() : deps.crearClienteUsuario(jwt);
+    const acceso = esServicio
+        ? await autorizarPerfilGerencia(cliente, solicitud.usuario_id!)
+        : await autorizarGerencia(cliente, jwt);
     if (!acceso.ok) {
         deps.registrar?.({ funcion: NOMBRE_FUNCION, evento: 'acceso_denegado', estado: acceso.estado, motivo: acceso.motivo });
         return json(acceso.estado, { error: acceso.estado === 401 ? 'sesión inválida' : 'Esco 2.0 está disponible solo para gerencia' });
@@ -207,8 +228,8 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     const hoy = fechaBogota(ahora);
     if (solicitud.motor === 'sql') {
         const llmSql = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco SQL esco-consultas')))(apiKey);
-        const entradaSql = { cliente, llm: llmSql, pregunta: solicitud.pregunta, historial: solicitud.historial, hoy, registrar: deps.registrar };
-        if (req.headers.get('accept')?.split(',').some((valor) => valor.trim().split(';')[0] === 'text/event-stream')) {
+        const entradaSql = { cliente, usuarioIdActor: esServicio ? solicitud.usuario_id : undefined, llm: llmSql, pregunta: solicitud.pregunta, historial: solicitud.historial, hoy, registrar: deps.registrar };
+        if (!esServicio && req.headers.get('accept')?.split(',').some((valor) => valor.trim().split(';')[0] === 'text/event-stream')) {
             if (!tieneRpc(cliente)) return json(503, { error: 'El motor SQL no está disponible en este entorno' });
             return respuestaStreamSql(req, entradaSql);
         }

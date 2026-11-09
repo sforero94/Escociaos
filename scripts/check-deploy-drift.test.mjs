@@ -19,6 +19,8 @@ import {
   FRASE_VERIFY_JWT_APAGADO,
   rutasDesplegadas,
   verifyJwtEsperado,
+  evaluarSecretoEsperado,
+  secretoEsperadoPresente,
 } from './check-deploy-drift.mjs';
 
 // El caso real: `updated_at` de la Management API llega en epoch MILISEGUNDOS.
@@ -525,5 +527,28 @@ describe('funciones con verify_jwt=true (esco-consultas, Esco 2.0 M3)', () => {
     const wf = readFileSync(fileURLToPath(new URL('../.github/workflows/deteccion-deriva-despliegue.yml', import.meta.url)), 'utf8');
     expect(wf).toMatch(/slug: esco-consultas\n\s+path: supabase\/functions\/esco-consultas src\/utils\/esco2 src\/utils\/escoSql src\/utils\/escoEvals\/numeros.ts src\/utils\/formatPuro.ts src\/utils\/calculosAplicaciones.ts src\/utils\/calculosMonitoreo.ts src\/utils\/calculosConductividad.ts src\/utils\/escoClimaCalidad.ts src\/utils\/calculosRadiacion.ts src\/utils\/calculosHato.ts src\/utils\/hatoConfigDesdeTabla.ts src\/utils\/hatoCategorias.ts src\/utils\/hato\/litrosQuincenalesPuro.ts src\/utils\/hato\/turnoPesaje.ts src\/types\/hato.ts src\/utils\/importHato\/overridesChapeta.ts src\/types\/aplicaciones.ts src\/utils\/calculosNecesidadProductos.ts src\/utils\/esco2\/cobertura.ts\n\s+verify_jwt: 'true'\n\s+health_anon: '401'/);
     expect(wf).toContain('EDGE_FUNCTION_VERIFY_JWT: ${{ matrix.verify_jwt }}');
+  });
+});
+
+
+describe('P4 secreto de Telegram en detector de deriva', () => {
+  it('ausencia inicial queda como pendiente de aprobación, no autorización implícita', () => {
+    expect(evaluarSecretoEsperado(false, false)).toMatchObject({ ok: true, aviso: true, visto: false });
+  });
+  it('la presencia se conserva y la retirada posterior da error sin resetear la línea base', () => {
+    expect(evaluarSecretoEsperado(true, false)).toMatchObject({ ok: true, visto: true });
+    expect(evaluarSecretoEsperado(false, true)).toMatchObject({ ok: false, visto: true });
+  });
+  it('solo lee nombres, nunca devuelve el valor del secreto', async () => {
+    const anterior = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify([{ name: 'ESCO_TELEGRAM_SECRET', value: 'valor-fixture-no-devolver' }]));
+    try { expect(await secretoEsperadoPresente({ proyecto: 'fixture', token: 'token-fixture', nombre: 'ESCO_TELEGRAM_SECRET' })).toBe(true); }
+    finally { globalThis.fetch = anterior; }
+  });
+  it('una respuesta de secretos ilegible no se convierte en ausencia verificada', async () => {
+    const anterior = globalThis.fetch;
+    globalThis.fetch = async () => new Response('{}');
+    try { await expect(secretoEsperadoPresente({ proyecto: 'fixture', token: 'token-fixture', nombre: 'ESCO_TELEGRAM_SECRET' })).rejects.toThrow(/lista/); }
+    finally { globalThis.fetch = anterior; }
   });
 });

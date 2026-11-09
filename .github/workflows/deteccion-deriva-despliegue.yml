@@ -50,6 +50,7 @@ jobs:
             path: supabase/functions/esco-consultas src/utils/esco2 src/utils/escoSql src/utils/escoEvals/numeros.ts src/utils/formatPuro.ts src/utils/calculosAplicaciones.ts src/utils/calculosMonitoreo.ts src/utils/calculosConductividad.ts src/utils/escoClimaCalidad.ts src/utils/calculosRadiacion.ts src/utils/calculosHato.ts src/utils/hatoConfigDesdeTabla.ts src/utils/hatoCategorias.ts src/utils/hato/litrosQuincenalesPuro.ts src/utils/hato/turnoPesaje.ts src/types/hato.ts src/utils/importHato/overridesChapeta.ts src/types/aplicaciones.ts src/utils/calculosNecesidadProductos.ts src/utils/esco2/cobertura.ts
             verify_jwt: 'true'
             health_anon: '401'
+            expected_secret: ESCO_TELEGRAM_SECRET
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,6 +74,7 @@ jobs:
           EDGE_FUNCTION_PATH: ${{ matrix.path }}
           EDGE_FUNCTION_VERIFY_JWT: ${{ matrix.verify_jwt }}
           EDGE_FUNCTION_HEALTH_ANON: ${{ matrix.health_anon }}
+          EDGE_FUNCTION_EXPECTED_SECRET: ${{ matrix.expected_secret }}
         # Sin tuberia a `tee`: el shell por defecto de Actions es `bash -e`, SIN
         # pipefail, asi que el codigo de salida de una tuberia es el de `tee` (0)
         # y un fallo del script no tumbaria el job. Se guarda la salida, se

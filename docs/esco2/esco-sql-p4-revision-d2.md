@@ -1,8 +1,9 @@
 # P4 — propuesta de corrección del ejecutor compartido y revisión de D2
 
 Fecha: 2026-11-09. Base revisada: `main` `5839ff62` y plan aprobado #471.
-**Propuesta de arquitectura para aprobar alcance. No es código terminado ni una
-migración candidata. La 194 sigue sin escribirse ni aplicarse.**
+**Alcance aprobado por Santiago el 2026-11-09 para implementación y pruebas locales,
+con QA separado. Este documento fija el contrato aprobado; no acredita una migración
+aplicada, un despliegue ni la aceptación de un candidato.**
 
 ## Decisión propuesta
 
@@ -180,7 +181,7 @@ debe aprobar al autorizar el candidato productivo concreto:
   conocido. Cualquier campaña dev real requiere autorización de envío y presupuesto
   nuevos y concretos. Held sigue cerrado hasta D6. No se heredan gastos ni aceptación.
 
-**Texto de aprobación solicitado para el alcance, todavía no para producción:**
+**Texto de alcance aprobado en esta sesión, todavía no para producción:**
 
 > Apruebo revisar D2 y ampliar P4 para corregir el ejecutor compartido de web y
 > Telegram con parser de SQL, representación relacional validada y compilador en
@@ -193,5 +194,6 @@ La ampliación de pruebas detenida por revisión automática no se reintenta por
 vía; esa limitación no queda levantada por este texto de alcance. Si fuese esencial
 retomarla, debe resolverse expresamente antes de ejecutar esa acción.
 
-P4 permanece bloqueada y sin implementación hasta esta decisión. Esta propuesta
-no acredita que el compilador o sus garantías hayan sido construidos o aceptados.
+P4 está en implementación local tras esa aprobación. La entrega debe aportar evidencia
+del compilador y sus garantías; la aplicación productiva, el despliegue, los secretos,
+los flags, las campañas pagadas y held conservan sus puertas separadas.

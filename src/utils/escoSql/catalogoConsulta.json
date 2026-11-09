@@ -1,0 +1,945 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "name": "v_esco_aplicaciones",
+      "columns": [
+        {
+          "name": "aplicacion_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "codigo_aplicacion",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "nombre_aplicacion",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "estado_pantalla",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "fecha_inicio_planeada",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_fin_planeada",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_inicio_ejecucion",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_fin_ejecucion",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_cierre",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "lotes_planeados",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "lotes_ejecutados",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "costo_total_insumos",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "costo_total_mano_obra",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "costo_total",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "jornales_utilizados",
+          "type": "numeric",
+          "sql_type": "numeric"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_aplicaciones_productos",
+      "columns": [
+        {
+          "name": "aplicacion_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "nombre_aplicacion",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "producto_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "producto",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "unidad",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "cantidad_planeada",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "cantidad_real",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "primera_fecha_real",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ultima_fecha_real",
+          "type": "date",
+          "sql_type": "date"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_clima_diario",
+      "columns": [
+        {
+          "name": "fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "station_id",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "temp_c_min",
+          "type": "numeric",
+          "sql_type": "numeric(5,2)"
+        },
+        {
+          "name": "temp_c_max",
+          "type": "numeric",
+          "sql_type": "numeric(5,2)"
+        },
+        {
+          "name": "temp_c_avg",
+          "type": "numeric",
+          "sql_type": "numeric(5,2)"
+        },
+        {
+          "name": "humedad_pct_avg",
+          "type": "numeric",
+          "sql_type": "numeric(5,2)"
+        },
+        {
+          "name": "lluvia_mm",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "lluvia_estado",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "viento_kmh_avg",
+          "type": "numeric",
+          "sql_type": "numeric(6,2)"
+        },
+        {
+          "name": "rafaga_kmh_max",
+          "type": "numeric",
+          "sql_type": "numeric(6,2)"
+        },
+        {
+          "name": "radiacion_wm2_avg",
+          "type": "numeric",
+          "sql_type": "numeric(8,2)"
+        },
+        {
+          "name": "horas_sol_duracion",
+          "type": "numeric",
+          "sql_type": "numeric(5,2)"
+        },
+        {
+          "name": "tiene_fila",
+          "type": "boolean",
+          "sql_type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_gastos",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "valor",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "negocio",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "region",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "categoria",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "concepto",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "proveedor",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_hato",
+      "columns": [
+        {
+          "name": "animal_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "chapeta",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "etapa",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "raza",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "fecha_nacimiento",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "num_partos",
+          "type": "bigint",
+          "sql_type": "bigint"
+        },
+        {
+          "name": "ultimo_parto_fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ultimo_servicio_fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ultimo_tipo_servicio",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "ultima_confirmacion_prenez_fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ultima_confirmacion_prenez_metodo",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "ultimo_aborto_fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_probable_parto",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_secar",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ultimo_secado_real_fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ultimo_estado_chequeo",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "ultimo_chequeo_fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "pl",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "estado_reproductivo",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "estado_pantalla",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_hato_eventos",
+      "columns": [
+        {
+          "name": "evento_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "animal_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "chapeta",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_confianza",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo_servicio",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "toro",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "fuente",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_hato_pesajes",
+      "columns": [
+        {
+          "name": "pesaje_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "animal_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "chapeta",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "litros",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "fuente",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_hato_produccion_quincenal",
+      "columns": [
+        {
+          "name": "anio",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "mes",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "quincena",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "fecha_inicio",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_fin",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "litros",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "num_vacas_ordeno",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "origen_dato",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_ingresos",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "valor",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "negocio",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "region",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "categoria",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "cantidad",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "precio_unitario",
+          "type": "numeric",
+          "sql_type": "numeric(15,2)"
+        },
+        {
+          "name": "cosecha",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "finca",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "cabezas",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "es_venta",
+          "type": "boolean",
+          "sql_type": "boolean"
+        },
+        {
+          "name": "origen",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_inventario",
+      "columns": [
+        {
+          "name": "producto_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "categoria",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "unidad",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "cantidad_actual",
+          "type": "numeric",
+          "sql_type": "numeric(12,2)"
+        },
+        {
+          "name": "stock_minimo",
+          "type": "numeric",
+          "sql_type": "numeric(12,2)"
+        },
+        {
+          "name": "precio_unitario",
+          "type": "numeric",
+          "sql_type": "numeric(12,2)"
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "activo",
+          "type": "boolean",
+          "sql_type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_jornales",
+      "columns": [
+        {
+          "name": "registro_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "fecha",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "lote_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "lote",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tarea_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "tarea",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo_tarea",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo_persona",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "persona",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "jornales",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "costo",
+          "type": "numeric",
+          "sql_type": "numeric"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_monitoreo",
+      "columns": [
+        {
+          "name": "ronda_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "ronda",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "ronda_inicio",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ronda_fin",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "lote_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "lote",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "sublote_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "sublote",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "plaga_enfermedad_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "plaga",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo_plaga",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "fecha_primera",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "fecha_ultima",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "arboles_afectados",
+          "type": "bigint",
+          "sql_type": "bigint"
+        },
+        {
+          "name": "arboles_monitoreados",
+          "type": "bigint",
+          "sql_type": "bigint"
+        },
+        {
+          "name": "incidencia_pct",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "n_observaciones",
+          "type": "bigint",
+          "sql_type": "bigint"
+        },
+        {
+          "name": "ronda_orden",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "es_ultima_ronda",
+          "type": "boolean",
+          "sql_type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_monitoreo_ronda_plaga",
+      "columns": [
+        {
+          "name": "ronda_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "ronda",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "ronda_inicio",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ronda_fin",
+          "type": "date",
+          "sql_type": "date"
+        },
+        {
+          "name": "ronda_orden",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "es_ultima_ronda",
+          "type": "boolean",
+          "sql_type": "boolean"
+        },
+        {
+          "name": "plaga_enfermedad_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "plaga",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "tipo_plaga",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "arboles_afectados",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "arboles_monitoreados",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "incidencia_pct",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "n_lotes",
+          "type": "bigint",
+          "sql_type": "bigint"
+        },
+        {
+          "name": "n_observaciones",
+          "type": "numeric",
+          "sql_type": "numeric"
+        }
+      ]
+    },
+    {
+      "name": "v_esco_produccion",
+      "columns": [
+        {
+          "name": "lote_id",
+          "type": "uuid",
+          "sql_type": "uuid"
+        },
+        {
+          "name": "lote",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "ano",
+          "type": "integer",
+          "sql_type": "integer"
+        },
+        {
+          "name": "cosecha_tipo",
+          "type": "text",
+          "sql_type": "text"
+        },
+        {
+          "name": "kg_totales",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "arboles_registrados",
+          "type": "bigint",
+          "sql_type": "bigint"
+        },
+        {
+          "name": "kg_por_arbol",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "kg_exportacion",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "kg_nacional",
+          "type": "numeric",
+          "sql_type": "numeric"
+        },
+        {
+          "name": "nivel",
+          "type": "text",
+          "sql_type": "text"
+        }
+      ]
+    }
+  ]
+}
