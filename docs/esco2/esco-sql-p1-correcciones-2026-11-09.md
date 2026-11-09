@@ -27,11 +27,12 @@ nombrar productos cuando preguntaban «cuáles» (regresión en inventario), y l
 
 ## Estado de la migración 193
 
-Escrita y **sin aplicar**. Ensayada el 2026-11-09 con `po_sonda` contra producción (corre los pasos y siempre deshace):
-las guardas previas y posteriores pasan, `deshecho: true`, y las cifras de la vista nueva coinciden con las pantallas
-(ingresos 2026 = `fin_ingresos` + ventas de ganado; el costo de las aplicaciones cerradas en octubre igual al del reporte;
-octubre con 31 días de clima, uno sin fila). Orden al aplicar: migración primero, `esco-consultas` después. Aplicar y
-desplegar necesitan la aprobación de Santiago en ese momento.
+**Aplicada a producción el 2026-11-09** (ledger `20261109182850`, con la aprobación de Santiago) y `esco-consultas` redesplegada como v13.
+Antes se ensayó con `po_sonda` contra producción (corre los pasos y siempre deshace): las guardas pasan, `deshecho: true`, y las
+cifras de la vista nueva coinciden con las pantallas (ingresos 2026 = `fin_ingresos` + ventas de ganado; el costo de las
+aplicaciones cerradas en octubre igual al del reporte; octubre con 31 días de clima, uno sin fila). Orden usado: migración
+primero, deploy después. Verificado en vivo: 10 vistas con `security_invoker`, `anon` sin acceso, `/health` anónimo 401.
+Pendiente: una prueba real de Santiago en el botón «Esco SQL (beta)».
 
 ## Cómo se midió
 
