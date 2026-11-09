@@ -10,6 +10,10 @@ import { EscoMemoriaAprobacion } from './EscoMemoriaAprobacion';
 import { ExportarInformeDialog } from './ExportarInformeDialog';
 import type { ExportData } from './ExportarInformeDialog';
 import { ChatEmptyState } from './ChatEmptyState';
+import { SugerenciasSql } from './BloquesSql';
+import { enviarMensajeSql } from '@/utils/escoSqlChatService';
+import { motorSqlWebHabilitado, leerMetadataSql, leerRespuestaSqlWeb, bloquesParaExportar, trazaSql } from '@/utils/escoSqlChat';
+import type { Bloque } from '@/utils/escoSql/bloques';
 import { generarTituloInforme } from '@/utils/generarTituloInforme';
 import {
   sendChatMessage,
@@ -49,6 +53,8 @@ interface ToolInteractionPersistida {
  * leía. Es lo que hace que la trazabilidad no se evapore al cerrar el panel.
  */
 function trazaDeMensaje(msg: ChatMessage): PasoTraza[] | null {
+  const sql = leerMetadataSql(msg.metadata);
+  if (sql) return trazaSql(sql.consultas);
   const enVivo = msg.metadata?.traza;
   if (Array.isArray(enVivo) && enVivo.length > 0) return enVivo as PasoTraza[];
 
@@ -81,6 +87,8 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [streamingBloques, setStreamingBloques] = useState<Bloque[]>([]);
+  const motorSql = motorSqlWebHabilitado(import.meta.env.VITE_ESCO_MOTOR_WEB);
   // La traza vive en un ref además del estado: el estado es para pintarla, y el
   // ref para poder leerla al cerrar el mensaje sin quedar atrapado en el closure
   // de `handleSend`.
@@ -118,7 +126,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   // Load conversations list
   useEffect(() => {
     if (open) {
-      fetchConversations().then(setConversations).catch(() => {});
+      fetchConversations().then(setConversations).catch(() => toast.error('No se pudo cargar el historial'));
     }
   }, [open]);
 
@@ -128,7 +136,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
       fetchMessages(currentConversationId).then((msgs) => {
         setMessages(msgs);
         scrollToBottom();
-      }).catch(() => {});
+      }).catch(() => toast.error('No se pudo cargar la conversación'));
     } else {
       setMessages([]);
     }
@@ -166,6 +174,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
 
     setIsStreaming(true);
     setStreamingContent('');
+    setStreamingBloques([]);
     trazaRef.current = [];
     setTraza([]);
 
@@ -180,6 +189,29 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
     };
 
     try {
+      if (motorSql) {
+        const resultado = await enviarMensajeSql(currentConversationId, messageText, messages, (event) => {
+          if (event.type === 'consulta_inicio') {
+            actualizarTraza((pasos) => [...pasos, { index: event.consulta ?? pasos.length + 1, tool: 'consultar_sql', args: { proposito: event.proposito } }]);
+          } else if (event.type === 'consulta_fin') {
+            actualizarTraza((pasos) => pasos.map((p) => p.index === event.consulta ? { ...p, ms: event.ms, ok: event.ok } : p));
+          } else if (event.type === 'texto' && typeof event.texto === 'string') {
+            setStreamingContent(event.texto);
+          } else if (event.type === 'bloques') {
+            setStreamingBloques(leerRespuestaSqlWeb({ texto: '', bloques: event.bloques })?.bloques ?? []);
+          }
+          scrollToBottom();
+        }, controller.signal);
+        if (controller.signal.aborted) return;
+        setMessages((prev) => [...prev, resultado.asistente]);
+        setStreamingContent('');
+        setStreamingBloques([]);
+        setTraza([]);
+        trazaRef.current = [];
+        if (resultado.conversationId !== currentConversationId) setCurrentConversationId(resultado.conversationId);
+        fetchConversations().then(setConversations).catch(() => toast.error('No se pudo actualizar el historial'));
+        return;
+      }
       await sendChatMessage(currentConversationId, messageText, (event) => {
         if (event.type === 'text_delta' && event.content) {
           setStreamingContent((prev) => prev + event.content);
@@ -247,6 +279,10 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
         setTraza([]);
         trazaRef.current = [];
       } else {
+        setStreamingContent('');
+        setStreamingBloques([]);
+        setTraza([]);
+        trazaRef.current = [];
         const msg = err instanceof Error ? err.message : 'Error al enviar mensaje';
         toast.error(msg);
       }
@@ -285,6 +321,8 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   };
 
   const handleSelectConversation = (id: string) => {
+    abortRef.current?.abort();
+    setStreamingBloques([]);
     setCurrentConversationId(id);
     setStreamingContent('');
     setShowHistory(false);
@@ -329,7 +367,8 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
     if (lastAssistantIdx === -1) return;
 
     const assistantMsg = messages[lastAssistantIdx];
-    const bloques = splitChartBlocks(assistantMsg.content);
+    const sql = leerMetadataSql(assistantMsg.metadata);
+    const bloques = sql ? bloquesParaExportar(assistantMsg.content, sql.bloques) : splitChartBlocks(assistantMsg.content);
 
     // Find the preceding user question
     const userQuestion = messages
@@ -513,7 +552,8 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                       {messages.map((msg, idx) => {
                         const trazaMsg = trazaDeMensaje(msg);
                         const esUltimoAsistente = idx === ultimoAsistenteIdx;
-                        const propuesta = msg.role === 'assistant' ? memoriaPropuesta(trazaMsg) : null;
+                        const sql = leerMetadataSql(msg.metadata);
+                        const propuesta = msg.role === 'assistant' && !sql ? memoriaPropuesta(trazaMsg) : null;
 
                         return (
                           <div key={msg.id} className="flex flex-col gap-2">
@@ -526,7 +566,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                                 lo usa para capturar el nodo del informe, y ni la
                                 traza ni las acciones son parte del informe. */}
                             <div data-role={msg.role}>
-                              <ChatMessageView role={msg.role} content={msg.content} />
+                              <ChatMessageView role={msg.role} content={msg.content} metadata={msg.metadata} />
                             </div>
                             {msg.role === 'assistant' && (
                               <ChatMessageAcciones
@@ -534,6 +574,8 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                                 onReintentar={esUltimoAsistente && !isStreaming ? handleReintentar : undefined}
                               />
                             )}
+                            {sql && msg.role === 'assistant' && esUltimoAsistente && <SugerenciasSql sugerencias={sql.sugerencias} pregunta={sql.aclaracion?.pregunta} opciones={sql.aclaracion?.opciones} onSelect={(texto) => handleSend(texto)} disabled={isStreaming} />}
+                            {sql && sql.consultas.length > 0 && <details className="pl-9 text-xs"><summary className="min-h-11 cursor-pointer py-3">Consultas usadas ({sql.consultas.length})</summary>{sql.consultas.map((c, i) => <div key={i} className="space-y-1 py-2"><p className="font-medium">{c.proposito}</p><pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border bg-muted/30 p-2">{c.sql}</pre><p>{c.n_filas ?? '—'} filas · {c.ms} ms{c.truncado ? ' · Resultado truncado' : ''}</p>{c.error && <p className="text-destructive">{c.error}</p>}</div>)}</details>}
                             {propuesta && (
                               <div className="pl-9">
                                 {/* La tarjeta se queda montada al resolverse: se
@@ -554,7 +596,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                             <EscoTraza pasos={traza} trabajando={!streamingContent} />
                           </div>
                           {streamingContent && (
-                            <ChatMessageView role="assistant" content={streamingContent} />
+                            <ChatMessageView role="assistant" content={streamingContent} metadata={motorSql ? { motor: 'sql', bloques: streamingBloques, texto: streamingContent } : undefined} />
                           )}
                         </div>
                       )}

@@ -1049,6 +1049,13 @@ Report: `escociaos-po/reports/2026-11-07-sabado-respuesta.md`.
   active Gerencia and active Administrador 9 lotes / 3,388 registros; profile-less session 0/0;
   Administrador simulated as inactive 0/0; still 12 policies, 0 inactive accounts.
   Evidence: `docs/esco2/m3-rls.md`.
+- **Esco SQL P3 web adapter (2026-11-09, deploy and activation pending).** The existing `ChatPanel`
+  can select SQL with `VITE_ESCO_MOTOR_WEB=sql`; absent or any other value keeps legacy. Do not activate
+  this flag without Santiago's approval. SQL requests opt into SSE via `Accept: text/event-stream`;
+  input/auth/active-Gerencia gates precede the stream and JSON remains available. Completed turns
+  persist blocks plus a timestamped snapshot and query traces without rows. Reopening and exporting
+  use that snapshot. Keep the beta FAB/route until Santiago completes the real-use checkpoint.
+  See [P3 web contract](docs/esco2/esco-sql-p3-web.md).
 - **Esco SQL P2 answer contract v1 (2026-11-09, deploy pending approval).** `motor: 'sql'` returns
   `texto`, `bloques`, `sugerencias`, optional `aclaracion`, and query traces without rows. `respuesta`
   remains an alias of `texto`. `mostrar_visual` accepts column specifications only; the server builds
