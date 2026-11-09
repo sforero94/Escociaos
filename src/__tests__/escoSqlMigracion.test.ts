@@ -209,7 +209,10 @@ describe('migración 192 — contrato del archivo', () => {
   });
 
   it('cada vista del archivo está descrita en el prompt, y al revés', () => {
-    expect([...vistasEnArchivo].sort()).toEqual(VISTAS_ESCO.map((v) => v.nombre).sort());
+    // Las vistas que la 195 agrega viven en su propio archivo; el prompt describe las de las dos migraciones.
+    const m195 = readFileSync(new URL('../sql/migrations/195_esco_sql_hato_monitoreo_vistas.sql', import.meta.url), 'utf8');
+    const de195 = [...m195.matchAll(/CREATE VIEW public\.(v_esco_\w+) WITH/g)].map((m) => m[1]);
+    expect([...new Set([...vistasEnArchivo, ...de195])].sort()).toEqual(VISTAS_ESCO.map((v) => v.nombre).sort());
   });
 
   it('la RPC es SECURITY INVOKER, con search_path pineado, y no se da a anon', () => {

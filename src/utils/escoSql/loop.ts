@@ -11,6 +11,7 @@
 // primero emular el intercambio con turnos de texto y el modelo repetía la misma consulta.
 
 import type { ClienteLLM, Esfuerzo, MensajeLLM } from '../esco2/llm.ts';
+import { abreviarDineroEnTexto } from './formatoDinero.ts';
 import { construirPrompt } from './prompt.ts';
 
 export const MAX_CONSULTAS = 4;
@@ -164,8 +165,9 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
     uso.costoUsd = uso.costoUsd === null || u.costoUsd === null ? null : uso.costoUsd + u.costoUsd;
   };
 
+  // F1: el dinero del texto sale siempre en formato colombiano abreviado, lo escriba así el modelo o no.
   const terminar = (respuesta: string): ResultadoPregunta => ({
-    respuesta: respuesta.trim() || 'No pude armar una respuesta. Intenta reformular la pregunta.',
+    respuesta: abreviarDineroEnTexto(respuesta.trim()) || 'No pude armar una respuesta. Intenta reformular la pregunta.',
     consultas,
     uso,
     ms: reloj() - inicio,

@@ -3,7 +3,11 @@
 // verdad escrita a mano (SQL sobre las tablas base).
 //
 //   node scripts/esco-sql-eval/run.mts --dir <carpeta con banco.json y verdad.json> --tag <nombre>
-//        [--split dev|held|all] [--reps 3] [--conc 4] [--max-usd 3] [--ids 1,2,3]
+//        [--split dev|held|all] [--reps 3] [--conc 4] [--max-usd 3] [--ids 1,2,3] [--sombra <migración.sql>]
+//
+// --sombra: evalúa una migración de vistas ANTES de aplicarla. Cada `CREATE VIEW public.v_esco_* … AS <cuerpo>`
+//   del archivo se inyecta como CTE con el mismo nombre delante de la consulta del modelo, así que la consulta
+//   lee la definición nueva aunque en producción siga la vieja. Solo lectura: no se crea nada en la base.
 //
 // Privacidad: el repo es público. El banco (preguntas con nombres reales), la verdad y los resultados
 // viven FUERA del repo, en --dir. Aquí solo hay el runner. Ver README.md.
@@ -35,6 +39,7 @@ const REPS = Number(arg('reps', '3'));
 const CONC = Number(arg('conc', '4'));
 const MAX_USD = Number(arg('max-usd', '3'));
 const SOLO = arg('ids') ? new Set(arg('ids')!.split(',').map(Number)) : null;
+const SOMBRA = arg('sombra');
 const HOY = '2026-11-08';
 const MODELO_JUEZ = 'openai/gpt-6-sol';
 
@@ -57,6 +62,37 @@ mkdirSync(DIR, { recursive: true });
 const SALIDA = join(DIR, `resultados-${TAG}.jsonl`);
 writeFileSync(SALIDA, '');
 
+// Vistas sombra: nombre -> cuerpo SELECT de la migración.
+const vistasSombra: Record<string, string> = {};
+if (SOMBRA) {
+  const archivo = readFileSync(resolve(SOMBRA), 'utf8');
+  for (const m of archivo.matchAll(/CREATE VIEW public\.(v_esco_\w+) WITH \(security_invoker = true\) AS\n([\s\S]*?);\n/g)) vistasSombra[m[1]] = m[2];
+  if (!Object.keys(vistasSombra).length) throw new Error(`--sombra: no encontré ningún CREATE VIEW v_esco_* en ${SOMBRA}`);
+  console.log(`vistas sombra: ${Object.keys(vistasSombra).join(', ')}`);
+}
+/**
+ * Antepone como CTE las vistas sombra que la consulta menciona (una CTE con el nombre de la vista la tapa).
+ * Una vista sombra que lee otra vista sombra (v_esco_monitoreo_ronda_plaga lee v_esco_monitoreo) arrastra a su
+ * dependencia, definida antes; y se le quita el prefijo `public.` para que resuelva a la CTE y no a la vista vieja.
+ */
+function conSombra(sql: string): string {
+  const menciona = (texto: string, n: string) => new RegExp(`\\b${n}\\b`, 'i').test(texto);
+  const usadas = new Set(Object.keys(vistasSombra).filter(n => menciona(sql, n)));
+  for (let cambio = true; cambio;) {
+    cambio = false;
+    for (const n of [...usadas]) for (const otra of Object.keys(vistasSombra)) if (otra !== n && !usadas.has(otra) && menciona(vistasSombra[n], otra)) { usadas.add(otra); cambio = true; }
+  }
+  if (!usadas.size) return sql;
+  // Dependencias primero: una vista va después de todas las que ella menciona.
+  const orden: string[] = [];
+  const poner = (n: string) => { if (orden.includes(n)) return; for (const otra of usadas) if (otra !== n && menciona(vistasSombra[n], otra)) poner(otra); orden.push(n); };
+  for (const n of usadas) poner(n);
+  const defs = orden.map(n => `${n} AS (\n${vistasSombra[n].replace(/public\.(v_esco_)/g, '$1')}\n)`).join(',\n');
+  const t = sql.trim();
+  if (/^with\s+recursive\b/i.test(t)) throw new ErrorSql('--sombra: WITH RECURSIVE no está soportado en el eval', '22023');
+  return /^with\b/i.test(t) ? t.replace(/^with\b/i, `WITH ${defs},`) : `WITH ${defs}\n${t}`;
+}
+
 let gasto = 0;
 async function ejecutarSql(sql: string) {
   const unica = sql.trim().replace(/[\s;]+$/, '');
@@ -64,10 +100,14 @@ async function ejecutarSql(sql: string) {
   if (unica.includes(';')) throw new ErrorSql('esco_sql_lectura: envía una sola sentencia, sin ";" intermedio', '22023');
   if (!/^(select|with)([\s(]|$)/i.test(unica)) throw new ErrorSql('esco_sql_lectura: la consulta debe empezar por SELECT o WITH', '22023');
   // Mismo envoltorio que la RPC: LIMIT 501 para detectar el truncado.
-  const envuelta = `select * from (${unica}\n) q limit 501`;
+  const envuelta = `select * from (${conSombra(unica)}\n) q limit 501`;
   const { stdout } = await sh('composio', ['execute', 'SUPABASE_RUN_READ_ONLY_QUERY', '--account', 'escocia-os', '-d', JSON.stringify({ ref: 'ywhtjwawnkeqlwxbvgup', query: envuelta })], { maxBuffer: 64 * 1024 * 1024, cwd: '/tmp' }).catch((e: { stdout?: string }) => ({ stdout: e.stdout ?? '' }));
   let d: any;
   try { d = JSON.parse(stdout); } catch { throw new ErrorSql(`respuesta no JSON de la base: ${stdout.slice(0, 200)}`); }
+  // Un resultado grande no viene en la respuesta: Composio lo deja en un archivo (`storedInFile`).
+  if (d.storedInFile && d.outputFilePath) {
+    try { d = JSON.parse(readFileSync(d.outputFilePath, 'utf8')); } catch { throw new ErrorSql('no pude leer el resultado grande guardado por Composio'); }
+  }
   if (!d.successful) {
     const msg = String(d.error ?? d.data?.message ?? 'error').replace(/^Bad request: Failed to run sql query: /, '').split('\nLINE')[0];
     throw new ErrorSql(msg.slice(0, 600));
@@ -92,6 +132,7 @@ Según "espera":
 - truncado: debe reconocer que hay demasiadas filas (resultado truncado/agregado) y no presentar una lista parcial como completa.
 
 Reglas: juzga contra la VERDAD y el CRITERIO, no contra tu intuición. No premies la fluidez. Si la respuesta cita una cifra que no sale de las consultas ejecutadas, es un invento. Si la verdad y la respuesta difieren y la diferencia es una definición razonable que la respuesta declara, puede ser CORRECTA o PARCIAL; dilo en la razón. Un seguimiento debe conservar el período/contexto del turno anterior.
+Contexto de las vistas (migración 193): las columnas costo_total, costo_total_insumos y costo_total_mano_obra de v_esco_aplicaciones están CALCULADAS COMO EL REPORTE de la aplicación (precio actual × cantidad usada, registros de trabajo), no son el valor guardado al cerrar; y fecha_cierre es la fecha real de cierre. Una consulta que lee esas columnas SÍ usa el costo del reporte. Con la vista v_esco_ingresos, origen = 'fin_transacciones_ganado' son las ventas de ganado de ceba. Con v_esco_clima_diario hay una fila por día calendario (tiene_fila = false = día sin registro).
 
 Responde SOLO con un JSON, sin texto alrededor:
 {"veredicto":"CORRECTA|PARCIAL|INCORRECTA","fallo_tipo":"ninguno|cifra_mal|periodo_mal|filas_vs_jornales|cero_en_vez_de_sin_dato|invento|no_aclaro|escribio_o_no_rechazo|faltante|formato|consulta_fallida|otro","formato_ok":true|false,"razon":"máx. 30 palabras"}

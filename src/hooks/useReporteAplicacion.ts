@@ -8,6 +8,7 @@ import {
     formatearMoneda,
     formatearNumero,
 } from '../utils/calculosReporteAplicacion';
+import { calcularCostoAplicacionReal } from '../utils/calculosCostoAplicacionReporte';
 // Types defined locally — not available in types/aplicaciones
 interface KPICardData {
     titulo: string;
@@ -334,11 +335,13 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             // Trabajo labor log) so per-lote jornales reflect actual worker assignments
             // instead of a tree-count proration of a single application-wide total.
             const jornalesPorLoteReal = new Map<string, { jornales: number; costo: number; lote_nombre?: string; total_arboles?: number }>();
+            let registrosTrabajoApp: any[] = [];
             if (appData.tarea_id) {
                 const { data: registrosTrabajo } = await supabase
                     .from('registros_trabajo')
                     .select('lote_id, fraccion_jornal, costo_jornal, lotes(nombre, total_arboles)')
                     .eq('tarea_id', appData.tarea_id);
+                registrosTrabajoApp = registrosTrabajo || [];
 
                 (registrosTrabajo || []).forEach((r: any) => {
                     if (!r.lote_id) return;
@@ -671,11 +674,18 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             // Totals
             // Prefer the sum of actual per-worker costo_jornal from registros_trabajo (accounts
             // for each worker's real rate); fall back to average valorJornal × jornales otherwise.
-            const totalCostoManoObraReal = totalJornalesRegistros > 0
-                ? Array.from(jornalesPorLoteReal.values()).reduce((sum, v) => sum + v.costo, 0)
-                : totalJornalesApp * valorJornal;
-            const totalCostoProductosReal = Array.from(productosRealMap.values()).reduce((sum: number, p: any) => sum + p.costo, 0);
-            const totalCostoReal = totalCostoManoObraReal + totalCostoProductosReal; // Ignore app.costo_total to force recalc
+            // La regla vive en calcularCostoAplicacionReal (la replica la vista v_esco_aplicaciones de
+            // Esco SQL, migración 193, y una prueba compara las dos). Ignore app.costo_total to force recalc.
+            const costoReal = calcularCostoAplicacionReal({
+                registros: registrosTrabajoApp,
+                movimientos: movimientos || [],
+                productosMovimiento: movProductos,
+                jornalesRespaldo: Number(appData.jornales_utilizados || cierreData?.[0]?.jornales_aplicacion || 0),
+                valorJornal,
+            });
+            const totalCostoManoObraReal = costoReal.costoManoObra;
+            const totalCostoProductosReal = costoReal.costoInsumos;
+            const totalCostoReal = costoReal.costoTotal;
 
             const totalCanecasReal = Array.from(lotesRealMap.values()).reduce((sum: number, l: any) => sum + l.canecas_200l, 0);
             const totalCanecasPlan = Array.from(lotesPlanMap.values()).reduce((sum: number, l: any) => sum + l.canecas_plan, 0);
