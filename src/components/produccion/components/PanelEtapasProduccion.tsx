@@ -1,94 +1,102 @@
-import { Info, Package, Scale, Truck, Diff } from 'lucide-react';
-import { GAPS_PRODUCCION_ANALISIS } from '@/utils/calculosProduccionAnalisis';
+import type { ResumenProduccionCosecha } from '@/utils/calculosProduccionAnalisis';
+import { conciliarEtapas } from '@/utils/calculosProduccionAnalisis';
 
 interface PanelEtapasProduccionProps {
-  /** Proxy actual: kg_totales de produccion. */
-  produccionKg: number | null;
-  periodo: string;
+  resumenes: ResumenProduccionCosecha[];
+  vista: 'una' | 'varias';
   loading?: boolean;
 }
 
-/**
- * Resumen de etapas del mock (entrada / clasificado / despachado / diferencia).
- * Solo la producción registrada tiene dato en el schema actual; el resto se
- * muestra como gap explícito — no se inventan cifras del mock.
- */
+function fmtKg(valor: number | null, loading: boolean): string {
+  if (loading) return '…';
+  if (valor == null) return 'Sin dato';
+  return `${Math.round(valor).toLocaleString('es-CO')} kg`;
+}
+
 export function PanelEtapasProduccion({
-  produccionKg,
-  periodo,
+  resumenes,
+  vista,
   loading = false,
 }: PanelEtapasProduccionProps) {
+  const una = vista === 'una' ? resumenes[resumenes.length - 1] : null;
+  const entrada = una?.tiene_registros ? una.produccion_kg : null;
+  const conciliacion = conciliarEtapas(entrada, null, null);
+
   const cards = [
     {
-      titulo: 'Producción registrada',
-      valor:
-        loading || produccionKg == null
-          ? '—'
-          : `${produccionKg.toLocaleString('es-CO')} kg`,
-      subtitulo: periodo
-        ? `kg_totales · ${periodo}`
-        : 'Proxy de entrada neta (sin fecha de movimiento)',
-      icono: Package,
-      disponible: produccionKg != null && !loading,
+      titulo: 'Entrada neta',
+      valor: vista === 'varias' ? null : fmtKg(entrada, loading),
+      subtitulo:
+        vista === 'varias'
+          ? 'Cada campaña conserva su total. No se suman entre sí.'
+          : una
+            ? `Producción registrada · ${una.cosecha.label}`
+            : 'Producción registrada de la cosecha',
+      destacada: true,
     },
     {
       titulo: 'Clasificado',
       valor: 'Sin dato',
-      subtitulo: 'Sin registros de clasificación por línea',
-      icono: Scale,
-      disponible: false,
+      subtitulo: 'Sin líneas de clasificación en este corte',
+      destacada: false,
     },
     {
       titulo: 'Despachado',
       valor: 'Sin dato',
-      subtitulo: 'Sin tabla de despachos en el schema',
-      icono: Truck,
-      disponible: false,
+      subtitulo: 'Sin despachos ligados a esta cosecha',
+      destacada: false,
     },
     {
       titulo: 'Diferencia por revisar',
       valor: 'Sin dato',
-      subtitulo: 'No se infiere merma entre etapas',
-      icono: Diff,
-      disponible: false,
+      subtitulo: conciliacion.nota,
+      destacada: false,
     },
   ];
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {cards.map((card) => {
-          const Icono = card.icono;
-          return (
-            <div
-              key={card.titulo}
-              className="bg-white rounded-xl border border-gray-200 p-5"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-gray-600">{card.titulo}</p>
-                <Icono
-                  className={`w-4 h-4 ${card.disponible ? 'text-primary' : 'text-gray-300'}`}
-                />
-              </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {cards.map((card) => (
+          <div
+            key={card.titulo}
+            className={`rounded-xl border p-5 ${
+              card.destacada
+                ? 'bg-[#E4EED0] border-[#C5D6A4]'
+                : 'bg-white border-primary/10'
+            }`}
+          >
+            <p className="text-sm text-brand-brown/70">{card.titulo}</p>
+            {card.destacada && vista === 'varias' ? (
+              <ul className="mt-2 space-y-1">
+                {resumenes.length === 0 && (
+                  <li className="text-2xl font-semibold text-foreground">Sin dato</li>
+                )}
+                {resumenes.map((r) => (
+                  <li key={r.cosecha.key} className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm text-foreground">{r.cosecha.label}</span>
+                    <span className="text-base font-semibold tabular-nums text-foreground">
+                      {loading
+                        ? '…'
+                        : r.tiene_registros
+                          ? `${r.produccion_kg.toLocaleString('es-CO')} kg`
+                          : 'Sin dato'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
               <p
-                className={`text-2xl font-semibold tabular-nums ${
-                  card.disponible ? 'text-gray-900' : 'text-gray-400'
+                className={`mt-1 text-2xl font-semibold tabular-nums ${
+                  card.valor === 'Sin dato' ? 'text-brand-brown/40' : 'text-foreground'
                 }`}
               >
                 {card.valor}
               </p>
-              <p className="text-xs text-gray-400 mt-2">{card.subtitulo}</p>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex items-start gap-2 text-xs text-gray-500 px-1">
-        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-        <p>
-          {GAPS_PRODUCCION_ANALISIS.produccion_proxy} Las etapas del mock
-          (entrada canastilla / clasificación / despacho) no están en el
-          schema: se muestran como «Sin dato», no como ceros del demo.
-        </p>
+            )}
+            <p className="text-xs text-brand-brown/60 mt-2 leading-relaxed">{card.subtitulo}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,15 +1,15 @@
 /**
  * Lógica pura del tablero analítico de Producción (issue #463).
  *
- * Unidad de agrupación = cosecha (`Principal 2027`), nunca el año calendario.
- *
- * - Identidad de cosecha = `{tipo, ano}` → etiqueta "Principal 2027".
- * - Año de movimiento = filtro opcional (cuándo cayó el movimiento). No es el
- *   eje de KPIs, series ni comparación.
- *
- * Sin fecha de movimiento en `produccion`, el filtro de años solo acota qué
- * cosechas se listan (regla finanzas: en Y → Principal Y, Traviesa Y,
- * Principal Y+1). No inventa kilos ni fechas, ni reagrupa por calendario.
+ * - Identidad de cosecha = `{tipo, ano}` → "Principal 2027". Es independiente
+ *   del año calendario.
+ * - Año del movimiento = año de `fecha` (YYYY-MM-DD). No es `produccion.ano`.
+ *   Un registro de Principal 2027 con fecha en 2026 aparece al filtrar 2026.
+ * - Si el registro no trae fecha, el año no recorta kilos ni esconde la cosecha:
+ *   el corte se declara explícito.
+ * - Producción = kg de entrada (`kg_totales`). No se suman etapas.
+ * - kg/árbol y t/ha exigen denominador válido en todo el corte; si falta, null.
+ * - La evolución no rellena semanas futuras ni huecos con cero.
  */
 
 import type {
@@ -35,6 +35,8 @@ export interface RegistroProduccionAgregable extends RegistroCosechaBase {
   area_hectareas?: number | null;
   kg_exportacion?: number | null;
   kg_nacional?: number | null;
+  /** Fecha del movimiento (YYYY-MM-DD). `produccion` no la tiene. */
+  fecha?: string | null;
 }
 
 export interface EstadoFiltroProduccion {
@@ -98,33 +100,39 @@ export function ordenarCosechas(cosechas: CosechaIdentidad[]): CosechaIdentidad[
   );
 }
 
-/**
- * Cosechas que, por regla de producto, pueden tener movimientos en el año
- * calendario Y. Misma familia que `opcionesCosecha` en finanzas.
- */
-export function cosechasAsociadasAAnoMovimiento(anoMovimiento: number): CosechaIdentidad[] {
-  return [
-    identidadFromParts('Principal', anoMovimiento),
-    identidadFromParts('Traviesa', anoMovimiento),
-    identidadFromParts('Principal', anoMovimiento + 1),
-  ];
+/** Año calendario de una fecha de movimiento. Null si la fecha no es válida. */
+export function anioDeFechaMovimiento(fecha: string | null | undefined): number | null {
+  if (!fecha) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return year;
 }
 
 /**
- * Años de movimiento sugeridos a partir de cosechas existentes.
- * Para Principal N incluye N-1 (movimientos previos al año de campaña).
+ * Años de movimiento presentes en las fechas. No usa el año del nombre de
+ * campaña y no inventa el año anterior de una Principal.
  */
 export function derivarAnosMovimiento(
-  registros: RegistroCosechaBase[],
+  registros: Array<{ fecha?: string | null }>,
 ): number[] {
   const anos = new Set<number>();
   for (const r of registros) {
-    anos.add(r.ano);
-    if (r.cosecha_tipo === 'Principal') {
-      anos.add(r.ano - 1);
-    }
+    const year = anioDeFechaMovimiento(r.fecha);
+    if (year != null) anos.add(year);
   }
-  return Array.from(anos).filter((a) => a >= 2020).sort((a, b) => a - b);
+  return Array.from(anos).sort((a, b) => a - b);
 }
 
 /** Identidades distintas presentes en los registros, ordenadas. */
@@ -140,44 +148,21 @@ export function derivarCosechasDisponibles(
 }
 
 /**
- * Cosechas disponibles restringidas a las compatibles con los años de
- * movimiento seleccionados. Si no hay años, devuelve todas.
- */
-export function cosechasCompatiblesConAnos(
-  disponibles: CosechaIdentidad[],
-  anosMovimiento: number[],
-): CosechaIdentidad[] {
-  if (anosMovimiento.length === 0) return disponibles;
-  const permitidas = new Set<string>();
-  for (const ano of anosMovimiento) {
-    for (const c of cosechasAsociadasAAnoMovimiento(ano)) {
-      permitidas.add(c.key);
-    }
-  }
-  return disponibles.filter((c) => permitidas.has(c.key));
-}
-
-/**
- * Resuelve la selección efectiva de cosechas (siempre identidades de campaña).
- * - Vista "una": una sola cosecha; si hay varias keys, toma la más reciente.
- * - Vista "varias": N cosechas; si ninguna key, todas las visibles.
- * - `anos_movimiento` solo acota el catálogo visible; no reagrupa resultados.
- * - Selección fuera del acote de año → incompatible (explícito, sin ocultar).
+ * Resuelve la cosecha que se analiza. El año del movimiento no entra aquí:
+ * no esconde campañas ni sustituye una identidad por otra.
+ * - Vista "una": la cosecha elegida, o la más reciente si no hay elección.
+ * - Vista "varias": las elegidas, o todas si no hay elección.
+ * - Una key que no existe en los datos es incompatible y se nombra.
  */
 export function resolverSeleccionCosechas(
   disponibles: CosechaIdentidad[],
-  filtros: Pick<EstadoFiltroProduccion, 'vista' | 'anos_movimiento' | 'cosecha_keys'>,
+  filtros: Pick<EstadoFiltroProduccion, 'vista' | 'cosecha_keys'>,
 ): EstadoSeleccionCosecha {
-  const visibles = cosechasCompatiblesConAnos(disponibles, filtros.anos_movimiento);
-
-  if (visibles.length === 0) {
+  if (disponibles.length === 0) {
     return {
       estado: 'vacio',
       cosechas: [],
-      mensaje:
-        filtros.anos_movimiento.length > 0
-          ? `Ninguna cosecha registrada queda visible con el filtro de año de movimiento ${filtros.anos_movimiento.join(', ')}. Quita el año o elige otra cosecha.`
-          : 'No hay cosechas registradas en producción.',
+      mensaje: 'No hay cosechas registradas en producción.',
     };
   }
 
@@ -185,22 +170,17 @@ export function resolverSeleccionCosechas(
     .map((k) => disponibles.find((c) => c.key === k))
     .filter((c): c is CosechaIdentidad => Boolean(c));
 
-  const interseccion = seleccionadas.filter((c) =>
-    visibles.some((x) => x.key === c.key),
-  );
-
-  if (seleccionadas.length > 0 && interseccion.length === 0) {
+  if (filtros.cosecha_keys.length > 0 && seleccionadas.length === 0) {
     return {
       estado: 'incompatible',
       cosechas: [],
-      sugeridas: visibles,
+      sugeridas: ordenarCosechas(disponibles),
       mensaje:
-        'La cosecha elegida queda fuera del filtro opcional de año de movimiento. El análisis se agrupa por cosecha: ajusta el año o cambia la cosecha.',
+        'La cosecha elegida no está en los registros de producción. El tablero no la sustituye por otra campaña.',
     };
   }
 
-  let efectivas = interseccion.length > 0 ? interseccion : visibles;
-
+  let efectivas = seleccionadas.length > 0 ? seleccionadas : disponibles;
   if (filtros.vista === 'una') {
     efectivas = [efectivas[efectivas.length - 1]];
   }
@@ -301,6 +281,8 @@ export interface ResumenProduccionCosecha {
   lotes_con_dato: number;
   /** true cuando algún denominador falta: no se debe mostrar 0. */
   rendimientos_parciales: boolean;
+  /** false cuando la cosecha no tiene filas en el corte. 0 kg sería un cero inventado. */
+  tiene_registros: boolean;
 }
 
 export function resumirCosecha(
@@ -313,40 +295,35 @@ export function resumirCosecha(
     ),
   );
   const produccion_kg = delGrupo.reduce((s, r) => s + (Number(r.kg_totales) || 0), 0);
-  const arboles = delGrupo.reduce((s, r) => {
-    const a = r.arboles_registrados;
-    return s + (a != null && a > 0 ? a : 0);
-  }, 0);
-  const tieneArboles = delGrupo.some(
-    (r) => r.arboles_registrados != null && r.arboles_registrados > 0,
-  );
-
-  const areaPorLote = new Map<string, number>();
-  for (const r of delGrupo) {
-    if (r.lote_id && r.area_hectareas != null && r.area_hectareas > 0) {
-      areaPorLote.set(r.lote_id, Number(r.area_hectareas));
-    }
-  }
-  const areaTotal = Array.from(areaPorLote.values()).reduce((s, a) => s + a, 0);
-  const lotesConArea = areaPorLote.size;
+  const conKg = delGrupo.filter((r) => (Number(r.kg_totales) || 0) > 0);
+  const arbolesOk =
+    conKg.length > 0 &&
+    conKg.every((r) => r.arboles_registrados != null && r.arboles_registrados > 0);
+  const arboles = conKg.reduce((s, r) => s + (r.arboles_registrados ?? 0), 0);
+  const areaOk =
+    conKg.length > 0 &&
+    conKg.every((r) => r.area_hectareas != null && r.area_hectareas > 0);
+  const areaTotal = conKg.reduce((s, r) => s + Number(r.area_hectareas || 0), 0);
   const lotesConDato = new Set(delGrupo.map((r) => r.lote_id)).size;
 
   return {
     cosecha,
     produccion_kg: Math.round(produccion_kg),
-    kg_por_arbol: tieneArboles ? calcularKgPorArbol(produccion_kg, arboles) : null,
-    ton_por_ha: lotesConArea > 0 ? calcularTonPorHa(produccion_kg, areaTotal) : null,
+    kg_por_arbol: arbolesOk ? calcularKgPorArbol(produccion_kg, arboles) : null,
+    ton_por_ha: areaOk ? calcularTonPorHa(produccion_kg, areaTotal) : null,
     lotes_con_dato: lotesConDato,
-    rendimientos_parciales:
-      !tieneArboles || lotesConArea < lotesConDato || lotesConDato === 0,
+    rendimientos_parciales: !arbolesOk || !areaOk,
+    tiene_registros: delGrupo.length > 0,
   };
 }
 
 export interface ComparacionLoteCosecha {
   lote_id: string;
   lote_nombre: string;
-  /** kg por cosecha key; ausente = sin dato (no cero). */
+  /** Valor de la métrica pedida; ausente = sin dato (no cero). */
   por_cosecha: Record<string, number | null>;
+  /** Entrada neta (kg_totales), independiente de la métrica del gráfico. */
+  kg_por_cosecha: Record<string, number | null>;
 }
 
 /**
@@ -372,20 +349,24 @@ export function compararProduccionPorLote(
   return Array.from(lotes.entries())
     .map(([lote_id, lote_nombre]) => {
       const por_cosecha: Record<string, number | null> = {};
+      const kg_por_cosecha: Record<string, number | null> = {};
       for (const c of cosechas) {
         const reg = porLoteCosecha.get(`${lote_id}__${c.key}`);
         if (!reg) {
           por_cosecha[c.key] = null;
+          kg_por_cosecha[c.key] = null;
           continue;
         }
+        const kg = Number(reg.kg_totales) || 0;
+        kg_por_cosecha[c.key] = kg;
         por_cosecha[c.key] = valorMetrica(
           metrica,
-          Number(reg.kg_totales) || 0,
+          kg,
           reg.arboles_registrados,
           reg.area_hectareas,
         );
       }
-      return { lote_id, lote_nombre, por_cosecha };
+      return { lote_id, lote_nombre, por_cosecha, kg_por_cosecha };
     })
     .filter((row) => Object.values(row.por_cosecha).some((v) => v != null))
     .sort((a, b) => a.lote_nombre.localeCompare(b.lote_nombre, 'es'));
@@ -438,19 +419,355 @@ export function agregarCalidadPorCosecha(
   });
 }
 
+export interface CorteMovimiento {
+  estado: 'sin_filtro' | 'aplicado' | 'sin_fecha' | 'incompatible';
+  mensaje: string;
+  /**
+   * Filas del corte. En `sin_fecha` se conservan: el año no las esconde.
+   * En `incompatible` quedan vacías y no se sustituyen por otra cosecha.
+   */
+  registros: RegistroProduccionAgregable[];
+  corte: string | null;
+  anos: number[];
+}
+
+function registrosDeCosechas(
+  registros: RegistroProduccionAgregable[],
+  cosechas: CosechaIdentidad[],
+): RegistroProduccionAgregable[] {
+  const keys = new Set(cosechas.map((c) => c.key));
+  return registros.filter((r) => keys.has(cosechaKey(r.cosecha_tipo, r.ano)));
+}
+
+function fechaMaxima(registros: Array<{ fecha?: string | null }>): string | null {
+  let max: string | null = null;
+  for (const r of registros) {
+    if (anioDeFechaMovimiento(r.fecha) == null || !r.fecha) continue;
+    if (max == null || r.fecha > max) max = r.fecha;
+  }
+  return max;
+}
+
 /**
- * Gaps de datos del issue #463 que el schema actual no cubre.
- * Se exponen en UI como estados honestos, no como ceros.
+ * Aplica el año del movimiento (año de la fecha) sin confundirlo con la
+ * identidad de campaña.
+ */
+export function evaluarCorteMovimiento(
+  registros: RegistroProduccionAgregable[],
+  cosechas: CosechaIdentidad[],
+  anosMovimiento: number[],
+): CorteMovimiento {
+  const anos = [...anosMovimiento].sort((a, b) => a - b);
+
+  if (anos.length === 0) {
+    const delGrupo = registrosDeCosechas(registros, cosechas);
+    return {
+      estado: 'sin_filtro',
+      mensaje: 'Sin filtro de año. El corte es el total registrado de la cosecha.',
+      registros: delGrupo,
+      corte: fechaMaxima(delGrupo),
+      anos,
+    };
+  }
+
+  const partes = cosechas.map((cosecha) => {
+    const delGrupo = registrosDeCosechas(registros, [cosecha]);
+    const conFecha = delGrupo.filter((r) => anioDeFechaMovimiento(r.fecha) != null);
+    const coinciden = conFecha.filter((r) =>
+      anos.includes(anioDeFechaMovimiento(r.fecha) as number),
+    );
+    return { cosecha, delGrupo, conFecha, coinciden };
+  });
+
+  if (partes.every((p) => p.conFecha.length === 0)) {
+    const delGrupo = partes.flatMap((p) => p.delGrupo);
+    const etiquetas = cosechas.map((c) => c.label).join(', ') || 'la cosecha elegida';
+    return {
+      estado: 'sin_fecha',
+      mensaje: `Hay un año de movimiento (${anos.join(', ')}) y ${etiquetas} no trae fecha. Los kilos se muestran completos: el año no los recorta ni esconde la cosecha.`,
+      registros: delGrupo,
+      corte: null,
+      anos,
+    };
+  }
+
+  const coinciden = partes.flatMap((p) => p.coinciden);
+  const fuera = partes.filter((p) => p.conFecha.length > 0 && p.coinciden.length === 0);
+  const sinFecha = partes.reduce((s, p) => s + (p.delGrupo.length - p.conFecha.length), 0);
+
+  if (coinciden.length === 0) {
+    const etiquetas = cosechas.map((c) => c.label).join(', ') || 'la cosecha elegida';
+    return {
+      estado: 'incompatible',
+      mensaje: `${etiquetas} no tiene movimientos con fecha en ${anos.join(', ')}. La selección queda explícita y no se cambia por otra campaña.`,
+      registros: [],
+      corte: null,
+      anos,
+    };
+  }
+
+  const avisoFuera =
+    fuera.length > 0
+      ? ` ${fuera.map((p) => p.cosecha.label).join(', ')} no tiene movimientos en ${anos.join(', ')}: queda fuera de este corte y no se rellena con cero.`
+      : '';
+  const avisoSinFecha =
+    sinFecha > 0
+      ? ` ${sinFecha} registro(s) sin fecha quedan fuera de este corte y no se cuentan como cero.`
+      : '';
+  return {
+    estado: 'aplicado',
+    mensaje: `Corte por fecha de movimiento en ${anos.join(', ')}. El acumulado llega hasta ese corte, no hasta el total de la campaña.${avisoFuera}${avisoSinFecha}`,
+    registros: coinciden,
+    corte: fechaMaxima(coinciden),
+    anos,
+  };
+}
+
+export interface PuntoEvolucion {
+  iso: string;
+  etiqueta_calendario: string;
+  semana_desde_inicio: number;
+  /** Null = semana del tramo sin movimiento. No es cero. */
+  kg: number | null;
+  acumulado: number;
+}
+
+export interface SerieEvolucion {
+  cosecha: CosechaIdentidad;
+  /** No hay columna abierta/cerrada. No se infiere del calendario. */
+  estado: 'no_registrado';
+  inicio: string | null;
+  corte: string | null;
+  semanas_con_dato: number;
+  puntos: PuntoEvolucion[];
+}
+
+export type EjeEvolucion = 'desde_inicio' | 'calendario';
+
+export interface EvolucionSemanal {
+  estado: 'sin_fecha' | 'ok';
+  eje: EjeEvolucion;
+  mensaje: string;
+  series: SerieEvolucion[];
+  avance_comun: number | null;
+  comparable_totales: false;
+  motivo: string;
+}
+
+interface IsoSemana {
+  year: number;
+  week: number;
+  clave: string;
+}
+
+/** Semana ISO de una fecha YYYY-MM-DD, en UTC para que el resultado no dependa del huso. */
+export function semanaIsoDeFecha(fecha: string): IsoSemana | null {
+  if (anioDeFechaMovimiento(fecha) == null) return null;
+  const [year, month, day] = fecha.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const isoYear = date.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return {
+    year: isoYear,
+    week,
+    clave: `${isoYear}-W${String(week).padStart(2, '0')}`,
+  };
+}
+
+function lunesDeSemanaIso(year: number, week: number): Date {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const day = jan4.getUTCDay() || 7;
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - day + 1 + (week - 1) * 7);
+  return monday;
+}
+
+function listarSemanas(desde: IsoSemana, hasta: IsoSemana): IsoSemana[] {
+  const out: IsoSemana[] = [];
+  let cursor = lunesDeSemanaIso(desde.year, desde.week);
+  const fin = lunesDeSemanaIso(hasta.year, hasta.week).getTime();
+  for (let i = 0; i < 120 && cursor.getTime() <= fin; i += 1) {
+    const iso = semanaIsoDeFecha(cursor.toISOString().slice(0, 10));
+    if (iso) out.push(iso);
+    cursor = new Date(cursor);
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return out;
+}
+
+function serieDeCosecha(
+  cosecha: CosechaIdentidad,
+  registros: RegistroProduccionAgregable[],
+): SerieEvolucion {
+  const propios = registros.filter(
+    (r) =>
+      r.cosecha_tipo === cosecha.tipo &&
+      r.ano === cosecha.ano &&
+      semanaIsoDeFecha(r.fecha ?? '') != null,
+  );
+  if (propios.length === 0) {
+    return {
+      cosecha,
+      estado: 'no_registrado',
+      inicio: null,
+      corte: null,
+      semanas_con_dato: 0,
+      puntos: [],
+    };
+  }
+
+  const porSemana = new Map<string, number>();
+  let inicio = propios[0].fecha as string;
+  let corte = propios[0].fecha as string;
+  for (const r of propios) {
+    const fecha = r.fecha as string;
+    if (fecha < inicio) inicio = fecha;
+    if (fecha > corte) corte = fecha;
+    const iso = semanaIsoDeFecha(fecha);
+    if (!iso) continue;
+    porSemana.set(iso.clave, (porSemana.get(iso.clave) ?? 0) + (Number(r.kg_totales) || 0));
+  }
+
+  const desde = semanaIsoDeFecha(inicio);
+  const hasta = semanaIsoDeFecha(corte);
+  const tramo = desde && hasta ? listarSemanas(desde, hasta) : [];
+  let acumulado = 0;
+  let conDato = 0;
+  const puntos = tramo.map((iso, index) => {
+    const kg = porSemana.has(iso.clave) ? (porSemana.get(iso.clave) as number) : null;
+    if (kg != null) {
+      acumulado += kg;
+      conDato += 1;
+    }
+    return {
+      iso: iso.clave,
+      etiqueta_calendario: `S${iso.week}`,
+      semana_desde_inicio: index + 1,
+      kg,
+      acumulado,
+    };
+  });
+
+  return {
+    cosecha,
+    estado: 'no_registrado',
+    inicio,
+    corte,
+    semanas_con_dato: conDato,
+    puntos,
+  };
+}
+
+/**
+ * Serie semanal por campaña. El eje recomendado es la semana desde el inicio
+ * de cada una. No agrega semanas posteriores al último movimiento ni escribe
+ * cero en un hueco o en el futuro.
+ */
+export function construirEvolucionSemanal(
+  registros: RegistroProduccionAgregable[],
+  cosechas: CosechaIdentidad[],
+  eje: EjeEvolucion = 'desde_inicio',
+): EvolucionSemanal {
+  const series = cosechas.map((c) => serieDeCosecha(c, registros));
+  const conPuntos = series.filter((s) => s.puntos.length > 0);
+  const algunaFecha = registros.some((r) => anioDeFechaMovimiento(r.fecha) != null);
+
+  if (!algunaFecha || conPuntos.length === 0) {
+    const sinFechaEnFuente = !algunaFecha;
+    return {
+      estado: 'sin_fecha',
+      eje,
+      mensaje: sinFechaEnFuente
+        ? eje === 'desde_inicio'
+          ? 'La evolución usa la semana desde el inicio de cada campaña. Los registros de producción no tienen fecha de movimiento, así que no hay serie y las semanas futuras quedan en blanco.'
+          : 'El eje calendario usa la semana ISO de la fecha del movimiento. Sin esa fecha no hay serie.'
+        : 'Las cosechas elegidas no tienen fecha de movimiento. No se dibuja una serie ni se rellena con ceros.',
+      series,
+      avance_comun: null,
+      comparable_totales: false,
+      motivo:
+        'Sin fecha no se puede alinear el avance. Un total registrado no equivale a una campaña en curso.',
+    };
+  }
+
+  const largos = conPuntos.map((s) => s.puntos.length);
+  const avance = largos.length >= 2 ? Math.min(...largos) : null;
+  const distintos = new Set(largos).size > 1 || series.some((s) => s.puntos.length === 0);
+  return {
+    estado: 'ok',
+    eje,
+    mensaje:
+      eje === 'desde_inicio'
+        ? 'Semana 1 es la primera semana con movimiento de esa campaña. El acumulado llega hasta su último movimiento.'
+        : 'Eje calendario (semana ISO). Cada campaña empieza en su fecha; las semanas previas quedan en blanco.',
+    series,
+    avance_comun: avance,
+    comparable_totales: false,
+    motivo: distintos
+      ? `El tramo común llega a la semana ${avance ?? 0} desde el inicio. Después, la campaña más corta queda en blanco y su total no equivale al de una campaña más larga. Abierta o cerrada no está en el registro.`
+      : 'Las series cubren el mismo número de semanas desde su inicio. Abierta o cerrada no está en el registro, así que los totales no se presentan como equivalentes.',
+  };
+}
+
+export interface ConciliacionEtapas {
+  entrada_kg: number | null;
+  clasificado_kg: number | null;
+  despachado_kg: number | null;
+  diferencia_entrada_clasificacion_kg: number | null;
+  diferencia_sin_despacho_kg: number | null;
+  es_merma: false;
+  nota: string;
+}
+
+/**
+ * Presenta las tres etapas sin sumarlas y sin inventar la que falta.
+ * La diferencia solo existe cuando los dos lados existen.
+ */
+export function conciliarEtapas(
+  entradaKg: number | null,
+  clasificadoKg: number | null,
+  despachadoKg: number | null,
+): ConciliacionEtapas {
+  const difClas =
+    entradaKg != null && clasificadoKg != null ? entradaKg - clasificadoKg : null;
+  const difDesp =
+    clasificadoKg != null && despachadoKg != null ? clasificadoKg - despachadoKg : null;
+  const faltan: string[] = [];
+  if (clasificadoKg == null) faltan.push('clasificación');
+  if (despachadoKg == null) faltan.push('despacho');
+  const nota =
+    faltan.length > 0
+      ? `Diferencia no calculable: falta ${faltan.join(' y ')}. Lo que falta queda en blanco y no es merma.`
+      : 'Diferencia por revisar entre etapas. No es merma: la resta no demuestra una pérdida.';
+  return {
+    entrada_kg: entradaKg,
+    clasificado_kg: clasificadoKg,
+    despachado_kg: despachadoKg,
+    diferencia_entrada_clasificacion_kg: difClas,
+    diferencia_sin_despacho_kg: difDesp,
+    es_merma: false,
+    nota,
+  };
+}
+
+/**
+ * Límites verificados contra el esquema y una lectura de producción (2026-11-09).
+ * La UI los muestra; no los rellena con cifras de ejemplo.
  */
 export const GAPS_PRODUCCION_ANALISIS = {
   fecha_movimiento:
-    'La tabla produccion no tiene fecha de movimiento; el año de movimiento se asocia por regla de campaña (Principal Y+1 visible en Y), sin inventar fechas diarias.',
+    'produccion no tiene fecha de movimiento. El año del filtro sale de la fecha cuando existe; sin ella no recorta kilos ni esconde la cosecha. produccion.ano es la identidad de campaña.',
   entrada_semanal:
-    'No existen registros de entrada por canastilla ni series semanales ISO en el schema. La evolución semanal y el acumulado por semana quedan pendientes de fuente fechada.',
+    'No hay serie semanal en produccion. La tabla cosechas tiene fecha, pero no identidad de campaña y no tiene filas: no se le asigna una cosecha por la fecha.',
   clasificacion_detalle:
-    'Solo hay kg_exportacion / kg_nacional opcionales. No hay categorías de calibre ni comprador por línea.',
+    'La calidad disponible es kg_exportacion y kg_nacional, opcionales. No hay calibres. Lo no clasificado se muestra aparte, con el denominador a la vista.',
   despachos:
-    'No hay tabla de despachos. La conciliación entrada/clasificación/despacho no puede calcularse sin inventar relaciones.',
+    'No hay despachos ni clasificación por línea ligados a produccion. La diferencia que falta no se llama merma.',
   produccion_proxy:
-    'Producción mostrada = kg_totales registrados en produccion (proxy de entrada neta). No se suman etapas como producción adicional.',
+    'Producción = kg_totales de produccion. No se suman clasificación ni despacho.',
+  principal_2027:
+    'Principal 2027 no tiene filas en produccion. Aparece en el catálogo cuando exista un registro, sin cambiar una lista fija.',
 } as const;

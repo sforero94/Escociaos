@@ -1,21 +1,12 @@
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import { BarChart2 } from 'lucide-react';
-
 interface DatoCalidadCosecha {
   cosecha: string;
   cosecha_label: string;
   kg_exportacion: number;
   kg_nacional: number;
   kg_sin_desglose: number;
+  kg_con_desglose?: number;
+  pct_exportacion?: number | null;
+  pct_nacional?: number | null;
 }
 
 interface GraficoCalidadCosechaProps {
@@ -23,150 +14,124 @@ interface GraficoCalidadCosechaProps {
   loading?: boolean;
 }
 
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  const total = payload.reduce((s: number, p: any) => s + (p.value || 0), 0);
+function pct(parte: number, total: number): string {
+  if (total <= 0) return 'Sin dato';
+  return `${((parte / total) * 100).toLocaleString('es-CO', { maximumFractionDigits: 1 })} %`;
+}
+
+function Fila({
+  color,
+  nombre,
+  kg,
+  porcentaje,
+}: {
+  color: string;
+  nombre: string;
+  kg: number;
+  porcentaje: string;
+}) {
   return (
-    <div className="bg-white p-4 border border-gray-200 shadow-lg rounded-lg text-sm z-50 min-w-[180px]">
-      <p className="font-bold text-gray-800 mb-2">{label}</p>
-      {payload.map((p: any) => (
-        <div key={p.name} className="flex items-center justify-between gap-4 mb-1">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: p.fill }} />
-            <span className="text-gray-600">{p.name}</span>
-          </div>
-          <span className="font-mono font-medium">
-            {(p.value as number).toLocaleString('es-CO')} kg
-          </span>
-        </div>
-      ))}
-      <div className="border-t border-gray-100 mt-2 pt-2 flex justify-between">
-        <span className="text-gray-500">Total</span>
-        <span className="font-mono font-bold">{total.toLocaleString('es-CO')} kg</span>
-      </div>
+    <div className="grid grid-cols-[auto_1fr_auto] gap-3 items-center text-sm">
+      <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
+      <span className="text-foreground">{nombre}</span>
+      <span className="font-mono text-foreground tabular-nums text-right">
+        {Math.round(kg).toLocaleString('es-CO')} kg
+        <span className="text-brand-brown/60 font-sans"> · {porcentaje}</span>
+      </span>
     </div>
   );
 }
 
-function ChartSkeleton() {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-      <div className="h-6 bg-gray-200 rounded w-64 mb-4" />
-      <div className="h-[300px] bg-gray-100 rounded" />
-    </div>
-  );
-}
-
-/**
- * Gráfico de barras apiladas exportación vs nacional por cosecha.
- * Sólo se renderiza si hay al menos un registro con desglose de calidad.
- * Registros sin desglose aparecen como "Sin clasificar".
- */
-export function GraficoCalidadCosecha({
-  data,
-  loading = false,
-}: GraficoCalidadCosechaProps) {
-  if (loading) return <ChartSkeleton />;
-
-  const tieneCalidad =
-    data?.some((d) => d.kg_exportacion > 0 || d.kg_nacional > 0) ?? false;
-
-  if (!data || data.length === 0 || !tieneCalidad) {
+export function GraficoCalidadCosecha({ data, loading = false }: GraficoCalidadCosechaProps) {
+  if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6 h-full">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-            <BarChart2 className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Calidades y clasificacion
-            </h3>
-            <p className="text-sm text-gray-500">
-              Sin desglose exportacion/nacional para el corte
-            </p>
-          </div>
-        </div>
-        <div className="h-[220px] flex items-center justify-center text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg">
-          No hay kg_exportacion / kg_nacional en los registros seleccionados.
-          Los porcentajes solo se informan con denominador explicito.
-        </div>
-      </div>
+      <div className="bg-white rounded-xl border border-primary/10 p-6 animate-pulse h-full min-h-[240px]" />
     );
   }
 
-  const tieneSinDesglose = data.some((d) => d.kg_sin_desglose > 0);
-
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-          <BarChart2 className="w-5 h-5 text-blue-600" />
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            Distribución Exportación / Nacional
-          </h3>
-          <p className="text-sm text-gray-500">
-            KG por destino de mercado por cosecha
-          </p>
-        </div>
+    <section className="bg-white rounded-xl border border-primary/10 p-5 md:p-6 h-full">
+      <h2 className="text-xl text-foreground">Calidades y clasificación</h2>
+      {(!data || data.length === 0) && (
+        <p className="mt-4 text-sm text-brand-brown/70">Sin cosecha en el corte actual.</p>
+      )}
+      <div className="mt-4 space-y-6">
+        {(data ?? []).map((dato) => {
+          const conDesglose = dato.kg_con_desglose ?? dato.kg_exportacion + dato.kg_nacional;
+          const total = conDesglose + dato.kg_sin_desglose;
+          const segmentos = [
+            { key: 'exp', kg: dato.kg_exportacion, color: '#73991C' },
+            { key: 'nac', kg: dato.kg_nacional, color: '#C5D6A4' },
+            { key: 'sin', kg: dato.kg_sin_desglose, color: '#E4D3C4' },
+          ].filter((s) => s.kg > 0);
+          return (
+            <div key={dato.cosecha}>
+              <p className="text-sm font-medium text-foreground">{dato.cosecha_label}</p>
+              {total <= 0 ? (
+                <p className="text-sm text-brand-brown/70 mt-2">
+                  Sin dato en este corte. No hay kilos de entrada para clasificar.
+                </p>
+              ) : (
+              <>
+              <p className="text-sm sm:text-xs text-brand-brown/60 mt-1">
+                {conDesglose > 0
+                  ? `Base del porcentaje: ${Math.round(conDesglose).toLocaleString('es-CO')} kg clasificados. Quedan fuera ${Math.round(dato.kg_sin_desglose).toLocaleString('es-CO')} kg sin desglose.`
+                  : `Sin desglose de calidad. ${Math.round(dato.kg_sin_desglose).toLocaleString('es-CO')} kg quedan sin clasificar.`}
+              </p>
+              <div className="mt-3 h-4 rounded-sm overflow-hidden flex bg-[#F3F6EE]">
+                {total <= 0 ? (
+                  <div className="h-full w-full bg-[repeating-linear-gradient(135deg,#e7eddd,#e7eddd_6px,#f7faf2_6px,#f7faf2_12px)]" />
+                ) : (
+                  segmentos.map((s) => (
+                    <div
+                      key={s.key}
+                      style={{ width: `${(s.kg / total) * 100}%`, backgroundColor: s.color }}
+                    />
+                  ))
+                )}
+              </div>
+              <div className="mt-3 space-y-2">
+                {conDesglose > 0 ? (
+                  <>
+                    <Fila
+                      color="#73991C"
+                      nombre="Exportación"
+                      kg={dato.kg_exportacion}
+                      porcentaje={
+                        dato.pct_exportacion != null
+                          ? `${dato.pct_exportacion.toLocaleString('es-CO', { maximumFractionDigits: 1 })} % del clasificado`
+                          : pct(dato.kg_exportacion, conDesglose)
+                      }
+                    />
+                    <Fila
+                      color="#C5D6A4"
+                      nombre="Nacional"
+                      kg={dato.kg_nacional}
+                      porcentaje={
+                        dato.pct_nacional != null
+                          ? `${dato.pct_nacional.toLocaleString('es-CO', { maximumFractionDigits: 1 })} % del clasificado`
+                          : pct(dato.kg_nacional, conDesglose)
+                      }
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm text-brand-brown/70">
+                    Exportación y nacional: Sin dato. No hay desglose para calcular un porcentaje.
+                  </p>
+                )}
+                <Fila
+                  color="#E4D3C4"
+                  nombre="Sin desglose"
+                  kg={dato.kg_sin_desglose}
+                  porcentaje="fuera del denominador"
+                />
+              </div>
+              </>
+              )}
+            </div>
+          );
+        })}
       </div>
-
-      <div className="h-[280px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={data}
-            margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
-            barCategoryGap="30%"
-          >
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis
-              dataKey="cosecha_label"
-              stroke="#9ca3af"
-              tick={{ fontSize: 12 }}
-              tickMargin={8}
-            />
-            <YAxis
-              stroke="#9ca3af"
-              tick={{ fontSize: 12 }}
-              tickFormatter={(v) =>
-                v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-              }
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend wrapperStyle={{ paddingTop: 12, fontSize: 13 }} />
-            <Bar
-              dataKey="kg_exportacion"
-              name="Exportación"
-              stackId="calidad"
-              fill="#3b82f6"
-              radius={[0, 0, 0, 0]}
-            />
-            <Bar
-              dataKey="kg_nacional"
-              name="Nacional"
-              stackId="calidad"
-              fill="#10b981"
-              radius={[0, 0, 0, 0]}
-            />
-            {tieneSinDesglose && (
-              <Bar
-                dataKey="kg_sin_desglose"
-                name="Sin clasificar"
-                stackId="calidad"
-                fill="#d1d5db"
-                radius={[4, 4, 0, 0]}
-              />
-            )}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <p className="mt-3 text-xs text-gray-400">
-        Las cosechas sin desglose de calidad aparecen en gris. El desglose exportación/nacional
-        está disponible a partir de los registros con migración 046.
-      </p>
-    </div>
+    </section>
   );
 }
