@@ -30,10 +30,11 @@ nombrar productos cuando preguntaban «cuáles» (regresión en inventario), y l
 
 ## Estado de las migraciones
 
-**195 — escrita y SIN APLICAR** (vistas de hato y monitoreo; 194 queda reservada para P4). Ensayada con `po_sonda` contra producción: guardas pasan,
-`deshecho: true`, y la vista de hato da los mismos conteos por estado que el motor de TypeScript sobre los datos vivos. Orden al aplicar:
-migración primero, deploy de `esco-consultas` después (el prompt nuevo nombra `estado_pantalla`, `es_ultima_ronda` y las vistas nuevas;
-con la migración sola, el prompt actual sigue funcionando salvo que reemplaza `v_esco_hato` y `v_esco_monitoreo`: las columnas que ya existían se conservan, y las fechas probable de parto y de secar pasan a calcularse desde el último servicio).
+**195 — aplicada a producción el 2026-11-09** (ledger `20261109190817`, con la aprobación de Santiago) y `esco-consultas` redesplegada como v14
+(vistas de hato y monitoreo; 194 queda reservada para P4). Antes se ensayó con `po_sonda`: guardas pasan, `deshecho: true`, y la vista de hato
+da los mismos conteos por estado que el motor de TypeScript sobre los datos vivos. Verificado en vivo: 14 vistas con `security_invoker`, `anon`
+sin acceso, `/health` anónimo 401. Orden usado: migración primero, deploy después. Las fechas probable de parto y de secar de `v_esco_hato` ya se
+calculan desde el último servicio.
 
 ### 193
 
@@ -42,7 +43,7 @@ Antes se ensayó con `po_sonda` contra producción (corre los pasos y siempre de
 cifras de la vista nueva coinciden con las pantallas (ingresos 2026 = `fin_ingresos` + ventas de ganado; el costo de las
 aplicaciones cerradas en octubre igual al del reporte; octubre con 31 días de clima, uno sin fila). Orden usado: migración
 primero, deploy después. Verificado en vivo: 10 vistas con `security_invoker`, `anon` sin acceso, `/health` anónimo 401.
-Pendiente: una prueba real de Santiago en el botón «Esco SQL (beta)».
+Pendiente: una prueba real de Santiago en el botón «Esco SQL (beta)» (hato y monitoreo incluidos).
 
 ## Cómo se midió
 
