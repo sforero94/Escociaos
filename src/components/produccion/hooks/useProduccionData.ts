@@ -27,6 +27,7 @@ import {
   consolidarRegistrosProduccion,
   derivarAnosMovimiento,
   derivarCosechasDisponibles,
+  type RegistroEtapaLote,
   ordenarCosechas,
   resolverSeleccionCosechas,
   resumirCosecha,
@@ -642,8 +643,68 @@ export function useProduccionData() {
     ) as unknown as Produccion[];
   };
 
+  const getEtapasLote = async (filtros: FiltrosProduccion): Promise<RegistroEtapaLote[]> => {
+    const { seleccion } = await ensureCosechas(filtros);
+    if (seleccion.estado !== 'ok' || seleccion.cosechas.length === 0) return [];
+    const anos = anosCampanaDeCosechas(seleccion.cosechas);
+    if (anos.length === 0) return [];
+
+    // La tabla entra con la migración 193, que todavía no está aplicada.
+    // El tipo generado de Supabase no la conoce.
+    const { data, error } = await (supabase as unknown as {
+      from: (table: string) => {
+        select: (columns: string) => {
+          in: (
+            column: string,
+            values: number[],
+          ) => Promise<{
+            data: Array<{
+              ano: number;
+              cosecha_tipo: string;
+              lote_id: string;
+              etapa: string;
+              kg: number | string;
+              fecha_corte: string;
+            }> | null;
+            error: { code?: string; message?: string } | null;
+          }>;
+        };
+      };
+    })
+      .from('produccion_etapas_lote')
+      .select('ano, cosecha_tipo, lote_id, etapa, kg, fecha_corte')
+      .in('ano', anos);
+
+    if (error) {
+      const mensaje = error.message ?? '';
+      const faltaTabla =
+        error.code === '42P01' ||
+        error.code === 'PGRST205' ||
+        (/produccion_etapas_lote/i.test(mensaje) &&
+          /does not exist|schema cache|could not find/i.test(mensaje));
+      if (faltaTabla) return [];
+      throw error;
+    }
+
+    const keys = new Set(seleccion.cosechas.map((c) => c.key));
+    const lotes = new Set(filtros.lote_ids);
+    return (data ?? [])
+      .filter((row) => keys.has(`${row.cosecha_tipo}:${row.ano}`))
+      .filter((row) => lotes.size === 0 || lotes.has(row.lote_id))
+      .filter((row) => row.etapa === 'clasificado' || row.etapa === 'despachado')
+      .map((row) => ({
+        ano: Number(row.ano),
+        cosecha_tipo: row.cosecha_tipo as RegistroEtapaLote['cosecha_tipo'],
+        lote_id: row.lote_id,
+        etapa: row.etapa as RegistroEtapaLote['etapa'],
+        kg: Number(row.kg),
+        fecha_corte: String(row.fecha_corte).slice(0, 10),
+      }));
+  };
+
   return {
     getCatalogoCosechas,
+    getEtapasLote,
     getKPIs,
     getTendenciasHistoricas,
     getComparacionLotes,

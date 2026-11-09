@@ -43,8 +43,21 @@ lo lee.
   cuando hay fecha. No dibuja ceros en huecos ni después del último movimiento.
   Abierta/cerrada no está en el registro.
 
+## Etapas por lote (migración 193, sin aplicar)
+
+`produccion_etapas_lote` guarda clasificado o despachado por lote y cosecha,
+con su `fecha_corte`. No trae datos y no se aplica sola. El tablero la lee;
+si la tabla todavía no existe, esas columnas quedan en «Sin dato».
+
+El clasificado son canastas × 20 kg. Una diferencia contra la entrada o contra
+el despacho no es necesariamente merma y no se suma a la producción. Cada
+etapa muestra su propio corte. Para Principal 2027 la entrada cargada corta
+el 23 oct 2026 (16.203,28 kg); ese día no está en `produccion`. Clasificado
+y despachado llevan el corte en la fila (23 oct y 27 oct cuando se carguen).
+
 ## Qué sigue fuera
 
-Sin registro manual, sin importar el Excel, sin migración, sin usar ingresos
-como si fueran entrada o despacho, y sin inventar el vínculo entre `produccion`
-y las tablas vacías de cosecha/despacho.
+Sin registro manual, sin importar el Excel, sin aplicar la migración, sin usar
+ingresos como si fueran despacho, y sin inventar el vínculo con las tablas
+vacías `cosechas` y `despachos`. La carga de etapas la hace Escocia Bot
+después de que Santiago aplique la 193.

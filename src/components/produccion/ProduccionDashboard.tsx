@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { RoleGuard } from '../auth/RoleGuard';
 import { FiltrosProduccion } from './components/FiltrosProduccion';
 import { PanelEtapasProduccion } from './components/PanelEtapasProduccion';
@@ -25,7 +25,12 @@ import type {
   ResumenProduccionCosecha,
 } from '@/utils/calculosProduccionAnalisis';
 import { proyectarInicial } from './utils/proyectarFiltrosInicial';
-import { GAPS_PRODUCCION_ANALISIS } from '@/utils/calculosProduccionAnalisis';
+import {
+  construirVistaEtapas,
+  formatoFechaCorte,
+  GAPS_PRODUCCION_ANALISIS,
+  type RegistroEtapaLote,
+} from '@/utils/calculosProduccionAnalisis';
 
 export function ProduccionDashboard() {
   const [filtros, setFiltros] = useState<FiltrosType>(FILTROS_PRODUCCION_DEFAULT);
@@ -51,6 +56,7 @@ export function ProduccionDashboard() {
     cosechas: CosechaIdentidad[];
   }>({ filas: [], cosechas: [] });
   const [resumenes, setResumenes] = useState<ResumenProduccionCosecha[]>([]);
+  const [etapas, setEtapas] = useState<RegistroEtapaLote[]>([]);
   const [anosDisponibles, setAnosDisponibles] = useState<number[]>([]);
   const [cosechasDisponibles, setCosechasDisponibles] = useState<CosechaIdentidad[]>([]);
   const [catalogoListo, setCatalogoListo] = useState(false);
@@ -63,6 +69,7 @@ export function ProduccionDashboard() {
     getCatalogoCosechas,
     getComparacionLotes,
     getResumenesCosecha,
+    getEtapasLote,
   } = useProduccionData();
 
   const getLotesRef = useRef(getLotes);
@@ -70,6 +77,7 @@ export function ProduccionDashboard() {
   const getCatalogoRef = useRef(getCatalogoCosechas);
   const getComparacionRef = useRef(getComparacionLotes);
   const getResumenesRef = useRef(getResumenesCosecha);
+  const getEtapasRef = useRef(getEtapasLote);
 
   useEffect(() => {
     getLotesRef.current = getLotes;
@@ -77,6 +85,7 @@ export function ProduccionDashboard() {
     getCatalogoRef.current = getCatalogoCosechas;
     getComparacionRef.current = getComparacionLotes;
     getResumenesRef.current = getResumenesCosecha;
+    getEtapasRef.current = getEtapasLote;
   });
 
   useEffect(() => {
@@ -111,8 +120,9 @@ export function ProduccionDashboard() {
       getCalidadRef.current(filtros),
       getComparacionRef.current(filtros),
       getResumenesRef.current(filtros),
+      getEtapasRef.current(filtros),
     ])
-      .then(([calidadResult, comparacionResult, resumenesResult]) => {
+      .then(([calidadResult, comparacionResult, resumenesResult, etapasResult]) => {
         if (cancelled) return;
         setCalidadData(calidadResult);
         setComparacion({
@@ -120,6 +130,7 @@ export function ProduccionDashboard() {
           cosechas: comparacionResult.cosechas,
         });
         setResumenes(resumenesResult.resumenes);
+        setEtapas(etapasResult);
       })
       .catch((err) => {
         if (!cancelled) setErrorData(err?.message ?? 'Error cargando datos');
@@ -149,6 +160,37 @@ export function ProduccionDashboard() {
       ? comparacion.cosechas.map((c) => c.label).join(' · ')
       : '';
 
+  const vistaEtapas = useMemo(() => {
+    const entradas = comparacion.filas.flatMap((fila) =>
+      comparacion.cosechas.map((cosecha) => ({
+        cosechaKey: cosecha.key,
+        lote_id: fila.lote_id,
+        kg: fila.kg_por_cosecha?.[cosecha.key] ?? null,
+      })),
+    );
+    return construirVistaEtapas(etapas, comparacion.cosechas, entradas);
+  }, [comparacion, etapas]);
+
+  const corteFiltro = useMemo(() => {
+    const partes: string[] = [];
+    for (const etapa of vistaEtapas.porCosecha) {
+      const clas = etapa.clasificado.fechas_corte.map((f) => formatoFechaCorte(f)).filter(Boolean);
+      const desp = etapa.despachado.fechas_corte.map((f) => formatoFechaCorte(f)).filter(Boolean);
+      if (clas.length > 0) partes.push(`Clasificado ${etapa.cosecha.label}: ${clas.join(', ')}`);
+      if (desp.length > 0) partes.push(`Despachado ${etapa.cosecha.label}: ${desp.join(', ')}`);
+    }
+    if (partes.length === 0) {
+      return {
+        label: 'Total registrado',
+        detalle: 'Sin fecha de corte en las etapas. La entrada tampoco trae fecha.',
+      };
+    }
+    return {
+      label: 'Cortes por etapa',
+      detalle: partes.join(' · '),
+    };
+  }, [vistaEtapas]);
+
   return (
     <RoleGuard allowedRoles={['Gerencia']}>
       <div className="space-y-6">
@@ -177,8 +219,8 @@ export function ProduccionDashboard() {
           lotes={lotes}
           anosDisponibles={anosDisponibles}
           cosechasDisponibles={cosechasDisponibles}
-          corteLabel="Total registrado"
-          corteDetalle="Sin fecha de movimiento: el corte es el total de la cosecha, no un día."
+          corteLabel={corteFiltro.label}
+          corteDetalle={corteFiltro.detalle}
           onFiltrosChange={setFiltros}
         />
 
@@ -203,6 +245,7 @@ export function ProduccionDashboard() {
           <TabsContent value="rendimiento" className="mt-6 space-y-6">
             <PanelEtapasProduccion
               resumenes={resumenes}
+              etapas={vistaEtapas.porCosecha}
               vista={filtros.vista}
               loading={loadingData}
             />
@@ -243,10 +286,8 @@ export function ProduccionDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <GraficoCalidadCosecha data={calidadData} loading={loadingData} />
               <ConciliacionEtapasGap
-                entradas={resumenes.map((r) => ({
-                  label: r.cosecha.label,
-                  kg: r.tiene_registros ? r.produccion_kg : null,
-                }))}
+                resumenes={resumenes}
+                etapas={vistaEtapas.porCosecha}
                 periodo={periodoLabel}
               />
             </div>
@@ -254,6 +295,7 @@ export function ProduccionDashboard() {
             <DetalleProduccionLotes
               filas={comparacion.filas}
               cosechas={comparacion.cosechas}
+              etapasPorLote={vistaEtapas.porLote}
               loading={loadingData}
               onVerCosecha={verCosecha}
             />
