@@ -70,11 +70,24 @@ if (SOMBRA) {
   if (!Object.keys(vistasSombra).length) throw new Error(`--sombra: no encontré ningún CREATE VIEW v_esco_* en ${SOMBRA}`);
   console.log(`vistas sombra: ${Object.keys(vistasSombra).join(', ')}`);
 }
-/** Antepone como CTE las vistas sombra que la consulta menciona (una CTE con el nombre de la vista la tapa). */
+/**
+ * Antepone como CTE las vistas sombra que la consulta menciona (una CTE con el nombre de la vista la tapa).
+ * Una vista sombra que lee otra vista sombra (v_esco_monitoreo_ronda_plaga lee v_esco_monitoreo) arrastra a su
+ * dependencia, definida antes; y se le quita el prefijo `public.` para que resuelva a la CTE y no a la vista vieja.
+ */
 function conSombra(sql: string): string {
-  const usadas = Object.keys(vistasSombra).filter(n => new RegExp(`\\b${n}\\b`, 'i').test(sql));
-  if (!usadas.length) return sql;
-  const defs = usadas.map(n => `${n} AS (\n${vistasSombra[n]}\n)`).join(',\n');
+  const menciona = (texto: string, n: string) => new RegExp(`\\b${n}\\b`, 'i').test(texto);
+  const usadas = new Set(Object.keys(vistasSombra).filter(n => menciona(sql, n)));
+  for (let cambio = true; cambio;) {
+    cambio = false;
+    for (const n of [...usadas]) for (const otra of Object.keys(vistasSombra)) if (otra !== n && !usadas.has(otra) && menciona(vistasSombra[n], otra)) { usadas.add(otra); cambio = true; }
+  }
+  if (!usadas.size) return sql;
+  // Dependencias primero: una vista va después de todas las que ella menciona.
+  const orden: string[] = [];
+  const poner = (n: string) => { if (orden.includes(n)) return; for (const otra of usadas) if (otra !== n && menciona(vistasSombra[n], otra)) poner(otra); orden.push(n); };
+  for (const n of usadas) poner(n);
+  const defs = orden.map(n => `${n} AS (\n${vistasSombra[n].replace(/public\.(v_esco_)/g, '$1')}\n)`).join(',\n');
   const t = sql.trim();
   if (/^with\s+recursive\b/i.test(t)) throw new ErrorSql('--sombra: WITH RECURSIVE no está soportado en el eval', '22023');
   return /^with\b/i.test(t) ? t.replace(/^with\b/i, `WITH ${defs},`) : `WITH ${defs}\n${t}`;
@@ -91,6 +104,10 @@ async function ejecutarSql(sql: string) {
   const { stdout } = await sh('composio', ['execute', 'SUPABASE_RUN_READ_ONLY_QUERY', '--account', 'escocia-os', '-d', JSON.stringify({ ref: 'ywhtjwawnkeqlwxbvgup', query: envuelta })], { maxBuffer: 64 * 1024 * 1024, cwd: '/tmp' }).catch((e: { stdout?: string }) => ({ stdout: e.stdout ?? '' }));
   let d: any;
   try { d = JSON.parse(stdout); } catch { throw new ErrorSql(`respuesta no JSON de la base: ${stdout.slice(0, 200)}`); }
+  // Un resultado grande no viene en la respuesta: Composio lo deja en un archivo (`storedInFile`).
+  if (d.storedInFile && d.outputFilePath) {
+    try { d = JSON.parse(readFileSync(d.outputFilePath, 'utf8')); } catch { throw new ErrorSql('no pude leer el resultado grande guardado por Composio'); }
+  }
   if (!d.successful) {
     const msg = String(d.error ?? d.data?.message ?? 'error').replace(/^Bad request: Failed to run sql query: /, '').split('\nLINE')[0];
     throw new ErrorSql(msg.slice(0, 600));

@@ -22,10 +22,20 @@ documento trae **solo agregados**: el banco, la verdad y las respuestas siguen f
 | F12 | La RPC rechaza `;` dentro de un literal | Solo regla 14 del prompt. `esco_sql_lectura` no se toca (un cambio ahí es un cambio de seguridad); una prueba lo fija. | prompt | `escoSqlCorreccionesP1` |
 | F13 | Prueba de inyección no evaluable en producción | Corrida por el motor (no por la pantalla): Esco se negó en 3 de 3 corridas, antes y después. Sin cambio de código. | — | corrida manual |
 
+| H1 | Hato sin vistas de eventos, pesajes ni producción quincenal; estado reproductivo no calculable | Migración 195: `v_esco_hato_eventos`, `v_esco_hato_pesajes`, `v_esco_hato_produccion_quincenal` (sin dinero) y el estado reproductivo derivado en `v_esco_hato` (`estado_reproductivo`, `estado_pantalla`, fechas de secar y parto desde el último servicio). Paridad con TypeScript. | migración 195 + prompt | `escoSqlMigracion195` |
+| M1 | «Última ronda» devolvía «no hay registros»; promedio de porcentajes; conteo de filas en vez de observaciones | Migración 195: `ronda_orden` / `es_ultima_ronda` (las 86 observaciones sin ronda ordenaban primero con `DESC`) y `v_esco_monitoreo_ronda_plaga` (incidencia ponderada de todos los lotes). Reglas de prompt. | migración 195 + prompt | `escoSqlMigracion195` |
+
 Dos ajustes salieron de mirar los fallos de `dev` (se permite afinar sobre `dev`): la regla 6 había hecho que Esco dejara de
 nombrar productos cuando preguntaban «cuáles» (regresión en inventario), y la regla 13 dejaba «hasta hoy» sin hoy.
 
-## Estado de la migración 193
+## Estado de las migraciones
+
+**195 — escrita y SIN APLICAR** (vistas de hato y monitoreo; 194 queda reservada para P4). Ensayada con `po_sonda` contra producción: guardas pasan,
+`deshecho: true`, y la vista de hato da los mismos conteos por estado que el motor de TypeScript sobre los datos vivos. Orden al aplicar:
+migración primero, deploy de `esco-consultas` después (el prompt nuevo nombra `estado_pantalla`, `es_ultima_ronda` y las vistas nuevas;
+con la migración sola, el prompt actual sigue funcionando salvo que reemplaza `v_esco_hato` y `v_esco_monitoreo`: las columnas que ya existían se conservan, y las fechas probable de parto y de secar pasan a calcularse desde el último servicio).
+
+### 193
 
 **Aplicada a producción el 2026-11-09** (ledger `20261109182850`, con la aprobación de Santiago) y `esco-consultas` redesplegada como v13.
 Antes se ensayó con `po_sonda` contra producción (corre los pasos y siempre deshace): las guardas pasan, `deshecho: true`, y las
@@ -50,70 +60,76 @@ Pendiente: una prueba real de Santiago en el botón «Esco SQL (beta)».
 - 3 repeticiones por pregunta, juez `openai/gpt-6-sol`, temperatura 0, fecha fija 2026-11-08.
 
 ## Antes y después (split `dev`)
-Antes: base2,antes. Después: p1c,p1d. Por pregunta se toma el último tag que la contiene.
+
+Medición final, con el prompt y las vistas 193 (en producción) y 195 (inyectadas como CTE).
+Antes: base2,antes,antes2,antes3. Después: p3. Por pregunta se toma el último tag que la contiene.
 
 | grupo | preguntas | correcta antes | correcta después | cambio (pp) |
 |---|---|---|---|---|
-| **Total** | 70 | 71.0 % | 82.9 % | +11.9 |
-| verdad intacta (comparación estricta) | 53 | 83.0 % | 83.0 % | +0.0 |
-| verdad cambiada o pregunta nueva | 17 | 33.3 % | 82.4 % | +49.1 |
+| **Total** | 75 | 66.2 % | 91.1 % | +24.9 |
+| verdad intacta (comparación estricta) | 52 | 84.6 % | 93.6 % | +9.0 |
+| verdad cambiada o pregunta nueva | 23 | 24.6 % | 85.5 % | +60.9 |
 
 ### Por módulo (todas las preguntas)
 
 | módulo | preguntas | antes | después | cambio (pp) |
 |---|---|---|---|---|
-| aplicaciones | 8 | 70.8 % | 87.5 % | +16.7 |
-| clima | 6 | 55.6 % | 100.0 % | +44.4 |
-| comportamiento | 9 | 70.4 % | 66.7 % | -3.7 |
-| gastos | 8 | 83.3 % | 95.8 % | +12.5 |
-| hato | 7 | 38.1 % | 42.9 % | +4.8 |
-| ingresos | 5 | 40.0 % | 80.0 % | +40.0 |
+| aplicaciones | 8 | 70.8 % | 95.8 % | +25.0 |
+| clima | 6 | 55.6 % | 88.9 % | +33.3 |
+| comportamiento | 9 | 81.5 % | 81.5 % | +0.0 |
+| gastos | 8 | 83.3 % | 100.0 % | +16.7 |
+| hato | 10 | 16.7 % | 93.3 % | +76.6 |
+| ingresos | 5 | 40.0 % | 100.0 % | +60.0 |
 | inventario | 4 | 100.0 % | 100.0 % | +0.0 |
-| jornales | 11 | 100.0 % | 100.0 % | +0.0 |
-| monitoreo | 6 | 50.0 % | 55.6 % | +5.6 |
-| produccion | 6 | 83.3 % | 100.0 % | +16.7 |
+| jornales | 11 | 100.0 % | 97.0 % | -3.0 |
+| monitoreo | 8 | 37.5 % | 66.7 % | +29.2 |
+| produccion | 6 | 83.3 % | 94.4 % | +11.1 |
 
 ### Por módulo (solo verdad intacta)
 
 | módulo | preguntas | antes | después | cambio (pp) |
 |---|---|---|---|---|
-| aplicaciones | 3 | 100.0 % | 77.8 % | -22.2 |
+| aplicaciones | 3 | 100.0 % | 100.0 % | +0.0 |
 | clima | 2 | 100.0 % | 100.0 % | +0.0 |
-| comportamiento | 7 | 76.2 % | 71.4 % | -4.8 |
-| gastos | 8 | 83.3 % | 95.8 % | +12.5 |
-| hato | 6 | 38.9 % | 33.3 % | -5.6 |
+| comportamiento | 7 | 90.5 % | 85.7 % | -4.8 |
+| gastos | 8 | 83.3 % | 100.0 % | +16.7 |
+| hato | 5 | 26.7 % | 100.0 % | +73.3 |
 | ingresos | 2 | 100.0 % | 100.0 % | +0.0 |
 | inventario | 4 | 100.0 % | 100.0 % | +0.0 |
-| jornales | 11 | 100.0 % | 100.0 % | +0.0 |
+| jornales | 11 | 100.0 % | 97.0 % | -3.0 |
 | monitoreo | 5 | 53.3 % | 60.0 % | +6.7 |
 | produccion | 5 | 100.0 % | 100.0 % | +0.0 |
 
-Preguntas que mejoran: 17; empeoran: 5; igual: 48.
-Empeoran por módulo: {'aplicaciones': 1, 'monitoreo': 1, 'hato': 2, 'comportamiento': 1}.
+Preguntas que mejoran: 28; empeoran: 3; igual: 44.
+Empeoran por módulo: {'jornales': 1, 'monitoreo': 1, 'comportamiento': 1}.
 
 ### Tipos de fallo (corridas no correctas)
 
 | tipo | antes | después |
 |---|---|---|
-| cifra_mal | 31 | 11 |
-| consulta_fallida | 7 | 1 |
-| faltante | 12 | 10 |
-| formato | 0 | 1 |
+| cifra_mal | 39 | 6 |
+| consulta_fallida | 5 | 0 |
+| faltante | 19 | 6 |
 | invento | 1 | 2 |
-| no_aclaro | 2 | 2 |
-| otro | 5 | 9 |
+| no_aclaro | 2 | 3 |
+| otro | 7 | 3 |
 | periodo_mal | 3 | 0 |
 
 ## Lectura
 
-- Mejoran 17 preguntas y empeoran 5. De las 5, ninguna se puede atribuir a una corrección: son hato (2), monitoreo (1),
-  comportamiento (1) y aplicaciones (1), con diferencias de una o dos repeticiones sobre tres. Ninguna de esas cinco preguntas
-  usa una vista o una regla que cambió, salvo la de aplicaciones (estados), cuyo conteo sigue siendo correcto y solo varía cómo lo nombra. Aun así **no se cumple al pie de la letra** «ningún módulo baja»: comportamiento (−3,7 pp) y, en la
-  comparación estricta, aplicaciones, hato y comportamiento caen dentro de ese ruido. Con 3 repeticiones, una pregunta que cambia
-  de 3/3 a 2/3 mueve un módulo de 3 preguntas 22 pp.
-- El gasto del eval completo de P1 fue de unos USD 1,6 (juez ≈ 90 %).
-- **Fuera del alcance de F1–F13 y siguen bajos** (candidatos para una fase propia):
-  1. Hato (43 %): faltan vistas de eventos (partos, servicios), pesajes individuales y producción quincenal; Esco consulta ingresos por «pesar».
-  2. Monitoreo (56 %): promedia porcentajes en vez de ponderar, y en la «última ronda» responde que no hay registros.
-  3. Lista larga («todos los gastos»): el resumen que pide la regla 6 no siempre sale.
-  4. El cruce de F7 se agrega bien, pero Esco no siempre reconoce el volumen ni ofrece filtrar.
+- **Dev total: 66,2 % → 91,1 %** (+24,9 pp). Con la verdad intacta (52 preguntas, comparación estricta): 84,6 % → 93,6 %.
+  Mejoran 28 preguntas, empeoran 3 (jornales, monitoreo, comportamiento: una repetición de tres cada una, sin causa en una corrección).
+- **Todos los módulos quedan en 80 % o más salvo monitoreo (66,7 %)**, que subió desde 37,5 %. Lo que falla ahí es una pregunta
+  de incidencia anual cuya cifra difiere en 0,3 pp de la verdad, un juez estricto con el método de un conteo correcto y otro con
+  los umbrales de atención (10 %/30 %, que sí están en el prompt). No hay una causa de motor pendiente demostrada.
+- **Dos artefactos del eval, no de Esco, se corrigieron en el runner:** (1) las vistas sombra no resolvían a otras sombras
+  (`v_esco_monitoreo_ronda_plaga` leía la vista vieja); (2) cuando Composio guarda un resultado grande en un archivo, el runner no
+  lo leía, así que las preguntas de listas largas «fallaban» también en el baseline. El «antes» de esas preguntas se repitió con
+  el runner corregido.
+- **El estado derivado del hato ya está en SQL**, con una prueba de paridad contra `derivarEstadoReproductivo()` sobre más de
+  2.500 filas (incluye los bordes de la ventana de secar; se comprobó que un error de `<` frente a `<=` hace fallar la prueba).
+  Sobre los datos vivos la vista y el motor de TypeScript dan los mismos conteos por estado.
+- **Pendiente para el gate D6** (≥ 90 % total, ningún módulo bajo 80 %, `held` una sola vez): monitoreo, y la pregunta de kg por
+  árbol anual, que sigue dividiendo entre árboles-cosecha. El `held` sigue cerrado y sus verdades hay que actualizar antes con las
+  mismas definiciones nuevas (ventas, costo como el reporte, fecha de cierre real, días calendario, rangos semiabiertos).
+- Gasto del eval completo de P1 y de la 195: unos USD 4.

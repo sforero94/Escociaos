@@ -142,6 +142,36 @@ describe('listas y rangos: ajustes que salieron del eval de dev', () => {
   });
 });
 
+describe('ajustes de ingresos y monitoreo salidos del eval de dev', () => {
+  it('una cosecha se filtra por su etiqueta, no por fecha', () => {
+    expect(PROMPT).toMatch(/filtra por la ETIQUETA \(cosecha = 'Principal 2026'\), nunca por fecha/);
+  });
+  it('las cabezas vendidas suman todas las filas es_venta y dicen de dónde salen', () => {
+    expect(PROMPT).toMatch(/suma cabezas de TODAS las filas es_venta/);
+  });
+  it('«últimas N rondas» son las N más recientes (ronda_orden <= N), no las que contienen la plaga', () => {
+    expect(PROMPT).toMatch(/ronda_orden <= N/);
+    expect(PROMPT).toMatch(/no se monitoreó en ellas/);
+  });
+  it('«última ronda» es es_ultima_ronda y no se ordena a mano (las filas sin ronda ordenan primero)', () => {
+    expect(PROMPT).toMatch(/es_ultima_ronda = true/);
+    expect(PROMPT).toMatch(/ronda_id NULL\) ordenan primero/);
+  });
+  it('la incidencia de varios lotes o rondas es Σafectados/Σmonitoreados, nunca AVG(incidencia_pct)', () => {
+    expect(PROMPT).toMatch(/NUNCA AVG\(incidencia_pct\)/);
+    expect(PROMPT).toMatch(/SUM\(n_observaciones\), no COUNT/);
+  });
+});
+
+describe('hato: vocabulario y vistas nuevas en el prompt', () => {
+  it('«vacías» es estado_pantalla = Vacía y activa; «partos» se cuentan en eventos; «pesar» es producción quincenal', () => {
+    expect(PROMPT).toMatch(/estado_pantalla = 'Vacía' y estado = 'activa'/);
+    expect(PROMPT).toMatch(/COUNT\(\*\) de tipo = 'parto' con la fecha del EVENTO/);
+    expect(PROMPT).toMatch(/«¿Cuántos litros se pesaron \/ produjo el hato en octubre\?» se responde con SUM\(litros\)/);
+    expect(PROMPT).toMatch(/Es una muestra semanal por vaca, no la producción del hato/);
+  });
+});
+
 describe('F8 — ningún conteo sin consulta', () => {
   it('la regla 1 exige que todo conteo salga de un COUNT o de n_filas, y un COUNT antes del total si hubo truncado', () => {
     const r = regla(1);
