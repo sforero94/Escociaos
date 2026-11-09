@@ -585,12 +585,19 @@ function lunesDeSemanaIso(year: number, week: number): Date {
   return monday;
 }
 
+/** `AAAA-MM-DD` de un día calendario UTC (el lunes ISO se construye con `Date.UTC`, no es «hoy»). */
+function isoDeDiaUtc(d: Date): string {
+  const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dia = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${mes}-${dia}`;
+}
+
 function listarSemanas(desde: IsoSemana, hasta: IsoSemana): IsoSemana[] {
   const out: IsoSemana[] = [];
   let cursor = lunesDeSemanaIso(desde.year, desde.week);
   const fin = lunesDeSemanaIso(hasta.year, hasta.week).getTime();
   for (let i = 0; i < 120 && cursor.getTime() <= fin; i += 1) {
-    const iso = semanaIsoDeFecha(cursor.toISOString().slice(0, 10));
+    const iso = semanaIsoDeFecha(isoDeDiaUtc(cursor));
     if (iso) out.push(iso);
     cursor = new Date(cursor);
     cursor.setUTCDate(cursor.getUTCDate() + 7);
