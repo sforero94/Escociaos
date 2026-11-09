@@ -42,6 +42,12 @@ node --experimental-transform-types --no-warnings scripts/esco-sql-eval/run.mts 
 python3 scripts/esco-sql-eval/reporte.py <carpeta> base1
 ```
 
+**Evaluar una migración de vistas antes de aplicarla:** `--sombra <migracion.sql>` inyecta cada `CREATE VIEW v_esco_*` del archivo
+como CTE delante de la consulta del modelo (solo lectura, no crea nada). **Antes y después por módulo:**
+`python3 scripts/esco-sql-eval/comparar.py <carpeta> --split dev --antes base2,antes --despues p1c` (marca aparte las preguntas
+cuya verdad cambió: `verdad_v2` en `banco.json`). Cuidado: el runner también ejecuta las preguntas `held` que son antecesoras de un
+seguimiento de `dev`; excluye sus resultados de lo que publiques.
+
 `--experimental-transform-types` es necesario porque `loop.ts` usa propiedades de parámetro en el constructor.
 La llave de OpenRouter se lee de `.env.local` y nunca se imprime.
 
