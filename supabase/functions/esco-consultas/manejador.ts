@@ -28,7 +28,7 @@ import { responderTurnoDesdeFuente, type ConfigModelos, type ResultadoTurno } fr
 import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensaje } from '../../../src/utils/esco2/mensajes.ts';
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
-import { manejarSql } from './manejadorSql.ts';
+import { manejarSql, tieneRpc } from './manejadorSql.ts';
 import { coberturaNoCertificada, validarCoberturaFinal, type ModoCobertura } from '../../../src/utils/esco2/cobertura.ts';
 export const NOMBRE_FUNCION = 'esco-consultas';
 /** D25: Luna sin razonamiento es la ruta habitual; Sol solo compone planes de varias partes. */
@@ -207,7 +207,12 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     const hoy = fechaBogota(ahora);
     if (solicitud.motor === 'sql') {
         const llmSql = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco SQL esco-consultas')))(apiKey);
-        const salida = await manejarSql({ cliente, llm: llmSql, pregunta: solicitud.pregunta, historial: solicitud.historial, hoy, registrar: deps.registrar });
+        const entradaSql = { cliente, llm: llmSql, pregunta: solicitud.pregunta, historial: solicitud.historial, hoy, registrar: deps.registrar };
+        if (req.headers.get('accept')?.split(',').some((valor) => valor.trim().split(';')[0] === 'text/event-stream')) {
+            if (!tieneRpc(cliente)) return json(503, { error: 'El motor SQL no está disponible en este entorno' });
+            return respuestaStreamSql(req, entradaSql);
+        }
+        const salida = await manejarSql(entradaSql);
         return json(salida.estado, salida.cuerpo);
     }
     const estado = solicitud.estadoToken ? leerEstado(solicitud.estadoToken, acceso.usuarioId, ahora.getTime()) : undefined;
@@ -268,4 +273,52 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     if (!valida)
         return json(500, { error: mensajeDisposicion('error_datos') });
     return json(200, { ...cuerpoRespuesta(turno, hoy), respuesta: respuestaFinal, estadoToken, opcionesAclaracion: estadoToken ? turno.opcionesAclaracion : undefined, avisoEstado: avisoTamano ?? avisoEstado });
+}
+
+/** SQL progress streams only after the existing authentication and input gates. */
+function respuestaStreamSql(req: Request, entrada: Parameters<typeof manejarSql>[0]): Response {
+    const encoder = new TextEncoder();
+    const cancelacion = new AbortController();
+    let activo = true;
+    let cerrar: (() => void) | undefined;
+    const alAbortar = () => { cancelacion.abort(); cerrar?.(); };
+    if (req.signal.aborted) alAbortar();
+    else req.signal.addEventListener('abort', alAbortar, { once: true });
+    const stream = new ReadableStream<Uint8Array>({
+        start(control) {
+            cerrar = () => {
+                if (activo) { activo = false; control.close(); }
+            };
+            if (cancelacion.signal.aborted) cerrar();
+            const enviar = (evento: { type: string; [clave: string]: unknown }) => {
+                if (activo && !cancelacion.signal.aborted) control.enqueue(encoder.encode(`event: ${evento.type}\ndata: ${JSON.stringify(evento)}\n\n`));
+            };
+            void (async () => {
+                try {
+                    const salida = await manejarSql({ ...entrada, signal: cancelacion.signal, onEvento: enviar });
+                    if (cancelacion.signal.aborted) return;
+                    if (salida.estado !== 200) {
+                        enviar({ type: 'error', message: salida.cuerpo.error ?? 'No se pudo completar la consulta.' });
+                        return;
+                    }
+                    const r = salida.cuerpo;
+                    enviar({ type: 'texto', texto: r.texto });
+                    enviar({ type: 'bloques', bloques: r.bloques });
+                    enviar({ type: 'sugerencias', sugerencias: r.sugerencias, ...(r.aclaracion ? { aclaracion: r.aclaracion } : {}) });
+                    enviar({ type: 'done', resultado: r });
+                } catch {
+                    enviar({ type: 'error', message: 'No se pudo completar la consulta. Intenta de nuevo.' });
+                } finally {
+                    req.signal.removeEventListener('abort', alAbortar);
+                    cerrar?.();
+                }
+            })();
+        },
+        cancel() {
+            activo = false;
+            cancelacion.abort();
+            req.signal.removeEventListener('abort', alAbortar);
+        },
+    });
+    return new Response(stream, { headers: { ...CORS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-store', 'X-Accel-Buffering': 'no' } });
 }

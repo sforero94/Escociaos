@@ -5,7 +5,7 @@
 // con el JWT del usuario: la RLS que aplica es la de quien pregunta, en una transacción de
 // solo lectura. Aquí no hay ningún analizador de SQL: la seguridad la da Postgres.
 import type { ClienteLLM } from '../../../src/utils/esco2/llm.ts';
-import { ErrorAccesoSql, ErrorSql, responderPregunta, type MensajeHistorialSql, type ResultadoSql } from '../../../src/utils/escoSql/loop.ts';
+import { ErrorAccesoSql, ErrorSql, responderPregunta, type MensajeHistorialSql, type ResultadoSql, type EventoProgresoSql } from '../../../src/utils/escoSql/loop.ts';
 
 /** Forma mínima de supabase-js que usa el motor SQL. */
 export interface ClienteRpc {
@@ -43,6 +43,8 @@ export async function manejarSql(entrada: {
   hoy: string;
   modelo?: { modelo: string; esfuerzo: 'none' | 'low' | 'medium' };
   registrar?: (evento: Record<string, unknown>) => void;
+  onEvento?: (evento: EventoProgresoSql) => void;
+  signal?: AbortSignal;
 }): Promise<SalidaSql> {
   if (!tieneRpc(entrada.cliente)) return { estado: 503, cuerpo: { error: 'El motor SQL no está disponible en este entorno' } };
   try {
@@ -53,6 +55,9 @@ export async function manejarSql(entrada: {
       ejecutarSql: ejecutorSqlSupabase(entrada.cliente),
       hoy: entrada.hoy,
       config: entrada.modelo,
+      onEvento: entrada.onEvento,
+      signal: entrada.signal,
+      registrarRechazoVisual: (motivo) => entrada.registrar?.({ funcion: 'esco-consultas', evento: 'visual_descartado', motivo }),
     });
     // Traza mínima: sin la pregunta, el SQL ni la respuesta (datos de la finca).
     entrada.registrar?.({
@@ -64,7 +69,9 @@ export async function manejarSql(entrada: {
       ms: r.ms,
       costoUsd: r.uso.costoUsd,
     });
-    return { estado: 200, cuerpo: { motor: 'sql', respuesta: r.respuesta, consultas: r.consultas, uso: r.uso, ms: r.ms, hoy: entrada.hoy } };
+    // Las filas completas nunca salen por la traza; un visual lleva solo su proyección elegida.
+    const consultas = r.consultas.map(({ filas_muestra: _muestra, ...consulta }) => consulta);
+    return { estado: 200, cuerpo: { motor: 'sql', texto: r.texto, respuesta: r.respuesta, bloques: r.bloques, sugerencias: r.sugerencias, ...(r.aclaracion ? { aclaracion: r.aclaracion } : {}), consultas, uso: r.uso, ms: r.ms, hoy: entrada.hoy } };
   } catch (e) {
     if (e instanceof ErrorAccesoSql) return { estado: 403, cuerpo: { error: 'Esco está disponible solo para gerencia' } };
     // La migración 192 no está aplicada: PostgREST no encuentra la función.

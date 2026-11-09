@@ -50,7 +50,9 @@ export interface PasoTraza {
 export interface ChartSpec {
   type: 'bar' | 'line' | 'pie' | 'area';
   title: string;
-  data: Array<Record<string, string | number>>;
+  data: Array<Record<string, string | number | boolean | null>>;
+  /** Shared SQL contract formatting; legacy charts keep yFormat. */
+  formatoSql?: import('../utils/escoSql/formato').Formato;
   xKey: string;
   yKey: string | string[];
   yFormat?: 'currency' | 'number' | 'percent' | 'kg';
