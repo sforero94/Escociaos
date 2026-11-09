@@ -53,6 +53,7 @@ export async function manejarSql(entrada: {
       ejecutarSql: ejecutorSqlSupabase(entrada.cliente),
       hoy: entrada.hoy,
       config: entrada.modelo,
+      registrarRechazoVisual: (motivo) => entrada.registrar?.({ funcion: 'esco-consultas', evento: 'visual_descartado', motivo }),
     });
     // Traza mínima: sin la pregunta, el SQL ni la respuesta (datos de la finca).
     entrada.registrar?.({
@@ -64,7 +65,9 @@ export async function manejarSql(entrada: {
       ms: r.ms,
       costoUsd: r.uso.costoUsd,
     });
-    return { estado: 200, cuerpo: { motor: 'sql', respuesta: r.respuesta, consultas: r.consultas, uso: r.uso, ms: r.ms, hoy: entrada.hoy } };
+    // Las filas completas nunca salen por la traza; un visual lleva solo su proyección elegida.
+    const consultas = r.consultas.map(({ filas_muestra: _muestra, ...consulta }) => consulta);
+    return { estado: 200, cuerpo: { motor: 'sql', texto: r.texto, respuesta: r.respuesta, bloques: r.bloques, sugerencias: r.sugerencias, ...(r.aclaracion ? { aclaracion: r.aclaracion } : {}), consultas, uso: r.uso, ms: r.ms, hoy: entrada.hoy } };
   } catch (e) {
     if (e instanceof ErrorAccesoSql) return { estado: 403, cuerpo: { error: 'Esco está disponible solo para gerencia' } };
     // La migración 192 no está aplicada: PostgREST no encuentra la función.

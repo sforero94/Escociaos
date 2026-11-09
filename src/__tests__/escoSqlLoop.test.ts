@@ -5,6 +5,7 @@ import {
   ErrorAccesoSql,
   ErrorSql,
   MAX_CONSULTAS,
+  MAX_RONDAS_SQL,
   responderPregunta,
   textoHistorialSql,
   type ResultadoSql,
@@ -37,6 +38,20 @@ const ok = (filas: Record<string, unknown>[], truncado = false): ResultadoSql =>
 const HOY = '2026-11-08';
 
 describe('Esco SQL — loop', () => {
+  it('acota también un modelo que repite visuales inválidos sin consultar', async () => {
+    let llamadas = 0;
+    const llm: ClienteLLM = { completar: async (s) => {
+      llamadas++;
+      if (!s.herramientas) return texto('No pude preparar el visual.');
+      return { ...texto(''), llamadas: [{ nombre: 'mostrar_visual', argumentos: '{}' }] };
+    } };
+    const ejecutarSql = vi.fn(async () => ok([]));
+    const r = await responderPregunta({ pregunta: 'q', llm, ejecutarSql, hoy: HOY });
+    expect(llamadas).toBe(MAX_RONDAS_SQL + 1);
+    expect(ejecutarSql).not.toHaveBeenCalled();
+    expect(r.bloques).toEqual([]);
+    expect(r.texto).toBe('No pude preparar el visual.');
+  });
   it('consulta, ve las filas y responde con ellas', async () => {
     const { llm, solicitudes } = modelo(consulta('select sum(jornales) j from v_esco_jornales'), texto('Se registraron 12,5 jornales.'));
     const ejecutarSql = vi.fn(async () => ok([{ j: 12.5 }]));
@@ -49,7 +64,7 @@ describe('Esco SQL — loop', () => {
     expect(solicitudes[0].mensajes[0].content).toContain('2026-11-08');
     expect(solicitudes[1].mensajes.at(-1)?.content).toContain('"j":12.5');
     // Primera vuelta con la herramienta; no se le quita nunca el modo automático.
-    expect(solicitudes[0].herramientas).toHaveLength(1);
+    expect(solicitudes[0].herramientas).toHaveLength(2);
   });
 
   it('usa el protocolo de herramientas: cada llamada del asistente recibe su mensaje tool, también las no ejecutadas', async () => {
@@ -104,14 +119,15 @@ describe('Esco SQL — loop', () => {
     expect(() => JSON.parse(json)).not.toThrow();
   });
 
-  it(`corta en ${MAX_CONSULTAS} consultas y pide la respuesta final sin herramientas`, async () => {
+  it(`corta en ${MAX_CONSULTAS} consultas y conserva la herramienta visual`, async () => {
     const { llm, solicitudes } = modelo(consulta('select 1'), consulta('select 2'), consulta('select 3'), consulta('select 4'), texto('Con lo que obtuve: …'));
     const ejecutarSql = vi.fn(async () => ok([{ x: 1 }]));
     const r = await responderPregunta({ pregunta: 'mucho', llm, ejecutarSql, hoy: HOY });
     expect(ejecutarSql).toHaveBeenCalledTimes(MAX_CONSULTAS);
     expect(r.consultas).toHaveLength(MAX_CONSULTAS);
     const ultima = solicitudes.at(-1)!;
-    expect(ultima.herramientas).toBeUndefined();
+    expect(ultima.herramientas).toHaveLength(1);
+    expect(ultima.herramientas?.[0]).toMatchObject({ function: { name: 'mostrar_visual' } });
     expect(ultima.mensajes.at(-1)?.content).toContain('consultas permitidas');
     expect(r.respuesta).toBe('Con lo que obtuve: …');
   });
