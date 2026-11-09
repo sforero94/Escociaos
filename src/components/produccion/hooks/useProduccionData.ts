@@ -95,7 +95,9 @@ export function useProduccionData() {
 
     return {
       cosechas: derivarCosechasDisponibles(registros),
-      anos_movimiento: derivarAnosMovimiento(registros),
+      // `produccion` no tiene fecha de movimiento. El año del filtro sale de
+      // la fecha; sin esa columna el catálogo de años queda vacío.
+      anos_movimiento: derivarAnosMovimiento([]),
     };
   };
 
@@ -169,8 +171,8 @@ export function useProduccionData() {
     if (seleccion.estado !== 'ok') {
       return {
         produccion_total_kg: 0,
-        rendimiento_promedio_kg_arbol: 0,
-        ton_por_ha_promedio: 0,
+        rendimiento_promedio_kg_arbol: null,
+        ton_por_ha_promedio: null,
         lotes_activos: 0,
         periodo: seleccion.mensaje,
       };
@@ -194,26 +196,9 @@ export function useProduccionData() {
     const data = consolidarRegistrosProduccion(toAgregable(raw));
     const resumenes = seleccion.cosechas.map((c) => resumirCosecha(data, c));
     const produccionTotal = resumenes.reduce((s, r) => s + r.produccion_kg, 0);
-
-    const conArboles = resumenes.filter((r) => r.kg_por_arbol != null);
-    const totalKgConArboles = conArboles.reduce((s, r) => s + r.produccion_kg, 0);
-    const totalArboles = data.reduce((sum, r) => {
-      const a = r.arboles_registrados;
-      return sum + (a != null && a > 0 ? a : 0);
-    }, 0);
-    const rendimientoPromedio =
-      totalArboles > 0 && totalKgConArboles > 0
-        ? calcularKgPorArbol(produccionTotal, totalArboles)
-        : null;
-
-    const lotesUnicos = new Map<string, number>();
-    data.forEach((r) => {
-      if (r.lote_id && r.area_hectareas != null && r.area_hectareas > 0) {
-        lotesUnicos.set(r.lote_id, Number(r.area_hectareas));
-      }
-    });
-    const areaTotal = Array.from(lotesUnicos.values()).reduce((sum, area) => sum + area, 0);
-    const tonPorHa = areaTotal > 0 ? calcularTonPorHa(produccionTotal, areaTotal) : null;
+    const unico = resumenes.length === 1 ? resumenes[0] : null;
+    const rendimientoPromedio = unico?.kg_por_arbol ?? null;
+    const tonPorHa = unico?.ton_por_ha ?? null;
 
     const { count: lotesActivos } = await supabase
       .from('lotes')
@@ -228,8 +213,8 @@ export function useProduccionData() {
     return {
       produccion_total_kg: Math.round(produccionTotal),
       rendimiento_promedio_kg_arbol:
-        rendimientoPromedio != null ? Math.round(rendimientoPromedio * 100) / 100 : 0,
-      ton_por_ha_promedio: tonPorHa != null ? Math.round(tonPorHa * 100) / 100 : 0,
+        rendimientoPromedio != null ? Math.round(rendimientoPromedio * 100) / 100 : null,
+      ton_por_ha_promedio: tonPorHa != null ? Math.round(tonPorHa * 100) / 100 : null,
       lotes_activos: lotesActivos || 0,
       periodo,
     };

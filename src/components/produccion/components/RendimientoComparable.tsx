@@ -42,29 +42,51 @@ export function RendimientoComparable({
         <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
           <TreeDeciduous className="w-5 h-5 text-primary" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-900">Rendimiento comparable</h3>
+        <h3 className="text-xl text-foreground">Rendimiento comparable</h3>
       </div>
 
+      {resumenes.length > 1 ? (
+        <div className="space-y-4">
+          {resumenes.map((r) => (
+            <div key={r.cosecha.key} className="border-b border-primary/10 pb-3 last:border-0">
+              <p className="text-sm font-medium text-foreground">{r.cosecha.label}</p>
+              <p className="text-sm text-brand-brown/80 mt-1">
+                kg / árbol:{' '}
+                <span className="font-semibold text-foreground">
+                  {r.kg_por_arbol == null ? 'Sin dato' : fmt(r.kg_por_arbol, 2, '')}
+                </span>
+              </p>
+              <p className="text-sm text-brand-brown/80">
+                t / ha:{' '}
+                <span className="font-semibold text-foreground">
+                  {r.ton_por_ha == null ? 'Sin dato' : fmt(r.ton_por_ha, 2, '')}
+                </span>
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="space-y-4">
         <div>
-          <p className="text-sm text-gray-500">kg / arbol</p>
-          <p className="text-2xl font-semibold text-gray-900 tabular-nums">
-            {fmt(kgArbol, 2, 'kg/arbol')}
+          <p className="text-sm text-brand-brown/70">kg / árbol</p>
+          <p className={`text-2xl font-semibold tabular-nums ${kgArbol == null ? 'text-brand-brown/40' : 'text-foreground'}`}>
+            {kgArbol == null ? 'Sin dato' : fmt(kgArbol, 2, '')}
           </p>
         </div>
         <div>
-          <p className="text-sm text-gray-500">t / ha</p>
-          <p className="text-2xl font-semibold text-gray-900 tabular-nums">
-            {fmt(tonHa, 2, 't/ha')}
+          <p className="text-sm text-brand-brown/70">t / ha</p>
+          <p className={`text-2xl font-semibold tabular-nums ${tonHa == null ? 'text-brand-brown/40' : 'text-foreground'}`}>
+            {tonHa == null ? 'Sin dato' : fmt(tonHa, 2, '')}
           </p>
         </div>
       </div>
+      )}
 
       {(kgArbol == null || tonHa == null) && (
-        <p className="mt-4 text-sm text-gray-500">
-          Faltan denominadores validados (arboles o area) para la seleccion.
-          Se calculan solo con datos vigentes del lote y la campana. Nunca se
-          asume cero.
+        <p className="mt-4 text-sm text-brand-brown/70 leading-relaxed">
+          {primario?.rendimientos_parciales
+            ? 'Falta un denominador válido para toda la cosecha. El rendimiento de un lote con dato no se extiende a los demás, y el hueco queda en blanco.'
+            : 'Se calcula con los árboles o el área de los lotes que tienen kilo en esta cosecha.'}
         </p>
       )}
 
@@ -73,7 +95,7 @@ export function RendimientoComparable({
           <p key={r.cosecha.key}>
             Total {r.cosecha.label}:{' '}
             <span className="font-mono font-medium text-gray-900">
-              {r.produccion_kg.toLocaleString('es-CO')} kg
+              {r.tiene_registros ? `${r.produccion_kg.toLocaleString('es-CO')} kg` : 'Sin dato'}
             </span>
           </p>
         ))}

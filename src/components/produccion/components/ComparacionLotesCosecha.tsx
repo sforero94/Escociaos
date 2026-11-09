@@ -58,10 +58,10 @@ export function ComparacionLotesCosecha({
           <Grid3X3 className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">
+          <h3 className="text-xl text-foreground">
             Producción por lote y cosecha
           </h3>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-sm text-brand-brown/70 mt-0.5">
             {leyenda || 'Sin cosechas seleccionadas'} · {METRICA_LABELS[metrica]}
           </p>
         </div>
@@ -98,9 +98,7 @@ export function ComparacionLotesCosecha({
                             className="h-full rounded-sm transition-[width] duration-500 ease-out"
                             style={{
                               width: `${width}%`,
-                              backgroundColor:
-                                COSECHA_SERIES_COLORS[i % COSECHA_SERIES_COLORS.length],
-                              opacity: i === 0 ? 1 : 0.55,
+                              backgroundColor: i === 0 ? '#73991C' : i === 1 ? '#C5D6A4' : COSECHA_SERIES_COLORS[i % COSECHA_SERIES_COLORS.length],
                             }}
                           />
                         ) : (

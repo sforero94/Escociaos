@@ -74,8 +74,8 @@ export interface SubloteProduccion {
 export interface FiltrosProduccion {
   vista: VistaProduccion;
   /**
-   * Filtro opcional por año calendario del movimiento.
-   * No es el eje de KPIs ni de series; vacío = sin acote.
+   * Años de la fecha del movimiento. Vacío = sin corte por año.
+   * No es el año del nombre de la cosecha y no esconde campañas.
    */
   anos_movimiento: number[];
   /**
@@ -110,8 +110,10 @@ export const FILTROS_PRODUCCION_DEFAULT: FiltrosProduccion = {
 
 export interface KPIProduccion {
   produccion_total_kg: number;
-  rendimiento_promedio_kg_arbol: number;
-  ton_por_ha_promedio: number;
+  /** Null cuando falta el denominador o hay más de una cosecha en el corte. */
+  rendimiento_promedio_kg_arbol: number | null;
+  /** Null cuando falta el área o hay más de una cosecha en el corte. */
+  ton_por_ha_promedio: number | null;
   lotes_activos: number;
   periodo: string;
 }
@@ -357,9 +359,10 @@ export const LOT_NAMES: Record<string, string> = {
 export function getLoteCode(nombreLote: string): string {
   const normalized = nombreLote.toLowerCase();
   if (normalized.includes('piedra') || normalized.includes('pp')) return 'PP';
+  // «Australia» contiene «st»; el nombre completo va antes que la sigla.
+  if (normalized.includes('australia') || normalized.includes('au')) return 'AU';
   if (normalized.includes('salto') || normalized.includes('tequendama') || normalized.includes('st'))
     return 'ST';
-  if (normalized.includes('australia') || normalized.includes('au')) return 'AU';
   if (normalized.includes('vega') || normalized.includes('lv')) return 'LV';
   if (normalized.includes('union') || normalized.includes('un')) return 'UN';
   if (normalized.includes('pedregal') || normalized.includes('pg')) return 'PG';

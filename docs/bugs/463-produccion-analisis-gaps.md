@@ -1,35 +1,50 @@
-# #463 — Gaps del tablero analítico de Producción
+# #463 — Causa y límites del tablero de Producción
 
-Diagnóstico tras implementar filtros dinámicos y vistas una/varias cosechas
-sin ampliar schema ni importar Excel/tracker.
+Lectura de solo lectura del 2026-11-09 sobre el proyecto `ywhtjwawnkeqlwxbvgup`.
+Sin escrituras, sin importar el Excel ni el tracker.
 
-## Unidad de agrupación
+## Por qué Principal 2027 no se veía
 
-**Por cosecha** (`Principal 2027`, `Traviesa 2026`), nunca por año calendario.
+Había dos capas, y solo la primera estaba en el código.
 
-El año de movimiento es un filtro opcional que solo acota qué cosechas se
-listan. KPIs, comparación por lote, calidad y series usan identidades de
-campaña.
+1. **Filtro.** Antes del #465, `ANOS_DISPONIBLES` era `[2023, 2024, 2025, 2026]` y
+   `COSECHAS_ORDEN` terminaba en `P26`. La consulta era `produccion.ano IN (años
+   elegidos)`. El control «año» era el año guardado en `produccion.ano`, que es
+   el nombre de la campaña, no la fecha del movimiento. Una fila `ano = 2027`
+   no se podía elegir. El #465 hizo el catálogo dinámico, pero el año seguía
+   asociado por una regla (Principal N «cabe» en el año N−1) y, al no coincidir,
+   **escondía** la cosecha o la reemplazaba por otra.
 
-## Qué sí cubre el repo hoy
+2. **Datos.** En `produccion` no hay filas con `ano = 2027`. Las campañas con
+   kilo son Principal y Traviesa de 2023 a 2026. `kg_exportacion` y
+   `kg_nacional` están vacíos en todas las filas. La tabla no tiene fecha.
+   `cosechas`, `despachos` y `despachos_trazabilidad` existen y tienen fecha,
+   y están en **0 filas**. `cosechas` tampoco guarda la identidad Principal /
+   Traviesa, así que no se le puede poner la etiqueta Principal 2027 a partir
+   de la fecha (esa regla de ventanas quedó obsoleta en la migración 184).
 
-| Capacidad | Fuente |
-|-----------|--------|
-| Identidad de cosecha `Principal 2027` | `produccion(ano, cosecha_tipo)` |
-| Año de movimiento (filtro opcional) | Regla de producto: en año Y → Principal Y, Traviesa Y, Principal Y+1 |
-| Producción / comparación por lote | `kg_totales` consolidados por cosecha (sin doble conteo lote/sublote) |
-| Calidad export/nacional | `kg_exportacion` / `kg_nacional` opcionales |
-| kg/árbol y t/ha honestos | `null` sin denominador; nunca cero inventado |
-| Filtros dinámicos | Catálogo vivo de cosechas; sin listas hardcodeadas |
+La etiqueta «Principal 2027» sí aparece en ingresos de Aguacate Hass: 9 filas
+con fecha en 2026. Eso es finanzas, no entrada de cosecha, y este tablero no
+lo lee.
 
-## Gaps explícitos (UI muestra «Sin dato»)
+## Qué hace el tablero con eso
 
-1. **Fecha de movimiento** — `produccion` no tiene columna de fecha. El filtro opcional de año usa la asociación de campaña; no inventa fechas diarias ni reagrupa por calendario.
-2. **Evolución semanal / acumulado** — no hay entrada por canastilla ni serie ISO. El bloque del mock queda como gap; recomendación de eje relativo documentada en UI.
-3. **Clasificación por calibre/comprador** — solo existe desglose export/nacional opcional.
-4. **Despachos y conciliación de etapas** — no hay tabla de despachos; no se infiere merma ni se usan cifras del mock Figma.
-5. **Producción = entrada neta** — el proxy actual es `kg_totales`. No se suman etapas.
+- La cosecha se elige por identidad (`Principal 2027`). El año, cuando hay
+  fecha, es el año de esa fecha. Un movimiento de Principal 2027 fechado en
+  2026 sale al filtrar 2026.
+- Si no hay fecha, el año no recorta kilos y no esconde la cosecha. El corte
+  dice «total registrado».
+- Una cosecha que no está en los datos se nombra. No se cambia por otra.
+- Producción = `kg_totales`. Clasificado y despachado quedan en «Sin dato».
+  La diferencia no se calcula y no se llama merma.
+- kg/árbol y t/ha salen solo si todos los lotes con kilo de ese corte tienen
+  denominador. Si falta uno, «Sin dato».
+- La evolución semanal (semana desde el inicio, o calendario ISO) se calcula
+  cuando hay fecha. No dibuja ceros en huecos ni después del último movimiento.
+  Abierta/cerrada no está en el registro.
 
-## No objetivos respetados
+## Qué sigue fuera
 
-Sin importación, sin migraciones en vivo, sin tocar captura manual como objetivo, sin merge/deploy, sin datos demo en producción.
+Sin registro manual, sin importar el Excel, sin migración, sin usar ingresos
+como si fueran entrada o despacho, y sin inventar el vínculo entre `produccion`
+y las tablas vacías de cosecha/despacho.

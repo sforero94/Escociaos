@@ -139,11 +139,12 @@ export function KPICardsProduccion({
     },
     {
       titulo: 'Rendimiento',
-      valor: rendimientoSinDato
-        ? 'Sin dato'
-        : `${kpis.rendimiento_promedio_kg_arbol.toLocaleString('es-CO', {
-            minimumFractionDigits: 2,
-          })} kg/árbol`,
+      valor:
+        rendimientoSinDato || kpis.rendimiento_promedio_kg_arbol == null
+          ? 'Sin dato'
+          : `${kpis.rendimiento_promedio_kg_arbol.toLocaleString('es-CO', {
+              minimumFractionDigits: 2,
+            })} kg/árbol`,
       subtitulo: rendimientoSinDato
         ? 'Sin árboles vinculados a la campaña'
         : 'Promedio ponderado',
@@ -152,11 +153,12 @@ export function KPICardsProduccion({
     },
     {
       titulo: 'Toneladas / ha',
-      valor: tonHaSinDato
-        ? 'Sin dato'
-        : `${kpis.ton_por_ha_promedio.toLocaleString('es-CO', {
-            minimumFractionDigits: 2,
-          })} t/ha`,
+      valor:
+        tonHaSinDato || kpis.ton_por_ha_promedio == null
+          ? 'Sin dato'
+          : `${kpis.ton_por_ha_promedio.toLocaleString('es-CO', {
+              minimumFractionDigits: 2,
+            })} t/ha`,
       subtitulo: tonHaSinDato
         ? 'Sin área válida para el corte'
         : 'Con área de lotes con dato',

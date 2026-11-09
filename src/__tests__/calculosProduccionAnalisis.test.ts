@@ -5,8 +5,6 @@ import {
   formatCosechaCode,
   derivarAnosMovimiento,
   derivarCosechasDisponibles,
-  cosechasAsociadasAAnoMovimiento,
-  cosechasCompatiblesConAnos,
   resolverSeleccionCosechas,
   anosCampanaDeCosechas,
   consolidarRegistrosProduccion,
@@ -17,7 +15,12 @@ import {
   agregarCalidadPorCosecha,
   identidadFromParts,
   ordenarCosechas,
+  evaluarCorteMovimiento,
+  construirEvolucionSemanal,
+  conciliarEtapas,
+  semanaIsoDeFecha,
   GAPS_PRODUCCION_ANALISIS,
+  type RegistroProduccionAgregable,
 } from '@/utils/calculosProduccionAnalisis';
 
 describe('identidad y etiquetas de cosecha', () => {
@@ -43,39 +46,29 @@ describe('identidad y etiquetas de cosecha', () => {
 
 describe('años de movimiento vs campaña', () => {
   const registros = [
-    { ano: 2026, cosecha_tipo: 'Principal' as const },
-    { ano: 2026, cosecha_tipo: 'Traviesa' as const },
-    { ano: 2027, cosecha_tipo: 'Principal' as const },
+    { ano: 2026, cosecha_tipo: 'Principal' as const, fecha: '2025-12-02' },
+    { ano: 2026, cosecha_tipo: 'Traviesa' as const, fecha: '2026-06-01' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, fecha: '2026-11-02' },
   ];
 
-  it('deriva años de movimiento incluyendo N-1 para Principal', () => {
-    expect(derivarAnosMovimiento(registros)).toEqual([2025, 2026, 2027]);
+  it('deriva el año desde la fecha, no desde el nombre de la campaña', () => {
+    expect(derivarAnosMovimiento(registros)).toEqual([2025, 2026]);
   });
 
-  it('asocia Principal 2027 al año de movimiento 2026', () => {
-    const asociadas = cosechasAsociadasAAnoMovimiento(2026).map((c) => c.label);
-    expect(asociadas).toEqual(['Principal 2026', 'Traviesa 2026', 'Principal 2027']);
+  it('no inventa un año si el registro no trae fecha', () => {
+    expect(derivarAnosMovimiento([{}])).toEqual([]);
+    expect(derivarAnosMovimiento([{ fecha: null }])).toEqual([]);
   });
 
-  it('filtra cosechas disponibles compatibles con 2026 sin excluir Principal 2027', () => {
-    const disponibles = derivarCosechasDisponibles(registros);
-    const compatibles = cosechasCompatiblesConAnos(disponibles, [2026]);
-    expect(compatibles.map((c) => c.label)).toEqual([
-      'Principal 2026',
-      'Traviesa 2026',
-      'Principal 2027',
-    ]);
-  });
-
-  it('no requiere listas hardcodeadas: un año nuevo aparece solo por datos', () => {
+  it('no requiere listas hardcodeadas: una cosecha nueva aparece solo por datos', () => {
     const conP28 = derivarCosechasDisponibles([
       ...registros,
       { ano: 2028, cosecha_tipo: 'Principal' as const },
     ]);
     expect(conP28.some((c) => c.label === 'Principal 2028')).toBe(true);
-    expect(derivarAnosMovimiento([{ ano: 2028, cosecha_tipo: 'Principal' }])).toEqual([
-      2027, 2028,
-    ]);
+    expect(
+      derivarAnosMovimiento([{ fecha: '2028-02-01' }]),
+    ).toEqual([2028]);
   });
 });
 
@@ -89,7 +82,6 @@ describe('resolverSeleccionCosechas', () => {
   it('sin filtro de año agrupa por cosecha (vista una = la más reciente)', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'una',
-      anos_movimiento: [],
       cosecha_keys: [],
     });
     expect(res.estado).toBe('ok');
@@ -102,7 +94,6 @@ describe('resolverSeleccionCosechas', () => {
   it('vista varias sin keys expone todas las cosechas (no un bucket de año)', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
-      anos_movimiento: [],
       cosecha_keys: [],
     });
     expect(res.estado).toBe('ok');
@@ -118,7 +109,6 @@ describe('resolverSeleccionCosechas', () => {
   it('vista varias permite multiselección explícita por identidad de cosecha', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
-      anos_movimiento: [],
       cosecha_keys: ['Principal:2027', 'Principal:2026'],
     });
     expect(res.estado).toBe('ok');
@@ -130,10 +120,9 @@ describe('resolverSeleccionCosechas', () => {
     }
   });
 
-  it('el año de movimiento solo acota; no reagrupa el resultado', () => {
+  it('mantiene la cosecha elegida aunque el año del nombre sea otro', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
-      anos_movimiento: [2026],
       cosecha_keys: ['Principal:2027'],
     });
     expect(res.estado).toBe('ok');
@@ -142,25 +131,22 @@ describe('resolverSeleccionCosechas', () => {
     }
   });
 
-  it('reporta incompatibilidad en vez de ocultar en silencio', () => {
-    // 2027 admite Principal 2027; Traviesa 2026 no es visible con ese acote.
+  it('una cosecha que no está en los datos se declara y no se sustituye', () => {
     const res = resolverSeleccionCosechas(disponibles, {
       vista: 'varias',
-      anos_movimiento: [2027],
-      cosecha_keys: ['Traviesa:2026'],
+      cosecha_keys: ['Traviesa:2030'],
     });
     expect(res.estado).toBe('incompatible');
     if (res.estado === 'incompatible') {
       expect(res.cosechas).toHaveLength(0);
-      expect(res.mensaje).toMatch(/cosecha/i);
+      expect(res.mensaje).toMatch(/no está en los registros/i);
       expect(res.sugeridas.map((c) => c.label)).toContain('Principal 2027');
     }
   });
 
-  it('estado vacío cuando el año no deja cosechas visibles', () => {
-    const res = resolverSeleccionCosechas(disponibles, {
+  it('estado vacío cuando no hay cosechas registradas', () => {
+    const res = resolverSeleccionCosechas([], {
       vista: 'varias',
-      anos_movimiento: [2024],
       cosecha_keys: ['Principal:2027'],
     });
     expect(res.estado).toBe('vacio');
@@ -339,8 +325,198 @@ describe('agregaciones honestas', () => {
 
 describe('gaps documentados', () => {
   it('declara los límites de schema sin simular datos', () => {
-    expect(GAPS_PRODUCCION_ANALISIS.entrada_semanal).toMatch(/semanal/i);
-    expect(GAPS_PRODUCCION_ANALISIS.despachos).toMatch(/despacho/i);
+    expect(GAPS_PRODUCCION_ANALISIS.entrada_semanal).toMatch(/semanal|fecha/i);
+    expect(GAPS_PRODUCCION_ANALISIS.despachos).toMatch(/despacho|merma/i);
     expect(GAPS_PRODUCCION_ANALISIS.produccion_proxy).toMatch(/kg_totales/i);
+    expect(GAPS_PRODUCCION_ANALISIS.principal_2027).toMatch(/Principal 2027/);
+  });
+});
+
+function fila(parcial: Partial<RegistroProduccionAgregable> & Pick<RegistroProduccionAgregable, 'ano' | 'cosecha_tipo' | 'lote_id' | 'kg_totales'>): RegistroProduccionAgregable {
+  return {
+    arboles_registrados: 100,
+    ...parcial,
+  };
+}
+
+describe('corte por fecha de movimiento', () => {
+  const p27 = identidadFromParts('Principal', 2027);
+  const p26 = identidadFromParts('Principal', 2026);
+  const registros = [
+    fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 1000, fecha: '2026-11-02' }),
+    fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 500, fecha: '2027-01-15' }),
+    fila({ lote_id: 'b', ano: 2026, cosecha_tipo: 'Principal', kg_totales: 800, fecha: '2026-02-01' }),
+  ];
+
+  it('los registros de 2026 de Principal 2027 aparecen al filtrar 2026', () => {
+    const corte = evaluarCorteMovimiento(registros, [p27], [2026]);
+    expect(corte.estado).toBe('aplicado');
+    expect(corte.registros).toHaveLength(1);
+    expect(corte.registros[0].kg_totales).toBe(1000);
+    expect(corte.corte).toBe('2026-11-02');
+    expect(corte.registros.some((r) => r.ano === 2026)).toBe(false);
+  });
+
+  it('el mismo año de movimiento conserva las dos identidades por separado', () => {
+    const corte = evaluarCorteMovimiento(registros, [p26, p27], [2026]);
+    expect(corte.estado).toBe('aplicado');
+    const claves = corte.registros.map((r) => `${r.cosecha_tipo}:${r.ano}`);
+    expect(claves).toContain('Principal:2026');
+    expect(claves).toContain('Principal:2027');
+    expect(corte.registros.reduce((s, r) => s + r.kg_totales, 0)).toBe(1800);
+  });
+
+  it('una selección incompatible se nombra y no se sustituye por otra campaña', () => {
+    const corte = evaluarCorteMovimiento(registros, [p27], [2024]);
+    expect(corte.estado).toBe('incompatible');
+    expect(corte.registros).toHaveLength(0);
+    expect(corte.mensaje).toMatch(/Principal 2027/);
+    expect(corte.mensaje).toMatch(/2024/);
+  });
+
+  it('sin fecha muestra la cosecha completa y lo dice', () => {
+    const sinFecha = [
+      fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 4000 }),
+    ];
+    const corte = evaluarCorteMovimiento(sinFecha, [p27], [2026]);
+    expect(corte.estado).toBe('sin_fecha');
+    expect(corte.registros).toHaveLength(1);
+    expect(corte.registros[0].kg_totales).toBe(4000);
+    expect(corte.mensaje).toMatch(/no los recorta/i);
+  });
+
+  it('si una de varias campañas no cae en el año, se nombra y no se rellena', () => {
+    const corte = evaluarCorteMovimiento(
+      [
+        fila({ lote_id: 'a', ano: 2026, cosecha_tipo: 'Principal', kg_totales: 800, fecha: '2025-12-02' }),
+        fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 1000, fecha: '2026-11-02' }),
+      ],
+      [p26, p27],
+      [2026],
+    );
+    expect(corte.estado).toBe('aplicado');
+    expect(corte.registros.map((r) => r.ano)).toEqual([2027]);
+    expect(corte.mensaje).toMatch(/Principal 2026/);
+    expect(corte.mensaje).toMatch(/no se rellena con cero/i);
+  });
+
+  it('el acumulado del filtro 2026 no incluye el tramo de 2027', () => {
+    const corte = evaluarCorteMovimiento(registros, [p27], [2026]);
+    const evolucion = construirEvolucionSemanal(corte.registros, [p27], 'desde_inicio');
+    expect(evolucion.estado).toBe('ok');
+    const serie = evolucion.series[0];
+    expect(serie.corte).toBe('2026-11-02');
+    const ultimo = serie.puntos[serie.puntos.length - 1];
+    expect(ultimo.acumulado).toBe(1000);
+    expect(serie.puntos.some((p) => p.kg === 500)).toBe(false);
+  });
+});
+
+describe('evolución semanal', () => {
+  it('conoce la semana ISO de una fecha fija', () => {
+    expect(semanaIsoDeFecha('2026-01-01')).toMatchObject({ year: 2026, week: 1 });
+    expect(semanaIsoDeFecha('2025-12-29')).toMatchObject({ year: 2026, week: 1 });
+  });
+
+  it('no rellena con cero un hueco ni una semana posterior al corte', () => {
+    const cosecha = identidadFromParts('Principal', 2027);
+    const evolucion = construirEvolucionSemanal(
+      [
+        fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 100, fecha: '2026-11-02' }),
+        fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 40, fecha: '2026-11-16' }),
+      ],
+      [cosecha],
+      'desde_inicio',
+    );
+    const puntos = evolucion.series[0].puntos;
+    expect(puntos.map((p) => p.kg)).toEqual([100, null, 40]);
+    expect(puntos.map((p) => p.acumulado)).toEqual([100, 100, 140]);
+    expect(puntos).toHaveLength(3);
+    expect(puntos.every((p) => p.kg !== 0)).toBe(true);
+  });
+
+  it('alinea por semana desde el inicio y no equipara un tramo corto con uno largo', () => {
+    const corta = identidadFromParts('Principal', 2027);
+    const larga = identidadFromParts('Principal', 2026);
+    const evolucion = construirEvolucionSemanal(
+      [
+        fila({ lote_id: 'a', ano: 2027, cosecha_tipo: 'Principal', kg_totales: 10, fecha: '2026-11-02' }),
+        fila({ lote_id: 'a', ano: 2026, cosecha_tipo: 'Principal', kg_totales: 20, fecha: '2025-11-03' }),
+        fila({ lote_id: 'a', ano: 2026, cosecha_tipo: 'Principal', kg_totales: 30, fecha: '2025-11-24' }),
+      ],
+      [larga, corta],
+      'desde_inicio',
+    );
+    expect(evolucion.comparable_totales).toBe(false);
+    expect(evolucion.avance_comun).toBe(1);
+    const serieCorta = evolucion.series.find((s) => s.cosecha.key === corta.key)!;
+    const serieLarga = evolucion.series.find((s) => s.cosecha.key === larga.key)!;
+    expect(serieCorta.puntos).toHaveLength(1);
+    expect(serieLarga.puntos.length).toBeGreaterThan(serieCorta.puntos.length);
+    expect(serieCorta.puntos.every((p) => p.semana_desde_inicio === 1 || p.kg !== 0)).toBe(true);
+    expect(serieCorta.estado).toBe('no_registrado');
+    expect(evolucion.motivo).toMatch(/no equivale/i);
+  });
+
+  it('en eje calendario una campaña no arranca con ceros antes de su fecha', () => {
+    const cosecha = identidadFromParts('Traviesa', 2026);
+    const evolucion = construirEvolucionSemanal(
+      [
+        fila({ lote_id: 'a', ano: 2026, cosecha_tipo: 'Traviesa', kg_totales: 70, fecha: '2026-06-01' }),
+      ],
+      [cosecha],
+      'calendario',
+    );
+    expect(evolucion.series[0].puntos).toHaveLength(1);
+    expect(evolucion.series[0].inicio).toBe('2026-06-01');
+    expect(evolucion.mensaje).toMatch(/calendario/i);
+  });
+});
+
+describe('denominadores y conciliación', () => {
+  it('t/ha de la cosecha es null si un lote con kilo no tiene área', () => {
+    const resumen = resumirCosecha(
+      [
+        fila({
+          lote_id: 'l1',
+          lote_nombre: 'Australia',
+          ano: 2027,
+          cosecha_tipo: 'Principal',
+          kg_totales: 5000,
+          arboles_registrados: 500,
+          area_hectareas: 10,
+        }),
+        fila({
+          lote_id: 'l2',
+          lote_nombre: 'La Vega',
+          ano: 2027,
+          cosecha_tipo: 'Principal',
+          kg_totales: 2000,
+          arboles_registrados: 200,
+          area_hectareas: null,
+        }),
+      ],
+      identidadFromParts('Principal', 2027),
+    );
+    expect(resumen.produccion_kg).toBe(7000);
+    expect(resumen.kg_por_arbol).toBeCloseTo(10);
+    expect(resumen.ton_por_ha).toBeNull();
+    expect(resumen.rendimientos_parciales).toBe(true);
+  });
+
+  it('la diferencia solo existe cuando las dos etapas existen y no es merma', () => {
+    const soloEntrada = conciliarEtapas(16000, null, null);
+    expect(soloEntrada.diferencia_entrada_clasificacion_kg).toBeNull();
+    expect(soloEntrada.diferencia_sin_despacho_kg).toBeNull();
+    expect(soloEntrada.es_merma).toBe(false);
+    expect(soloEntrada.nota).toMatch(/no es merma/i);
+
+    const completa = conciliarEtapas(16000, 15200, 14400);
+    expect(completa.diferencia_entrada_clasificacion_kg).toBe(800);
+    expect(completa.diferencia_sin_despacho_kg).toBe(800);
+    expect(completa.es_merma).toBe(false);
+    expect(completa.entrada_kg).not.toBe(
+      (completa.clasificado_kg ?? 0) + (completa.despachado_kg ?? 0),
+    );
   });
 });

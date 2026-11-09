@@ -1,79 +1,77 @@
-import { Diff, Info } from 'lucide-react';
-import { GAPS_PRODUCCION_ANALISIS } from '@/utils/calculosProduccionAnalisis';
+import { conciliarEtapas } from '@/utils/calculosProduccionAnalisis';
+
+interface EntradaConciliacion {
+  label: string;
+  kg: number | null;
+}
 
 interface ConciliacionEtapasGapProps {
-  produccionKg: number | null;
+  entradas: EntradaConciliacion[];
   periodo: string;
 }
 
-export function ConciliacionEtapasGap({
-  produccionKg,
-  periodo,
-}: ConciliacionEtapasGapProps) {
-  const etapas = [
-    {
-      label: 'Producción registrada',
-      valor: produccionKg,
-      nota: 'Única etapa con dato en produccion',
-    },
-    { label: 'Clasificado', valor: null as number | null, nota: 'Sin fuente' },
-    { label: 'Despachado', valor: null as number | null, nota: 'Sin fuente' },
-  ];
-
-  const maxRef = Math.max(produccionKg ?? 0, 1);
-
+export function ConciliacionEtapasGap({ entradas, periodo }: ConciliacionEtapasGapProps) {
+  const bloques = (entradas.length > 0 ? entradas : [{ label: 'Cosecha', kg: null }]).map(
+    (entrada) => ({
+      label: entrada.label,
+      corte: conciliarEtapas(entrada.kg, null, null),
+    }),
+  );
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 h-full">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
-          <Diff className="w-5 h-5 text-amber-700" />
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Conciliación al corte</h3>
-          <p className="text-sm text-gray-500">
-            {periodo || 'Sin período'} · etapas no sumables
-          </p>
-        </div>
-      </div>
+    <section className="bg-white rounded-xl border border-primary/10 p-5 md:p-6 h-full">
+      <h2 className="text-xl text-foreground">Conciliación al corte</h2>
+      <p className="text-sm text-brand-brown/70 mt-1">
+        {periodo || 'Sin período'} · etapas separadas, no se suman
+      </p>
 
-      <div className="mt-6 space-y-5">
-        {etapas.map((e) => (
-          <div key={e.label}>
-            <div className="flex justify-between text-sm mb-1.5">
-              <span className="text-gray-700">{e.label}</span>
-              <span className="font-mono text-gray-900">
-                {e.valor != null
-                  ? `${e.valor.toLocaleString('es-CO')} kg`
-                  : 'Sin dato'}
-              </span>
-            </div>
-            <div className="h-3.5 rounded-sm bg-gray-100 overflow-hidden">
-              {e.valor != null ? (
-                <div
-                  className="h-full bg-primary/80 rounded-sm transition-[width] duration-500"
-                  style={{ width: `${Math.round((e.valor / maxRef) * 100)}%` }}
-                />
-              ) : (
-                <div className="h-full w-full bg-[repeating-linear-gradient(135deg,#e5e7eb,#e5e7eb_4px,#f9fafb_4px,#f9fafb_8px)]" />
+      <div className="mt-5 space-y-6">
+        {bloques.map((bloque) => {
+          const etapas = [
+            { label: 'Entrada neta', valor: bloque.corte.entrada_kg },
+            { label: 'Clasificado', valor: bloque.corte.clasificado_kg },
+            { label: 'Despachado', valor: bloque.corte.despachado_kg },
+          ];
+          const maxRef = Math.max(bloque.corte.entrada_kg ?? 0, 1);
+          return (
+            <div key={bloque.label}>
+              {bloques.length > 1 && (
+                <p className="text-sm font-medium text-foreground mb-2">{bloque.label}</p>
               )}
+              <div className="space-y-4">
+                {etapas.map((etapa) => (
+                  <div key={etapa.label}>
+                    <div className="flex justify-between gap-3 text-sm mb-1.5">
+                      <span className="text-foreground">{etapa.label}</span>
+                      <span className="font-mono text-foreground">
+                        {etapa.valor != null
+                          ? `${Math.round(etapa.valor).toLocaleString('es-CO')} kg`
+                          : 'Sin dato'}
+                      </span>
+                    </div>
+                    <div className="h-3 rounded-sm bg-[#F3F6EE] overflow-hidden">
+                      {etapa.valor != null ? (
+                        <div
+                          className="h-full bg-primary rounded-sm"
+                          style={{
+                            width: `${Math.max(4, Math.round((etapa.valor / maxRef) * 100))}%`,
+                          }}
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-[repeating-linear-gradient(135deg,#e7eddd,#e7eddd_6px,#f7faf2_6px,#f7faf2_12px)]" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <p className="text-xs text-gray-400 mt-1">{e.nota}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div className="mt-6 rounded-lg border border-amber-100 bg-amber-50/60 px-4 py-3 text-sm text-amber-950">
-        <p className="font-medium">Diferencias por revisar — no merma inferida</p>
-        <p className="mt-1 text-amber-900/80 text-xs leading-relaxed">
-          {GAPS_PRODUCCION_ANALISIS.despachos} No se inventa relación entre
-          registros ni se llama merma a toda diferencia.
-        </p>
+      <div className="mt-5 rounded-lg bg-[#F7FAF2] border border-primary/10 px-4 py-3 text-sm text-foreground">
+        <p className="font-medium">Diferencia por revisar</p>
+        <p className="mt-1 text-brand-brown/80 leading-relaxed">{bloques[0].corte.nota}</p>
       </div>
-
-      <div className="mt-3 flex items-start gap-2 text-xs text-gray-500">
-        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-        <p>{GAPS_PRODUCCION_ANALISIS.clasificacion_detalle}</p>
-      </div>
-    </div>
+    </section>
   );
 }
