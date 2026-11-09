@@ -720,3 +720,12 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - Drift-state de `esco-consultas` = `0596352` (fuente de v2); v3/v4 salieron de `f58d36c8`/`095a5c50`, y main ya tiene #421 encima. Confirmar el hash de v4 con el detector #76+. [corrida: 2026-11-05-jueves]
 - Tick del hato: 0 alertas generadas del 11-01 al 11-05 (semanas previas 1–8), estado `ok`, `saltadas_sin_destinatario: 4` el 11-05. Vigilar con la cobertura por razón; no filar todavía. [corrida: 2026-11-05-jueves]
 - Líneas base: suite 320 ficheros / 7.567 pruebas, tsc limpio · árboles edge 112/112 · 6 crons, `clima-sync` 864 corridas/72 h, 0 fallos · clima 288/287/288/288 (11-01..11-04) · pg_net 2 timeouts en ~6 h (cosmético). [corrida: 2026-11-05-jueves]
+
+## Corrida 2026-11-09-lunes
+- sin_hallazgos. Vercel PROMOTED 16c7157 = HEAD. make-server v297 (2026-11-08T18:07:21Z, verify_jwt=false), ezbr `cffe7300…`. esco-consultas v12 (20:52:30Z, verify_jwt=true), ezbr `5b1ea753…`. [corrida: 2026-11-09-lunes]
+- Detector #79 rojo (esco-consultas, reloj 52,2 h + hash sin cambio) RESUELTO por la v12: `git diff de18f61b 16c7157` sobre EDGE_FUNCTION_PATH + src/utils/escoSql = vacío. Drift-state de make-server quedó en `5e578169…` porque la #79 corrió antes de la v297. Un rojo en #80 sí es hallazgo. [corrida: 2026-11-09-lunes]
+- MÉTODO: un deploy desde la rama de un PR luego fusionado por squash NO comparte SHA con main; verificar con diff de contenido sobre las rutas del detector. [corrida: 2026-11-09-lunes]
+- Firma nueva: `Failed to parse LLM JSON` (generar-reporte-semanal.tsx:735) 2026-11-09T11:58:58Z → filada por bug-triage como ESCO-176. [corrida: 2026-11-09-lunes]
+- MÉTODO: reportes_semanales.html_storage es una RUTA; para ver regeneraciones mirar storage.objects.updated_at del bucket reportes-semanales. function_logs no admite unnest(metadata): usar positionCaseInsensitive sobre event_message. [corrida: 2026-11-09-lunes]
+- Hato tick: 11-07/11-08 1 generada, 11-09 2 generadas / 2 enviadas; se cierra la vigilancia de "0 generadas" del 11-05. [corrida: 2026-11-09-lunes]
+- Líneas base: DB 136 MB (net._http_response 60 + cron.job_run_details 28), 23 conexiones · Storage 271 MB / 324 objetos · 6 crons / 0 fallos en 72 h · clima 288 / 24 h · edge 329×200 + 2×401 esperados · PostgREST 0 no-2xx de 2.617 · árboles edge 113/113 · monitoreos vía PostgREST 220,7 ms media (180,8 el 10-26; vigilar). [corrida: 2026-11-09-lunes]

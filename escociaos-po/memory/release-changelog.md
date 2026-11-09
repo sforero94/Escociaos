@@ -642,3 +642,10 @@ mensual sigue siendo la unica legible.**
 - Estado aceptado: un cambio de Esco fusionado y no desplegado NO es hallazgo mientras su PR `chore(esco): prepare … release` esté abierto o fusionado; el detector se pone rojo en ese hueco por diseño. [corrida: 2026-11-02-lunes]
 - Baseline despliegue: HEAD 48a925c, frontend PROMOTED (verificado por contenido); edge v288 = d88f6db, un PR atrás (#391, release #392); migraciones hasta 188; ledger del CLAUDE.md sin 186 (filado ESCO-168, VIERNES). [corrida: 2026-11-02-lunes]
 - Baseline cadencia mensual (10-05→11-02): 38,8 commits/semana, 29,5 aterrizajes/semana; fix 83,6% (72,7% sin el programa de fidelidad de Esco); lag edge ~21 h por workflow de release; frontend automático. [corrida: 2026-11-02-lunes]
+
+## Corrida 2026-11-09-lunes
+- Baseline: HEAD `16c7157`. Frontend = HEAD, proved by content (`Abrir Esco SQL (beta)` in `index-*.js`). make-server v297 (2026-11-08T18:07:21Z, ezbr `cffe7300…`) = #459/#460. esco-consultas v12 (20:52:30Z, ezbr `5b1ea753…`). Migrations up to 192, all with a file. Open PRs: #470 (1 day, clean), #324 (draft, 30 days). Nothing waits for a deploy. [corrida: 2026-11-09-lunes]
+- Navigation: in Actions logs, lines prefixed `[36;1m` are the step's script text, not output; look for `##[warning]` lines without that prefix. [corrida: 2026-11-09-lunes]
+- Navigation: Notion SQL on Mantenimiento uses `"userDefined:ID"`, `"Ultima actualizacion"`, `"Motivo cierre"`; rows mode with 15 rows exceeds the token limit, use SQL with substr. [corrida: 2026-11-09-lunes]
+- Accepted state: the drift-state file can lag the live edge version by one run when a deploy comes after the 18:00Z scheduled run. Not drift. [corrida: 2026-11-09-lunes]
+- Open note: ESCO-78 is Done with Resolucion NULL (September). [corrida: 2026-11-09-lunes]

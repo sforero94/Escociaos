@@ -869,3 +869,11 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 
 - ESCO-165 F1 está en la PR #448 (`95a8c766`). `CierreAplicacion` vuelve a leer `productos.cantidad_actual` antes de `fn_cerrar_aplicacion` y no llama al RPC si falta un producto (`calcularFaltantesCierre`, `src/utils/stockAplicacion.ts`). Después del merge, un 400 por inventario negativo es una carrera entre la comprobación y el RPC, no una comprobación ausente. [corrida: 2026-11-06-viernes]
 - Patrón de prueba: `aplicacionesDateSaveBoundaries.test.tsx` y `cierreAplicacionStockGuard.test.tsx` direccionan el estado por posición de `useState` (`CierreAplicacion`: 0 = loading, 4 = movimientos). Un `useState` nuevo antes de esas posiciones rompe las dos pruebas. [corrida: 2026-11-06-viernes]
+
+## Corrida 2026-11-09-lunes
+- Baseline main@16c7157 VERDE: vitest 404 ficheros / 8.595 pruebas, tsc 0, lint 0 / 885 (907 antes; #461 borró 16 componentes). [corrida: 2026-11-09-lunes]
+- generar-reporte-semanal.tsx:731-753 sustituye un análisis genérico si JSON.parse falla y responde 200; generarReporteCompleto guarda sin revisión humana. Visto 2026-11-09 11:58Z (S45, sobrescrito a los 30 s). Filado ESCO-176 P3 FDS/decision. Frecuencia: function_logs 'Failed to parse LLM JSON'. [corrida: 2026-11-09-lunes]
+- v_esco_clima_diario no duplica estaciones (0 fechas compartidas). station_id de Ecowitt lleva un espacio al final ('84:1F:E8:35:D8:73 '). [corrida: 2026-11-09-lunes]
+- movimientos_diarios_productos.unidad = productos.unidad_medida en 924/924 filas. [corrida: 2026-11-09-lunes]
+- Esco SQL (#464/#467/#468) revisado sin defectos: tope 4 consultas, 42501/PGRST no llegan al modelo, truncado a 500 correcto, límites de historial cliente=servidor (12×4000). [corrida: 2026-11-09-lunes]
+- reportes_semanales no tiene updated_at; mirar storage.objects.updated_at del .html/.pdf. [corrida: 2026-11-09-lunes]

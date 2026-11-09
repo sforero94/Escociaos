@@ -23,6 +23,32 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-11-09 — corrida lunes
+### Aguacate · Aplicaciones
+- Closing an application now stops before saving and lists every product that is short of stock, instead of failing inside the close (96ebc44d, #448).
+- The calculadora lets each plan line carry alternative products with their own dosis, and keeps them when a saved application is reopened (242fbdb1, #455; table from migration 189, 7a2271de, #399).
+- Movimientos diarios offer the principal product and its alternatives in alphabetical order, with coverage warnings (2753b357, #457).
+### Aguacate · Monitoreo
+- A Telegram monitoring reading dated inside a closed ronda's window now joins that ronda instead of opening a new one (5ab09bd1, #460).
+- Data fix: the Salto de Tequendama S1 capture moved into Ronda 33, and the old Ronda 35 is now «Ronda 34» (migration 191, 082e8b96, #453).
+### Aguacate · Producción
+- The production dashboard builds its year and cosecha filters from the data and can analyse one or several cosechas (1f94f342, #465); the lot detail uses the standard table (29e0113b, #466).
+### Inventario
+- Importing products from CSV no longer sets a starting stock without an inventory movement (34885fdd, #459).
+### Hato Lechero
+- Telegram /pesaje explains pending operations before it replays them (7d95a3ec, #395).
+### Esco
+- Gerencia has Esco SQL (beta): the /esco-sql page and a second floating button next to classic Esco (a8d881ed #467, 1b2b7df7 #468), backed by migration 192 and esco-consultas v12 (09a622ad, #464). First measurement: 80,1 % correct over 122 questions (16c71574, #469).
+- Esco 2.0 (esco-consultas v3→v11, Gerencia only) learned labor by day and type, application quantities, costs and shortages, monitoring by ronda, soil CE, climate history, herd records and fortnight milk litres (#407–#447).
+- Classic Esco answers named application status from fresh records and keeps the user's scope (#392–#406).
+### Seguridad
+- Migration 190: a deactivated or profile-less session can no longer read lotes or registros_trabajo (d6ff7575 #410, applied 2026-11-04).
+### Interno
+- 16 dead UI components and 9 dependencies only they used were removed (b3774fba, #461).
+- The CLAUDE.md migration ledger gained entries 186–192 (4bd95f32 #462, dfe381f4 #454); Esco 2.0 deploy records and evaluation evidence (#414–#449).
+### Requiere despliegue manual
+- Nothing pending. make-server-1ccce916 v297 (2026-11-08 18:07Z) carries #459/#460; esco-consultas v12 matches main.
+
 ## 2026-11-02 — corrida lunes
 
 **25 PRs merged** (2026-10-26 → 2026-11-02) and **four migrations applied** (185 ledger
