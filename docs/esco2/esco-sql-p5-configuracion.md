@@ -43,8 +43,8 @@ ajenas a estos dos nombres. La puerta de esco-consultas v15 ya está desplegada.
    health anónimo200 y esco-consultas v15/JWT=true sin cambios. El secreto por sí solo
    no cambia el enrutamiento de preguntas a SQL.
 4. Antes de activar SQL, cerrar el gate de recursos PNG descrito en el
-   [spike D3](esco-sql-p5-d3-spike.md). Las medidas Deno locales no certifican el
-   presupuesto de memoria del worker productivo. Cualquier prueba productiva,
+   [spike D3](esco-sql-p5-d3-spike.md). El renderer aislado pasó 45 peticiones y 180 PNG con cuota de 256 MB; eso no
+   certifica el grafo completo de make-server ni el worker productivo. Cualquier prueba productiva,
    mensaje real o llamada pagada requiere su alcance y presupuesto explícitos.
 5. Tras aprobación de activación, crear el flag `ESCO_MOTOR_TELEGRAM=sql` por
    Composio. Verificar acceso y captura con el alcance aprobado de esa comprobación.

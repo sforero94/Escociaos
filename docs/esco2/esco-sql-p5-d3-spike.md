@@ -113,73 +113,99 @@ primer dibujo hasta 202.768.384; cuarto dibujo hasta 249.184.256; pico global ha
 291.618.816 bytes. RSS incluye overhead, código y cachés del proceso Deno; no se
 identifica con la contabilidad del isolate de Supabase.
 
-## Resultado y puerta pendiente D3
+## Segundo ensayo: user isolate real local
 
-La ejecución PNG local es funcional y sin egreso. **No se acredita el límite de
-256 MB del worker de Supabase**: el RSS local llegó a superarlo y no tenemos una
-medición del isolate alojado. El heap y la memoria lineal se mantuvieron acotados,
-pero eso no sustituye esa comprobación. Tampoco es un día completo de observación,
-un arranque frío de Supabase ni el benchmark de la función entera con sus imports.
+Después del microbenchmark se inició Docker Desktop local, sin solicitar login,
+licencia, contraseña ni cambiar ajustes. La imagen oficial elegida se contrastó
+con el [docker-compose publicado por Supabase](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml)
+y se ejecutó fijada por digest:
 
-Antes de activar SQL en Telegram, medir el candidato desplegado con carga sintética
-máxima (cuatro gráficas, reutilización warm y el resto de imports) bajo límites del
-runtime, dentro de la autorización de despliegue y sin modelos/datos reales. Si no
-cabe, volver con una solución local más pequeña o pedir aprobación de la alternativa;
-no activar QuickChart ni enviar cifras a terceros automáticamente.
+`supabase/edge-runtime@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343`
 
-La [documentación de límites](https://supabase.com/docs/guides/functions/limits)
-indica 256 MB, 2 s de CPU por petición y tamaños de bundle distintos según carril.
-La [guía Wasm](https://supabase.com/docs/guides/functions/wasm) documenta el requisito
-especial de empaquetado de archivos estáticos. La configuración productiva de
-make-server mantiene `verify_jwt=false`; este trabajo no despliega ni activa flags.
+Tag: `v1.77.9`; versión que imprime: `edge-runtime 0.1.0`, Deno 2.1.4,
+`aarch64-unknown-linux-gnu`. No se identifica esa versión con la producción alojada.
 
-### Siguiente ensayo local del isolate
+El proxy temporal crea un **user worker**, no ejecuta la gráfica en el main runtime,
+con `memoryLimitMb: 256`, CPU hard limit de 2.000 ms, `envVars: []`, 150 s de plazo
+y política `per_request`. El contenedor completo tiene una cota distinta de 1 GB;
+no se confunde esa cota con los 256 MB del user isolate. La red del contenedor es
+`none`; las peticiones del proxy usan solamente su propio HTTP loopback.
 
-Es posible ensayar esta cuota sin producción con el **user runtime** de
-[Supabase Edge Runtime](https://github.com/supabase/edge-runtime), distinto del Deno
-CLI. El proxy/main runtime no tiene esa cuota: ejecutar la gráfica solamente en
-su proceso principal no verifica el límite. Un límite Docker de 256 MB tampoco
-sustituye la cuota del user worker.
+Se copió únicamente el renderer PNG productivo, el formateador compartido y los
+assets públicos a un directorio temporal de solo lectura. Solo se reescribieron
+los dos import specifiers para resolver esas copias locales; el código del PNG no
+cambió. No se montó el repositorio, `.env`, credenciales ni datos del producto.
+El wrapper público de resvg se verificó por hash. El fixture y sus fuentes tienen
+manifiesto SHA-256.
 
-En este host existe Docker CLI y el contexto usa un socket local. La comprobación
-real devolvió «Cannot connect to the Docker daemon»; no había un binario
-`edge-runtime` en PATH. No se inició Docker ni se instaló/descargó una imagen y no
-se pudo averiguar qué imágenes están presentes. Por tanto, **este ensayo no se
-ha ejecutado** y no se atribuye ningún resultado al isolate.
+**Corrida final: 45 peticiones y 180 PNG correctos**, cada petición con las cuatro
+formas al máximo del contrato. Hubo tres peticiones frías, cuarenta warm y dos
+concurrentes. El pool reutilizó workers: no se afirma que las cuarenta warm
+ocurrieron en un único isolate. Todos los HTTP fueron 200, sin retiros/fallos de
+cuota y sin `fetch` del renderer. Bar/line/area: 720 × 480; pie: 720 × 997 con las
+sesenta leyendas. NULL, valores negativos cartesianos y aviso de truncado estaban
+presentes en los datos sintéticos.
 
-Próximo paso concreto, antes de activar el flag:
+- Peticiones frías, cuatro PNG cada una: 396,05 / 138,82 / 120,49 ms.
+- Peticiones warm, cuatro PNG cada una: mediana 91,34 ms; p95 observado 96,40 ms.
+- `heapUsed + external` máximo devuelto: 31.585.906 bytes.
+- La API de ese worker devolvió `rss=0`: **no acredita un pico RSS medido**.
+- Cero llamadas de red del renderer y ninguna variable de entorno entregada al worker.
 
-1. Con Docker local funcionando, elegir la imagen oficial de Edge Runtime compatible
-   con el carril CLI aprobado, fijarla por digest y registrar su versión. Inspeccionar
-   `edge-runtime start --help` de esa imagen antes de crear el comando. Registrar
-   también la política del supervisor: el upstream actual permite `--policy
-   per_request` para cuota de CPU por petición y reutilización warm; `per_worker`
-   es su valor por defecto y no equivale a esa medición. No usar `oneshot` para
-   afirmar reutilización warm. Contrastar esto con la versión fijada.
-2. Montar una copia de las fuentes/configs/locks congeladas, sin `.env`, credenciales
-   ni banco de preguntas. Resolver/cachear solo dependencias públicas y después
-   cerrar la red. El fixture no llama al bot, Telegram, Supabase ni un modelo.
-3. En un main/proxy temporal, crear un **user worker** mediante
-   `EdgeRuntime.userWorkers.create` con `memoryLimitMb: 256`,
-   `cpuTimeHardLimitMs: 2000`, `workerTimeoutMs: 150000` y `envVars: []`.
-   Usar los nombres de opciones de la versión elegida, contrastados con su ejemplo
-   oficial. No heredar `Deno.env.toObject()` como hace el ejemplo genérico.
-4. En ese user worker, cargar el mismo grafo del candidato sin inicializar el bot ni
-   usar credenciales; si algún import produce I/O, cerrar y corregir ese fixture.
-   Dibujar cuatro bloques sintéticos máximos por petición (60 categorías, seis
-   series o 60 sectores, incluyendo la altura máxima de leyendas), primero en frío
-   y después en 40 peticiones warm. Añadir dos peticiones concurrentes para verificar
-   la cola de rasterización. Todos los PNG deben conservar firma/dimensiones.
-5. Registrar digest, SHA del candidato, número de peticiones, CPU/memoria que exponga
-   el runtime y cualquier retiro/cancelación del worker. Si hay overflow, retiro por
-   memoria/CPU bajo la política declarada, OOM o falta de medición de cuota, el gate
-   sigue abierto. No confundir el retiro normal por cuota acumulada de `per_worker`
-   con un fallo de una petición de menos de dos segundos. La prueba del renderer
-   aislado no acredita el grafo completo ni el presupuesto de CPU del turno HTTP.
-6. QA independiente repite el fixture. Solo después se puede proponer activar SQL.
+Un primer arranque del proxy falló antes de dibujar porque la petición construida
+manualmente no tenía el contexto HTTP interno de Supabase. Se corrigió solo el
+proxy temporal para enviar peticiones HTTP loopback reales y se repitió el fixture.
+El fallo inicial no se contabiliza como petición PNG correcta.
 
-La [fuente oficial de ejemplo del proxy](https://github.com/supabase/edge-runtime/blob/main/examples/main/index.ts)
-muestra las opciones del user worker. La [CLI del runtime](https://github.com/supabase/edge-runtime/blob/main/cli/src/flags.rs)
-y su [supervisor](https://github.com/supabase/edge-runtime/blob/main/crates/base/src/worker/pool.rs)
-definen las políticas descritas; verificar la versión fijada. Estas instrucciones definen un ensayo local
-pendiente; no son una afirmación de que los límites de la plataforma ya pasaron.
+La cuota configurada del **renderer aislado local** pasa este ensayo. El resultado
+no acredita el grafo completo de make-server, el consumo total de un turno HTTP,
+arranque de Telegram, un día entero de observación ni aceptación productiva P6.
+El microbenchmark Deno anterior conserva su límite: su RSS no era una medida del
+isolate y no es la base de esta comprobación.
+
+## Reproducir el isolate local
+
+Con las dependencias del lock instaladas (`npm ci`) y Docker local disponible,
+`scripts/esco-sql-p5/preparar-isolate.py` copia una lista cerrada de archivos públicos
+desde este repo y genera el mismo proxy/fixture/manifiesto. Rechaza destinos dentro
+del repo o directorios de salida no vacíos; no inicia Docker ni accede a producción.
+Los tres archivos main/worker/renderer generados se contrastaron byte a byte con
+la corrida final. No se añaden otros assets binarios al repositorio.
+
+```sh
+esco_d3_dir="$(mktemp -d /tmp/esco-p5-d3.XXXXXX)"
+python3 scripts/esco-sql-p5/preparar-isolate.py --out "$esco_d3_dir"
+docker run --name esco-p5-d3-repro --detach --network none --memory 1g --cpus 2 \
+  --mount "type=bind,source=$esco_d3_dir,target=/fixtures,readonly" \
+  supabase/edge-runtime@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343 \
+  start --main-service /fixtures/main --policy per_request
+docker logs --follow esco-p5-d3-repro
+# Tras D3_COMPLETE o D3_FAILED, salir del seguimiento y retirar solo este contenedor:
+docker rm --force esco-p5-d3-repro
+```
+
+Aceptar únicamente `D3_COMPLETE` con 45 filas, cuatro PNG por fila, firma/dimensiones
+correctas y cero `fetch`; un `D3_FAILED`, cancelación o falta de datos conserva el
+gate abierto. Comparar también versión/digest y los hashes del manifiesto.
+`per_worker` es el valor por defecto del upstream: no mide lo mismo que la cuota
+CPU por petición. `oneshot` tampoco prueba reutilización warm. Antes de usar otra
+versión, contrastar `start --help` y las opciones de su user worker.
+
+Se eliminó el contenedor del ensayo. Docker Desktop quedó encendido al encontrar
+otras cargas activas; no se detuvo ninguna. La imagen pública puede quedar en caché.
+
+## Gate pendiente de la función completa
+
+Antes de activar SQL, comprobar el candidato de make-server con **su grafo entero**
+y carga sintética máxima, dentro del alcance autorizado, además de los controles
+operativos de despliegue. No se puede cerrar ese gate con el positivo del renderer
+por separado. Si el conjunto excede las cuotas, volver con una solución local más
+pequeña o pedir aprobación de la alternativa; no enviar cifras a QuickChart
+automáticamente.
+
+Fuentes primarias: [arquitectura del user runtime](https://github.com/supabase/edge-runtime),
+[proxy de ejemplo](https://github.com/supabase/edge-runtime/blob/main/examples/main/index.ts),
+[CLI y políticas](https://github.com/supabase/edge-runtime/blob/main/cli/src/flags.rs),
+[supervisor](https://github.com/supabase/edge-runtime/blob/main/crates/base/src/worker/pool.rs),
+[límites alojados](https://supabase.com/docs/guides/functions/limits) y
+[guía Wasm](https://supabase.com/docs/guides/functions/wasm).

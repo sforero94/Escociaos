@@ -76,7 +76,7 @@ snapshot/historial, HTML/CSV/PNG y el límite HTTP. El coordinador repite la sui
 completa. Se añadieron regresiones de CSV con espacios iniciales y de colores pie;
 las guardas históricas mantienen sus hashes y aserciones.
 
-Resultado del candidato local: **430 archivos y 8.927 pruebas verdes**. `npm run
+Resultado del candidato local: **431 archivos y 8.930 pruebas verdes**. `npm run
 lint` termina con cero errores y 873 advertencias existentes; `typecheck` y build
 pasan. Deno2.1.4 pasa los siete módulos nuevos y el grafo completo se resuelve con
 lock congelado. Un check adicional del bot completo devuelve 53 diagnósticos de
@@ -93,8 +93,11 @@ No son capturas de Telegram real ni aceptación de P6.
 
 [D3: mediciones y límites](esco-sql-p5-d3-spike.md) registra 15 procesos y
 600 dibujos warm, sin red. El RSS local no certifica el presupuesto de 256 MB de
-un user worker de Supabase. El daemon Docker local estaba apagado y no se ejecutó
-el ensayo equivalente de isolate. Hay que cerrar ese gate antes de activar SQL.
+un user worker de Supabase. En el primer corte no estaba disponible el daemon Docker. Después se ejecutaron
+45 peticiones y 180 PNG en un user isolate real con cuota de 256 MB y CPU de 2 s,
+sin red ni variables de entorno: pasaron frío, warm y concurrencia. Esto acredita
+el renderer aislado, no todo el grafo de make-server. El gate del grafo completo
+permanece pendiente antes de activar SQL.
 
 [Configuración y textos de aprobación](esco-sql-p5-configuracion.md): crear el
 secreto compartido, desplegar make-server desde el SHA revisado con el flag aún
@@ -104,3 +107,12 @@ No se vuelve a pedir aplicar194 ni desplegar esco-consultas, ya completados en P
 Sin usuarios reales, entrega Telegram real, llamadas de modelos, campañas dev/held,
 escrituras productivas ni nuevas migraciones. El pase manual de capturas con
 Santiago y las mediciones productivas siguen pendientes de la fase correspondiente.
+
+## Compatibilidad del receptor QA en Node20
+
+El transporte del fixture normaliza únicamente las cabeceras Content-Disposition
+antes de usar el parser FormData de Node20. Este parser rechazaba la forma compacta
+válida que genera grammY; Node24 y Deno2.1.4 aceptan los mismos bytes sin cambios.
+Las pruebas verifican que no se modifica ningún byte de archivo, incluso con texto
+parecido a cabeceras dentro del payload y bytes no UTF8. Un multipart incompleto
+sigue rechazado. No se alteró el código productivo ni las aserciones de PNG/CSV.

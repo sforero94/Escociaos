@@ -8,6 +8,7 @@ import ts from 'typescript';
 import * as grammy from 'grammy';
 import * as conversations from '@grammyjs/conversations';
 import { createClient } from '@supabase/supabase-js';
+import { leerMultipartTelegramQa } from './escoSqlP5QaMultipart';
 
 type Row = Record<string, unknown>;
 const DB = 'https://telegram-handler-fixture.invalid';
@@ -163,7 +164,7 @@ export async function fixture(options: Options = {}) {
         const request = new Request(input, { ...init, signal: undefined, duplex: 'half' } as RequestInit), url = new URL(request.url), method = url.pathname.split('/').pop()!;
         const payload: Row = {}, files: Record<string, Uint8Array> = {};
         if (request.headers.get('content-type')?.includes('multipart/form-data')) {
-          for (const [key, value] of await request.formData()) {
+          for (const [key, value] of await leerMultipartTelegramQa(request)) {
             if (typeof value === 'string') payload[key] = value;
             else { payload[key] = value.name; files[key] = new Uint8Array(await value.arrayBuffer()); }
           }
