@@ -1,7 +1,7 @@
 # P4 — aplicación 194 y esco-consultas v15
 
 Fecha: 2026-11-09. [PR #476](https://github.com/sforero94/Escociaos/pull/476).
-Santiago aprobó explícitamente la 194 ensayada, el despliegue por CLI2.117.0
+Santiago aprobó explícitamente la 194 ensayada, el despliegue por CLI 2.117.0
 `--use-api` con verify_jwt=true y la pausa controlada de consultas SQL.
 No autorizó cambios de secretos, flags ni despliegue de make-server.
 
@@ -21,10 +21,10 @@ nota es solo documentación y no sustituye el SHA desplegado.
 
 ## Ensayo y preflight
 
-Barrido de294ramas:194solo en P4. Ledger/respaldos sin194; catálogo14vistas/174columnas.
+Barrido de 294 ramas: la 194 aparece solo en P4. Ledger/respaldos sin 194; catálogo de 14 vistas y 174 columnas.
 La configuración leída expone `public, graphql_public`, fuera del esquema privado.
 El paquete exacto, con solo BEGIN/COMMIT exteriores retirados para la sonda,
-pasó29/29controles y devolvió deshecho=true, error/sqlstate nulos. QA separado
+pasó 29/29 controles y devolvió deshecho=true, error/sqlstate nulos. QA separado
 repitió el paquete local y reconcilió los objetos completos antes/después por RO:
 ledger, defaultACL, rawRPC y vistas idénticos; esquema y RPC nuevas ausentes.
 El preflight de aplicación volvió a coincidir con ese estado.
@@ -39,7 +39,7 @@ migraciones con ledger. Después, por el conector RO, se verificaron:
 - RPC web: EXECUTE para authenticated; actor: EXECUTE para service_role.
 - RPC anterior: PUBLIC/anon/authenticated/service_role sin EXECUTE.
 - Esquema privado sin USAGE PUBLIC/anon y funciones nuevas sin EXECUTE PUBLIC.
-- Definición anterior sin cambios;14vistas y174columnas/tipos sin cambios.
+- Definición anterior sin cambios; 14 vistas y 174 columnas/tipos sin cambios.
 
 Luego se ejecutó desde el árbol limpio aprobado:
 
@@ -47,10 +47,10 @@ Luego se ejecutó desde el árbol limpio aprobado:
 npx supabase@2.117.0 functions deploy esco-consultas --project-ref ywhtjwawnkeqlwxbvgup --use-api
 ```
 
-La lectura posterior confirma v15ACTIVE y verify_jwt=true. Gateway health sin JWT
-→401; JWT inválido→401; JWT anon público existente→200 con ok=true y nombre de
+La lectura posterior confirma v15 ACTIVE y verify_jwt=true. Gateway health sin JWT
+→ 401; JWT inválido → 401; JWT anon público existente → 200 con ok=true y nombre de
 función correcto: el worker nuevo arranca. La pausa SQL terminó tras esta comprobación.
-make-server permanece v297, verify_jwt=false y bundlehash idéntico al preflight.
+make-server permanece v297, verify_jwt=false y hash del bundle idéntico al preflight.
 No se cambiaron secretos ni flags. No se desplegó frontend ni make-server.
 
 La CLI publicó desde el árbol aprobado y el hash de bundle es nuevo. La descarga
@@ -60,7 +60,7 @@ comparación byte a byte entre el body descargado y las fuentes locales.
 ## Límites y siguiente paso
 
 Los positivos completos HTTP→parser→RPC/compilador y RLS son de QA local sintética
-(8.842tests y CI del candidato verdes; lint0errores). En producción se verificaron
+(8.842 pruebas y CI del candidato verdes; lint sin errores). En producción se verificaron
 instalación, ACL y arranque; no se consultaron perfiles/filas reales para una respuesta
 útil ni se llamó al modelo. No hay tasa nueva de calidad o aceptación D6.
 
