@@ -181,19 +181,16 @@ debe aprobar al autorizar el candidato productivo concreto:
   conocido. Cualquier campaña dev real requiere autorización de envío y presupuesto
   nuevos y concretos. Held sigue cerrado hasta D6. No se heredan gastos ni aceptación.
 
-**Texto de alcance aprobado en esta sesión, todavía no para producción:**
+**Aprobación literal de Santiago en esta sesión:**
 
-> Apruebo revisar D2 y ampliar P4 para corregir el ejecutor compartido de web y
-> Telegram con parser de SQL, representación relacional validada y compilador en
-> PostgreSQL, conservando `consultar_sql({sql, proposito})` y las vistas de negocio.
-> Autorizo el spike y la implementación local, con QA separado y cierre planificado
-> de la RPC arbitraria anterior. No autorizo todavía aplicar migraciones, desplegar,
-> crear/cambiar secretos, activar flags, ejecutar campañas pagadas ni abrir held.
+> Apruebo revisar D2 y ampliar P4 para implementar y probar localmente el ejecutor compartido, con QA separado y cierre planificado de la RPC anterior.
+
+Esta aprobación cubre el candidato local. Las acciones productivas, secretos,
+flags, campañas pagadas y held conservan sus puertas separadas.
 
 La ampliación de pruebas detenida por revisión automática no se reintenta por otra
 vía; esa limitación no queda levantada por este texto de alcance. Si fuese esencial
 retomarla, debe resolverse expresamente antes de ejecutar esa acción.
 
-P4 está en implementación local tras esa aprobación. La entrega debe aportar evidencia
-del compilador y sus garantías; la aplicación productiva, el despliegue, los secretos,
-los flags, las campañas pagadas y held conservan sus puertas separadas.
+P4 tiene un candidato implementado y probado localmente. La [entrega y evidencia](esco-sql-p4-ejecutor-compartido.md)
+registra sus verificaciones y límites; no acredita aceptación productiva.
