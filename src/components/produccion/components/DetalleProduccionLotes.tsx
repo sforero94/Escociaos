@@ -8,7 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { ComparacionLoteCosecha, DetalleEtapaLote } from '@/utils/calculosProduccionAnalisis';
-import { formatoFechaCorte, formatoKgEtapa, textoDiferenciaEtapas } from '@/utils/calculosProduccionAnalisis';
+import { formatoCambioNeto, formatoFechaCorte, formatoKgEtapa, NOTA_CAMBIO_NETO } from '@/utils/calculosProduccionAnalisis';
 import type { CosechaIdentidad } from '../../../types/produccion';
 
 interface DetalleProduccionLotesProps {
@@ -145,11 +145,8 @@ export function DetalleProduccionLotes({
                       Clasificado {formatoKgEtapa(etapa?.clasificado_kg ?? null)} · Despachado{' '}
                       {formatoKgEtapa(etapa?.despachado_kg ?? null)}
                     </p>
-                    <p className="text-sm text-brand-brown/70 mt-1">
-                      {textoDiferenciaEtapas(
-                        etapa?.diferencia_entrada_clasificacion_kg ?? null,
-                        etapa?.diferencia_sin_despacho_kg ?? null,
-                      )}
+                    <p className="text-sm text-brand-brown/70 mt-1" title={NOTA_CAMBIO_NETO}>
+                      Cambio neto {formatoCambioNeto(etapa?.despachado_kg ?? null, entrada)}
                     </p>
                     <p className="text-sm text-brand-brown/60 mt-1">{textoRespaldo(etapa)}</p>
                   </article>
@@ -168,7 +165,7 @@ export function DetalleProduccionLotes({
                     <TableHead>Entrada kg</TableHead>
                     <TableHead>Clasificado kg</TableHead>
                     <TableHead>Despachado kg</TableHead>
-                    <TableHead>Diferencia kg</TableHead>
+                    <TableHead title={NOTA_CAMBIO_NETO}>Cambio neto %</TableHead>
                     <TableHead>Respaldo</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -196,11 +193,8 @@ export function DetalleProduccionLotes({
                             formatoKgEtapa(etapa.despachado_kg)
                           )}
                         </TableCell>
-                        <TableCell>
-                          {textoDiferenciaEtapas(
-                            etapa?.diferencia_entrada_clasificacion_kg ?? null,
-                            etapa?.diferencia_sin_despacho_kg ?? null,
-                          )}
+                        <TableCell className="font-mono" title={NOTA_CAMBIO_NETO}>
+                          {formatoCambioNeto(etapa?.despachado_kg ?? null, entrada)}
                         </TableCell>
                         <TableCell className="text-brand-brown/70">{textoRespaldo(etapa)}</TableCell>
                       </TableRow>
@@ -227,8 +221,8 @@ export function DetalleProduccionLotes({
                       <TableCell className="font-mono">
                         {hayDesp ? formatoKgEtapa(totalDesp) : <CeldaVacia>Sin dato</CeldaVacia>}
                       </TableCell>
-                      <TableCell className="font-normal text-brand-brown/70">
-                        Las etapas no se suman entre sí.
+                      <TableCell className="font-mono" title={NOTA_CAMBIO_NETO}>
+                        {formatoCambioNeto(hayDesp ? totalDesp : null, total)}
                       </TableCell>
                       <TableCell className="font-normal text-brand-brown/70">
                         Cada etapa conserva su corte.
@@ -241,6 +235,9 @@ export function DetalleProduccionLotes({
           </div>
         );
       })}
+      <p className="text-sm sm:text-xs text-brand-brown/60" title={NOTA_CAMBIO_NETO}>
+        {NOTA_CAMBIO_NETO}. El total usa el despachado de la cosecha sobre su entrada.
+      </p>
     </section>
   );
 }
