@@ -1047,6 +1047,11 @@ Report: `escociaos-po/reports/2026-11-07-sabado-respuesta.md`.
   active Gerencia and active Administrador 9 lotes / 3,388 registros; profile-less session 0/0;
   Administrador simulated as inactive 0/0; still 12 policies, 0 inactive accounts.
   Evidence: `docs/esco2/m3-rls.md`.
+- **Esco SQL is the Esco 2.0 baseline (2026-11-08).** PR #464 (migration 192, `esco-consultas` v12 with `motor: 'sql'`) replaces the
+  planner approach; the planner stack stays in the repo but is no longer the line of work. Live access for Gerencia: page `/esco-sql`
+  (PR #467) and a second floating button next to the classic Esco one (PR #468); the classic Esco panel (`chat.tsx`) is untouched.
+  First measurement: 122 questions × 3 runs, 80,1 % correct — `docs/esco2/esco-sql-baseline-2026-11-08.md`. The eval runner is
+  `scripts/esco-sql-eval/`; the question bank, truth and answers are private (the repo is public) and live outside it.
 - Migration 189 (`aplicaciones_productos_alternativos`) is in the live ledger as
   `20261103001246`; it was applied outside this work. Its entry is in the numbered list
   above (added 2026-11-08, ESCO-168).
