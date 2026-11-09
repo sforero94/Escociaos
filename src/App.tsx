@@ -8,6 +8,7 @@ import { Layout } from './components/Layout';
 import { RouteErrorBoundary } from './components/shared/RouteErrorBoundary';
 import { Toaster } from './components/ui/sonner';
 import { ChatFAB } from './components/chat/ChatFAB';
+import { EscoSqlFAB } from './components/esco2/EscoSqlFAB';
 import { Loader2 } from 'lucide-react';
 
 // Local access checks must not ship in the production bundle.
@@ -268,12 +269,17 @@ function AppContent() {
   );
 }
 
-const AppChat = import.meta.env.DEV
-  ? function AppChatLocal() {
-    const pruebaLocal = useMatch('/esco2-prueba');
-    return pruebaLocal ? null : <ChatFAB />;
-  }
-  : ChatFAB;
+function AppChat() {
+  // La pantalla local de prueba (solo en desarrollo) no lleva botones flotantes.
+  const pruebaLocal = useMatch('/esco2-prueba');
+  if (import.meta.env.DEV && pruebaLocal) return null;
+  return (
+    <>
+      <ChatFAB />
+      <EscoSqlFAB />
+    </>
+  );
+}
 
 function App() {
   return (

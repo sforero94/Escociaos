@@ -25,13 +25,13 @@ type Turno =
  * Usa la función `esco-consultas` con `motor: 'sql'`. No reemplaza al Esco del panel lateral.
  * Cada respuesta trae el desplegable con las consultas que hizo el modelo.
  */
-export function EscoSqlBeta() {
+export function EscoSqlBeta({ compacto = false }: { compacto?: boolean } = {}) {
   const { user } = useAuth();
   if (!user) return null;
-  return <Conversacion key={user.id} usuarioId={user.id} />;
+  return <Conversacion key={user.id} usuarioId={user.id} compacto={compacto} />;
 }
 
-function Conversacion({ usuarioId }: { usuarioId: string }) {
+function Conversacion({ usuarioId, compacto }: { usuarioId: string; compacto: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [historial, setHistorial] = useState<MensajePruebaEsco2[]>([]);
   const [pregunta, setPregunta] = useState('');
@@ -107,13 +107,19 @@ function Conversacion({ usuarioId }: { usuarioId: string }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6 md:px-0">
+    <div className={compacto ? 'flex h-full min-h-0 flex-col gap-3 p-3' : 'mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6 md:px-0'}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-brand-brown">Esco SQL <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 align-middle text-xs font-medium text-primary">beta</span></h1>
-          <p className="text-sm text-muted-foreground">
-            Pregunta por los datos de la finca. Esco escribe una consulta de solo lectura, la ejecuta con tus permisos y responde con lo que devuelve. Abre «Consultas usadas» para revisar de dónde salió cada cifra.
-          </p>
+          {compacto ? (
+            <p className="text-sm text-muted-foreground">Abre «Consultas usadas» para ver de dónde salió cada cifra.</p>
+          ) : (
+            <>
+              <h1 className="text-2xl font-semibold text-brand-brown">Esco SQL <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 align-middle text-xs font-medium text-primary">beta</span></h1>
+              <p className="text-sm text-muted-foreground">
+                Pregunta por los datos de la finca. Esco escribe una consulta de solo lectura, la ejecuta con tus permisos y responde con lo que devuelve. Abre «Consultas usadas» para revisar de dónde salió cada cifra.
+              </p>
+            </>
+          )}
         </div>
         <Button variant="outline" className="min-h-11" onClick={nueva} disabled={!turnos.length && !enCurso}>
           <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -121,7 +127,7 @@ function Conversacion({ usuarioId }: { usuarioId: string }) {
         </Button>
       </header>
 
-      <section aria-label="Conversación" aria-live="polite" className="flex min-h-[40vh] flex-col gap-4">
+      <section aria-label="Conversación" aria-live="polite" className={compacto ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto' : 'flex min-h-[40vh] flex-col gap-4'}>
         {turnos.length === 0 && !enCurso ? (
           <div className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">
             <p className="mb-2 font-medium text-foreground">Ejemplos</p>
