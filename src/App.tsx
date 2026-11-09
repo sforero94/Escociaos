@@ -54,6 +54,8 @@ const IngresosView = lazy(() => import('./components/finanzas/IngresosView').the
 const ReportesView = lazy(() => import('./components/finanzas/ReportesView').then(m => ({ default: m.ReportesView })));
 const ConfiguracionFinanzas = lazy(() => import('./components/finanzas/ConfiguracionFinanzas').then(m => ({ default: m.ConfiguracionFinanzas })));
 const PresupuestoView = lazy(() => import('./components/finanzas/presupuesto/PresupuestoView').then(m => ({ default: m.PresupuestoView })));
+const EscoSqlBeta = lazy(() => import('./components/esco2/EscoSqlBeta').then(m => ({ default: m.EscoSqlBeta })));
+const RoleGuard = lazy(() => import('./components/auth/RoleGuard').then(m => ({ default: m.RoleGuard })));
 const ProduccionDashboard = lazy(() => import('./components/produccion/ProduccionDashboard').then(m => ({ default: m.ProduccionDashboard })));
 const HatoDashboard = lazy(() => import('./components/hato/HatoDashboard').then(m => ({ default: m.HatoDashboard })));
 const AnimalesList = lazy(() => import('./components/hato/AnimalesList').then(m => ({ default: m.AnimalesList })));
@@ -216,6 +218,7 @@ function LayoutRoutes() {
           </Route>
 
           {/* ===== Siempre disponibles ===== */}
+          <Route path="esco-sql" element={<RoleGuard allowedRoles={['Gerencia']}><EscoSqlBeta /></RoleGuard>} />
           <Route path="configuracion" element={<ConfiguracionDashboard />} />
           <Route path="ventas" element={<ComingSoon moduleName="Ventas y Despachos" />} />
           <Route path="lotes" element={<ComingSoon moduleName="Gestión de Lotes" />} />
