@@ -1,9 +1,11 @@
-# Esco SQL — P4: ejecutor compartido (candidato local)
+# Esco SQL — P4: ejecutor compartido
 
 Santiago aprobó el 2026-11-09 revisar D2 y ampliar P4 a implementación y pruebas
 locales del ejecutor compartido, con QA separado. [Contrato aprobado](esco-sql-p4-revision-d2.md).
 Este candidato continúa el [PR #476](https://github.com/sforero94/Escociaos/pull/476)
-y depende de P2/P3. **La migración 194 está escrita y sin aplicar. No hay despliegue.**
+y depende de P2/P3. **194 aplicada y esco-consultas v15 desplegada el 2026-11-09**,
+tras ensayo y aprobación explícita de Santiago. [Liberación y verificación](esco-sql-p4-liberacion-2026-11-09.md).
+Las secciones de pruebas locales y puertas originales conservan el alcance del candidato previo a liberar.
 
 ## Qué cambia
 
@@ -94,7 +96,7 @@ aplicaciones de migración o cambios de flags. El evaluador Composio anterior no
 recorre la nueva RPC/compilador: [límite documentado](../../scripts/esco-sql-eval/README.md).
 No se atribuye a este candidato la tasa de P1 ni aceptación D6.
 
-## Puertas de liberación pendientes
+## Secuencia de liberación del candidato (194 y deploy completados)
 
 1. Revisar el PR y congelar su SHA. Antes de aplicar, repetir el preflight de ramas,
    ledger, esquema privado/respaldos, catálogo y permisos; confirmar que el esquema
