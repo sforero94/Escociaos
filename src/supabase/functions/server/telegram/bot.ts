@@ -1258,6 +1258,37 @@ function getBot(): Bot<BotContext> {
     await aplicarAjusteRondaYResponder(ctx, sb, excepcionId, true);
   });
 
+  // /esco_nueva: Esco deja de usar las preguntas anteriores. No borra mensajes: crea
+  // una conversación nueva, que getOrCreateTelegramConversation elige por ser la más
+  // reciente, y retira los botones de sugerencias de la conversación anterior.
+  bot.command("esco_nueva", async (ctx) => {
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("consultas")) {
+      await ctx.reply("No tienes acceso a consultas. Usa los comandos del menú.");
+      return;
+    }
+    try {
+      const sb = getSupabaseAdmin();
+      const resuelto = exigirUsuarioIdVinculado(
+        await resolverUsuarioTelegram(adaptarIdentidadEscoSql(sb), ctx.from?.id),
+      );
+      if (!resuelto.ok) {
+        await ctx.reply(mensajeResolverUsuarioTelegram(resuelto.motivo));
+        return;
+      }
+      const { error } = await sb
+        .from("chat_conversations")
+        .insert({ user_id: resuelto.usuarioId, title: "Telegram" });
+      if (error) throw new Error(error.message);
+      ctx.session.escoSql = undefined;
+      await ctx.reply(
+        "Listo. Empecé una conversación nueva: Esco ya no usa tus preguntas anteriores.",
+      );
+    } catch (err) {
+      console.error("[Telegram] esco_nueva:", err instanceof Error ? err.message : err);
+      await ctx.reply("No pude empezar una conversación nueva. Intenta de nuevo.");
+    }
+  });
+
   bot.command("ayuda", async (ctx) => {
     await ctx.reply(
       [
@@ -2408,6 +2439,8 @@ function getBot(): Bot<BotContext> {
       leerHistorial: async (conversationId) => {
         const { data, error } = await sb.from("chat_messages")
           .select("id,role,content,metadata,created_at").eq("conversation_id", conversationId)
+          // Solo turnos SQL: un mensaje de Esco 1.0 no gasta el cupo de 20 filas.
+          .contains("metadata", { motor: "sql" })
           .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(20);
         if (error) throw new Error("ESCO_SQL_HISTORY_FAILED");
         return (data ?? []).reverse();
@@ -2547,6 +2580,7 @@ function getBot(): Bot<BotContext> {
     { command: "proponer", description: "Proponer un ajuste de inventario" },
     { command: "aprobar", description: "Aprobar o desestimar ajustes de inventario" },
     { command: "cancelar", description: "Cancelar operación actual" },
+    { command: "esco_nueva", description: "Empezar una conversación nueva con Esco" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));
 

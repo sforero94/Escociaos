@@ -6,16 +6,72 @@ import {
 } from "./escoSqlContrato.ts";
 export const seleccionarMotorTelegram = (valor: unknown): boolean =>
   valor === "sql";
+/** Igual que MAX_HISTORIAL_SQL y MAX_TEXTO_HISTORIAL de src/utils/escoSql/loop.ts. */
+const MAX_MENSAJES_HISTORIAL_SQL = 10;
+const MAX_TEXTO_HISTORIAL_SQL = 4000;
+
+/**
+ * Copia literal de `textoHistorialSql` (src/utils/escoSql/loop.ts): el texto de la
+ * respuesta más el SQL que la produjo, para que un seguimiento («¿y el año pasado?»)
+ * llegue con el mismo contexto que en la web. La paridad la fija
+ * escoSqlTelegramHistorial.test.ts.
+ */
+export function textoHistorialTelegramSql(
+  respuesta: string,
+  consultas: { sql: string }[],
+): string {
+  if (!consultas.length) return respuesta.slice(0, MAX_TEXTO_HISTORIAL_SQL);
+  const bloque = `\n\n[Consultas SQL que usé en este turno]\n${
+    consultas.map((c) => c.sql).join("\n---\n")
+  }`;
+  const sobra = MAX_TEXTO_HISTORIAL_SQL - bloque.length;
+  if (sobra < 200) {
+    return `${respuesta.slice(0, MAX_TEXTO_HISTORIAL_SQL - 200)}${
+      bloque.slice(0, 200)
+    }`;
+  }
+  return `${respuesta.slice(0, sobra)}${bloque}`;
+}
+
+function consultasDeMetadata(metadata: Record<string, unknown>): { sql: string }[] {
+  if (!Array.isArray(metadata.consultas)) return [];
+  return metadata.consultas.filter((c): c is { sql: string } =>
+    esObjetoSql(c) && typeof c.sql === "string" && c.sql.length > 0
+  ).map((c) => ({ sql: c.sql }));
+}
+
+/**
+ * Historial que se manda al motor SQL: solo pares pregunta → respuesta SQL completos.
+ * Quedan fuera los mensajes de Esco 1.0 (una pregunta vieja sin su respuesta confunde
+ * al modelo) y la pregunta de un turno que falló y no guardó respuesta.
+ */
 export function historialEscoSql(filas: unknown[]): HistorialTelegramSql[] {
-  return filas.filter(esObjetoSql).filter((f) =>
+  const sql = filas.filter(esObjetoSql).filter((f) =>
     typeof f.content === "string" &&
-    (f.role === "user" ||
-      (f.role === "assistant" && esObjetoSql(f.metadata) &&
-        f.metadata.motor === "sql"))
-  ).slice(-12).map((f) => ({
-    rol: f.role as "user" | "assistant",
-    texto: (f.content as string).slice(0, 4000),
-  }));
+    (f.role === "user" || f.role === "assistant") &&
+    esObjetoSql(f.metadata) && f.metadata.motor === "sql"
+  );
+  const pares: HistorialTelegramSql[] = [];
+  for (let i = 0; i < sql.length - 1; i++) {
+    const pregunta = sql[i];
+    const respuesta = sql[i + 1];
+    if (pregunta.role !== "user" || respuesta.role !== "assistant") continue;
+    pares.push(
+      {
+        rol: "user",
+        texto: (pregunta.content as string).slice(0, MAX_TEXTO_HISTORIAL_SQL),
+      },
+      {
+        rol: "assistant",
+        texto: textoHistorialTelegramSql(
+          respuesta.content as string,
+          consultasDeMetadata(respuesta.metadata as Record<string, unknown>),
+        ),
+      },
+    );
+    i++;
+  }
+  return pares.slice(-MAX_MENSAJES_HISTORIAL_SQL);
 }
 export async function idTurnoTelegramSql(
   usuarioId: string,
