@@ -43,7 +43,7 @@ lo lee.
   cuando hay fecha. No dibuja ceros en huecos ni después del último movimiento.
   Abierta/cerrada no está en el registro.
 
-## Etapas por lote (migración 193, sin aplicar)
+## Etapas por lote (migración 196, sin aplicar)
 
 `produccion_etapas_lote` guarda clasificado o despachado por lote y cosecha,
 con su `fecha_corte`. No trae datos y no se aplica sola. El tablero la lee;

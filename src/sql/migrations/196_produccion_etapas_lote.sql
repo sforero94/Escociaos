@@ -1,4 +1,4 @@
--- 193 — Totales de etapa por lote y cosecha. NO APLICADA.
+-- 196 — Totales de etapa por lote y cosecha. NO APLICADA.
 --
 -- Santiago aprueba esta migración antes de que corra en ninguna base.
 -- No trae datos. La carga la hace Escocia Bot después de aplicarla.
