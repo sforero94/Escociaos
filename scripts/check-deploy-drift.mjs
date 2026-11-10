@@ -20,6 +20,7 @@
 //                              funcion que importa codigo de src/ (esco-consultas) lista
 //                              tambien esas carpetas: un commit ahi tambien es deriva.
 //   EDGE_FUNCTION_VERIFY_JWT   'false' (por defecto) o 'true': el valor esperado.
+//   EDGE_FUNCTION_EXPECTED_SECRET nombre esperado; solo presencia, nunca su valor.
 //   EDGE_FUNCTION_HEALTH_ANON  estado esperado del GET /health anonimo (por defecto 200).
 //                              Con verify_jwt=true el gateway responde 401, y ese 401
 //                              es la prueba de que la puerta del gateway esta puesta.
@@ -426,6 +427,23 @@ export async function datosDelDespliegue({ proyecto, funcion, token }) {
   };
 }
 
+/** Presence only: the API response values are never returned, logged or persisted. */
+export async function secretoEsperadoPresente({ proyecto, token, nombre }) {
+  const url = `https://api.supabase.com/v1/projects/${proyecto}/secrets`;
+  const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!respuesta.ok) throw new Error(mensajeErrorManagementApi(respuesta.status, respuesta.statusText, url));
+  const lista = await respuesta.json();
+  if (!Array.isArray(lista) || !lista.every((s) => s && typeof s.name === 'string')) throw new Error('la API no devolvió una lista válida de nombres de secretos');
+  return lista.some((s) => s.name === nombre);
+}
+
+/** Before provisioning, report a pending gate; after first sighting, removal is drift. */
+export function evaluarSecretoEsperado(presente, vistoAntes) {
+  if (presente) return { ok: true, aviso: false, visto: true, motivo: 'secreto esperado presente' };
+  if (vistoAntes) return { ok: false, aviso: false, visto: true, motivo: 'DERIVA DE SECRETO: el secreto esperado desapareció después de configurarse' };
+  return { ok: true, aviso: true, visto: false, motivo: 'secreto esperado aún ausente: puerta de Telegram cerrada, configuración pendiente de aprobación' };
+}
+
 async function main() {
   const proyecto = process.env.SUPABASE_PROJECT_REF || PROYECTO_POR_DEFECTO;
   const funcion = process.env.EDGE_FUNCTION_SLUG || FUNCION_POR_DEFECTO;
@@ -455,13 +473,19 @@ async function main() {
 
   const rutaEstado = rutaEstadoDriftPorHash(funcion);
   const estadoPrevio = leerEstadoPrevio(rutaEstado);
+  const nombreSecreto = process.env.EDGE_FUNCTION_EXPECTED_SECRET;
+  const secretosVistos = { ...(estadoPrevio?.secretosVistos ?? {}) };
+  const secreto = nombreSecreto
+    ? evaluarSecretoEsperado(await secretoEsperadoPresente({ proyecto, token, nombre: nombreSecreto }), secretosVistos[nombreSecreto] === true)
+    : undefined;
+  if (nombreSecreto && secreto) secretosVistos[nombreSecreto] = secreto.visto;
   const { hayDerivaPorHash, aviso, motivo } = evaluarDerivaPorHash({
     hashActual: hash,
     commitActual: commitSha,
     estadoPrevio,
     hayDerivaReloj: hayDeriva,
   });
-  escribirEstadoActual(rutaEstado, { commit: commitSha, hash });
+  escribirEstadoActual(rutaEstado, { commit: commitSha, hash, ...(nombreSecreto ? { secretosVistos } : {}) });
 
   console.log(`edge function : ${funcion} (proyecto ${proyecto})`);
   console.log(`desplegada    : ${desplegado.toISOString()}`);
@@ -478,7 +502,12 @@ async function main() {
   console.log(`health anonimo: ${health.motivo}`);
   if (!jwt.ok) console.error(`\n${jwt.motivo}.`);
   if (!health.ok) console.error(`\n${health.motivo}.`);
-  const produccionRota = !jwt.ok || !health.ok;
+  if (secreto) {
+    console.log(`secreto       : ${nombreSecreto}: ${secreto.motivo}`);
+    if (!secreto.ok) console.error(secreto.motivo);
+    else if (secreto.aviso) console.warn(secreto.motivo);
+  }
+  const produccionRota = !jwt.ok || !health.ok || Boolean(secreto && !secreto.ok);
 
   if (!hayDeriva && !hayDerivaPorHash) {
     if (aviso) {

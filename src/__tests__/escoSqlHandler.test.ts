@@ -46,7 +46,8 @@ describe('esco-consultas — motor sql', () => {
     const c = await res.json();
     expect(c).toMatchObject({ motor: 'sql', respuesta: '12,5 jornales.', hoy: '2026-11-08' });
     expect(c.consultas).toHaveLength(1);
-    expect(rpc).toHaveBeenCalledWith('esco_sql_lectura', { p_sql: 'select sum(jornales) j from v_esco_jornales' });
+    expect(rpc).toHaveBeenCalledWith('esco_sql_consultar_v1', { p_consulta: expect.objectContaining({ version: 1, query: expect.objectContaining({ body: expect.objectContaining({ columns: [expect.objectContaining({ alias: 'j', expr: expect.objectContaining({ kind: 'aggregate', fn: 'sum' }) })] }) }) }) });
+    expect(rpc.mock.calls[0][1]).not.toHaveProperty('p_sql');
   });
 
   it('un rol que no es Gerencia recibe 403 y no se llama ni al modelo ni a la RPC', async () => {
@@ -64,11 +65,11 @@ describe('esco-consultas — motor sql', () => {
     expect(res.status).toBe(403);
   });
 
-  it('sin la migración 192 (PGRST202) responde 503 con un mensaje claro', async () => {
+  it('sin la migración 194 (PGRST202) responde 503 con un mensaje claro', async () => {
     const rpc: Rpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
     const res = await manejar(peticion({ pregunta: 'x', motor: 'sql' }), deps(cliente('Gerencia', rpc), modelo(consulta('select 1'))));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toContain('192');
+    expect((await res.json()).error).toContain('194');
   });
 
   it('un error de Postgres de la consulta vuelve al modelo y se registra en consultas', async () => {
@@ -76,7 +77,7 @@ describe('esco-consultas — motor sql', () => {
       .fn<Rpc>()
       .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column "x" does not exist' } })
       .mockResolvedValueOnce({ data: { filas: [{ n: 3 }], n_filas: 1, truncado: false }, error: null });
-    const res = await manejar(peticion({ pregunta: 'x', motor: 'sql' }), deps(cliente('Gerencia', rpc), modelo(consulta('select x'), consulta('select 3 n'), texto('Son 3.'))));
+    const res = await manejar(peticion({ pregunta: 'x', motor: 'sql' }), deps(cliente('Gerencia', rpc), modelo(consulta('select 1 AS x'), consulta('select 3 n'), texto('Son 3.'))));
     const c = await res.json();
     expect(c.consultas.map((q: { error: string | null }) => q.error)).toEqual(['column "x" does not exist', null]);
   });

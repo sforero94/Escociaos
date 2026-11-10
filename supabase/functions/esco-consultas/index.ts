@@ -26,6 +26,10 @@ Deno.serve((req) =>
         global: { headers: { Authorization: `Bearer ${jwt}` } },
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       }) as unknown as ClienteUsuario,
+    crearClienteServicio: () =>
+      createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      }) as unknown as ClienteUsuario,
     registrar: (evento) => console.log(JSON.stringify(evento)),
   }),
 );

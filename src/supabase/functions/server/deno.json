@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "@esco-sql/": "../../../utils/escoSql/",
+    "@resvg/resvg-wasm": "npm:@resvg/resvg-wasm@2.6.2"
+  },
+  "lock": "./deno.lock"
+}

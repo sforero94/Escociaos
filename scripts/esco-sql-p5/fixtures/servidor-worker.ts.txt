@@ -1,0 +1,67 @@
+import https from 'node:https';
+import http from 'node:http';
+import { Writable, Readable } from 'node:stream';
+import { Buffer } from 'node:buffer';
+const bootstrapStart=performance.now();
+const ISOLATE=crypto.randomUUID(), DB='https://synthetic.invalid';
+const USERS={123:'11111111-1111-4111-8111-111111111111',124:'33333333-3333-4333-8333-333333333333'};
+const CONVS={123:'22222222-2222-4222-8222-222222222222',124:'44444444-4444-4444-8444-444444444444'};
+const sessions=new Map(),history=new Map(),stats=new Map();let msg=100,updates=0,count=0;const rejected=[];let sqlCalls=0,nodeHttpCalls=0,nodeDenied=0;const wireBytes=[];
+function assert(ok,m){if(!ok)throw Error(m);}
+function s(chat){if(!stats.has(chat))stats.set(chat,{messages:0,html:0,photos:0,csv:0,sql:0,pngDimensions:[]});return stats.get(chat);}
+const realServe=Deno.serve;let captured;
+Deno.serve=(handler)=>{assert(!captured,'multiple bootstrap handlers');captured=handler;return{finished:Promise.resolve(),shutdown:async()=>{},ref(){},unref(){}};};
+globalThis.WebSocket=class{constructor(){rejected.push('WebSocket');throw Error('WebSocket forbidden');}};
+Deno.connect=async()=>{rejected.push('connect');throw Error('connect forbidden');};Deno.connectTls=Deno.connect;
+function sqlBody(csv){const forms=csv?['bar','line','pie']:['bar','line','area','pie'];const bloques=forms.map((forma,index)=>{const y=forma==='pie'?['v0']:Array.from({length:6},(_,i)=>'v'+i);return{tipo:'grafica',consulta:index+1,truncado:true,titulo:'Gráfica sintética '+forma,forma,x:'categoria',y,formato:'numero',datos:Array.from({length:60},(_,i)=>Object.fromEntries([['categoria','Categoría '+i],...y.map((key,j)=>[key,forma==='pie'?i+1:(i%11===0?null:(i*31+j*17)%180-40)])]))};});if(csv)bloques.push({tipo:'tabla',consulta:4,truncado:false,titulo:'Tabla sintética máxima',columnas:Array.from({length:12},(_,i)=>({columna:'c'+i,etiqueta:'Columna '+i,formato:'texto'})),filas:Array.from({length:500},(_,r)=>Object.fromEntries(Array.from({length:12},(_,c)=>['c'+c,('CELL_'+r+'_'+c+'_').padEnd(600,'x')]))),total_filas:500});return{motor:'sql',texto:('**Resumen sintético** <&> árbol. ').repeat(2100).slice(0,64000).padEnd(64000,'x'),bloques,sugerencias:['Ver detalle'],consultas:Array.from({length:4},(_,i)=>({sql:'SELECT 1 AS control',proposito:'Control sintético',n_filas:i===3&&csv?500:60,truncado:i!==3||!csv,error:null,ms:1})),ms:2};}
+globalThis.fetch=async(input,init)=>{
+ const req=new Request(input,init),url=new URL(req.url);
+ if(url.origin==='https://api.telegram.org'){
+  const method=url.pathname.split('/').pop();assert(['sendMessage','sendChatAction','setMyCommands','sendPhoto','sendDocument','editMessageReplyMarkup','answerCallbackQuery'].includes(method),'Unknown Telegram method');let body={},files={};
+  if(req.headers.get('content-type')?.includes('multipart/form-data')){const form=await req.formData();for(const[k,v]of form){if(typeof v==='string')body[k]=v;else files[k]=new Uint8Array(await v.arrayBuffer());}}
+  else body=await req.json();const chat=Number(body.chat_id??123),st=s(chat);
+  if(method==='sendMessage'){assert(typeof body.text==='string'&&body.text.length<=4096,'Telegram text limit');st.messages++;if(body.parse_mode==='HTML')st.html++;}
+  if(method==='sendPhoto'){const ref=String(body.photo);assert(ref.startsWith('attach://'),'Photo attachment reference');const b=files[ref.slice(9)];assert(b&&[137,80,78,71,13,10,26,10].every((v,i)=>b[i]===v),'Real PNG signature');const dv=new DataView(b.buffer,b.byteOffset,b.byteLength);st.photos++;assert(dv.getUint32(16)===720&&dv.getUint32(20)>=480&&dv.getUint32(20)<=1100,'PNG dimensions');st.pngDimensions.push([dv.getUint32(16),dv.getUint32(20)]);}
+  if(method==='sendDocument'){const ref=String(body.document);assert(ref.startsWith('attach://'),'CSV attachment reference');const b=files[ref.slice(9)];assert(b,'CSV file');const lines=new TextDecoder().decode(b).replace(/^\uFEFF/,'').split('\r\n');assert(lines.length===501&&lines.every(l=>(l.match(/"(?:[^"]|"")*"/g)||[]).length===12),'CSV shape500x12');for(let r=0;r<500;r++){const cells=lines[r+1].split(',');for(let c=0;c<12;c++)assert(cells[c]==='"'+('CELL_'+r+'_'+c+'_').padEnd(600,'x')+'"','CSV exact cell '+r+'/'+c);}st.csv++;}
+  return Response.json({ok:true,result:['sendMessage','sendPhoto','sendDocument'].includes(method)?{message_id:++msg,date:1,chat:{id:chat,type:'private'},text:body.text}:true});
+ }
+ if(url.origin===DB&&url.pathname==='/functions/v1/esco-consultas'&&req.method==='POST'){
+  const body=await req.json();const user=body.usuario_id,chat=Object.keys(USERS).find(k=>USERS[k]===user);assert(chat,'Trusted user');assert(req.headers.get('authorization')==='Bearer synthetic-service-key'&&req.headers.get('x-esco-telegram-secret')==='synthetic-sql-secret'&&body.motor==='sql','Real SQL client auth contract');assert(Array.isArray(body.historial)&&body.historial.every(h=>Object.keys(h).length===2&&Object.keys(h).every(k=>['rol','texto'].includes(k))&&['user','assistant'].includes(h.rol)&&typeof h.texto==='string'),'History closed');if(s(Number(chat)).sql>0)assert(body.historial.length>0,'Warm history');s(Number(chat)).sql++;sqlCalls++;const reply=sqlBody(body.pregunta.includes('CASE_CSV'));const raw=JSON.stringify(reply);const wire=new TextEncoder().encode(raw).byteLength;assert(wire<4*1024*1024,'Wire limit');if(body.pregunta.includes('CASE_CSV'))assert(wire>3500000,'Near wire limit fixture');wireBytes.push({chat:Number(chat),csv:body.pregunta.includes('CASE_CSV'),bytes:wire});return new Response(raw,{headers:{'content-type':'application/json','content-length':String(wire)}});
+ }
+ if(url.origin!==DB||!/^\/rest\/v1\/[a-z_]+$/.test(url.pathname)){rejected.push(req.method+' '+url.origin+url.pathname);throw Error('Closed transport');}
+ const table=url.pathname.split('/').pop(),p=url.searchParams;let rows=[];
+ if(req.method==='POST'){
+  const b=await req.json();if(['telegram_sessions','telegram_conversations'].includes(table))sessions.set(table+':'+b.key,structuredClone(b.session));
+  else if(table==='chat_messages'){assert(typeof b.conversation_id==='string','Conversation ID');const h=history.get(b.conversation_id)||[];h.push({...b,created_at:new Date().toISOString()});history.set(b.conversation_id,h.slice(-20));}
+  else{rejected.push('POST:'+table);throw Error('Unknown persistence');}return new Response(null,{status:201});
+ }
+ assert(req.method==='GET','Only closed reads');
+ if(table==='telegram_usuarios'){const chat=Number(p.get('telegram_id')?.slice(3));assert(USERS[chat],'Known Telegram account');rows=[{id:'linked-'+chat,telegram_id:chat,activo:true,usuario_id:USERS[chat],nombre_display:'Cuenta sintética',rol_bot:'gerencia',modulos_permitidos:['consultas']}];}
+ else if(table==='usuarios'){const id=p.get('id')?.slice(3);assert(Object.values(USERS).includes(id),'Known profile');rows=[{id,rol:'Gerencia',activo:true}];}
+ else if(['telegram_sessions','telegram_conversations'].includes(table)){const value=sessions.get(table+':'+p.get('key')?.slice(3));rows=value?[{session:value}]:[];}
+ else if(table==='chat_conversations'){const user=p.get('user_id')?.slice(3),chat=Object.keys(USERS).find(k=>USERS[k]===user);assert(chat,'Conversation owner');rows=[{id:CONVS[chat]}];}
+ else if(table==='chat_messages'){rows=(history.get(p.get('conversation_id')?.slice(3))||[]).slice(-20).reverse();}
+ else{rejected.push('GET:'+table);throw Error('Unknown table');}
+ if(req.headers.get('accept')?.includes('vnd.pgrst.object+json'))return rows.length===1?Response.json(rows[0]):Response.json({code:'PGRST116'},{status:406});return Response.json(rows);
+};
+
+// Closed transport seam: grammY's Node adapter uses node-fetch/http(s), not global fetch.
+function closedNodeRequest(options, callback){
+ nodeHttpCalls++;const target=(options.hostname??options.host);if(target!=='api.telegram.org'){nodeDenied++;rejected.push('node:'+target);throw Error('Node HTTP destination forbidden');}
+ const chunks=[];const headers=new Map(Object.entries(options.headers??{}));
+ const stream=new Writable({write(chunk,_encoding,done){chunks.push(Buffer.from(chunk));done();}});
+ stream.abort=()=>stream.destroy();stream.setTimeout=()=>stream;stream.flushHeaders=()=>{};stream.setHeader=(k,v)=>headers.set(k,v);stream.getHeader=(k)=>headers.get(k);stream.removeHeader=(k)=>headers.delete(k);
+ if(callback)stream.on('response',callback);
+ stream.on('finish',async()=>{try{
+  const url=(options.protocol??'https:')+'//'+(options.hostname??options.host)+(options.port?':'+options.port:'')+(options.path??'/');
+  const method=options.method??'GET';const data=Buffer.concat(chunks);const response=await globalThis.fetch(url,{method,headers:Object.fromEntries(headers),...(method==='GET'||method==='HEAD'?{}:{body:data})});
+  const result=Readable.from([Buffer.from(await response.arrayBuffer())]);result.statusCode=response.status;result.statusMessage='Synthetic';result.headers=Object.fromEntries(response.headers);result.httpVersion='1.1';stream.emit('response',result);
+ }catch(error){stream.emit('error',error);}});
+ return stream;
+}
+https.request=closedNodeRequest;http.request=closedNodeRequest;
+
+await import('../repo/supabase/functions/make-server-1ccce916/index.ts');
+Deno.serve=realServe;assert(typeof captured==='function','Real index bootstrap handler');const bootstrapMs=performance.now()-bootstrapStart;
+async function turn(chat,csv){const before=structuredClone(s(chat));const id=++updates;const update={update_id:id,message:{message_id:id,date:1,chat:{id:chat,type:'private'},from:{id:chat,is_bot:false,first_name:'Synthetic'},text:csv?'CASE_CSV synthetic':'CASE_GRAPH synthetic'}};const r=await captured(new Request('http://local.invalid/make-server-1ccce916/telegram/webhook',{method:'POST',headers:{'content-type':'application/json','X-Telegram-Bot-Api-Secret-Token':'synthetic-webhook-secret'},body:JSON.stringify(update)}));assert(r.status===200,'Real webhook HTTP '+r.status);const after=s(chat);assert(after.sql-before.sql===1,'Exactly one SQL call');assert(after.photos-before.photos===(csv?3:4),'Expected real PNG count');assert(after.csv-before.csv===(csv?1:0),'Expected CSV count');assert(after.html-before.html>=16,'Maximum HTML chunks');return{chat,csv,sql:after.sql-before.sql,photos:after.photos-before.photos,csvs:after.csv-before.csv,html:after.html-before.html,pngDimensions:after.pngDimensions.slice(before.pngDimensions.length)};}
+realServe(async(req)=>{const start=performance.now();count++;try{const health=await captured(new Request('http://local.invalid/make-server-1ccce916/health'));assert(health.status===200,'Health boot');const mode=new URL(req.url).searchParams.get('mode');const turns=mode==='parallel'?await Promise.all([turn(123,false),turn(124,true)]):[await turn(123,mode==='csv')];assert(rejected.length===0,'No rejected I/O');return Response.json({isolateId:ISOLATE,requestCount:count,bootstrapMs,ms:performance.now()-start,health:health.status,turns,sqlCalls,nodeHttpCalls,nodeDenied,wireBytes:wireBytes.slice(-4),fakeDatabaseRows:[...history.values()].reduce((n,h)=>n+h.length,0),maxFakeRowsPerConversation:Math.max(0,...[...history.values()].map(h=>h.length)),rejected,memory:Deno.memoryUsage()});}catch(error){return Response.json({error:String(error),isolateId:ISOLATE,requestCount:count,rejected},{status:500});}});

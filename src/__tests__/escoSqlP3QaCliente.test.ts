@@ -29,7 +29,7 @@ function escenario(opciones: { ajena?: boolean; errorGuardar?: boolean } = {}) {
   };
   vi.mocked(getSupabase).mockReturnValue(cliente as unknown as ReturnType<typeof getSupabase>);
   const respuestas = [
-    modelo('', [{ nombre: 'consultar_sql', argumentos: JSON.stringify({ sql: 'select serie,total from datos_sinteticos', proposito: 'Serie sintética' }) }]),
+    modelo('', [{ nombre: 'consultar_sql', argumentos: JSON.stringify({ sql: 'SELECT nombre AS serie, valor AS total FROM v_esco_gastos', proposito: 'Serie sintética' }) }]),
     modelo('', [{ nombre: 'mostrar_visual', argumentos: JSON.stringify({ tipo: 'tabla', consulta: 1, titulo: 'Detalle sintético', columnas: [{ columna: 'serie', etiqueta: 'Serie', formato: 'texto' }, { columna: 'total', etiqueta: 'Total', formato: 'numero' }] }) }]),
     modelo(JSON.stringify({ texto: 'Detalle verificado', sugerencias: ['Ver tendencia'] })),
   ];

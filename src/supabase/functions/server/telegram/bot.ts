@@ -12,7 +12,12 @@ import { conversations, createConversation } from "npm:@grammyjs/conversations@2
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { Context as HonoContext } from "npm:hono";
 
-import type { BotContext, TelegramUsuario } from "./types.ts";
+import type { BotContext as BotContextBase, TelegramUsuario } from "./types.ts";
+import type { EstadoBotonesSql } from "./escoSqlSesion.ts";
+// SQL session state is local to this adapter; shared capture types remain frozen.
+type BotContext = BotContextBase & {
+  session: BotContextBase["session"] & { escoSql?: EstadoBotonesSql };
+};
 import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
@@ -42,6 +47,10 @@ import { contextoDesdeHistorial, type ContextoCohorte } from "../escoCohorteApli
 import { llmToolLoop, getSystemPrompt, conservarCohorteAplicaciones } from "../chat.tsx";
 import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 import { procesarRespuestaAlertaTelegram } from "./responderAlertaHato.ts";
+import { seleccionarMotorTelegram } from "./escoSqlCliente.ts";
+import { autorizarPerfilEscoSql, adaptarIdentidadEscoSql } from "./escoSqlAcceso.ts";
+import { manejarPreguntaTelegramSql, manejarCallbackTelegramSql, type DependenciasFlujoSql } from "./escoSqlFlujo.ts";
+
 
 // --- Ronda de inventario (Fase 3, Telegram/Uriel) ---------------------------
 // docs/brief_tecnico_verificacion_inventario.md §5/§7/§13. Pipeline de voz
@@ -2098,7 +2107,7 @@ function getBot(): Bot<BotContext> {
     role: string,
     content: string,
     metadata?: Record<string, unknown>,
-    messageId = crypto.randomUUID(),
+    messageId: string = crypto.randomUUID(),
   ): Promise<string> {
     const sb = getSupabaseAdmin();
     const { error } = await sb.from("chat_messages").insert({
@@ -2385,6 +2394,36 @@ function getBot(): Bot<BotContext> {
     await aplicarAjusteRondaYResponder(ctx, sb, pendiente.excepcionId, false);
   });
 
+  // P5: solo el último fallback se desvía. Capturas, ronda y alertas conservan su orden.
+  function dependenciasTelegramSql(ctx: BotContext): DependenciasFlujoSql {
+    const sb = getSupabaseAdmin();
+    return {
+      env: (nombre) => Deno.env.get(nombre),
+      resolverActor: async (telegramId) => {
+        const resuelto = exigirUsuarioIdVinculado(await resolverUsuarioTelegram(adaptarIdentidadEscoSql(sb), telegramId));
+        return resuelto.ok ? { usuarioId: resuelto.usuarioId, filaId: resuelto.fila.id } : null;
+      },
+      autorizarActor: (telegramId, actor) => autorizarPerfilEscoSql(sb, telegramId, actor.usuarioId, actor.filaId),
+      crearConversacion: getOrCreateTelegramConversation,
+      leerHistorial: async (conversationId) => {
+        const { data, error } = await sb.from("chat_messages")
+          .select("id,role,content,metadata,created_at").eq("conversation_id", conversationId)
+          .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(20);
+        if (error) throw new Error("ESCO_SQL_HISTORY_FAILED");
+        return (data ?? []).reverse();
+      },
+      guardarMensaje: saveTelegramMessage,
+      enviarDocumento: (_ctx, bytes, nombre) => ctx.replyWithDocument(new InputFile(bytes, nombre)),
+      enviarFoto: (_ctx, bytes, nombre, titulo) => ctx.replyWithPhoto(new InputFile(bytes, nombre), { caption: titulo }),
+      renderizarPng: async (bloque) => (await import("./escoSqlPng.ts")).renderizarGraficaPng(bloque),
+      registrar: (codigo) => console.error("[Telegram] Esco SQL:", codigo),
+    };
+  }
+
+  bot.callbackQuery(/^esco_sql:/, async (ctx) => {
+    await manejarCallbackTelegramSql(ctx, dependenciasTelegramSql(ctx));
+  });
+
   // ==========================================================================
   // FREE-TEXT FALLBACK — Esco AI engine with conversation persistence
   // ==========================================================================
@@ -2401,6 +2440,11 @@ function getBot(): Bot<BotContext> {
 
     const userMessage = ctx.message.text;
     if (!userMessage?.trim()) return;
+
+    if (seleccionarMotorTelegram(Deno.env.get("ESCO_MOTOR_TELEGRAM"))) {
+      await manejarPreguntaTelegramSql(ctx, dependenciasTelegramSql(ctx), userMessage, `message:${ctx.message.message_id}`);
+      return;
+    }
 
     await ctx.replyWithChatAction("typing");
 

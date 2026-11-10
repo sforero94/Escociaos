@@ -1,7 +1,7 @@
 // Esco SQL — el loop. Sin extractor de intención, planificador, comparador ni cobertura.
 //
 // El modelo ve la pregunta, escribe un SELECT con la herramienta `consultar_sql`, la base
-// lo ejecuta con la RLS del usuario (RPC esco_sql_lectura, migración 192) y el modelo
+// lo valida y compila desde IR con la RLS del usuario (RPC segura, migración 194) y el modelo
 // responde con las filas devueltas. Si Postgres devuelve un error, el modelo lo ve y puede
 // corregir. Máximo MAX_CONSULTAS consultas por pregunta.
 //
@@ -133,7 +133,7 @@ export const HERRAMIENTA_CONSULTAR_SQL = {
   function: {
     name: 'consultar_sql',
     description:
-      'Ejecuta un SELECT (o WITH … SELECT) de PostgreSQL de solo lectura contra las vistas v_esco_*. Una sola sentencia. Devuelve máximo 500 filas o el error de Postgres.',
+      'Consulta las vistas v_esco_* registradas con un SELECT o WITH. El parser y PostgreSQL validan una estructura limitada: sin tablas crudas ni funciones arbitrarias. Máximo 500 filas; un rechazo cerrado permite reformular.',
     parameters: {
       type: 'object',
       properties: {

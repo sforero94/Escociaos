@@ -208,10 +208,11 @@ describe('F11 — rangos semiabiertos', () => {
 });
 
 describe('F12 — el punto y coma dentro de un texto', () => {
-  it('la regla 14 lo prohíbe en cualquier parte de la consulta, también dentro de un literal', () => {
+  it('P4 conserva una sentencia y permite el literal como parámetro, sin ejecutar su texto', () => {
     const r = regla(14);
-    expect(r).toMatch(/Sin punto y coma en ninguna parte/);
+    expect(r).toMatch(/No envíes varias sentencias/);
     expect(r).toMatch(/dentro de un texto entre comillas/);
+    expect(r).toMatch(/el texto viaja como parámetro/);
   });
 
   it('F12 no toca la RPC: la migración 193 no crea ni reemplaza ninguna función (cambiar esco_sql_lectura es un cambio de seguridad)', () => {

@@ -35,6 +35,7 @@ async function fixture(options: Options = {}) {
   const inherited = vi.fn(async (): Promise<Response> => { throw Error('Inherited network forbidden'); });
   vi.stubGlobal('fetch', inherited);
   const environment: Record<string, string | undefined> = {
+    ESCO_MOTOR_TELEGRAM: undefined,
     SUPABASE_URL: DB, SUPABASE_SERVICE_ROLE_KEY: 'synthetic-sdk-key', OPENROUTER_API_KEY: 'synthetic-model-key',
     TELEGRAM_BOT_TOKEN: '123:synthetic', TELEGRAM_WEBHOOK_SECRET: options.secret === null ? undefined : options.secret ?? 'synthetic-webhook-secret',
   };
@@ -182,7 +183,9 @@ async function fixture(options: Options = {}) {
       if (specifier === 'npm:@supabase/supabase-js@2') return { createClient: (url: string, key: string) =>
         createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: closedFetch } }) };
       if (specifier === '../chat.tsx') return chatExports;
-      if (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('escoCohorteAplicaciones.ts')) return load(resolve(dirname(file), specifier));
+      if (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('escoCohorteAplicaciones.ts') || /^\.\/escoSql(?:Contrato|Cliente|Sesion|Acceso|Render|Flujo)\.ts$/.test(specifier)) return load(resolve(dirname(file), specifier));
+      if (['@esco-sql/formato.ts', '@esco-sql/bloques.ts', '@esco-sql/respuesta.ts'].includes(specifier)) return load(resolve('src/utils/escoSql', specifier.slice('@esco-sql/'.length)));
+      if (file.startsWith(resolve('src/utils/escoSql')) && ['./formato.ts', './respuesta.ts', './bloques.ts'].includes(specifier)) return load(resolve(dirname(file), specifier));
       return new Proxy({}, { get: (_target, key) => key === '__esModule' ? true : forbidden(`${specifier}:${String(key)}`) });
     };
     new Function('require', 'module', 'exports', 'Deno', 'fetch', js)(requireModule, module, module.exports, deno, closedFetch);
