@@ -1,55 +1,71 @@
-import type { ResumenProduccionCosecha } from '@/utils/calculosProduccionAnalisis';
-import { conciliarEtapas } from '@/utils/calculosProduccionAnalisis';
+import type { ResumenEtapasCosecha, ResumenProduccionCosecha } from '@/utils/calculosProduccionAnalisis';
+import { formatoCambioNeto, formatoFechaCorte, formatoKgEtapa, NOTA_CAMBIO_NETO } from '@/utils/calculosProduccionAnalisis';
 
 interface PanelEtapasProduccionProps {
   resumenes: ResumenProduccionCosecha[];
+  etapas: ResumenEtapasCosecha[];
   vista: 'una' | 'varias';
+  /** Corte de la entrada cuando se conoce. `produccion` no lo guarda. */
+  corteEntrada?: Record<string, string | null | undefined>;
   loading?: boolean;
 }
 
-function fmtKg(valor: number | null, loading: boolean): string {
-  if (loading) return '…';
-  if (valor == null) return 'Sin dato';
-  return `${Math.round(valor).toLocaleString('es-CO')} kg`;
+function fechas(lista: string[]): string {
+  const texto = lista.map((f) => formatoFechaCorte(f)).filter(Boolean).join(' · ');
+  return texto || 'Sin fecha de corte';
 }
 
 export function PanelEtapasProduccion({
   resumenes,
+  etapas,
   vista,
+  corteEntrada = {},
   loading = false,
 }: PanelEtapasProduccionProps) {
   const una = vista === 'una' ? resumenes[resumenes.length - 1] : null;
+  const etapaUna = una ? etapas.find((e) => e.cosecha.key === una.cosecha.key) : null;
   const entrada = una?.tiene_registros ? una.produccion_kg : null;
-  const conciliacion = conciliarEtapas(entrada, null, null);
+  const corteUna = una ? formatoFechaCorte(corteEntrada[una.cosecha.key]) : null;
 
   const cards = [
     {
       titulo: 'Entrada neta',
-      valor: vista === 'varias' ? null : fmtKg(entrada, loading),
+      valor: vista === 'varias' ? null : loading ? '…' : formatoKgEtapa(entrada),
       subtitulo:
         vista === 'varias'
-          ? 'Cada campaña conserva su total. No se suman entre sí.'
-          : una
-            ? `Producción registrada · ${una.cosecha.label}`
-            : 'Producción registrada de la cosecha',
+          ? 'Cada campaña conserva su total. No se suma con clasificación ni despacho.'
+          : corteUna
+            ? `Corte ${corteUna}`
+            : 'Sin fecha de corte en produccion',
       destacada: true,
     },
     {
       titulo: 'Clasificado',
-      valor: 'Sin dato',
-      subtitulo: 'Sin líneas de clasificación en este corte',
+      valor: vista === 'varias' ? null : loading ? '…' : formatoKgEtapa(etapaUna?.clasificado.kg ?? null),
+      subtitulo:
+        vista === 'varias'
+          ? 'Canastas × 20 kg. Cada campaña tiene su corte.'
+          : `${fechas(etapaUna?.clasificado.fechas_corte ?? [])}. Canastas × 20 kg.`,
       destacada: false,
     },
     {
       titulo: 'Despachado',
-      valor: 'Sin dato',
-      subtitulo: 'Sin despachos ligados a esta cosecha',
+      valor: vista === 'varias' ? null : loading ? '…' : formatoKgEtapa(etapaUna?.despachado.kg ?? null),
+      subtitulo:
+        vista === 'varias'
+          ? 'Corte propio del despacho, distinto del de la entrada si hace falta.'
+          : fechas(etapaUna?.despachado.fechas_corte ?? []),
       destacada: false,
     },
     {
-      titulo: 'Diferencia por revisar',
-      valor: 'Sin dato',
-      subtitulo: conciliacion.nota,
+      titulo: 'Cambio neto %',
+      valor:
+        vista === 'varias'
+          ? null
+          : loading
+            ? '…'
+            : formatoCambioNeto(etapaUna?.despachado.kg ?? null, entrada),
+      subtitulo: NOTA_CAMBIO_NETO,
       destacada: false,
     },
   ];
@@ -61,40 +77,50 @@ export function PanelEtapasProduccion({
           <div
             key={card.titulo}
             className={`rounded-xl border p-5 ${
-              card.destacada
-                ? 'bg-[#E4EED0] border-[#C5D6A4]'
-                : 'bg-white border-primary/10'
+              card.destacada ? 'bg-[#E4EED0] border-[#C5D6A4]' : 'bg-white border-primary/10'
             }`}
           >
             <p className="text-sm text-brand-brown/70">{card.titulo}</p>
-            {card.destacada && vista === 'varias' ? (
-              <ul className="mt-2 space-y-1">
+            {vista === 'varias' ? (
+              <ul className="mt-2 space-y-2">
                 {resumenes.length === 0 && (
-                  <li className="text-2xl font-semibold text-foreground">Sin dato</li>
+                  <li className="text-2xl font-semibold text-brand-brown/40">Sin dato</li>
                 )}
-                {resumenes.map((r) => (
-                  <li key={r.cosecha.key} className="flex items-baseline justify-between gap-3">
-                    <span className="text-sm text-foreground">{r.cosecha.label}</span>
-                    <span className="text-base font-semibold tabular-nums text-foreground">
-                      {loading
-                        ? '…'
-                        : r.tiene_registros
-                          ? `${r.produccion_kg.toLocaleString('es-CO')} kg`
-                          : 'Sin dato'}
-                    </span>
-                  </li>
-                ))}
+                {resumenes.map((r) => {
+                  const etapa = etapas.find((e) => e.cosecha.key === r.cosecha.key);
+                  let valor = 'Sin dato';
+                  if (!loading) {
+                    if (card.titulo === 'Entrada neta') {
+                      valor = r.tiene_registros ? formatoKgEtapa(r.produccion_kg) : 'Sin dato';
+                    } else if (card.titulo === 'Clasificado') {
+                      valor = formatoKgEtapa(etapa?.clasificado.kg ?? null);
+                    } else if (card.titulo === 'Despachado') {
+                      valor = formatoKgEtapa(etapa?.despachado.kg ?? null);
+                    } else {
+                      valor = formatoCambioNeto(
+                        etapa?.despachado.kg ?? null,
+                        r.tiene_registros ? r.produccion_kg : null,
+                      );
+                    }
+                  }
+                  return (
+                    <li key={r.cosecha.key}>
+                      <p className="text-sm text-foreground">{r.cosecha.label}</p>
+                      <p className="text-base font-semibold tabular-nums text-foreground">{valor}</p>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p
-                className={`mt-1 text-2xl font-semibold tabular-nums ${
+                className={`mt-1 text-2xl font-semibold tabular-nums leading-tight ${
                   card.valor === 'Sin dato' ? 'text-brand-brown/40' : 'text-foreground'
                 }`}
               >
                 {card.valor}
               </p>
             )}
-            <p className="text-xs text-brand-brown/60 mt-2 leading-relaxed">{card.subtitulo}</p>
+            <p className="text-sm sm:text-xs text-brand-brown/60 mt-2 leading-relaxed">{card.subtitulo}</p>
           </div>
         ))}
       </div>
