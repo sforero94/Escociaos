@@ -66,3 +66,16 @@ por esa dependencia del plan se conserva el segundo botón beta y su ruta. Su re
 se hará después de esa comprobación, sin declarar una aceptación que aún no ocurrió.
 
 P4 se revisa por separado. Sus cambios de seguridad no están incluidos aquí.
+
+## Auditoría de liberación durante la preparación P6
+
+La revisión de solo lectura del 2026-11-09/10 UTC confirma que el backend SSE P3
+ya está incluido en la liberación P4 (v15; metadato actual v16 con el mismo bundle).
+El pendiente histórico de deploy de esta página no exige repetirlo.
+Vercel sirve main `bb560274`, cuyo ChatPanel no contiene el adaptador P3; el flag
+web está ausente. Los PR P2–P5 siguen abiertos. Dos builds locales del candidato
+P5 con credenciales ficticias verifican SQL/legacy y sus 26 tests P3 pasan, pero
+no son artefactos para producción ni el checkpoint real de Santiago.
+La publicación web, el flag de build, la aceptación real y las condiciones de
+medición están separadas en la [propuesta P6](esco-sql-p6-activacion.md).
+No se activaron flags, fusionaron PR, desplegaron funciones o ejecutaron held.
