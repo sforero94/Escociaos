@@ -44,12 +44,13 @@ function fixture() {
       filaId: "linked",
     })),
     autorizarActor: vi.fn(async () => true),
-    crearConversacion: vi.fn(async () => "conversation"),
+    obtenerContexto: vi.fn(async () => "conversation"),
     leerHistorial: vi.fn(async () => []),
     guardarMensaje: vi.fn(async (...args: unknown[]) => {
       writes.push(args);
       return "write";
     }),
+    confirmarTurno: vi.fn(async (_par: unknown) => {}),
     consultar,
     enviarDocumento: vi.fn(async () => ({ message_id: id++ })),
     enviarFoto: vi.fn(async () => ({ message_id: id++ })),
@@ -65,15 +66,20 @@ describe("P5 flujo unitario", () => {
     expect(s.deps.resolverActor).toHaveBeenCalledWith(11);
     expect(s.deps.autorizarActor).toHaveBeenCalledOnce();
     expect(s.deps.consultar).toHaveBeenCalledOnce();
-    expect(s.deps.guardarMensaje.mock.calls.map((a) => a[1])).toEqual([
-      "user",
-      "assistant",
-    ]);
-    expect(s.deps.guardarMensaje.mock.calls[1][3]).toMatchObject({
-      motor: "sql",
-      bloques: [],
-      consultas: [{ sql: "SELECT 1" }],
-      snapshot_at: expect.any(String),
+    expect(s.deps.guardarMensaje).toHaveBeenCalledOnce();
+    expect(s.deps.guardarMensaje.mock.calls[0][3]).toEqual({
+      motor: "sql_pending",
+    });
+    expect(s.deps.confirmarTurno).toHaveBeenCalledOnce();
+    expect(s.deps.confirmarTurno.mock.calls[0][0]).toMatchObject({
+      asistente: {
+        metadata: {
+          motor: "sql",
+          bloques: [],
+          consultas: [{ sql: "SELECT 1" }],
+          snapshot_at: expect.any(String),
+        },
+      },
     });
     expect(s.ctx.api.editMessageReplyMarkup).toHaveBeenCalledOnce();
   });
@@ -119,7 +125,8 @@ describe("P5 flujo unitario", () => {
     await manejarPreguntaTelegramSql(s.ctx, s.deps, "Pregunta", "message:33");
     expect(s.deps.enviarDocumento).toHaveBeenCalledOnce();
     expect(s.deps.enviarFoto).not.toHaveBeenCalled();
-    expect(s.deps.guardarMensaje).toHaveBeenCalledTimes(2);
+    expect(s.deps.guardarMensaje).toHaveBeenCalledOnce();
+    expect(s.deps.confirmarTurno).toHaveBeenCalledOnce();
   });
   it("callbacktrace revalida acceso y no llama al motor", async () => {
     const s = fixture();

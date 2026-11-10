@@ -1,22 +1,15 @@
+import { normalizarHistorialEfectivoSql } from "@esco-sql/historial.ts";
+import { hashHistorialSql } from "@esco-sql/turno.ts";
 import {
-  esObjetoSql,
+  ErrorRespuestaEscoSql,
   type HistorialTelegramSql,
+  leerObservabilidadTelegramSql,
   leerRespuestaEscoSql,
   type RespuestaTelegramSql,
 } from "./escoSqlContrato.ts";
 export const seleccionarMotorTelegram = (valor: unknown): boolean =>
   valor === "sql";
-export function historialEscoSql(filas: unknown[]): HistorialTelegramSql[] {
-  return filas.filter(esObjetoSql).filter((f) =>
-    typeof f.content === "string" &&
-    (f.role === "user" ||
-      (f.role === "assistant" && esObjetoSql(f.metadata) &&
-        f.metadata.motor === "sql"))
-  ).slice(-12).map((f) => ({
-    rol: f.role as "user" | "assistant",
-    texto: (f.content as string).slice(0, 4000),
-  }));
-}
+export { construirHistorialSql as historialEscoSql } from "@esco-sql/historial.ts";
 export async function idTurnoTelegramSql(
   usuarioId: string,
   chatId: string,
@@ -111,6 +104,8 @@ export async function solicitarEscoSql(
   ) {
     throw Error("Escribe una pregunta de hasta 1000 caracteres.");
   }
+  const historial = normalizarHistorialEfectivoSql(entrada.historial);
+  const historialSha256 = await hashHistorialSql(historial);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45000);
   try {
@@ -128,22 +123,47 @@ export async function solicitarEscoSql(
           motor: "sql",
           usuario_id: entrada.usuarioId,
           pregunta: entrada.pregunta,
-          historial: entrada.historial,
+          historial,
         }),
         signal: controller.signal,
         redirect: "error",
       },
     );
+    const raw = await leerCuerpoAcotado(response);
     if (!response.ok) {
-      throw Error(
+      let observacion = { recibo: null, uso: null } as ReturnType<
+        typeof leerObservabilidadTelegramSql
+      >;
+      try {
+        observacion = leerObservabilidadTelegramSql(JSON.parse(raw));
+      } catch { /* El transporte no inventa un recibo no verificable. */ }
+      if (
+        observacion.recibo &&
+        observacion.recibo.historial_sha256 !== historialSha256
+      ) {
+        throw new ErrorRespuestaEscoSql(
+          "La respuesta de la consulta SQL no corresponde al historial enviado.",
+        );
+      }
+      throw new ErrorRespuestaEscoSql(
         response.status === 403
           ? "Esco está disponible solo para Gerencia activa."
           : "El motor SQL no está disponible. Intenta de nuevo más tarde.",
+        observacion.recibo,
+        observacion.uso,
       );
     }
-    const raw = await leerCuerpoAcotado(response);
-    return leerRespuestaEscoSql(JSON.parse(raw));
+    const resultado = leerRespuestaEscoSql(JSON.parse(raw));
+    if (
+      resultado.recibo && resultado.recibo.historial_sha256 !== historialSha256
+    ) {
+      throw new ErrorRespuestaEscoSql(
+        "La respuesta de la consulta SQL no corresponde al historial enviado.",
+      );
+    }
+    return resultado;
   } catch (error) {
+    if (error instanceof ErrorRespuestaEscoSql) throw error;
     if (
       error instanceof Error &&
       ["La respuesta", "El motor SQL", "Esco está"].some((p) =>
@@ -152,7 +172,7 @@ export async function solicitarEscoSql(
     ) {
       throw error;
     }
-    throw Error(
+    throw new ErrorRespuestaEscoSql(
       "No se pudo completar la consulta SQL. Intenta de nuevo más tarde.",
     );
   } finally {

@@ -56,6 +56,7 @@ export async function fixture(options: Options = {}) {
   const user = { id: 'telegram-fixture-row', telegram_id: 123, activo: options.active !== false,
     usuario_id: '11111111-1111-4111-8111-111111111111', nombre_display: 'Cuenta sintética', modulos_permitidos: options.modules ?? ['consultas'] };
   const conversationId = '22222222-2222-4222-8222-222222222222';
+  const conversationsDb: Row[] = [{id:conversationId,user_id:user.usuario_id,updated_at:new Date().toISOString()}];
   const history: Row[] = [
     { id: 'history-u', role: 'user', content: `Consulta personal antigua ${PRIVATE[0]}; compras por proveedor ${PRIVATE[4]}; salario y observaciones ${PRIVATE[3]}`, created_at: '2034-05-08T16:00:00Z' },
     { id: 'history-a', role: 'assistant', content: PRIVATE[1] + CHART, created_at: '2034-05-08T16:01:00Z', metadata: {
@@ -77,7 +78,7 @@ export async function fixture(options: Options = {}) {
     return rows.filter(row => [...p].every(([key, filter]) => {
       if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(key)) return true;
       const dot = filter.indexOf('.'), op = filter.slice(0, dot), value = filter.slice(dot + 1);
-      if (op === 'eq') return String(row[key]) === value;
+      if (op === 'eq') return String(key === 'metadata->>motor' ? (row.metadata as Row)?.motor : row[key]) === value;
       if (op === 'gte') return String(row[key]) >= value;
       if (op === 'lte') return String(row[key]) <= value;
       if (op === 'in') return value.slice(1, -1).split(',').map(v => v.replace(/^"|"$/g, '')).includes(String(row[key]));
@@ -102,12 +103,58 @@ export async function fixture(options: Options = {}) {
     const body = method === 'POST' ? JSON.parse(await request.text()) as Row : undefined;
     requests.push({ method, url, body });
     if (method === 'POST') {
-      if (['telegram_sessions', 'telegram_conversations'].includes(table)) {
-        storage.set(`${table}:${body!.key}`, structuredClone(body!.session)); return new Response(null, { status: 201 });
+      if (["telegram_sessions", "telegram_conversations"].includes(table)) {
+        if (String(body!.key).startsWith("esco-sql-context:v1:")) {
+          expect(table).toBe("telegram_sessions");
+          expect(Object.keys(body!).sort()).toEqual(["key", "session"]);
+          expect(body!.key).toBe(
+            `esco-sql-context:v1:${user.usuario_id}:${
+              (body!.session as Row).telegramId
+            }:${(body!.session as Row).chatId}`,
+          );
+          const merge = request.headers.get("prefer")?.includes(
+            "resolution=merge-duplicates",
+          );
+          if (!merge && storage.has(`${table}:${body!.key}`)) {
+            return Response.json({
+              code: "23505",
+              message: "Synthetic authority already initialized",
+            }, { status: 409 });
+          }
+        }
+        storage.set(`${table}:${body!.key}`, structuredClone(body!.session));
+        return new Response(null, { status: 201 });
       }
-      if (table === 'chat_messages') {
-        expect(body!.conversation_id).toBe(conversationId);
-        inserted.push(structuredClone(body!)); history.push({ ...body, created_at: new Date().toISOString() });
+      if (table === "chat_conversations") {
+        expect(body!.user_id).toBe(user.usuario_id);
+        const created = {
+          ...structuredClone(body!),
+          id: crypto.randomUUID(),
+          updated_at: new Date().toISOString(),
+        };
+        conversationsDb.push(created);
+        return Response.json(created, { status: 201 });
+      }
+      if (table === "chat_messages") {
+        const batch = Array.isArray(body) ? body as Row[] : [body!];
+        for (const row of batch) {
+          expect(
+            conversationsDb.some((conv) => conv.id === row.conversation_id),
+          ).toBe(true);
+        }
+        const bulk = Array.isArray(body);
+        if (!bulk && history.some((row) => row.id === body!.id)) {
+          return Response.json({
+            code: "23505",
+            message: "Synthetic duplicate",
+          }, { status: 409 });
+        }
+        for (const row of batch) {
+          inserted.push(structuredClone(row));
+          const i = history.findIndex((old) => old.id === row.id);
+          if (i >= 0) history[i] = structuredClone(row);
+          else history.push(structuredClone(row));
+        }
         return new Response(null, { status: 201 });
       }
       rejected.push(`POST:${table}`); throw Error('Closed persistence table');
@@ -128,11 +175,15 @@ export async function fixture(options: Options = {}) {
       const key = p.get('key')?.slice(3); const session = storage.get(`${table}:${key}`);
       rows = session ? [{ key, session }] : [];
     } else if (table === 'chat_conversations') {
-      expect(p.get('user_id')).toBe(`eq.${user.usuario_id}`); expect(p.get('updated_at')).toMatch(/^gte\./);
-      rows = [{ id: conversationId, user_id: user.usuario_id, updated_at: new Date().toISOString() }];
+      expect(p.get('user_id')).toBe(`eq.${user.usuario_id}`);
+      if(p.has('updated_at'))expect(p.get('updated_at')).toMatch(/^gte\./);
+      else expect(p.get('id')).toMatch(/^eq\.[0-9a-f-]{36}$/);
+      rows = conversationsDb;
     } else if (table === 'chat_messages') {
-      expect(p.get('conversation_id')).toBe(`eq.${conversationId}`);
-      rows = [...history].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || String(b.id).localeCompare(String(a.id)));
+      if(p.get('conversation_id')===null) {
+        expect([...p.keys()].sort()).toEqual(['id','select']);expect(p.get('select')).toBe('id');expect(p.get('id')).toMatch(/^eq\.[0-9a-f-]{36}$/);
+      } else expect(conversationsDb.some(row=>p.get('conversation_id')===`eq.${row.id}`)).toBe(true);
+      rows = [...history].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))||String(b.id).localeCompare(String(a.id)));
     } else if (Object.prototype.hasOwnProperty.call(tables, table)) {
       if (table === 'registros_trabajo' && options.mode === 'source_error') return Response.json({ message: PRIVATE[6] }, { status: 503 });
       rows = tables[table];
@@ -202,8 +253,8 @@ export async function fixture(options: Options = {}) {
       if (specifier === '@resvg/resvg-wasm') return resvg;
       const local = specifier.startsWith('.') ? resolve(dirname(file), specifier) : '';
       if (local && (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('escoCohorteAplicaciones.ts') || (/\/telegram\/escoSql[^/]*\.ts$/.test(local) || /\/telegram\/vendor\/escoSql(?:Wasm|Font|FontCoverage)\.ts$/.test(local)))) return load(local);
-      if (['@esco-sql/formato.ts', '@esco-sql/bloques.ts', '@esco-sql/respuesta.ts'].includes(specifier)) return load(resolve('src/utils/escoSql', specifier.slice('@esco-sql/'.length)));
-      if (local && /\/utils\/escoSql\/(?:formato|bloques|respuesta)\.ts$/.test(local)) return load(local);
+      if (['@esco-sql/formato.ts', '@esco-sql/bloques.ts', '@esco-sql/respuesta.ts', '@esco-sql/historial.ts', '@esco-sql/turno.ts'].includes(specifier)) return load(resolve('src/utils/escoSql', specifier.slice('@esco-sql/'.length)));
+      if (local && /\/utils\/escoSql\/(?:formato|bloques|respuesta|historial|turno)\.ts$/.test(local)) return load(local);
 
       return new Proxy({}, { get: (_target, key) => key === '__esModule' ? true : forbidden(`${specifier}:${String(key)}`) });
     };

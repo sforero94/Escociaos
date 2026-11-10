@@ -20,11 +20,12 @@ it('un abort o un error del motor no crea conversación ni escribe mensajes', as
  mocks.fetch.mockResolvedValue(new Response('{"error":"Fallo sintético"}',{status:502,headers:{'content-type':'application/json'}}));
  await expect(enviarMensajeSql(null,'Pregunta',[],()=>{})).rejects.toThrow('Fallo sintético'); expect(from).not.toHaveBeenCalled();
 });
-it('recorta el historial legacy antes de continuar una conversación con SQL', async () => {
+it('recarga y recorta el historial SQL sin heredar mensajes legacy locales', async () => {
  const insertMensajes=vi.fn(async()=>({error:null}));
  const owner={eq:()=>owner,maybeSingle:async()=>({data:{id:'conv-a'},error:null})};
- mocks.getSupabase.mockReturnValue({auth:{getSession:async()=>({data:{session:{access_token:'sintetico',user:{id:'user-a'}}}})},from:(tabla:string)=>tabla==='chat_conversations'?{select:()=>owner}:{insert:insertMensajes}});
+ const historialDb={eq:()=>historialDb,in:()=>historialDb,order:()=>historialDb,limit:async()=>({data:[{id:'sql-previo',role:'assistant',content:'b'.repeat(5000),metadata:{motor:'sql'},created_at:'2026-01-01T00:00:00Z'}],error:null})};
+ mocks.getSupabase.mockReturnValue({auth:{getSession:async()=>({data:{session:{access_token:'sintetico',user:{id:'user-a'}}}})},from:(tabla:string)=>tabla==='chat_conversations'?{select:()=>owner}:{insert:insertMensajes,select:()=>historialDb}});
  mocks.fetch.mockResolvedValue(new Response(JSON.stringify({texto:'Respuesta',bloques:[],sugerencias:[],consultas:[],ms:1}),{headers:{'content-type':'application/json'}}));
  await enviarMensajeSql('conv-a','Seguimiento',[{id:'old',conversation_id:'conv-a',role:'assistant',content:'a'.repeat(5000),metadata:{},created_at:'2026-01-01'}],()=>{});
- const cuerpo=JSON.parse(mocks.fetch.mock.calls[0][1].body); expect(cuerpo.historial[0].texto).toHaveLength(4000);
+ const cuerpo=JSON.parse(mocks.fetch.mock.calls[0][1].body); expect(cuerpo.historial[0].texto).toHaveLength(4000); expect(cuerpo.historial).toEqual([{rol:'assistant',texto:'b'.repeat(4000)}]);
 });

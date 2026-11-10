@@ -5,7 +5,36 @@ import {
   type FuenteVisual,
 } from "@esco-sql/bloques.ts";
 import { leerRespuestaFinal } from "@esco-sql/respuesta.ts";
+import {
+  leerReciboTurnoSql,
+  leerUsoTurnoSql,
+  type ReciboTurnoSql,
+  type UsoTurnoSql,
+} from "@esco-sql/turno.ts";
 export type { Bloque };
+export class ErrorRespuestaEscoSql extends Error {
+  constructor(
+    mensaje: string,
+    readonly recibo: ReciboTurnoSql | null = null,
+    readonly uso: UsoTurnoSql | null = null,
+  ) {
+    super(mensaje);
+    this.name = "ErrorRespuestaEscoSql";
+  }
+}
+export function leerObservabilidadTelegramSql(
+  valor: unknown,
+): { recibo: ReciboTurnoSql | null; uso: UsoTurnoSql | null } {
+  if (!esObjetoSql(valor)) return { recibo: null, uso: null };
+  const recibo = leerReciboTurnoSql(valor.recibo);
+  const uso = leerUsoTurnoSql(valor.uso);
+  if (
+    valor.recibo != null &&
+    (!recibo || recibo.canal !== "telegram" ||
+      JSON.stringify(recibo.uso) !== JSON.stringify(uso))
+  ) throw new Error("La respuesta de uso SQL no es válida.");
+  return { recibo, uso };
+}
 export interface ConsultaTelegramSql {
   sql: string;
   proposito: string;
@@ -24,6 +53,8 @@ export interface RespuestaTelegramSql {
   };
   consultas: ConsultaTelegramSql[];
   ms: number;
+  recibo?: ReciboTurnoSql | null;
+  uso?: UsoTurnoSql | null;
 }
 export interface HistorialTelegramSql {
   rol: "user" | "assistant";
@@ -119,8 +150,15 @@ export function leerRespuestaEscoSql(valor: unknown): RespuestaTelegramSql {
       aclaracion: valor.aclaracion,
     }),
   );
+  const observacion = leerObservabilidadTelegramSql(valor);
+  if (observacion.recibo && observacion.recibo.estado !== "completado") {
+    throw new Error(
+      "La respuesta del motor SQL no es una respuesta completada.",
+    );
+  }
   return {
     ...final,
+    ...observacion,
     bloques: bloques as Bloque[],
     consultas: sanearConsultasSql(valor.consultas),
     ms: typeof valor.ms === "number" && Number.isFinite(valor.ms)

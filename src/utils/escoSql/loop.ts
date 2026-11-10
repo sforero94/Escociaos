@@ -16,15 +16,16 @@ import { construirPrompt } from './prompt.ts';
 import { construirBloque, MAX_BLOQUES, MAX_FILAS_SQL, type Bloque, type FuenteVisual } from './bloques.ts';
 import { FORMATOS } from './formato.ts';
 import { leerRespuestaFinal, type Aclaracion } from './respuesta.ts';
+import { normalizarHistorialEfectivoSql, type MensajeHistorialSql } from './historial.ts';
+export { MAX_HISTORIAL_SQL, textoHistorialSql } from './historial.ts';
+export type { MensajeHistorialSql } from './historial.ts';
 
 export const MAX_CONSULTAS = 4;
-export const MAX_HISTORIAL_SQL = 10;
 /** Tope de caracteres de filas que se le muestran al modelo por consulta (el resto se avisa). */
 export const MAX_CARACTERES_RESULTADO = 12000;
 /** Muestra del contexto del modelo y de consumidores internos anteriores; la traza HTTP la omite. */
 export const FILAS_MUESTRA = 20;
 const MAX_TOKENS = 1500;
-const MAX_TEXTO_HISTORIAL = 4000;
 /** Un proveedor que repite herramientas inválidas tampoco puede abrir un loop infinito. */
 export const MAX_RONDAS_SQL = 10;
 
@@ -51,11 +52,6 @@ export class ErrorAccesoSql extends ErrorSql {
     super(mensaje, '42501');
     this.name = 'ErrorAccesoSql';
   }
-}
-
-export interface MensajeHistorialSql {
-  rol: 'user' | 'assistant';
-  texto: string;
 }
 
 export interface ConsultaSql {
@@ -145,15 +141,6 @@ export const HERRAMIENTA_CONSULTAR_SQL = {
   },
 } as const;
 
-/** Lo que se guarda como respuesta del asistente en el historial: el texto más el SQL usado. */
-export function textoHistorialSql(respuesta: string, consultas: Pick<ConsultaSql, 'sql'>[]): string {
-  if (!consultas.length) return respuesta.slice(0, MAX_TEXTO_HISTORIAL);
-  const bloque = `\n\n[Consultas SQL que usé en este turno]\n${consultas.map((c) => c.sql).join('\n---\n')}`;
-  const sobra = MAX_TEXTO_HISTORIAL - bloque.length;
-  if (sobra < 200) return `${respuesta.slice(0, MAX_TEXTO_HISTORIAL - 200)}${bloque.slice(0, 200)}`;
-  return `${respuesta.slice(0, sobra)}${bloque}`;
-}
-
 function leerArgumentos(bruto: string): { sql: string; proposito: string } | null {
   try {
     const a = JSON.parse(bruto) as { sql?: unknown; proposito?: unknown };
@@ -200,7 +187,7 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
   let numeroLlamada = 0;
 
   const mensajes: MensajeLLM[] = [{ role: 'system', content: construirPrompt(entrada.hoy) }];
-  for (const m of (entrada.historial ?? []).slice(-MAX_HISTORIAL_SQL)) {
+  for (const m of normalizarHistorialEfectivoSql(entrada.historial ?? [])) {
     mensajes.push({ role: m.rol === 'assistant' ? 'assistant' : 'user', content: m.texto });
   }
   mensajes.push({ role: 'user', content: entrada.pregunta });

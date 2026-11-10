@@ -72,13 +72,21 @@ describe("P5 cliente HTTP unitario", () => {
       historialEscoSql([
         { role: "system", content: "oculto" },
         { role: "tool", content: "oculto" },
-        { role: "user", content: "Pregunta" },
         {
+          id: "sql-user",
+          created_at: "2034-05-08T00:00:00Z",
+          role: "user",
+          content: "Pregunta",
+          metadata: { motor: "sql" },
+        },
+        {
+          id: "sql-assistant",
+          created_at: "2034-05-08T00:00:01Z",
           role: "assistant",
           content: "Texto",
           metadata: {
             motor: "sql",
-            consultas: [{ sql: "privado" }],
+            consultas: [{ sql: "SELECT 1" }],
             bloques: [{ filas: ["privado"] }],
           },
         },
@@ -90,7 +98,7 @@ describe("P5 cliente HTTP unitario", () => {
       ]),
     ).toEqual([{ rol: "user", texto: "Pregunta" }, {
       rol: "assistant",
-      texto: "Texto",
+      texto: "Texto\n\n[Consultas SQL que usé en este turno]\nSELECT 1",
     }]);
   });
   it("rechaza una respuesta declarada demasiado grande antes de consumirla", async () => {

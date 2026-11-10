@@ -49,7 +49,11 @@ import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 import { procesarRespuestaAlertaTelegram } from "./responderAlertaHato.ts";
 import { seleccionarMotorTelegram } from "./escoSqlCliente.ts";
 import { autorizarPerfilEscoSql, adaptarIdentidadEscoSql } from "./escoSqlAcceso.ts";
-import { manejarPreguntaTelegramSql, manejarCallbackTelegramSql, type DependenciasFlujoSql } from "./escoSqlFlujo.ts";
+import { obtenerConversacionTelegramSql } from "./escoSqlConversacion.ts";
+import { adaptarPersistenciaEscoSql } from "./escoSqlAdaptador.ts";
+import { confirmarParTelegramSql } from "./escoSqlConfirmacion.ts";
+import { resolverContextoTelegramSql } from "./escoSqlContexto.ts";
+import { manejarPreguntaTelegramSql, manejarCallbackTelegramSql, manejarNuevaConversacionTelegramSql, type DependenciasFlujoSql } from "./escoSqlFlujo.ts";
 
 
 // --- Ronda de inventario (Fase 3, Telegram/Uriel) ---------------------------
@@ -2397,28 +2401,38 @@ function getBot(): Bot<BotContext> {
   // P5: solo el último fallback se desvía. Capturas, ronda y alertas conservan su orden.
   function dependenciasTelegramSql(ctx: BotContext): DependenciasFlujoSql {
     const sb = getSupabaseAdmin();
+    const {acceso,contextoSql,conversacionesSql,confirmacionSql} = adaptarPersistenciaEscoSql(sb);
     return {
       env: (nombre) => Deno.env.get(nombre),
       resolverActor: async (telegramId) => {
-        const resuelto = exigirUsuarioIdVinculado(await resolverUsuarioTelegram(adaptarIdentidadEscoSql(sb), telegramId));
+        const resuelto = exigirUsuarioIdVinculado(await resolverUsuarioTelegram(adaptarIdentidadEscoSql(acceso), telegramId));
         return resuelto.ok ? { usuarioId: resuelto.usuarioId, filaId: resuelto.fila.id } : null;
       },
-      autorizarActor: (telegramId, actor) => autorizarPerfilEscoSql(sb, telegramId, actor.usuarioId, actor.filaId),
-      crearConversacion: getOrCreateTelegramConversation,
+      autorizarActor: (telegramId, actor) => autorizarPerfilEscoSql(acceso, telegramId, actor.usuarioId, actor.filaId),
+      obtenerContexto: (identidad, nueva, soloLectura) => resolverContextoTelegramSql(contextoSql, identidad, () => obtenerConversacionTelegramSql(conversacionesSql, identidad.usuarioId), nueva, soloLectura),
+      confirmarTurno: (par) => confirmarParTelegramSql(confirmacionSql, par),
       leerHistorial: async (conversationId) => {
         const { data, error } = await sb.from("chat_messages")
           .select("id,role,content,metadata,created_at").eq("conversation_id", conversationId)
-          .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(20);
+          .eq("metadata->>motor", "sql").in("role", ["user", "assistant"])
+          .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(10);
         if (error) throw new Error("ESCO_SQL_HISTORY_FAILED");
-        return (data ?? []).reverse();
+        return data ?? [];
       },
-      guardarMensaje: saveTelegramMessage,
+      guardarMensaje: async (conversationId, role, content, metadata, id, creadoEn) => {
+        const { error } = await sb.from("chat_messages").insert({ id, conversation_id: conversationId, role, content, metadata, created_at: creadoEn });
+        if (error) throw new Error("ESCO_SQL_CLAIM_UNCONFIRMED");
+      },
       enviarDocumento: (_ctx, bytes, nombre) => ctx.replyWithDocument(new InputFile(bytes, nombre)),
       enviarFoto: (_ctx, bytes, nombre, titulo) => ctx.replyWithPhoto(new InputFile(bytes, nombre), { caption: titulo }),
       renderizarPng: async (bloque) => (await import("./escoSqlPng.ts")).renderizarGraficaPng(bloque),
-      registrar: (codigo) => console.error("[Telegram] Esco SQL:", codigo),
+      registrar: (codigo, observacion) => console.error("[Telegram] Esco SQL:", codigo, observacion ?? {}),
     };
   }
+
+  bot.command("esco_nueva", async (ctx) => {
+    await manejarNuevaConversacionTelegramSql(ctx, dependenciasTelegramSql(ctx));
+  });
 
   bot.callbackQuery(/^esco_sql:/, async (ctx) => {
     await manejarCallbackTelegramSql(ctx, dependenciasTelegramSql(ctx));
