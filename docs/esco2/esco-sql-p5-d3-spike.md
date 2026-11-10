@@ -194,14 +194,129 @@ versión, contrastar `start --help` y las opciones de su user worker.
 Se eliminó el contenedor del ensayo. Docker Desktop quedó encendido al encontrar
 otras cargas activas; no se detuvo ninguna. La imagen pública puede quedar en caché.
 
-## Gate pendiente de la función completa
+## Tercer ensayo: grafo completo del candidato aprobado
 
-Antes de activar SQL, comprobar el candidato de make-server con **su grafo entero**
-y carga sintética máxima, dentro del alcance autorizado, además de los controles
-operativos de despliegue. No se puede cerrar ese gate con el positivo del renderer
-por separado. Si el conjunto excede las cuotas, volver con una solución local más
-pequeña o pedir aprobación de la alternativa; no enviar cifras a QuickChart
-automáticamente.
+Se ensayó después el árbol aprobado
+`ab3e622c9e2c56b743698a0e2d54bcca4456d600`, candidato `0a9883c2`, con
+el entrypoint real `supabase/functions/make-server-1ccce916/index.ts` y su grafo
+completo de imports. El generador copia **412 archivos públicos rastreados** desde
+ese árbol Git congelado, con SHA-256 por archivo. No toma código runtime del
+working tree ni lee archivos `.env`. Conserva los módulos de Hono, grammY,
+Supabase, legacy, persistencia, adaptador SQL y renderer productivos íntegros.
+El lock aprobado se copia byte a byte: SHA-256
+`6ee918bc85516f5ad0efe4007ed745209c6d8448059faf187bd30ea03f6b86ec`.
+Solo el config del fixture rebasa el alias compartido hacia las copias locales.
+
+La costura externa captura el handler que el entrypoint entrega a `Deno.serve` y
+lo invoca para health y webhooks reales, sin sustituir módulos de aplicación.
+Antes del import instala transportes sintéticos cerrados para `fetch` y
+`node:http(s).request` (grammY usa también este último), y bloquea WebSocket y
+conexiones Deno. Valida los destinos y contratos permitidos; cualquier otro I/O
+falla. Las credenciales son literales falsas del fixture. La función SQL, base de
+datos y Telegram son transportes simulados; **no hay llamadas a modelos, bases de
+datos ni Telegram reales**. La compilación eszip descarga únicamente dependencias
+públicas. La ejecución final usa Docker `--network none` y monta solo el fixture
+público/sintético de solo lectura, nunca el repo ni el entorno del host.
+
+Se mantuvo la imagen/digest y política `per_request` del ensayo anterior. Cada
+**user isolate** tiene 256 MB y CPU hard de 2.000 ms; el main proxy del contenedor
+tiene una cota distinta de 2 GB. El bootstrap del entrypoint y la importación lazy
+del PNG suceden dentro del user isolate. El tiempo de bootstrap de la tabla mide
+el import dentro del worker; el tiempo main create+fetch se registra por separado.
+No se presenta tiempo de pared como CPU medida.
+
+Los dos escenarios respetan el máximo de cuatro bloques y texto de 64.000
+caracteres: cuatro PNG; o tabla CSV de 500 × 12 celdas de 600 caracteres y tres
+PNG. Cada gráfica usa 60 categorías, y las cartesianas seis series. La respuesta
+JSON medida ocupa **85.893** o **3.731.697 bytes**, respectivamente. La segunda
+es aproximadamente el 89 % del límite de 4 MiB; no se ensayó cada byte del techo.
+Se verifica el valor exacto de las **6.000 celdas** del CSV, la firma/dimensiones de
+cada PNG, el máximo de 4.096 caracteres por mensaje HTML, un SQL por turno,
+identidad/autenticación reales del cliente y el historial cerrado a rol/texto.
+El primer historial vacío es válido y el historial warm debe contener turnos previos.
+
+| Resultado local del grafo completo | Medida |
+|---|---:|
+| HTTP del proxy / turnos webhook / SQL | 45 / 46 / 46 |
+| PNG / CSV / fragmentos HTML | 161 / 23 / 1.242 |
+| Health, webhooks y respuestas funcionales | Todos HTTP 200 |
+| Bootstrap de los dos isolates | 207,85 / 149,26 ms |
+| Handler warm, mediana / p95 observado | 159,98 / 205,46 ms |
+| Mayor snapshot `heapUsed + external` | 230.877.424 bytes |
+| Destinos I/O rechazados / destinos Node rechazados | 0 / 0 |
+
+Hubo dos arranques fríos y cuarenta peticiones secuenciales warm. Dos handlers
+webhook se ejecutaron en paralelo dentro de un mismo isolate/presupuesto en una
+petición adicional. También se enviaron dos HTTP independientes simultáneos: el
+pool los resolvió en dos isolates previamente usados, no en uno solo. Las
+identidades y contadores registran esa reutilización. El padre repitió los 45
+HTTP desde el generador público con los mismos conteos y controles correctos;
+su mayor snapshot fue 230.565.408 bytes.
+
+La base de datos falsa conserva los últimos veinte mensajes por conversación,
+incluyendo metadata completa como la lectura real, dentro del propio isolate.
+Esa retención es overhead adicional del fixture, frente al almacenamiento externo
+real. Se informa para interpretar la memoria. `Deno.memoryUsage().rss` devuelve
+cero aquí: **el snapshot heap+external no es un pico RSS ni una medición completa
+del máximo de memoria**. El positivo acredita que estos turnos terminaron bajo
+el supervisor local configurado, no margen garantizado para toda carga futura.
+
+Un control negativo separado, compuesto solo por un busy loop sintético de cuatro
+segundos bajo las mismas cuotas, produjo `CPU time limit reached` y HTTP 500
+`WorkerRequestCancelled: request has been cancelled by supervisor`. Confirma que
+el límite CPU se aplica. Tras completar los 45 HTTP y cancelar ese control, el
+runtime escribió `runtime has escaped from the event loop unexpectedly` con
+`Uncaught null`. Se conserva como anomalía local posterior al control; no se
+oculta ni se contabiliza como fallo o éxito de un turno de aplicación.
+
+Los primeros intentos fallaron por dos defectos del fixture: faltaba interceptar
+el transporte Node de grammY, y se exigía historial no vacío en el primer turno.
+Con `--network none` no hubo tráfico externo efectivo. Se corrigieron únicamente
+las costuras/aserciones sintéticas y se repitió; esos intentos no son positivos
+ni defectos atribuidos al candidato aprobado.
+
+## Reproducir el grafo completo
+
+El generador no inicia Docker ni accede a servicios. Requiere Python 3, Git y que
+el árbol aprobado exista en el clon; el objeto permanece fijo aunque cambien docs
+u otros archivos locales. Rechaza destinos dentro del repo o no vacíos. No añade
+binarios al repo. Antes de cambiar la imagen, contrastar la CLI y opciones del
+user worker con la fuente upstream.
+
+```sh
+esco_full_dir="$(mktemp -d /tmp/esco-p5-full.XXXXXX)"
+python3 scripts/esco-sql-p5/preparar-servidor-completo.py --out "$esco_full_dir"
+# Solo descarga dependencias públicas y escribe el eszip externo.
+docker run --rm --name esco-p5-full-build --network bridge \
+  --mount "type=bind,source=$esco_full_dir,target=/fixtures" \
+  --mount "type=bind,source=$esco_full_dir/cache,target=/cache" \
+  supabase/edge-runtime@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343 \
+  bundle --entrypoint /fixtures/worker/index.ts --output /cache/full.eszip --timeout 180
+# No red externa, env del host, repo ni secretos montados en la corrida.
+docker run --name esco-p5-full-repro --detach --network none --memory 2g --cpus 2 \
+  --mount "type=bind,source=$esco_full_dir,target=/fixtures,readonly" \
+  --mount "type=bind,source=$esco_full_dir/cache,target=/cache,readonly" \
+  supabase/edge-runtime@sha256:6b850a2ccf0bf50ecac9accff8098095cd191c389c2a53c59b857aa0f53a8343 \
+  start --main-service /fixtures/main --policy per_request --max-parallelism 1
+docker logs --follow esco-p5-full-repro
+# Tras FULL_COMPLETE o FULL_FAILED, salir del seguimiento; retirar solo este contenedor.
+docker rm --force esco-p5-full-repro
+```
+
+Aceptar `FULL_COMPLETE` con 45 filas, los conteos indicados y cero I/O rechazado;
+comprobar además `CPU_CONTROL` con cancelación del supervisor y su mensaje de
+límite CPU. No aceptar cualquier HTTP 500 como prueba de CPU. Un `FULL_FAILED`,
+cancelación de aplicación o datos ausentes conserva el gate local abierto.
+El manifiesto incluye hashes de fuentes, wrappers, lock y cuotas; conservar además
+el hash del eszip y logs externamente para auditoría de cada corrida.
+
+El ensayo cierra la comprobación **local** de estos escenarios del grafo completo.
+La latencia/coste con servicios reales, aceptación alojada P6 y la activación SQL
+siguen siendo gates separados. No implica autorización de flags, secretos ni otro
+despliegue. Si una carga posterior excede cuotas, volver con una solución local
+más pequeña o pedir aprobación de la alternativa; no enviar cifras a QuickChart
+automáticamente. Se retiraron únicamente los contenedores propios; Docker quedó
+encendido porque hay otras cargas activas.
 
 Fuentes primarias: [arquitectura del user runtime](https://github.com/supabase/edge-runtime),
 [proxy de ejemplo](https://github.com/supabase/edge-runtime/blob/main/examples/main/index.ts),

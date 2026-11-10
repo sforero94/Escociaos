@@ -116,3 +116,12 @@ válida que genera grammY; Node24 y Deno2.1.4 aceptan los mismos bytes sin cambi
 Las pruebas verifican que no se modifica ningún byte de archivo, incluso con texto
 parecido a cabeceras dentro del payload y bytes no UTF8. Un multipart incompleto
 sigue rechazado. No se alteró el código productivo ni las aserciones de PNG/CSV.
+
+## Liberación posterior autorizada
+
+El candidato remoto `0a9883c227e550446230bcb8f18a9b5c8f2077b9` se desplegó
+el 2026-11-09 como make-server v299, ACTIVE y `verify_jwt=false`.
+Se creó el secreto compartido, pero el flag de Telegram sigue ausente (= legacy).
+El [registro de configuración](esco-sql-p5-configuracion.md) distingue el candidato
+que se desplegó de los commits posteriores de documentación/ensayo. Antes de
+activar SQL se exige el resultado del grafo completo en [D3](esco-sql-p5-d3-spike.md).
