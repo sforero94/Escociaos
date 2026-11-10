@@ -1,6 +1,6 @@
 # P6 — preparación local y protocolo de observación
 
-Fecha: 2026-11-09. Alcance: protocolo, comparador offline y QA sintética separados.
+Fecha: 2026-11-09. Alcance: historial/recibo compartidos, comparador offline y QA sintética separados.
 No hay activación, merge, deploy, pregunta real, lectura de banco privado, modelo
 pagado, captura en producción ni ejecución held en esta preparación.
 La [propuesta de activación](esco-sql-p6-activacion.md) trata la liberación web y
@@ -21,64 +21,42 @@ Usar ambas evidencias. La primera explica el renderizado; la segunda cumple el
 smoke vivo si los resultados coinciden. No atribuir automáticamente una diferencia
 a un renderer, no aceptar equivalencia semántica como igualdad literal del plan,
 ni escoger la repetición que favorezca al candidato. Una divergencia permanece
-abierta hasta revisión privada y resolución explícita. No hace falta cambiar el
-runtime para preparar este protocolo; el comparador consume capturas externas.
+abierta hasta revisión privada y resolución explícita. El comparador consume capturas externas; el runtime local ahora emite el vínculo
+que deberá verificarse después de su liberación aprobada.
 Una puerta de replay alojada requeriría revisión y autorización propias.
 
-## Gate previo: viabilidad de capturas, todavía abierto
+## Historial y coste: implementación local, pendiente de liberación
 
-No se promete una campaña de ochenta capturas comparables con el código actual.
-La revisión de fuente detectó estas diferencias:
+El PR #478 incorpora el [contrato de turno](esco-sql-p6-contrato-turno.md), con
+implementación web/Telegram y QA separado sobre handlers reales y servicios
+sintéticos. No acredita disponibilidad productiva ni inicia las dos semanas.
 
-| Evidencia | Web | Telegram | Consecuencia |
-|---|---|---|---|
-| Payload de historial | `escoSqlChatService.ts`: últimos diez mensajes; al asistente SQL añade `textoHistorialSql` con SQL. | `bot.ts` lee veinte mensajes; `historialEscoSql` filtra y envía hasta doce, solo contenido. | Después, el motor usa solo los últimos diez de ambos. Persisten diferencias de representación, filtros y selección de conversación. |
-| Selección de conversación | El usuario selecciona conversación; una nueva usa mensajes locales vacíos. | `getOrCreateTelegramConversation` reutiliza una reciente de hasta cuatro horas del mismo usuario. | No hay control común del estado inicial para veinte pares. No vaciar ni editar historial productivo para fabricar igualdad. |
-| Coste por turno | El frame SSE `done` contiene la respuesta cruda con `uso`, antes del parser web. | El parser de Telegram conserva texto/bloques/trazas, pero descarta `uso`. | Un recibo web autorizado puede guardar coste reportado; el snapshot Telegram no lo acredita. |
-| Correlación | `turno_sql` registra coste/ms/errores. | Ese evento no contiene canal, actor ni ID de request en su payload. | Sin vínculo adicional verificado no adjudicar una línea de logs a un turno por proximidad de hora. |
+| Punto resuelto localmente | Contrato |
+|---|---|
+| Historial comparable | Helper puro común; filas SQL de ambos roles filtradas antes de limitar a diez; orden created_at/id; prosa y consultas completas acotadas a 4.000 unidades UTF-16. Excluye legacy, pending y error. |
+| Conversación | Web usa fuente persistida y propietario comprobado. Telegram mantiene autoridad SQL separada de capturas y del selector legacy; `/esco_nueva` crea contexto vacío sin borrar mensajes. Un turno tardío no restaura el contexto anterior. |
+| Identidad de turno | UUID generado por el motor después del acceso, canal derivado de la puerta autenticada y SHA-256 del historial efectivo normalizado. |
+| Coste | Recibo por request conservado en JSON/SSE, cliente y snapshot; log terminal enlazado por UUID/canal. Completo, parcial y desconocido mantienen sus diferencias; null nunca se convierte en cero. |
+| Persistencia incierta | Conserva recibo/identidad para conciliación y no repite el modelo ni una escritura posiblemente confirmada. Los errores no entran al historial SQL. |
+| Comparación | Captura v2 exige respuesta/snapshot/log/uso/identidad coherentes. El esquema v1 conserva utilidad offline y nunca acredita protocolo vivo P6. |
 
-En `src/utils/escoSql/loop.ts`, `MAX_HISTORIAL_SQL = 10` y el motor aplica
-`slice(-10)`. **`history_sha256` debe representar el historial efectivo que usa
-el motor**, con ese recorte y la representación exacta de rol/texto; documentar
-el normalizador y la versión de fuente. Conservar también el payload original
-privado para verificar la transformación. No declarar una diferencia por dos
-mensajes antiguos que el motor descarta ni fabricar un historial común vacío.
+La huella corresponde al array exacto `{rol,texto}` que recibe el motor. Vive en el
+recibo privado; no se registra en logs públicos. Para nuevos seguimientos, dos
+respuestas diferentes pueden producir historiales diferentes: el código no fuerza
+igualdad ni fabrica un contexto vacío. El comparador conserva ese gate.
 
-Los metadatos del proveedor de logs podrían ofrecer vínculos adicionales, pero
-esta preparación no los ha verificado. No asumirlos. Incluso un coste reportado
-por el motor permanece desconocido si el proveedor devuelve null. Medir la
-latencia completa del canal requiere además observar el final de entrega; `ms`
-del motor no lo reemplaza.
+Antes de cualquier piloto se requieren candidatos congelados y aprobaciones para
+publicar frontend, esco-consultas y make-server. La autorización anterior de P5 no
+cubre este runtime. No requiere migración ni secreto nuevo; usa metadata existente.
+Después se debe verificar el gateway, autorización, snapshots y entrega alojados,
+así como los recursos del servidor completo del nuevo candidato. La prueba de
+recursos P5 corresponde a su SHA anterior y no certifica P6.
 
-Orden propuesto, sin autorización de ejecución viva:
-
-1. Completar comparador/QA offline sintéticos de esta PR y validar localmente una
-   propuesta de captura/instrumentación que realmente enlace ambos contextos y
-   recibos. Si exige runtime nuevo, presentar primero PR/revisión y pedir las
-   aprobaciones de deploy correspondientes. Dos llamadas actuales no generan por
-   sí mismas una correlación que el código no emite.
-2. Solo tras disponer de ese mecanismo validado, solicitar un **piloto previo de un par, como máximo dos llamadas al motor**,
-   con presupuesto concreto aprobado antes de usar modelos, cuenta/estado y
-   corte conocidos, y captura privada expresamente autorizada. No es el smoke de
-   dos semanas ni amplía permiso para leer held. El piloto solo procede si existe
-   una forma aprobada de capturar ambos payloads/recibos efectivos; el navegador
-   no puede observar por sí solo el POST servidor-a-servidor de Telegram.
-3. Demostrar con evidencia por turno: historial exacto enviado, actor autorizado,
-   configuración efectiva, corte, recibo del motor, coste observado y entrega
-   final. No incluir JWT, headers de autorización ni secretos en la captura.
-4. Si falta correlación/coste/corte o los historiales difieren, detener el piloto.
-   No iniciar las ochenta capturas, inventar hashes comunes ni relajar el
-   comparador. Proponer una decisión adicional: instrumentación mínima o revisión
-   explícita del criterio de paridad del plan, con Santiago.
-
-La alternativa de instrumentación futura necesita contrato y revisión propios:
-ID opaco por turno enlazado entre canal/motor/entrega, canal derivado en servidor,
-conservación de métricas agregadas observadas (incluido null), evidencia privada
-del historial efectivo y control explícito de conversación para un ensayo
-comparable. No publicar contenido/actor ni añadir secretos a logs. Un control
-experimental no debe permitir que un cliente imponga identidad o eluda RLS.
-No se implementa ni despliega esa alternativa en esta preparación; afectaría
-runtime y exige otra revisión/aprobación de los despliegues que correspondan.
+Un piloto previo de un par/dos llamadas necesita autorización, presupuesto concreto,
+captura privada y exposición acotada o aceptación explícita del alcance global de
+los flags. Detenerse si actor, historial, corte, configuración, coste o entrega no
+pueden verificarse; no iniciar las ochenta capturas. No adjudicar costes por hora
+aproximada, rebajar comparabilidad o reintentar una salida incierta.
 
 `config_sha256` representa solo configuración pública/no secreta confirmada:
 artefactos/SHAs, motor/modelo/parámetros y settings funcionales/flags congelados.
@@ -151,6 +129,26 @@ duplicados, cambios de valores/orden/formatos, contexto distinto, desconocidos y
 privacidad de stdout/stderr. Un positivo sintético verifica la herramienta;
 no agrega evidencia de aceptación real.
 
+## Verificación local del candidato
+
+Coordinador: 445 archivos y 9.129 pruebas pasan con Node20.20.2; typecheck completo
+verde y lint con cero errores/873 avisos existentes. QA independiente añade 77
+pruebas de P6; conserva además 120 regresiones P5/legacy. Se actualizaron las
+expectativas previas de SSE para reconocer el evento inicial de turno, manteniendo
+orden, cancelación, actor y ausencia de contenido privado. Los nueve archivos del
+bot modificados/nuevos se mantienen idénticos entre ambos árboles.
+
+Los builds legacy y SQL pasan en copia externa sin `.env`, con credenciales
+ficticias; sus fuentes utils/components coinciden con el candidato. No se promueven.
+El comparador tiene chequeo TypeScript estricto propio. Los grafos congelados de
+ambas funciones y ambos árboles resuelven; los módulos Telegram SQL aislados pasan
+Deno2.1.4. **El chequeo Deno del bot completo no está verde:** baseline53,
+candidato54, con un TS2589 adicional de expansión estructural señalado en una
+llamada legacy sin cambios. Los adaptadores SQL tienen puertos explícitos y no usan
+`any` para ocultarlo. No se atribuye el diagnóstico adicional al baseline. Resolver
+ese diferencial antes de proponer el candidato para despliegue; estas pruebas no
+certifican recursos del servidor completo P6 ni aceptación alojada.
+
 ## Medidas y decisiones al cierre
 
 - **Paridad:** 40/40 pares comparables, texto/bloques/sugerencias/aclaración exactos;
@@ -191,6 +189,6 @@ afinar ni repetirlo silenciosamente.
 
 El comparador deja siempre `d6_accepted: false` y `activation_authorized: false`.
 Ni su código0 ni un hash coincidente autorizan flags, secretos, deploys o retirada
-P7. Falta cerrar la viabilidad de captura/correlación, la autorización concreta de
-activación y campaña, ejecución viva de las dos
+P7. Faltan liberar y verificar la captura/correlación alojadas, aprobar
+activación y campaña, ejecutar las dos
 semanas, aceptación de seguridad/capturas/visuales, D6 y aprobación final del corte.

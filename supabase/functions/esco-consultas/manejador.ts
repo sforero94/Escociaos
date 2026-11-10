@@ -29,7 +29,9 @@ import { renderMensaje, validarMensajeFinal, mensajeDisposicion, type AvisoMensa
 import { guardarEstado, leerEstado } from '../../../src/utils/esco2/estado.ts';
 import type { MensajeHistorial } from '../../../src/utils/esco2/tipos.ts';
 import { validarPuertaTelegram } from './puertaServicio.ts';
-import { manejarSql, tieneRpc } from './manejadorSql.ts';
+import { manejarSql } from './manejadorSql.ts';
+import { normalizarHistorialEfectivoSql } from '../../../src/utils/escoSql/historial.ts';
+import { crearContextoTurnoSql } from '../../../src/utils/escoSql/turno.ts';
 import { coberturaNoCertificada, validarCoberturaFinal, type ModoCobertura } from '../../../src/utils/esco2/cobertura.ts';
 export const NOMBRE_FUNCION = 'esco-consultas';
 /** D25: Luna sin razonamiento es la ruta habitual; Sol solo compone planes de varias partes. */
@@ -65,6 +67,8 @@ export interface Dependencias {
     crearLLM?(apiKey: string): ClienteLLM;
     ahora?(): Date;
     registrar?(evento: Record<string, unknown>): void;
+    /** Inyección de pruebas; nunca se toma del cuerpo HTTP. */
+    crearIdTurno?(): string;
 }
 export const CORS = {
     'Access-Control-Allow-Origin': '*',
@@ -227,10 +231,11 @@ export async function manejar(req: Request, deps: Dependencias): Promise<Respons
     const ahora = deps.ahora?.() ?? new Date();
     const hoy = fechaBogota(ahora);
     if (solicitud.motor === 'sql') {
+        const historial = normalizarHistorialEfectivoSql(solicitud.historial);
+        const contextoTurno = await crearContextoTurnoSql(esServicio ? 'telegram' : 'web', historial, deps.crearIdTurno);
         const llmSql = (deps.crearLLM ?? ((k: string) => crearClienteOpenRouter(k, fetch, 'Esco SQL esco-consultas')))(apiKey);
-        const entradaSql = { cliente, usuarioIdActor: esServicio ? solicitud.usuario_id : undefined, llm: llmSql, pregunta: solicitud.pregunta, historial: solicitud.historial, hoy, registrar: deps.registrar };
+        const entradaSql = { cliente, usuarioIdActor: esServicio ? solicitud.usuario_id : undefined, llm: llmSql, pregunta: solicitud.pregunta, historial, contextoTurno, hoy, registrar: deps.registrar };
         if (!esServicio && req.headers.get('accept')?.split(',').some((valor) => valor.trim().split(';')[0] === 'text/event-stream')) {
-            if (!tieneRpc(cliente)) return json(503, { error: 'El motor SQL no está disponible en este entorno' });
             return respuestaStreamSql(req, entradaSql);
         }
         const salida = await manejarSql(entradaSql);
@@ -312,14 +317,15 @@ function respuestaStreamSql(req: Request, entrada: Parameters<typeof manejarSql>
             };
             if (cancelacion.signal.aborted) cerrar();
             const enviar = (evento: { type: string; [clave: string]: unknown }) => {
-                if (activo && !cancelacion.signal.aborted) control.enqueue(encoder.encode(`event: ${evento.type}\ndata: ${JSON.stringify(evento)}\n\n`));
+                if (activo && !cancelacion.signal.aborted) control.enqueue(encoder.encode(`event: ${evento.type}\ndata: ${JSON.stringify({ ...evento, turno_id: entrada.contextoTurno?.turno_id, canal: entrada.contextoTurno?.canal })}\n\n`));
             };
             void (async () => {
                 try {
-                    const salida = await manejarSql({ ...entrada, signal: cancelacion.signal, onEvento: enviar });
+                    enviar({ type: 'turno', ...entrada.contextoTurno });
+                    const salida = await manejarSql({ ...entrada, signal: cancelacion.signal, onEvento: (evento) => enviar({ ...evento, turno_id: entrada.contextoTurno?.turno_id, canal: entrada.contextoTurno?.canal }) });
                     if (cancelacion.signal.aborted) return;
                     if (salida.estado !== 200) {
-                        enviar({ type: 'error', message: salida.cuerpo.error ?? 'No se pudo completar la consulta.' });
+                        enviar({ type: 'error', message: salida.cuerpo.error ?? 'No se pudo completar la consulta.', recibo: salida.cuerpo.recibo, uso: salida.cuerpo.uso });
                         return;
                     }
                     const r = salida.cuerpo;

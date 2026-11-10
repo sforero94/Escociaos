@@ -39,7 +39,9 @@ async function eventos(res: Response): Promise<Record<string, unknown>[]> {
 describe('QA P3 — contrato HTTP SSE', () => {
   it('emite consulta pareada y contrato final en orden sin filas en consultas', async () => {
     const s = escenario();
-    const es = await eventos(await s.ejecutar());
+    const todos = await eventos(await s.ejecutar());
+    expect(todos[0]).toMatchObject({ type: 'turno', canal: 'web', turno_id: expect.any(String), historial_sha256: expect.any(String) });
+    const es = todos.slice(1);
     expect(es.map((e) => e.type)).toEqual(['consulta_inicio', 'consulta_fin', 'texto', 'bloques', 'sugerencias', 'done']);
     expect(es[0]).toMatchObject({ proposito: 'Comprobar total sintético' });
     expect(es[1]).toMatchObject({ ok: true, n_filas: 1, ms: expect.any(Number) });
@@ -64,7 +66,9 @@ describe('QA P3 — contrato HTTP SSE', () => {
       expect(r, 'El manejador no debe esperar a la consulta para abrir SSE').not.toBeNull();
       const reader = r!.body!.getReader();
       const primero = await reader.read();
-      expect(new TextDecoder().decode(primero.value)).toContain('consulta_inicio');
+      expect(new TextDecoder().decode(primero.value)).toContain('event: turno');
+      const consulta = await reader.read();
+      expect(new TextDecoder().decode(consulta.value)).toContain('consulta_inicio');
       resolver({ data: { filas: [], n_filas: 0, truncado: false }, error: null });
       while (!(await reader.read()).done) { /* vaciar stream */ }
     } finally {
@@ -82,7 +86,9 @@ describe('QA P3 — contrato HTTP SSE', () => {
     const r = await s.ejecutar('text/event-stream', 'Bearer sintetico', controller.signal);
     const reader = r.body!.getReader();
     const primero = await reader.read();
-    expect(new TextDecoder().decode(primero.value)).toContain('consulta_inicio');
+    expect(new TextDecoder().decode(primero.value)).toContain('event: turno');
+    const consulta = await reader.read();
+    expect(new TextDecoder().decode(consulta.value)).toContain('consulta_inicio');
     controller.abort();
     resolver({ data: { filas: [], n_filas: 0, truncado: false }, error: null });
     let restante = '';
@@ -120,7 +126,7 @@ describe('QA P3 — contrato HTTP SSE', () => {
     const llm: ClienteLLM = { completar: vi.fn(async () => { throw new Error('proveedor-traza-privada'); }) };
     const s = escenario({ llm });
     const es = await eventos(await s.ejecutar());
-    expect(es.map((e) => e.type)).toEqual(['error']);
+    expect(es.map((e) => e.type)).toEqual(['turno', 'error']);
     expect(JSON.stringify(es)).not.toContain('proveedor-traza-privada');
     expect(s.rpc).not.toHaveBeenCalled();
   });

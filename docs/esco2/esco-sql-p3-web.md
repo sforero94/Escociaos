@@ -79,3 +79,7 @@ no son artefactos para producción ni el checkpoint real de Santiago.
 La publicación web, el flag de build, la aceptación real y las condiciones de
 medición están separadas en la [propuesta P6](esco-sql-p6-activacion.md).
 No se activaron flags, fusionaron PR, desplegaron funciones o ejecutaron held.
+
+P6 #478 modifica después los historiales y recibos del frontend y de ambos
+servidores. Su nuevo candidato necesita pruebas y despliegues aprobados propios;
+la liberación histórica SSE no acredita que esos cambios estén en producción.

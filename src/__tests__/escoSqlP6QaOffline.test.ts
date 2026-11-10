@@ -52,9 +52,9 @@ function fails(input: unknown) { const r = run(input); expect(r.status).toBe(1);
 function cloneChangedPair(input: Input, fn: (r: ReturnType<typeof response>) => void) { const c = input.captures.find(c => c.week === 1 && c.channel === 'telegram')!; fn(c.response); c.snapshot = { ...structuredClone(c.response), snapshot_at: c.observed_at }; }
 
 describe('QA P6 — protocolo offline de capturas, privacidad y límites de aceptación', () => {
-  it('acepta80capturas/40pares de dossemanas sin conceder D6 ni autorización', () => {
+  it('analiza80capturasv1 sin certificar protocolo vivo sin recibos ni conceder D6/autorización', () => {
     const r = run(evidence()); expect(r.status, r.stderr).toBe(0);
-    expect(r.report).toMatchObject({ protocol_pass: true, p6_live_protocol_pass: true, d6_accepted: false, activation_authorized: false, visual_manual_review_required: true, counts: { captures: 80, complete_pairs: 40, comparable_pairs: 40, parity_pairs: 40, independent_generation_pairs: 40, valid_contract_and_snapshot: 80 }, cost: { total: 0, observed_count: 80, unknown_count: 0 }, latency: { p95_ms: { web: 100, telegram: 100 } } });
+    expect(r.report).toMatchObject({ protocol_pass: true, p6_live_protocol_pass: false, d6_accepted: false, activation_authorized: false, visual_manual_review_required: true, counts: { captures: 80, complete_pairs: 40, comparable_pairs: 40, parity_pairs: 40, independent_generation_pairs: 40, valid_contract_and_snapshot: 80 }, cost: { total: 0, observed_count: 80, unknown_count: 0 }, latency: { p95_ms: { web: 100, telegram: 100 } } });
   });
   it('acepta replay coherente pero no lo convierte en paridad de generación independiente', () => {
     const r = run(evidence('shared_response_replay')); expect(r.status).toBe(0); expect(r.report).toMatchObject({ protocol_pass: true, p6_live_protocol_pass: false, counts: { shared_generation_pairs: 40, independent_generation_pairs: 0 }, d6_accepted: false, activation_authorized: false });

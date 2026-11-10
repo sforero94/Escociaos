@@ -20,9 +20,9 @@ Usa `realpath` para rechazar entradas dentro del repo, incluso enlaces simbólic
 La salida es un objeto fijo de agregados. No imprime casos, hashes, SQL, preguntas,
 respuestas, trazas, errores originales ni rutas de entrada.
 
-## Entrada privada, versión 1
+## Entrada privada, versiones 1 y 2
 
-Raíz: `schema_version: 1`, `mode: paired_live | shared_response_replay`,
+Raíz: `schema_version: 1 | 2`, `mode: paired_live | shared_response_replay`,
 `period: {started_at, ended_at}` (ISO UTC con Z, fecha real, intervalo concluido de al menos 14 días),
 `captures: [...]`. Hay exactamente **80 capturas**: los mismos veinte `case_id`
 en cada semana, dos canales por caso. No combina ni escoge repeticiones favorables.
@@ -56,14 +56,36 @@ Cambiar ambos canales juntos entre semanas también bloquea. Fecha, `hoy` y cort
 dinámicos quedan fuera de configuración; van en `data_cut_sha256`/`scope_sha256`
 y se comparan por par. Un cambio real exige nuevo ensayo o decisión de Santiago,
 nunca hashear como si el valor anterior siguiera vigente. No leer
-secretos para construirla. La huella de historial describe el input EFECTIVO usado por el motor: el
-candidato actual aplica `MAX_HISTORIAL_SQL = 10`/`slice(-10)` a ambos canales,
-aunque Telegram puede enviar doce. Documentar esa transformación/versionado y
-conservar el payload original privado; no contar diferencias en los dos mensajes
-que el motor ignora. Persisten diferencias de representación SQL, filtros y
-conversación entre canales. El código actual tampoco garantiza coste Telegram
-correlacionado: primero resolver el gate previo del
-[protocolo](../../docs/esco2/esco-sql-p6-preparacion.md).
+secretos para construirla. La huella de historial describe el array efectivo
+normalizado por `src/utils/escoSql/historial.ts`: últimos diez mensajes SQL, texto
+y consultas completas bajo el límite común. `hashHistorialSql` calcula SHA-256 de
+UTF-8 de `JSON.stringify(arrayFinal)`; no usar la huella genérica con objetos
+ordenados para sustituir esta convención. Conservar evidencia privada del input.
+La implementación local enlaza UUID/canal/uso; todavía debe liberarse y verificarse
+con las aprobaciones del [protocolo](../../docs/esco2/esco-sql-p6-preparacion.md).
+
+### V2: recibos obligatorios para protocolo vivo
+
+V1 sigue aceptando replay/fixtures offline; nunca produce `p6_live_protocol_pass`.
+V2 exige `mode: paired_live`, ochenta UUID distintos y los requisitos anteriores.
+Cada captura añade:
+
+- `response.recibo` y `response.uso` coherentes según el contrato compartido; UUID
+  igual a generation_id, canal igual a channel y huella igual a context.history_sha256.
+- `snapshot.recibo`/`snapshot.uso` idénticos a los recibidos, sin perder null.
+- `execution_log`: JSON terminal de aplicación con claves exactas `funcion`,
+  `evento`, `turno_id`, `canal`, `estado`, `uso`, `coste`, `consultas`, `errores`,
+  `ms`, `llamadas`, `costoUsd`. funcion es esco-consultas y evento es turno_sql;
+  identidad/estado/uso/coste coinciden con el recibo. Excluir envoltorios del proveedor,
+  actor, contenido, SQL y huellas de contenido/historial.
+
+Éxito requiere recibo completado. Coste completo observado puede coexistir con
+error de ejecución o entrega: el gasto conserva evidencia pero el protocolo falla.
+Coste parcial/desconocido obliga metrics.cost_source unknown y cost_usd null;
+`partial_observed_subtotal` muestra el subtotal parcial por separado. No inventar
+un total desde tokens. Reutilizar IDs, eliminar recibos, alterar hash, snapshot,
+log o métricas bloquea el vínculo. La respuesta del reporte es schema_version2,
+con evidence_schema_version y counts.receipt_linked_captures explícitos.
 
 Las observaciones de formato deben venir del artefacto del canal, no de ejecutar
 el mismo formateador para rellenarlas. La herramienta solo comprueba las celdas
@@ -104,6 +126,6 @@ falte un coste. No infiere precios a partir de tokens ni atribuye precio cero a
 uso/coste ausente. El presupuesto para capturas/juez/modelos queda por aprobar.
 
 `protocol_pass` solo evalúa los archivos aportados. `p6_live_protocol_pass` exige
-además modo real; no es autorización ni aceptación de captura/comandos, seguridad,
+además esquema v2, modo real y todos los recibos enlazados; no es autorización ni aceptación de captura/comandos, seguridad,
 factualidad o D6. `d6_accepted` y `activation_authorized` siempre son false. La CLI
 no ofrece opción `held`, ejecutor de eval ni automatización de activación.

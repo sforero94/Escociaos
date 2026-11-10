@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { construirBloque, type FuenteVisual } from '../../src/utils/escoSql/bloques.ts';
 import { formatearValor, type Formato, type Valor } from '../../src/utils/escoSql/formato.ts';
 import { leerRespuestaFinal } from '../../src/utils/escoSql/respuesta.ts';
+import { leerReciboTurnoSql } from '../../src/utils/escoSql/turno.ts';
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -65,6 +66,27 @@ function formatOK(r: Obj, observation: unknown): boolean {
   }
   return typeof format === 'string' && observation.display === formatearValor(raw as Valor,format as Formato);
 }
+/** v2 links operational evidence by opaque ID, never by clock proximity. */
+function receiptEvidence(c: Obj, metrics: Obj, ids: Set<string>, issue: (code: string) => void) {
+  const response = obj(c.response) ? c.response : {};
+  const receipt = leerReciboTurnoSql(response.recibo);
+  if (!receipt) { issue('receipt_missing_or_invalid'); return { linked:false, costKnown:false, partialCost:null as number|null }; }
+  let identity=true;
+  if (ids.has(receipt.turno_id)) { issue('receipt_id_reused'); identity=false; } else ids.add(receipt.turno_id);
+  if (c.generation_id!==receipt.turno_id || c.channel!==receipt.canal || !obj(c.context) || c.context.history_sha256!==receipt.historial_sha256) { issue('receipt_identity_mismatch'); identity=false; }
+  if (!Object.hasOwn(response,'uso') || !same(response.uso,receipt.uso) || !same(response.recibo,receipt)) { issue('receipt_response_mismatch'); identity=false; }
+  if (c.outcome==='success' && receipt.estado!=='completado') issue('receipt_state_mismatch');
+  const snapshot=obj(c.snapshot)?c.snapshot:{};
+  const snapshotMatch=Object.hasOwn(snapshot,'uso') && same(snapshot.uso,receipt.uso) && same(snapshot.recibo,receipt);
+  if (!snapshotMatch) issue('receipt_snapshot_mismatch');
+  const log=obj(c.execution_log)?c.execution_log:{};
+  const logMatch=keys(log,['funcion','evento','turno_id','canal','estado','uso','coste','consultas','errores','ms','llamadas','costoUsd']) && log.funcion==='esco-consultas' && log.evento==='turno_sql' && log.turno_id===receipt.turno_id && log.canal===receipt.canal && log.estado===receipt.estado && Object.hasOwn(log,'uso') && same(log.uso,receipt.uso) && same(log.coste,receipt.coste) && log.costoUsd===(receipt.uso?.costoUsd??null) && log.llamadas===(receipt.uso?.llamadas??null);
+  if (!logMatch) issue('receipt_log_mismatch');
+  const known=receipt.coste.estado==='completo' && receipt.uso!==null && finite(receipt.uso.costoUsd);
+  const metricMatch=known ? metrics.cost_source==='observed' && metrics.cost_usd===receipt.uso?.costoUsd : metrics.cost_source==='unknown' && metrics.cost_usd===null;
+  if (!metricMatch) issue('receipt_metric_mismatch');
+  return { linked:identity&&snapshotMatch&&logMatch&&metricMatch&&(c.outcome!=='success'||receipt.estado==='completado'), costKnown:identity&&logMatch&&metricMatch&&known, partialCost:identity&&logMatch&&receipt.coste.estado==='parcial'?receipt.coste.observadoUsd:null };
+}
 const CONTEXT = ['actor_sha256','question_sha256','history_sha256','scope_sha256','data_cut_sha256','engine_sha256','config_sha256'];
 const contextOK = (v: unknown): v is Obj => obj(v) && keys(v,CONTEXT) && CONTEXT.every(k => typeof v[k] === 'string' && /^[a-f0-9]{64}$/.test(v[k] as string));
 const percentile = (values: number[]) => values.length ? [...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1] : null;
@@ -73,10 +95,14 @@ export function analizarCapturas(input: unknown, now: Date = new Date()) {
   const issues: Record<string,number> = {};
   const issue = (code: string) => { issues[code]=(issues[code]??0)+1; };
   const root = obj(input) ? input : {};
-  if (root.schema_version !== 1 || (typeof root.mode!=='string' || !['paired_live','shared_response_replay'].includes(root.mode)) || !Array.isArray(root.captures)) issue('input_schema');
+  if (![1,2].includes(Number(root.schema_version)) || (root.schema_version!==1 && root.schema_version!==2) || (typeof root.mode!=='string' || !['paired_live','shared_response_replay'].includes(root.mode)) || !Array.isArray(root.captures)) issue('input_schema');
   const captures: unknown[] = Array.isArray(root.captures) ? root.captures : [];
   const period = obj(root.period) ? root.period : {};
   const live = root.mode === 'paired_live';
+  const receiptVersion=root.schema_version===2;
+  if(receiptVersion&&!live) issue('receipt_schema_requires_independent_generations');
+  const receiptIds=new Set<string>();
+  let linkedReceipts=0;const partialCosts:number[]=[];
   if (!iso(period.started_at) || !iso(period.ended_at) || Date.parse(String(period.ended_at))-Date.parse(String(period.started_at)) < 14*86400000 || Date.parse(String(period.ended_at)) > now.getTime()) issue('period_incomplete');
   const pairs = new Map<string,Partial<Record<'web'|'telegram',Obj>>>();
   const byWeek = [new Set<string>(),new Set<string>()];
@@ -109,10 +135,13 @@ export function analizarCapturas(input: unknown, now: Date = new Date()) {
     if (!contextOK(c.context) || typeof c.generation_id!=='string' || !c.generation_id) issue('context_unverified');
     if (!iso(c.observed_at) || !iso(period.started_at) || !iso(period.ended_at) || Date.parse(String(c.observed_at)) < Date.parse(String(period.started_at))+(week-1)*7*86400000 || Date.parse(String(c.observed_at)) >= Date.parse(String(period.started_at))+week*7*86400000 || Date.parse(String(c.observed_at)) > now.getTime()) issue('capture_time');
     const metrics = obj(c.metrics)?c.metrics:{};
+    const receipt=receiptVersion?receiptEvidence(c,metrics,receiptIds,issue):null;
+    if(receipt?.linked) linkedReceipts++;
+    if(receipt?.partialCost!==null && receipt?.partialCost!==undefined) partialCosts.push(receipt.partialCost);
     if (metrics.latency_scope!=='end_to_end' || (typeof metrics.cost_source!=='string' || !['observed','unknown'].includes(metrics.cost_source)) || (metrics.cost_source==='unknown' && metrics.cost_usd!==null) || (metrics.cost_source==='observed' && !finite(metrics.cost_usd))) issue('metrics_provenance');
     if (!(metrics.latency_ms===null || finite(metrics.latency_ms)) || !(metrics.cost_usd===null || finite(metrics.cost_usd))) issue('metrics_schema');
     if (finite(metrics.latency_ms)) latencies[String(channel)].push(metrics.latency_ms); else issue('latency_unobserved');
-    if (metrics.cost_source==='observed' && finite(metrics.cost_usd)) costs.push(metrics.cost_usd); else issue('cost_unobserved');
+    if (metrics.cost_source==='observed' && finite(metrics.cost_usd) && (!receiptVersion||receipt?.costKnown)) costs.push(metrics.cost_usd); else issue('cost_unobserved');
     if (c.outcome==='error') {errors++;issue('turn_error');continue;}
     if (c.outcome!=='success') {unknown++;issue('turn_unknown');continue;}
     success++;
@@ -140,16 +169,18 @@ export function analizarCapturas(input: unknown, now: Date = new Date()) {
   }
   const subtotal=costs.reduce((a,b)=>a+b,0);
   if(!Number.isFinite(subtotal)) issue('cost_aggregate_nonfinite');
+  const partialSubtotal=partialCosts.reduce((a,b)=>a+b,0);
+  if(!Number.isFinite(partialSubtotal)) issue('receipt_cost_aggregate_nonfinite');
   const p95={web:percentile(latencies.web),telegram:percentile(latencies.telegram)};
   for(const channel of ['web','telegram']) if(p95[channel as 'web'|'telegram']!==null && Number(p95[channel as 'web'|'telegram'])>=25000) issue('latency_threshold');
   return {
-    schema_version:1, scope:'offline_capture_analysis', live_observation:live,
-    counts:{captures:captures.length,expected_captures:80,complete_pairs:fullPairs,comparable_pairs:comparablePairs,parity_pairs:parityPairs,shared_generation_pairs:shared,independent_generation_pairs:independent,success,errors,unknown,sql_trace_captures:sqlTraceCaptures,sql_query_attempts:sqlQueryAttempts,sql_query_errors:sqlQueryErrors,valid_contract_and_snapshot:valid,format_observed_captures:formatCaptures,format_not_applicable_captures:formatNotApplicable,format_checks:formatChecks},
+    schema_version:2, evidence_schema_version:root.schema_version===1?1:root.schema_version===2?2:null, scope:'offline_capture_analysis', live_observation:live, receipts_required_for_live:true,
+    counts:{captures:captures.length,expected_captures:80,complete_pairs:fullPairs,comparable_pairs:comparablePairs,parity_pairs:parityPairs,shared_generation_pairs:shared,independent_generation_pairs:independent,success,errors,unknown,sql_trace_captures:sqlTraceCaptures,sql_query_attempts:sqlQueryAttempts,sql_query_errors:sqlQueryErrors,valid_contract_and_snapshot:valid,format_observed_captures:formatCaptures,format_not_applicable_captures:formatNotApplicable,format_checks:formatChecks,receipt_linked_captures:linkedReceipts},
     latency:{p95_ms:p95,observed:{web:latencies.web.length,telegram:latencies.telegram.length},method:'nearest_rank',threshold_ms:25000},
-    cost:{currency:'USD',observed_count:costs.length,unknown_count:captures.length-costs.length,observed_subtotal:costs.length&&Number.isFinite(subtotal)?subtotal:null,total:costs.length===captures.length&&captures.length>0&&Number.isFinite(subtotal)?subtotal:null},
+    cost:{currency:'USD',partial_receipt_count:partialCosts.length,partial_observed_subtotal:partialCosts.length&&Number.isFinite(partialSubtotal)?partialSubtotal:null,observed_count:costs.length,unknown_count:captures.length-costs.length,observed_subtotal:costs.length&&Number.isFinite(subtotal)?subtotal:null,total:costs.length===captures.length&&captures.length>0&&Number.isFinite(subtotal)?subtotal:null},
     issues,
     protocol_pass:Object.keys(issues).length===0,
-    p6_live_protocol_pass:live&&Object.keys(issues).length===0,
+    p6_live_protocol_pass:live&&receiptVersion&&linkedReceipts===captures.length&&Object.keys(issues).length===0,
     d6_accepted:false, visual_manual_review_required:true, activation_authorized:false,
   };
 }

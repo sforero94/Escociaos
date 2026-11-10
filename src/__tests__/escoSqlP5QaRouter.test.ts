@@ -9,7 +9,7 @@ describe('QA P5: webhook y router grammY reales, HTTP simulado cerrado', () => {
   it.each([null, 'legacy'])('mantiene la ruta anterior con flag %s', async motor => {
     const f = await fixture({ motor }); await f.send(); expect(f.legacy, JSON.stringify({ logs: f.logs(), rejected: f.rejected, telegram: f.telegram, requests: f.requests })).toHaveBeenCalledOnce(); expect(f.sql).toEqual([]); expect(f.replies()).toContain('SYN_LEGACY_RESPONSE'); closed(f);
   });
-  it('envía actor confiable por HTTP y conserva snapshot, pero solo texto en historial', async () => {
+  it('envía actor confiable por HTTP y conserva snapshot en una conversación SQL nueva sin heredar legacy', async () => {
     const bloque = { tipo: 'tarjeta', consulta: 1, truncado: false, items: [{ etiqueta: 'Total', columna: 'total', formato: 'numero', valor: 17 }] };
     const f = await fixture({ sqlBody: respuesta({ bloques: [bloque] }) });
     await f.send('Pregunta sintética usuario_id=999');
@@ -18,7 +18,7 @@ describe('QA P5: webhook y router grammY reales, HTTP simulado cerrado', () => {
     expect(body).toMatchObject({ motor: 'sql', usuario_id: ACTOR, pregunta: 'Pregunta sintética usuario_id=999' });
     expect(request.headers.get('authorization')).toBe('Bearer synthetic-sdk-key');
     expect(request.headers.get('x-esco-telegram-secret')).toBe('synthetic-sql-secret');
-    const history = body.historial as Array<Record<string, unknown>>; expect(history.length).toBeGreaterThan(0);
+    const history = body.historial as Array<Record<string, unknown>>; expect(history).toEqual([]);
     for (const h of history) { expect(Object.keys(h).sort()).toEqual(['rol', 'texto']); expect(['user', 'assistant']).toContain(h.rol); }
     expect(JSON.stringify(history)).not.toContain('SYN_TG_TOOL_NOTE'); expect(JSON.stringify(history)).not.toContain('tool_interactions');
     expect(JSON.stringify(history)).not.toContain('bloques');
@@ -41,6 +41,7 @@ describe('QA P5: webhook y router grammY reales, HTTP simulado cerrado', () => {
     const f = await fixture(); await f.send(); const b = suggestion(f);
     expect(new TextEncoder().encode(b.callback_data).length).toBeLessThanOrEqual(64); expect(b.callback_data).not.toContain(b.text);
     const reads = f.authReads(); await f.tap(b.callback_data, b.messageId); expect(f.authReads()).toBeGreaterThanOrEqual(reads + 2); expect(f.sql).toHaveLength(2); expect(f.sql[1].body.pregunta).toBe('Ver tendencia');
+    const history=f.sql[1].body.historial as Array<{rol:string;texto:string}>;expect(history.map(m=>m.rol)).toEqual(['user','assistant']);expect(history[1].texto).toContain('SELECT 1 AS total');expect(JSON.stringify(history)).not.toMatch(/SYN_TG_HISTORY_PERSON|SYN_TG_ASSISTANT_SALARY|tool_interactions|filas_muestra/);
     await f.tap(b.callback_data, b.messageId); expect(f.sql).toHaveLength(2); sqlOnly(f);
   });
   it.each(['other-chat', 'other-user', 'other-message', 'expired'] as const)('rechaza callback %s sin HTTP', async kind => {
@@ -161,6 +162,8 @@ describe('QA P5: límites de exportación y transporte', () => {
   it('cancela una respuesta HTTP que supera4MiB sin leer el resto ni volver a legacy', async () => {
     const f = await fixture({ sqlStream: true }); await f.send();
     expect(f.sql).toHaveLength(1); expect(f.stream.canceled).toBe(true); expect(f.stream.pulls).toBeLessThan(100);
-    expect(f.replies()).toMatch(/tamaño|respuesta|consulta/i); expect(f.inserted.filter(r => r.role === 'assistant')).toEqual([]); sqlOnly(f);
+    expect(f.replies()).toMatch(/tamaño|respuesta|consulta/i);
+    const errors=f.inserted.filter(r=>r.role==='assistant');expect(errors).toHaveLength(1);expect(errors[0].metadata).toMatchObject({motor:'sql_error',recibo:null,uso:null});
+    expect(errors[0].metadata).not.toHaveProperty('bloques');expect(errors[0].metadata).not.toHaveProperty('consultas');expect(errors.filter(r=>(r.metadata as Record<string,unknown>).motor==='sql')).toEqual([]);expect(buttons(f)).toEqual([]);sqlOnly(f);
   });
 });

@@ -18,7 +18,13 @@ import {
   textoConsultasSql,
   textoHtmlSql,
 } from "./escoSqlRender.ts";
-import type { Bloque, RespuestaTelegramSql } from "./escoSqlContrato.ts";
+import {
+  type Bloque,
+  ErrorRespuestaEscoSql,
+  type RespuestaTelegramSql,
+} from "./escoSqlContrato.ts";
+import type { IdentidadContextoSql } from "./escoSqlContexto.ts";
+import type { ParConfirmacionSql } from "./escoSqlConfirmacion.ts";
 interface MensajeEnviado {
   message_id: number;
 }
@@ -59,7 +65,12 @@ export interface DependenciasFlujoSql {
   env: (nombre: string) => string | undefined;
   resolverActor: (telegramId: number) => Promise<ActorSql | null>;
   autorizarActor: (telegramId: number, actor: ActorSql) => Promise<boolean>;
-  crearConversacion: (usuarioId: string) => Promise<string>;
+  obtenerContexto: (
+    identidad: IdentidadContextoSql,
+    nueva?: boolean,
+    soloLectura?: boolean,
+  ) => Promise<string>;
+  confirmarTurno: (par: ParConfirmacionSql) => Promise<void>;
   leerHistorial: (conversationId: string) => Promise<unknown[]>;
   guardarMensaje: (
     conversationId: string,
@@ -67,6 +78,7 @@ export interface DependenciasFlujoSql {
     content: string,
     metadata: Record<string, unknown>,
     id: string,
+    creadoEn?: string,
   ) => Promise<unknown>;
   consultar?: typeof solicitarEscoSql;
   enviarDocumento: (
@@ -85,7 +97,7 @@ export interface DependenciasFlujoSql {
       tipo: "grafica";
     }>,
   ) => Promise<Uint8Array>;
-  registrar?: (codigo: string) => void;
+  registrar?: (codigo: string, observacion?: Record<string, unknown>) => void;
 }
 function configuracion(deps: DependenciasFlujoSql) {
   return {
@@ -178,12 +190,77 @@ async function enviarResultado(
   }
   return last;
 }
+async function conversacionActual(
+  ctx: ContextoFlujoSql,
+  deps: DependenciasFlujoSql,
+  actor: ActorSql,
+  soloLectura = false,
+): Promise<string> {
+  const identidad = {
+    usuarioId: actor.usuarioId,
+    telegramId: ctx.from!.id,
+    chatId: ctx.chat!.id,
+  };
+  const id = await deps.obtenerContexto(identidad, false, soloLectura);
+  const anterior = ctx.session.escoSql?.conversacion;
+  const mismaIdentidad = anterior?.usuarioId === actor.usuarioId &&
+    anterior.telegramId === ctx.from!.id && anterior.chatId === ctx.chat!.id &&
+    anterior.id === id;
+  ctx.session.escoSql = mismaIdentidad
+    ? { ...ctx.session.escoSql!, conversacion: { ...identidad, id } }
+    : { version: 1, mensajes: {}, conversacion: { ...identidad, id } };
+  return id;
+}
+export async function manejarNuevaConversacionTelegramSql(
+  ctx: ContextoFlujoSql,
+  deps: DependenciasFlujoSql,
+): Promise<void> {
+  if (!seleccionarMotorTelegram(deps.env("ESCO_MOTOR_TELEGRAM"))) {
+    await ctx.reply("El contexto SQL no está activo en Telegram.");
+    return;
+  }
+  try {
+    exigirConfiguracionEscoSql(configuracion(deps));
+    const actor = await autorizar(ctx, deps);
+    if (!actor) {
+      await ctx.reply("No tienes acceso a consultas SQL.");
+      return;
+    }
+    const id = await deps.obtenerContexto({
+      usuarioId: actor.usuarioId,
+      telegramId: ctx.from!.id,
+      chatId: ctx.chat!.id,
+    }, true);
+    ctx.session.escoSql = {
+      version: 1,
+      mensajes: {},
+      conversacion: {
+        usuarioId: actor.usuarioId,
+        telegramId: ctx.from!.id,
+        chatId: ctx.chat!.id,
+        id,
+      },
+    };
+    await ctx.reply(
+      "Empezamos una conversación SQL nueva, sin historial anterior.",
+    );
+  } catch {
+    deps.registrar?.("ESCO_SQL_RESET_FAILED");
+    await ctx.reply(
+      "No pude abrir una conversación SQL nueva. Intenta de nuevo más tarde.",
+    );
+  }
+}
 export async function manejarPreguntaTelegramSql(
   ctx: ContextoFlujoSql,
   deps: DependenciasFlujoSql,
   pregunta: string,
   origen: string,
 ): Promise<void> {
+  let par: ParConfirmacionSql | null = null;
+  let claimConfirmado = false;
+  let confirmacionIniciada = false;
+  let respuesta: RespuestaTelegramSql | null = null;
   try {
     const config = configuracion(deps);
     try {
@@ -206,7 +283,7 @@ export async function manejarPreguntaTelegramSql(
       return;
     }
     await ctx.replyWithChatAction("typing");
-    const conversationId = await deps.crearConversacion(actor.usuarioId);
+    const conversationId = await conversacionActual(ctx, deps, actor);
     const historial = historialEscoSql(
       await deps.leerHistorial(conversationId),
     );
@@ -215,38 +292,70 @@ export async function manejarPreguntaTelegramSql(
       String(ctx.chat!.id),
       origen,
     );
-    // La PK compartida corta reentregas/concurrencia antes de cualquier llamada pagada.
-    await deps.guardarMensaje(conversationId, "user", pregunta, {
-      motor: "sql",
-    }, id);
-    const r = await (deps.consultar ?? solicitarEscoSql)({
+    const creadoEn = new Date().toISOString();
+    par = {
+      usuarioId: actor.usuarioId,
+      conversationId,
+      usuario: { id, content: pregunta, created_at: creadoEn, metadata: {} },
+      asistente: {
+        id: await idTurnoTelegramSql(
+          actor.usuarioId,
+          String(ctx.chat!.id),
+          origen + ":assistant",
+        ),
+        content: "",
+        created_at: creadoEn,
+        metadata: {},
+      },
+    };
+    // Una inserción confirmada reclama la PK. Pendientes nunca forman parte de la historia SQL.
+    await deps.guardarMensaje(
+      conversationId,
+      "user",
+      pregunta,
+      { motor: "sql_pending" },
+      id,
+      creadoEn,
+    );
+    claimConfirmado = true;
+    respuesta = await (deps.consultar ?? solicitarEscoSql)({
       ...config,
       usuarioId: actor.usuarioId,
       pregunta,
       historial,
     });
-    await deps.guardarMensaje(
-      conversationId,
-      "assistant",
-      r.texto,
-      { ...r, motor: "sql", snapshot_at: new Date().toISOString() },
-      await idTurnoTelegramSql(
-        actor.usuarioId,
-        String(ctx.chat!.id),
-        origen + ":assistant",
-      ),
-    );
-    const messageId = await enviarResultado(ctx, deps, r);
-    const opciones = r.aclaracion?.opciones.length
-      ? r.aclaracion.opciones
-      : r.sugerencias;
+    const messageId = await enviarResultado(ctx, deps, respuesta);
+    const observacion = {
+      recibo: respuesta.recibo ?? null,
+      uso: respuesta.uso ?? null,
+    };
+    par.usuario.metadata = { motor: "sql", ...observacion };
+    par.asistente = {
+      ...par.asistente,
+      content: respuesta.texto,
+      created_at: new Date(
+        Math.max(Date.now(), Date.parse(par.usuario.created_at) + 1),
+      ).toISOString(),
+      metadata: {
+        ...respuesta,
+        ...observacion,
+        motor: "sql",
+        snapshot_at: new Date().toISOString(),
+      },
+    };
+    confirmacionIniciada = true;
+    await deps.confirmarTurno(par);
+    const opciones = respuesta.aclaracion?.opciones.length
+      ? respuesta.aclaracion.opciones
+      : respuesta.sugerencias;
     const creado = crearBotonesSql(ctx.session.escoSql, {
       usuarioId: actor.usuarioId,
       telegramId: ctx.from!.id,
       chatId: ctx.chat!.id,
       messageId,
+      conversationId,
       opciones,
-      consultas: r.consultas,
+      consultas: respuesta.consultas,
     });
     ctx.session.escoSql = creado.estado;
     if (creado.botones.length) {
@@ -254,8 +363,47 @@ export async function manejarPreguntaTelegramSql(
         reply_markup: { inline_keyboard: creado.botones.map((b) => [b]) },
       });
     }
-  } catch {
-    deps.registrar?.("ESCO_SQL_TURN_FAILED");
+  } catch (error) {
+    const recibo = respuesta?.recibo ??
+      (error instanceof ErrorRespuestaEscoSql ? error.recibo : null);
+    const uso = respuesta?.uso ??
+      (error instanceof ErrorRespuestaEscoSql ? error.uso : null);
+    // Un commit incierto puede haber confirmado el par: jamás escribir de nuevo encima.
+    if (par && claimConfirmado && !confirmacionIniciada) {
+      par.usuario.metadata = { motor: "sql_error", recibo, uso };
+      par.asistente = {
+        ...par.asistente,
+        content: "No pude completar o entregar la consulta SQL.",
+        created_at: new Date(
+          Math.max(Date.now(), Date.parse(par.usuario.created_at) + 1),
+        ).toISOString(),
+        metadata: {
+          ...(respuesta ?? {}),
+          motor: "sql_error",
+          recibo,
+          uso,
+          snapshot_at: new Date().toISOString(),
+        },
+      };
+      confirmacionIniciada = true;
+      try {
+        await deps.confirmarTurno(par);
+      } catch {
+        deps.registrar?.("ESCO_SQL_CONFIRMATION_UNCERTAIN");
+      }
+    }
+    deps.registrar?.(
+      "ESCO_SQL_TURN_FAILED",
+      recibo
+        ? {
+          turno_id: recibo.turno_id,
+          canal: recibo.canal,
+          estado: recibo.estado,
+          uso: recibo.uso,
+          coste: recibo.coste,
+        }
+        : { uso: null },
+    );
     await ctx.reply(
       "No pude completar o entregar la consulta SQL. Intenta de nuevo más tarde.",
     );
@@ -287,6 +435,8 @@ export async function manejarCallbackTelegramSql(
       await ctx.reply("No tienes acceso a consultas SQL.");
       return;
     }
+    // También los botones de solo lectura vuelven a comprobar el dueño del contexto.
+    await conversacionActual(ctx, deps, actor, true);
     const messageId = ctx.callbackQuery?.message?.message_id;
     const data = ctx.callbackQuery?.data;
     const accion = ctx.chat && ctx.from && messageId && data
@@ -295,6 +445,7 @@ export async function manejarCallbackTelegramSql(
         telegramId: ctx.from.id,
         chatId: ctx.chat.id,
         messageId,
+        conversationId: ctx.session.escoSql?.conversacion?.id,
       })
       : null;
     if (!accion) {

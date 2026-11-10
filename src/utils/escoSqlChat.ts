@@ -1,11 +1,12 @@
 import { construirBloque, type Bloque, type FuenteVisual } from './escoSql/bloques';
 import { formatearValor } from './escoSql/formato';
 import { leerRespuestaFinal, type Aclaracion } from './escoSql/respuesta';
+import { leerReciboTurnoSql, leerUsoTurnoSql, type ReciboTurnoSql, type UsoTurnoSql } from './escoSql/turno';
 import type { ConsultaSql } from './escoSql/loop';
 import type { ChartSpec, PasoTraza } from '@/types/chat';
 import type { ContentBlock } from '@/components/chat/ChatMessage';
 
-export interface RespuestaSqlWeb { texto: string; bloques: Bloque[]; sugerencias: string[]; aclaracion?: Aclaracion; consultas: Omit<ConsultaSql, 'filas_muestra'>[]; ms: number }
+export interface RespuestaSqlWeb { texto: string; bloques: Bloque[]; sugerencias: string[]; aclaracion?: Aclaracion; consultas: Omit<ConsultaSql, 'filas_muestra'>[]; ms: number; uso?: UsoTurnoSql | null; recibo?: ReciboTurnoSql }
 export interface MetadataSql extends RespuestaSqlWeb { motor: 'sql'; snapshot_at: string }
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 export const motorSqlWebHabilitado = (valor: unknown): boolean => valor === 'sql';
@@ -23,10 +24,14 @@ function bloquePersistido(valor: unknown): Bloque | null {
 }
 export function leerRespuestaSqlWeb(valor: unknown): RespuestaSqlWeb | null {
   if (!objeto(valor) || typeof valor.texto !== 'string') return null;
+  const recibo = valor.recibo === undefined ? undefined : leerReciboTurnoSql(valor.recibo);
+  if (valor.recibo !== undefined && (!recibo || recibo.estado !== 'completado')) return null;
+  const uso = valor.uso === undefined ? undefined : valor.uso === null ? null : leerUsoTurnoSql(valor.uso);
+  if (recibo && (valor.uso === undefined || (recibo.uso === null ? valor.uso !== null : !uso || JSON.stringify(uso) !== JSON.stringify(recibo.uso)))) return null;
   const final = leerRespuestaFinal(JSON.stringify({ texto: valor.texto, sugerencias: valor.sugerencias, aclaracion: valor.aclaracion }));
   const consultas = Array.isArray(valor.consultas) ? valor.consultas.filter(objeto).slice(0, 4).map((c) => ({ sql: typeof c.sql === 'string' ? c.sql : '', proposito: typeof c.proposito === 'string' ? c.proposito : '', n_filas: typeof c.n_filas === 'number' ? c.n_filas : null, truncado: c.truncado === true, error: typeof c.error === 'string' ? c.error : null, ms: typeof c.ms === 'number' ? c.ms : 0 })) : [];
   const bloques = Array.isArray(valor.bloques) ? valor.bloques.slice(0, 4).map(bloquePersistido).filter((b): b is Bloque => b !== null) : [];
-  return { ...final, consultas, bloques, ms: typeof valor.ms === 'number' ? valor.ms : 0 };
+  return { ...final, consultas, bloques, ms: typeof valor.ms === 'number' ? valor.ms : 0, ...(uso !== undefined ? { uso } : {}), ...(recibo ? { recibo } : {}) };
 }
 export function metadataRespuestaSql(valor: RespuestaSqlWeb, snapshot_at: string): MetadataSql {
   const limpia = leerRespuestaSqlWeb(valor);

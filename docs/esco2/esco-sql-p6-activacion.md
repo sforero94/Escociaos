@@ -6,11 +6,11 @@ se guardaron. Se mantienen cerrados held, flags, fusiones y despliegues.
 
 ## Decisión recomendada
 
-El adaptador P3 compila y puede publicarse, pero **no recomiendo activar SQL de
-forma general todavía para dar por iniciado el ensayo pareado**. Faltan historia
-efectiva comparable y coste Telegram ligado a cada turno. Son límites comprobados
-en el código, no fallos atribuidos al modelo. La propuesta distingue publicación,
-viabilidad de medición, activación y aceptación. Ninguna equivale a las demás.
+Los historiales comparables y el coste Telegram por turno están implementados y
+probados **localmente en #478**. La producción descrita abajo conserva el runtime
+anterior. Antes de activar SQL deben liberarse candidatos revisados del frontend,
+esco-consultas y make-server, verificar su captura alojada y concretar exposición,
+presupuesto y reversión. Las pruebas locales no inician el ensayo pareado.
 
 ## Qué está publicado y qué falta de P3
 
@@ -19,7 +19,7 @@ viabilidad de medición, activación y aceptación. Ninguna equivale a las demá
 | Vercel `escociaos` | Cuenta `escocia`, proyecto `prj_r9z59zKKLqZo64RgecbEB8lXyYCd`, equipo `team_hQ3EH5CL5DQFmWLo3VceWeE6`; GitHub `sforero94/Escociaos`, production branch `main` | Integrar la pila revisada y publicar un build que contenga P3 |
 | Web producción | Deployment READY `dpl_2JbNMWH8qFUdYDm6btPjDK8mn77R`, SHA `bb5602743f768b2debac4c92e0844f46b0b91916`, alias `escociaos.vercel.app` | Su `ChatPanel` no contiene el adaptador ni `VITE_ESCO_MOTOR_WEB` |
 | Variable web | Inventario con `decrypt=false`: solo las dos variables Supabase existentes; `VITE_ESCO_MOTOR_WEB` ausente en todos los targets | Crear exclusivamente el flag en el target aprobado; reconstruir el frontend |
-| esco-consultas | v16 ACTIVE, JWT=true, bundle `903db296ef4ecf9c77930dc32c3de936d78a16804a0de13c9c5d02e7711e6295`; contrato P2/SSE P3/ejecutor P4 ya publicados | No volver a pedir su deploy por el pendiente histórico del documento P3 |
+| esco-consultas | v16 ACTIVE, JWT=true, bundle `903db296ef4ecf9c77930dc32c3de936d78a16804a0de13c9c5d02e7711e6295`; contrato P2/SSE P3/ejecutor P4 ya publicados | P6 sí modifica su runtime: nuevo candidato y aprobación de deploy; el pendiente histórico P3 no exige repetir el anterior |
 | Telegram | make-server v299 ACTIVE, JWT=false, bundle `e2642bd441e6bffe84ad387c47829f66d3dd8bab7889f4e0a62acb9d44c939e2`; secreto compartido presente y flag ausente | La ruta SQL sigue apagada; eventual instrumentación tendría otro candidato y aprobación de deploy |
 
 La lectura GitHub confirmó esta pila abierta, mergeable/clean **en ese momento**:
@@ -65,50 +65,29 @@ no modifica el deployment anterior. Fuentes primarias:
 [Vite: variables y modos](https://vite.dev/guide/env-and-mode),
 [Vercel: Git y production branch](https://vercel.com/docs/git).
 
-## Viabilidad que debe cerrarse antes del piloto
+## Solución local y gates de liberación
 
-1. **Historial.** Web usa los últimos diez mensajes y añade SQL con
-   `textoHistorialSql`; Telegram lee veinte, filtra hasta doce y envía solo
-   contenido. El motor aplica `MAX_HISTORIAL_SQL=10` a ambos: no atribuir una
-   diferencia a dos mensajes que se descartan antes de llamar al modelo. Persisten
-   representación, filtros y selección. Además, Telegram reutiliza una conversación
-   de hasta cuatro horas.
-   La huella de historial corresponde al input efectivo tras ese recorte, con
-   normalizador/versionado documentados y payload original privado conservado.
-   La misma pregunta/actor no demuestra el mismo input. No rellenar hashes iguales
-   ni borrar conversaciones para forzar paridad.
-2. **Coste/correlación.** El SSE bruto web tiene `uso`, pero el adaptador no lo
-   conserva en su resultado. Telegram descarta `uso`. El log `turno_sql` lleva
-   ms/coste/errores sin un ID de turno/canal compartido con su snapshot. Bajo
-   concurrencia, una ventana horaria no prueba qué coste corresponde a qué turno.
-   Si falta evidencia verificable, el coste y su total siguen desconocidos.
-3. **Dos generaciones.** Un replay de la misma respuesta prueba el contrato de
-   presentación. Dos llamadas reales pueden variar aun con temperatura cero.
-   El comparador mantiene texto/bloques/opciones exactos: una divergencia sigue
-   abierta, no se renombra como equivalencia ni se atribuye automáticamente al renderer.
+El [contrato de turno](esco-sql-p6-contrato-turno.md) y la
+[preparación](esco-sql-p6-preparacion.md) documentan la implementación compartida:
+selección SQL persistida y acotada, contexto Telegram explícito, UUID/canal/huella
+postautorización, recibo de coste por llamada conservado y comparación v2 enlazada.
+QA separado usa handlers reales con transportes sintéticos y pruebas de concurrencia,
+acceso revocado, coste desconocido, cancelación, snapshot y persistencia incierta.
+No introduce migración, secreto ni permiso RLS adicional. No garantiza igualdad de
+dos generaciones diferentes ni permite relajar el gate de historial por seguimiento.
 
-Propuesta concreta para resolver los dos primeros puntos, aún sin implementar
-runtime en esta preparación:
+El SHA de #478 debe congelarse tras CI. El diferencial Deno TS2589 adicional
+(54 diagnósticos frente a53 del baseline, documentado en preparación) debe
+resolverse antes de presentar un candidato desplegable. Para liberar ese candidato se requiere
+aprobar explícitamente:
 
-- Definir y probar una política única de historial SQL (selección, número máximo,
-  representación del SQL y de respuestas previas) para ambos clientes. No cambiar
-  esa semántica silenciosamente. Preparar un inicio de conversación SQL aislada y
-  ligada al actor para el ensayo; nunca borrar historia ni tocar capturas.
-- Generar un `turno_id` opaco en la puerta del motor, después del acceso, y devolverlo
-  tanto en JSON como en SSE. Derivar el canal de la puerta autenticada, no de una
-  etiqueta confiada al cliente. Propagar el ID a snapshots y logs de coste/errores;
-  conservar `uso` observado en ambos clientes. No registrar pregunta, SQL, filas,
-  respuesta, JWT ni secreto. La huella de config excluye credenciales.
-- Una futura implementación acotaría cambios a los helpers de historial, clientes
-  web/Telegram, metadata del turno, manejadores de esco-consultas y ambos árboles
-  del bot. Usaría el JSON metadata ya existente: no se propone migración, secreto
-  nuevo ni permiso RLS adicional. Se debe validar que esto basta antes de afirmar
-  que no hará falta migración. QA separado debe falsificar aislamiento, IDs,
-  intercalado concurrente, coste null/0, snapshot y rechazo de acceso.
-- Si cambia runtime, entregar otro SHA revisable y sus pruebas antes de pedir los
-  despliegues correspondientes. La autorización cumplida de `0a9883c2` no cubre
-  ese candidato futuro. El comparador offline ya preparado no resuelve estas
-  carencias de captura por sí mismo.
+- Frontend con ambos modos compilados, manteniendo legacy al publicar.
+- esco-consultas mediante `npx supabase@2.117.0 functions deploy esco-consultas --project-ref ywhtjwawnkeqlwxbvgup --use-api`, con verify_jwt=true.
+- make-server mediante `npx supabase functions deploy make-server-1ccce916`, con verify_jwt=false, después de verificar recursos del servidor completo del nuevo candidato.
+
+La autorización cumplida de `0a9883c2` no cubre P6. Las pruebas de recursos P5
+acreditan aquel código; repetir la verificación pertinente para este candidato.
+No ejecutar estos pasos ni activar flags por aprobar únicamente trabajo local.
 
 Después de validar localmente esa solución, se propone un **piloto de un par/dos
 turnos** con autorización y presupuesto explícitos, sin juez ni reintentos
@@ -131,9 +110,8 @@ No activar globalmente con la promesa de que estos payloads ya imponen ese lími
 
 ## Orden de liberación propuesto (no ejecutado)
 
-Esta preparación tiene un único PR P6 sobre P5 y se deja abierto. Si se continúa
-con instrumentación local, ampliar este mismo PR antes de congelar el candidato
-runtime y pedir sus despliegues; no crear otra fase ni dar por aceptada P6.
+Esta preparación tiene un único PR P6 sobre P5 y se deja abierto. La instrumentación se incorporó en este mismo PR; congelar su candidato
+runtime antes de pedir los despliegues. No dar por aceptada P6.
 
 ### A. Integrar y publicar P3 manteniendo legacy
 
@@ -201,8 +179,8 @@ que siga ausente el flag. Cambiar exclusivamente una entrada en Supabase:
 
 Esta escritura tiene efecto de ejecución; no necesita otro deploy del mismo
 código. No rota `ESCO_TELEGRAM_SECRET` ni cambia JWT, webhook o credenciales.
-Si se aprobó y desplegó instrumentación nueva, usar su SHA/hash revisados, no afirmar
-que v299 la contiene. Tras la activación, únicamente el piloto/uso real autorizado;
+La instrumentación nueva exige primero sus despliegues aprobados y SHA/hash
+revisados; v299 no la contiene. Tras la activación, únicamente el piloto/uso real autorizado;
 no enviar mensajes de prueba, abrir held ni iniciar campañas por la sola aprobación
 del flag.
 
