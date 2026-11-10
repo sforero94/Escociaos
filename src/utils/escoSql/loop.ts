@@ -13,15 +13,20 @@
 import type { ClienteLLM, Esfuerzo, MensajeLLM } from '../esco2/llm.ts';
 import { abreviarDineroEnTexto } from './formatoDinero.ts';
 import { construirPrompt } from './prompt.ts';
+import { construirBloque, MAX_BLOQUES, MAX_FILAS_SQL, type Bloque, type FuenteVisual } from './bloques.ts';
+import { FORMATOS } from './formato.ts';
+import { leerRespuestaFinal, type Aclaracion } from './respuesta.ts';
 
 export const MAX_CONSULTAS = 4;
 export const MAX_HISTORIAL_SQL = 10;
 /** Tope de caracteres de filas que se le muestran al modelo por consulta (el resto se avisa). */
 export const MAX_CARACTERES_RESULTADO = 12000;
-/** Filas que se conservan para mostrar en la pantalla de prueba. */
+/** Muestra del contexto del modelo y de consumidores internos anteriores; la traza HTTP la omite. */
 export const FILAS_MUESTRA = 20;
 const MAX_TOKENS = 1500;
 const MAX_TEXTO_HISTORIAL = 4000;
+/** Un proveedor que repite herramientas inválidas tampoco puede abrir un loop infinito. */
+export const MAX_RONDAS_SQL = 10;
 
 /** Mismo modelo y misma ruta (habitual, sin razonamiento) que el planificador de esco-consultas. */
 export const CONFIG_SQL: { modelo: string; esfuerzo: Esfuerzo } = { modelo: 'openai/gpt-6-luna', esfuerzo: 'none' };
@@ -59,8 +64,9 @@ export interface ConsultaSql {
   n_filas: number | null;
   truncado: boolean;
   error: string | null;
-  /** Primeras filas, para que la pantalla de prueba las muestre. */
+  /** Compatibilidad interna del loop; manejarSql la excluye del contrato HTTP. */
   filas_muestra: Record<string, unknown>[];
+  ms: number;
 }
 
 export interface UsoSql {
@@ -73,6 +79,10 @@ export interface UsoSql {
 
 export interface ResultadoPregunta {
   respuesta: string;
+  texto: string;
+  bloques: Bloque[];
+  sugerencias: string[];
+  aclaracion?: Aclaracion;
   consultas: ConsultaSql[];
   uso: UsoSql;
   ms: number;
@@ -87,7 +97,29 @@ export interface EntradaPregunta {
   hoy: string;
   config?: { modelo: string; esfuerzo: Esfuerzo };
   ahora?: () => number;
+  /** Solo códigos cerrados, nunca especificaciones ni datos de la finca. */
+  registrarRechazoVisual?: (motivo: string) => void;
 }
+
+const columnaVisual = {
+  type: 'object', additionalProperties: false,
+  properties: { columna: { type: 'string' }, etiqueta: { type: 'string' }, formato: { type: 'string', enum: FORMATOS } },
+  required: ['columna', 'etiqueta', 'formato'],
+};
+export const HERRAMIENTA_MOSTRAR_VISUAL = {
+  type: 'function', function: {
+    name: 'mostrar_visual',
+    description: 'Pide un visual con columnas de una consulta previa (consulta desde 1). Solo especificación: jamás escribas filas, datos ni valores. Hasta 4 visuales. Tarjeta: consulta agregada de una sola fila. Gráfica: hasta 60 puntos.',
+    parameters: {
+      type: 'object',
+      oneOf: [
+        { type: 'object', additionalProperties: false, properties: { tipo: { const: 'tabla' }, consulta: { type: 'integer', minimum: 1 }, titulo: { type: 'string' }, columnas: { type: 'array', items: columnaVisual, minItems: 1, maxItems: 12 } }, required: ['tipo', 'consulta', 'titulo', 'columnas'] },
+        { type: 'object', additionalProperties: false, properties: { tipo: { const: 'grafica' }, consulta: { type: 'integer', minimum: 1 }, titulo: { type: 'string' }, forma: { enum: ['bar', 'line', 'pie', 'area'] }, x: { type: 'string' }, y: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 6 }, formato: { enum: FORMATOS } }, required: ['tipo', 'consulta', 'titulo', 'forma', 'x', 'y', 'formato'] },
+        { type: 'object', additionalProperties: false, properties: { tipo: { const: 'tarjeta' }, consulta: { type: 'integer', minimum: 1 }, items: { type: 'array', items: columnaVisual, minItems: 1, maxItems: 8 } }, required: ['tipo', 'consulta', 'items'] },
+      ],
+    },
+  },
+} as const;
 
 export const HERRAMIENTA_CONSULTAR_SQL = {
   type: 'function',
@@ -126,19 +158,20 @@ function leerArgumentos(bruto: string): { sql: string; proposito: string } | nul
 }
 
 function textoResultado(n: number, r: ResultadoSql): string {
-  let cuerpo = JSON.stringify(r.filas);
-  let aviso = '';
+  const muestra = r.filas.slice(0, FILAS_MUESTRA);
+  let cuerpo = JSON.stringify(muestra);
+  let aviso = r.filas.length > FILAS_MUESTRA ? ` Solo ves las primeras ${FILAS_MUESTRA} filas; el servidor conserva todas para mostrar_visual. Agrega con SUM/COUNT/GROUP BY si necesitas un total.` : '';
   if (cuerpo.length > MAX_CARACTERES_RESULTADO) {
     // Recorta por filas completas para no entregar JSON cortado a la mitad.
     let acumulado = 1;
     let usadas = 0;
-    for (const fila of r.filas) {
+    for (const fila of muestra) {
       const largo = JSON.stringify(fila).length + 1;
       if (acumulado + largo > MAX_CARACTERES_RESULTADO) break;
       acumulado += largo;
       usadas++;
     }
-    cuerpo = JSON.stringify(r.filas.slice(0, usadas));
+    cuerpo = JSON.stringify(muestra.slice(0, usadas));
     aviso = ` Solo ves las primeras ${usadas} filas porque el resultado es largo; agrega la consulta (SUM/COUNT/GROUP BY) si necesitas el total.`;
   }
   const trunc = r.truncado ? ' El resultado fue TRUNCADO a 500 filas: no es el conjunto completo.' : '';
@@ -151,6 +184,10 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
   const config = entrada.config ?? CONFIG_SQL;
   const uso: UsoSql = { llamadas: 0, entrada: 0, salida: 0, costoUsd: 0 };
   const consultas: ConsultaSql[] = [];
+  const fuentes: FuenteVisual[] = [];
+  const bloques: Bloque[] = [];
+  let rondas = 0;
+  let numeroLlamada = 0;
 
   const mensajes: MensajeLLM[] = [{ role: 'system', content: construirPrompt(entrada.hoy) }];
   for (const m of (entrada.historial ?? []).slice(-MAX_HISTORIAL_SQL)) {
@@ -166,38 +203,59 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
   };
 
   // F1: el dinero del texto sale siempre en formato colombiano abreviado, lo escriba así el modelo o no.
-  const terminar = (respuesta: string): ResultadoPregunta => ({
-    respuesta: abreviarDineroEnTexto(respuesta.trim()) || 'No pude armar una respuesta. Intenta reformular la pregunta.',
-    consultas,
-    uso,
-    ms: reloj() - inicio,
-  });
+  const terminar = (bruto: string): ResultadoPregunta => {
+    const final = leerRespuestaFinal(bruto);
+    const texto = abreviarDineroEnTexto(final.texto) || 'No pude armar una respuesta. Intenta reformular la pregunta.';
+    return { ...final, texto, respuesta: texto, bloques, consultas, uso, ms: reloj() - inicio };
+  };
 
   while (true) {
     const puedeConsultar = consultas.length < MAX_CONSULTAS;
+    const puedeUsarHerramientas = rondas < MAX_RONDAS_SQL;
+    const herramientas: unknown[] = [];
+    if (puedeUsarHerramientas) {
+      if (puedeConsultar) herramientas.push(HERRAMIENTA_CONSULTAR_SQL);
+      if (bloques.length < MAX_BLOQUES) herramientas.push(HERRAMIENTA_MOSTRAR_VISUAL);
+    }
     const r = await entrada.llm.completar({
       modelo: config.modelo,
       esfuerzo: config.esfuerzo,
       mensajes,
-      herramientas: puedeConsultar ? [HERRAMIENTA_CONSULTAR_SQL] : undefined,
-      toolChoice: puedeConsultar ? 'auto' : undefined,
+      herramientas: herramientas.length ? herramientas : undefined,
+      toolChoice: herramientas.length ? 'auto' : undefined,
       maxTokens: MAX_TOKENS,
     });
     registrarUso(r.uso);
+    rondas++;
 
-    const llamadas = r.llamadas.filter((l) => l.nombre === 'consultar_sql');
-    if (!llamadas.length || !puedeConsultar) return terminar(r.texto);
+    const llamadas = r.llamadas;
+    if (!llamadas.length || !puedeUsarHerramientas) return terminar(r.texto);
 
     // Protocolo de herramientas de OpenAI: el turno del asistente lleva sus llamadas y cada una
     // recibe su mensaje 'tool'. Todas las llamadas deben quedar respondidas, aunque no se ejecuten.
-    const ids = llamadas.map((_, i) => `call_${consultas.length + i + 1}`);
+    const ids = llamadas.map(() => `call_${++numeroLlamada}`);
     mensajes.push({
       role: 'assistant',
       content: r.texto ?? '',
-      tool_calls: llamadas.map((l, i) => ({ id: ids[i], type: 'function' as const, function: { name: 'consultar_sql', arguments: l.argumentos } })),
+      tool_calls: llamadas.map((l, i) => ({ id: ids[i], type: 'function' as const, function: { name: l.nombre, arguments: l.argumentos } })),
     });
     for (const [i, llamada] of llamadas.entries()) {
       const responder = (content: string) => mensajes.push({ role: 'tool', tool_call_id: ids[i], content });
+      if (llamada.nombre === 'mostrar_visual') {
+        let resultado: ReturnType<typeof construirBloque>;
+        try { resultado = construirBloque(JSON.parse(llamada.argumentos), fuentes); }
+        catch { resultado = { error: 'especificacion_invalida' }; }
+        const motivo = bloques.length >= MAX_BLOQUES ? 'limite_bloques' : 'error' in resultado ? resultado.error : null;
+        if (motivo) {
+          entrada.registrarRechazoVisual?.(motivo);
+          responder(`Visual descartado: ${motivo}. Continúa con texto o una especificación válida.`);
+        } else if ('bloque' in resultado) {
+          bloques.push(resultado.bloque);
+          responder(`Visual ${bloques.length} preparado desde las filas de la consulta ${resultado.bloque.consulta}.`);
+        }
+        continue;
+      }
+      if (llamada.nombre !== 'consultar_sql') { responder('Herramienta no admitida.'); continue; }
       if (consultas.length >= MAX_CONSULTAS) {
         responder(`No ejecutada: ya usaste las ${MAX_CONSULTAS} consultas permitidas.`);
         continue;
@@ -205,20 +263,25 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
       const n = consultas.length + 1;
       const args = leerArgumentos(llamada.argumentos);
       if (!args) {
-        consultas.push({ sql: llamada.argumentos.slice(0, 500), proposito: '', n_filas: null, truncado: false, error: 'argumentos inválidos', filas_muestra: [] });
+        consultas.push({ sql: llamada.argumentos.slice(0, 500), proposito: '', n_filas: null, truncado: false, error: 'argumentos inválidos', filas_muestra: [], ms: 0 });
+        fuentes.push({ filas: [], n_filas: null, truncado: false, error: 'argumentos_invalidos' });
         responder('Error: la llamada a consultar_sql no traía {sql, proposito} válidos. Vuelve a intentar.');
         continue;
       }
+      const inicioConsulta = reloj();
       try {
-        const res = await entrada.ejecutarSql(args.sql);
-        consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: res.n_filas, truncado: res.truncado, error: null, filas_muestra: res.filas.slice(0, FILAS_MUESTRA) });
+        const recibido = await entrada.ejecutarSql(args.sql);
+        const res = { ...recibido, filas: recibido.filas.slice(0, MAX_FILAS_SQL), truncado: recibido.truncado || recibido.filas.length > MAX_FILAS_SQL };
+        fuentes.push({ ...res });
+        consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: res.n_filas, truncado: res.truncado, error: null, filas_muestra: res.filas.slice(0, FILAS_MUESTRA), ms: reloj() - inicioConsulta });
         responder(textoResultado(n, res));
       } catch (e) {
         // Sin permiso (42501) o un error de PostgREST (PGRST*: la función no existe, etc.) no son
         // errores de la consulta: el modelo no puede arreglarlos, así que no se le muestran.
         if (e instanceof ErrorAccesoSql || (e instanceof ErrorSql && (e.codigo === '42501' || e.codigo?.startsWith('PGRST')))) throw e;
         const mensaje = e instanceof Error ? e.message : String(e);
-        consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: null, truncado: false, error: mensaje, filas_muestra: [] });
+        fuentes.push({ filas: [], n_filas: null, truncado: false, error: 'consulta_fallida' });
+        consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: null, truncado: false, error: mensaje, filas_muestra: [], ms: reloj() - inicioConsulta });
         responder(`Error de Postgres en la consulta ${n}: ${mensaje}\nCorrige la consulta o, si no se puede, explica qué no pudiste averiguar.`);
       }
     }

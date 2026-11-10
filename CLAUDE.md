@@ -1049,6 +1049,13 @@ Report: `escociaos-po/reports/2026-11-07-sabado-respuesta.md`.
   active Gerencia and active Administrador 9 lotes / 3,388 registros; profile-less session 0/0;
   Administrador simulated as inactive 0/0; still 12 policies, 0 inactive accounts.
   Evidence: `docs/esco2/m3-rls.md`.
+- **Esco SQL P2 answer contract v1 (2026-11-09, deploy pending approval).** `motor: 'sql'` returns
+  `texto`, `bloques`, `sugerencias`, optional `aclaracion`, and query traces without rows. `respuesta`
+  remains an alias of `texto`. `mostrar_visual` accepts column specifications only; the server builds
+  visuals from query rows (up to 500), with at most four blocks and 60 chart points. Table adapters use
+  `filasTablaParaCanal` (50 web / 15 Telegram); full projected rows remain available for CSV. Shared
+  formatting lives in `src/utils/escoSql/formato.ts`. See [P2 contract](docs/esco2/esco-sql-p2-contrato-v1.md).
+  No migration, secret or flag is required. Deploy `esco-consultas` only after Santiago's explicit approval.
 - **Esco SQL is the Esco 2.0 baseline (2026-11-08).** PR #464 (migration 192, `esco-consultas` v12 with `motor: 'sql'`) replaces the
   planner approach; the planner stack stays in the repo but is no longer the line of work. Live access for Gerencia: page `/esco-sql`
   (PR #467) and a second floating button next to the classic Esco one (PR #468); the classic Esco panel (`chat.tsx`) is untouched.
