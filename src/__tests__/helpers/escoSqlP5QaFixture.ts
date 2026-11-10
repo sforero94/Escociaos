@@ -81,6 +81,12 @@ export async function fixture(options: Options = {}) {
       if (op === 'gte') return String(row[key]) >= value;
       if (op === 'lte') return String(row[key]) <= value;
       if (op === 'in') return value.slice(1, -1).split(',').map(v => v.replace(/^"|"$/g, '')).includes(String(row[key]));
+      // jsonb @> de PostgREST (`.contains`): solo objetos planos, que es lo que usa el bot.
+      if (op === 'cs' && value.startsWith('{"')) {
+        const actual = row[key];
+        return typeof actual === 'object' && actual !== null
+          && Object.entries(JSON.parse(value) as Row).every(([k, v]) => (actual as Row)[k] === v);
+      }
       rejected.push(`filter:${key}:${op}`); throw Error('Closed REST filter');
     }));
   }

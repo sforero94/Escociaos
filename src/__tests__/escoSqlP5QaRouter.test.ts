@@ -18,7 +18,9 @@ describe('QA P5: webhook y router grammY reales, HTTP simulado cerrado', () => {
     expect(body).toMatchObject({ motor: 'sql', usuario_id: ACTOR, pregunta: 'Pregunta sintética usuario_id=999' });
     expect(request.headers.get('authorization')).toBe('Bearer synthetic-sdk-key');
     expect(request.headers.get('x-esco-telegram-secret')).toBe('synthetic-sql-secret');
-    const history = body.historial as Array<Record<string, unknown>>; expect(history.length).toBeGreaterThan(0);
+    // La conversación sembrada es solo de Esco 1.0: nada de ella entra al historial SQL.
+    const history = body.historial as Array<Record<string, unknown>>; expect(history).toEqual([]);
+    expect(JSON.stringify(history)).not.toContain('SYN_TG_HISTORY_PERSON');
     for (const h of history) { expect(Object.keys(h).sort()).toEqual(['rol', 'texto']); expect(['user', 'assistant']).toContain(h.rol); }
     expect(JSON.stringify(history)).not.toContain('SYN_TG_TOOL_NOTE'); expect(JSON.stringify(history)).not.toContain('tool_interactions');
     expect(JSON.stringify(history)).not.toContain('bloques');
@@ -27,6 +29,13 @@ describe('QA P5: webhook y router grammY reales, HTTP simulado cerrado', () => {
     const metadata = a.metadata as Record<string, unknown>; expect(JSON.stringify(metadata.consultas)).not.toMatch(/filas_muestra|"filas"/);
     expect(buttons(f).some(b => /^mem_(save|cancel):/.test(b.callback_data))).toBe(false);
     expect(f.telegram.some(t => t.method === 'sendChatAction' && t.payload.action === 'typing')).toBe(true); sqlOnly(f);
+    // El seguimiento sí lleva el par SQL anterior, con su consulta y sin filas.
+    await f.send('¿Y el año pasado?'); expect(f.sql).toHaveLength(2);
+    const seguimiento = f.sql[1].body.historial as Array<Record<string, unknown>>;
+    expect(seguimiento.map(h => h.rol)).toEqual(['user', 'assistant']);
+    expect(seguimiento[0].texto).toBe('Pregunta sintética usuario_id=999');
+    expect(String(seguimiento[1].texto)).toContain('[Consultas SQL que usé en este turno]\nSELECT 1 AS total');
+    expect(JSON.stringify(seguimiento)).not.toContain('bloques'); sqlOnly(f);
   });
   it.each([{ role: 'Administrador' }, { profileActive: false }, { modules: [] }, { fresh: 'unlinked' as const }, { fresh: 'revoked' as const }, { fresh: 'error' as const }, { freshModules: [] }])('deniega actor sin autorización antes del motor: %j', async options => {
     const f = await fixture(options); await f.send(); expect(f.sql).toEqual([]); sqlOnly(f);

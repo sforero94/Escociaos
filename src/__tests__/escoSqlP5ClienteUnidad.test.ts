@@ -67,12 +67,12 @@ describe("P5 cliente HTTP unitario", () => {
       .toThrow("disponible");
     expect(fetcher).toHaveBeenCalledOnce();
   });
-  it("historial solo usa contenido de preguntas y respuestas SQL, sin metadata ni herramientas", () => {
+  it("historial solo usa pares SQL; lleva el SQL usado, nunca filas ni herramientas", () => {
     expect(
       historialEscoSql([
         { role: "system", content: "oculto" },
         { role: "tool", content: "oculto" },
-        { role: "user", content: "Pregunta" },
+        { role: "user", content: "Pregunta", metadata: { motor: "sql" } },
         {
           role: "assistant",
           content: "Texto",
@@ -90,7 +90,7 @@ describe("P5 cliente HTTP unitario", () => {
       ]),
     ).toEqual([{ rol: "user", texto: "Pregunta" }, {
       rol: "assistant",
-      texto: "Texto",
+      texto: "Texto\n\n[Consultas SQL que usé en este turno]\nprivado",
     }]);
   });
   it("rechaza una respuesta declarada demasiado grande antes de consumirla", async () => {
