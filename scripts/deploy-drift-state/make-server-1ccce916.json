@@ -1,4 +1,7 @@
 {
-  "commit": "5ab09bd1e2a84fffd214f5d953c673d2cafc7f9c",
-  "hash": "cffe7300d520afbe841f6f9f355a5d845d5729328200e72f21871d683b0dee45"
+  "commit": "4df1b65cc35656dc8f9c252cc0efaafa54fbbc39",
+  "hash": "2151cd0ab6bacd573910282d11c3b2c3f07f45dbb3229a94833312dc4646c3b3",
+  "secretosVistos": {
+    "ESCO_TELEGRAM_SECRET": true
+  }
 }
