@@ -88,6 +88,10 @@ export interface ResultadoPregunta {
   ms: number;
 }
 
+export type EventoProgresoSql =
+  | { type: 'consulta_inicio'; consulta: number; proposito: string }
+  | { type: 'consulta_fin'; consulta: number; ms: number; ok: boolean; n_filas: number | null };
+
 export interface EntradaPregunta {
   pregunta: string;
   historial?: MensajeHistorialSql[];
@@ -99,6 +103,9 @@ export interface EntradaPregunta {
   ahora?: () => number;
   /** Solo códigos cerrados, nunca especificaciones ni datos de la finca. */
   registrarRechazoVisual?: (motivo: string) => void;
+  onEvento?: (evento: EventoProgresoSql) => void;
+  /** Best effort: never starts another model or SQL call after cancellation. */
+  signal?: AbortSignal;
 }
 
 const columnaVisual = {
@@ -182,6 +189,9 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
   const reloj = entrada.ahora ?? Date.now;
   const inicio = reloj();
   const config = entrada.config ?? CONFIG_SQL;
+  const comprobarCancelacion = () => {
+    if (entrada.signal?.aborted) throw new DOMException('Solicitud cancelada', 'AbortError');
+  };
   const uso: UsoSql = { llamadas: 0, entrada: 0, salida: 0, costoUsd: 0 };
   const consultas: ConsultaSql[] = [];
   const fuentes: FuenteVisual[] = [];
@@ -210,6 +220,7 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
   };
 
   while (true) {
+    comprobarCancelacion();
     const puedeConsultar = consultas.length < MAX_CONSULTAS;
     const puedeUsarHerramientas = rondas < MAX_RONDAS_SQL;
     const herramientas: unknown[] = [];
@@ -226,6 +237,7 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
       maxTokens: MAX_TOKENS,
     });
     registrarUso(r.uso);
+    comprobarCancelacion();
     rondas++;
 
     const llamadas = r.llamadas;
@@ -240,6 +252,7 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
       tool_calls: llamadas.map((l, i) => ({ id: ids[i], type: 'function' as const, function: { name: l.nombre, arguments: l.argumentos } })),
     });
     for (const [i, llamada] of llamadas.entries()) {
+      comprobarCancelacion();
       const responder = (content: string) => mensajes.push({ role: 'tool', tool_call_id: ids[i], content });
       if (llamada.nombre === 'mostrar_visual') {
         let resultado: ReturnType<typeof construirBloque>;
@@ -262,22 +275,28 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
       }
       const n = consultas.length + 1;
       const args = leerArgumentos(llamada.argumentos);
+      entrada.onEvento?.({ type: 'consulta_inicio', consulta: n, proposito: args?.proposito ?? '' });
       if (!args) {
         consultas.push({ sql: llamada.argumentos.slice(0, 500), proposito: '', n_filas: null, truncado: false, error: 'argumentos inválidos', filas_muestra: [], ms: 0 });
         fuentes.push({ filas: [], n_filas: null, truncado: false, error: 'argumentos_invalidos' });
+        entrada.onEvento?.({ type: 'consulta_fin', consulta: n, ms: 0, ok: false, n_filas: null });
         responder('Error: la llamada a consultar_sql no traía {sql, proposito} válidos. Vuelve a intentar.');
         continue;
       }
       const inicioConsulta = reloj();
       try {
         const recibido = await entrada.ejecutarSql(args.sql);
+        comprobarCancelacion();
         const res = { ...recibido, filas: recibido.filas.slice(0, MAX_FILAS_SQL), truncado: recibido.truncado || recibido.filas.length > MAX_FILAS_SQL };
         fuentes.push({ ...res });
         consultas.push({ sql: args.sql, proposito: args.proposito, n_filas: res.n_filas, truncado: res.truncado, error: null, filas_muestra: res.filas.slice(0, FILAS_MUESTRA), ms: reloj() - inicioConsulta });
+        entrada.onEvento?.({ type: 'consulta_fin', consulta: n, ms: reloj() - inicioConsulta, ok: true, n_filas: res.n_filas });
         responder(textoResultado(n, res));
       } catch (e) {
         // Sin permiso (42501) o un error de PostgREST (PGRST*: la función no existe, etc.) no son
         // errores de la consulta: el modelo no puede arreglarlos, así que no se le muestran.
+        comprobarCancelacion();
+        entrada.onEvento?.({ type: 'consulta_fin', consulta: n, ms: reloj() - inicioConsulta, ok: false, n_filas: null });
         if (e instanceof ErrorAccesoSql || (e instanceof ErrorSql && (e.codigo === '42501' || e.codigo?.startsWith('PGRST')))) throw e;
         const mensaje = e instanceof Error ? e.message : String(e);
         fuentes.push({ filas: [], n_filas: null, truncado: false, error: 'consulta_fallida' });

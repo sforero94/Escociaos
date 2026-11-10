@@ -52,7 +52,7 @@ export function EscoTraza({ pasos, trabajando }: EscoTrazaProps) {
   const titulo = !trabajando
     ? resumenTraza(pasos)
     : enCurso
-      ? etiquetaHerramienta(enCurso.tool)
+      ? enCurso.tool === 'consultar_sql' ? 'Consultando datos' : etiquetaHerramienta(enCurso.tool)
       : pasos.length === 0
         ? 'Pensando…'
         : 'Redactando la respuesta…';
@@ -129,7 +129,7 @@ export function EscoTraza({ pasos, trabajando }: EscoTrazaProps) {
                         fallo ? 'text-destructive' : 'text-foreground',
                       )}
                     >
-                      {etiquetaHerramienta(paso.tool)}
+                      {paso.tool === 'consultar_sql' && typeof paso.args?.proposito === 'string' ? paso.args.proposito : etiquetaHerramienta(paso.tool)}
                     </span>
 
                     {detalle && (

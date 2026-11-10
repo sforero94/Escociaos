@@ -6,10 +6,13 @@ import { toast } from 'sonner';
 import { cn } from '@/components/ui/utils';
 import { ChatChart } from '@/components/chat/ChatChart';
 import type { ChartSpec } from '@/types/chat';
+import { leerMetadataSql } from '@/utils/escoSqlChat';
+import { BloquesSql } from './BloquesSql';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string;
+  metadata?: unknown;
 }
 
 const CHART_SPEC_KEYS = ['type', 'title', 'data', 'xKey', 'yKey'];
@@ -104,9 +107,10 @@ function AccionesMensaje({ contenido, onReintentar }: { contenido: string; onRei
  * barras eran invisibles. Ahora la respuesta ocupa el ancho del panel y las
  * gráficas respiran.
  */
-export function ChatMessageView({ role, content }: ChatMessageProps) {
+export function ChatMessageView({ role, content, metadata }: ChatMessageProps) {
   const isUser = role === 'user';
-  const blocks = useMemo(() => (isUser ? null : splitChartBlocks(content)), [content, isUser]);
+  const sql = useMemo(() => leerMetadataSql(metadata), [metadata]);
+  const blocks = useMemo(() => (isUser ? null : sql ? [{ type: 'text' as const, value: content }] : splitChartBlocks(content)), [content, isUser, sql]);
 
   if (isUser) {
     return (
@@ -126,6 +130,7 @@ export function ChatMessageView({ role, content }: ChatMessageProps) {
         <Sprout className="h-4 w-4 text-primary" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {sql && <p className="text-[11px] text-muted-foreground">Instantánea de la consulta{sql.snapshot_at ? ` · ${new Date(sql.snapshot_at).toLocaleString('es-CO')}` : ''}. Los datos pueden cambiar.</p>}
         <div className="chat-markdown min-w-0 text-foreground">
           {blocks!.map((block, i) =>
             block.type === 'chart' ? (
@@ -136,6 +141,7 @@ export function ChatMessageView({ role, content }: ChatMessageProps) {
               </ReactMarkdown>
             ),
           )}
+          {sql && <BloquesSql bloques={sql.bloques} />}
         </div>
       </div>
     </div>

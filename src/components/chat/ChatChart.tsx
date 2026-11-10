@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { formatearValor } from '@/utils/escoSql/formato';
 import {
   ResponsiveContainer,
   BarChart,
@@ -70,8 +71,8 @@ export function ChatChart({ spec }: { spec: ChartSpec }) {
 
   const keys = Array.isArray(yKey) ? yKey : [yKey];
   const palette = colors ?? (color ? [color] : COLORS);
-  const tickFmt = getTickFormatter(yFormat);
-  const tooltipFmt = getTooltipFormatter(yFormat);
+  const tickFmt = spec.formatoSql ? (v: number) => formatearValor(v, spec.formatoSql!) : getTickFormatter(yFormat);
+  const tooltipFmt = spec.formatoSql ? (v: number) => formatearValor(v, spec.formatoSql!) : getTooltipFormatter(yFormat);
   const unaSolaSerie = keys.length === 1;
   const nombreDe = (k: string) => nombreSerie(k, title, unaSolaSerie);
 
