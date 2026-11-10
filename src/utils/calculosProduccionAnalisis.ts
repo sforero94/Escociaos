@@ -590,7 +590,9 @@ function listarSemanas(desde: IsoSemana, hasta: IsoSemana): IsoSemana[] {
   let cursor = lunesDeSemanaIso(desde.year, desde.week);
   const fin = lunesDeSemanaIso(hasta.year, hasta.week).getTime();
   for (let i = 0; i < 120 && cursor.getTime() <= fin; i += 1) {
-    const iso = semanaIsoDeFecha(cursor.toISOString().slice(0, 10));
+    const iso = semanaIsoDeFecha(
+      `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}-${String(cursor.getUTCDate()).padStart(2, '0')}`,
+    );
     if (iso) out.push(iso);
     cursor = new Date(cursor);
     cursor.setUTCDate(cursor.getUTCDate() + 7);

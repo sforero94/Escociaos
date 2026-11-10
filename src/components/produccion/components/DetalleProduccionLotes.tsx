@@ -73,7 +73,7 @@ export function DetalleProduccionLotes({
         <h2 className="text-xl text-foreground">Detalle por lote</h2>
         <p className="text-sm text-brand-brown/70 mt-1">
           Entrada, clasificado y despachado se leen aparte. Si falta la etapa, queda en blanco.
-          El clasificado son canastas × 20 kg.
+          El clasificado son canastas × 20 kg. Cambio neto = despachado / entrada − 1.
         </p>
       </div>
 
@@ -115,6 +115,17 @@ export function DetalleProduccionLotes({
         );
         return (
           <div key={cosecha.key} className="space-y-3">
+            {!etapasPorLote.some(
+              (e) =>
+                e.cosechaKey === cosecha.key &&
+                (e.clasificado_kg != null || e.despachado_kg != null),
+            ) && (
+              <p className="rounded-lg bg-[#F7FAF2] border border-primary/10 px-4 py-3 text-sm text-brand-brown/80">
+                No hay filas de clasificado ni de despachado para {cosecha.label}. Esos kilos
+                viven en produccion_etapas_lote; esa tabla todavía no está en la base, así que
+                el cambio neto queda en Sin dato.
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-base font-medium text-foreground">{cosecha.label}</p>
               {onVerCosecha && cosechas.length > 1 && (
