@@ -92,3 +92,10 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 - inventario_operaciones = 0 NO es fricción: fn_inventario_guardar solo está cableado a compra/movimiento/eliminar_compra, y desde 10-28 solo hubo 3 salidas del cierre. No proponer. [corrida: 2026-11-05-jueves]
 - La captura de monitoreo usa la cuenta compartida aescociahass@gmail.com (monitor 'Clara' / 'Clara, David'); user_id no identifica a la persona. [corrida: 2026-11-05-jueves]
 - Columnas: aplicaciones no tiene `nombre`; movimientos_inventario.tipo_movimiento es enum (::text antes de UNION). [corrida: 2026-11-05-jueves]
+
+## Corrida 2026-11-12-jueves
+- 1 propuesta (ESCO-180, P1 tras refutación CONFIRMADA): Esco SQL calcula "PyG" como ingresos − gastos y omite el costo de venta de ganado. Evidencia: chat_messages conv e1eaf257 (2026-11-10 02:55) "Tienes razón: el PyG es ingresos menos gastos"; prompt.ts sin regla de PyG/compra de ganado; regresión de la guarda de chat.tsx:420 (get_pyg_flujo_caja). Propuesto: tool consultar_pyg sobre construirPyG/costearVentasGanado (esco-consultas ya importa src/utils). [corrida: 2026-11-12-jueves]
+- El uso de Esco VOLVIÓ con Esco SQL (19 turnos, 1 usuario, 11-10): la regla "no invertir en Esco sin uso" queda matizada — correcciones de exactitud sí; superficie nueva no. [corrida: 2026-11-12-jueves]
+- DESCARTADO: "chequeo vencido 65 días". Intervalos históricos 61–105 días (mediana ~70). rechequeo_due es UNA fila de rebaño, no 32. No proponer enrutarlo salvo que Santiago lo pida. [corrida: 2026-11-12-jueves]
+- Baseline ganado ceba 2026: compras 131 cab / $454,4M; ventas 169 cab / $868,0M; gastos Ganado (v_esco_gastos) $108,5M. [corrida: 2026-11-12-jueves]
+- Columnas: hato_alertas no tiene `mensaje`; chat_messages = (conversation_id, role, content, metadata, created_at); los turnos de Esco SQL viven en chat_messages. [corrida: 2026-11-12-jueves]

@@ -729,3 +729,9 @@ instrumentacion vacia como fallo, mirar si el bucket recibio algo despues del de
 - MÉTODO: reportes_semanales.html_storage es una RUTA; para ver regeneraciones mirar storage.objects.updated_at del bucket reportes-semanales. function_logs no admite unnest(metadata): usar positionCaseInsensitive sobre event_message. [corrida: 2026-11-09-lunes]
 - Hato tick: 11-07/11-08 1 generada, 11-09 2 generadas / 2 enviadas; se cierra la vigilancia de "0 generadas" del 11-05. [corrida: 2026-11-09-lunes]
 - Líneas base: DB 136 MB (net._http_response 60 + cron.job_run_details 28), 23 conexiones · Storage 271 MB / 324 objetos · 6 crons / 0 fallos en 72 h · clima 288 / 24 h · edge 329×200 + 2×401 esperados · PostgREST 0 no-2xx de 2.617 · árboles edge 113/113 · monitoreos vía PostgREST 220,7 ms media (180,8 el 10-26; vigilar). [corrida: 2026-11-09-lunes]
+
+## Corrida 2026-11-12-jueves (sonda P0)
+- sin_hallazgos. Vercel PROMOTED 0853589 = HEAD. make-server v301 (2026-11-10T02:47:06Z, verify_jwt=false), ezbr 2151cd0a…; esco-consultas v17 (2026-11-09T22:18:07Z, verify_jwt=true), ezbr 903db296…. Detector #80–#82 verde. [corrida: 2026-11-12-jueves]
+- 196 produccion_etapas_lote: viva sin fila en el ledger y cabecera «NO APLICADA». Tratarla como 035–039/093 (aplicada fuera de apply_migration) hasta reconciliar (ESCO-177). No re-filar como P0. [corrida: 2026-11-12-jueves]
+- MÉTODO: el `entrypoint_path` de la edge function delata el origen del deploy (worktree local vs CI /tmp/user_fn_…). v301 salió de un worktree local `.claude/worktrees/novillas-upload-diagnosis-…` a las 02:47Z, 20 s después del merge de #479; el detector #82 dice que coincide con main. [corrida: 2026-11-12-jueves]
+- Líneas base: suite 432 ficheros / 8.940 pruebas, tsc limpio · 6 crons, clima-sync 864/72 h, 0 fallos · clima 288/288/278/288/288 (11-07..11-11) · edge 24 h: 292×200 make-server + 2×401 esco-consultas, 0 5xx · pg_net 7 timeouts en ~6 h (cosmético), 0 >=400. [corrida: 2026-11-12-jueves]

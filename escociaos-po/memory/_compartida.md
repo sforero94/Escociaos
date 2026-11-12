@@ -2484,3 +2484,16 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 - Santiago respondió en vivo el 2026-11-06: «167 - A» (quitar el saldo inicial del CSV) y «172 - A» (adjuntar a la ronda cerrada dentro de su ventana; GAP de 5 días sin cambiar). Las dos fichas pasaron a `VIERNES` + `preaprobado` + `requiere_deploy`. El próximo viernes tiene 7 elegibles para un tope de 5. [corrida: 2026-11-06-viernes]
 - Sábado: 1 PR (#448, verde, sin migración ni deploy) y 1 `datos` (ESCO-166, migración 191 ensayada según su commit, sin `TODO`, **todavía sin PR**: la respuesta del sábado exige PR antes de aplicar). La ficha ESCO-166 en Notion aún describe el plan viejo de reetiquetar; el vigente es la 191. Página: https://app.notion.com/p/41167755ed6881318889d1aebcf0d733 [corrida: 2026-11-07-sabado]
 - 2026-11-08: PR #459 (ESCO-167), #460 (ESCO-172), #461 (ESCO-174), #462 (ESCO-168) abiertos y en verde. ESCO-170/171 fusionadas por otra vía (#455/#457): las ramas WIP `claude/po-viernes-esco170-*` están obsoletas. ESCO-173 sigue sólo en WIP `ee287822`. ESCO-174 conservó `ui/separator` (otros `ui/` lo importan) y promovió `date-fns` a dependencia directa. [corrida: 2026-11-06-viernes]
+
+## Corrida 2026-11-12-jueves — hechos transversales
+- Segundo jueves: roster 4 (usage-analytics, feature-strategy, sonda infra-perf + data-integrity). Preflight verde: Composio supabase/vercel/github `active`, `escocia-os` = supabase_bitis-coward, Notion oficial responde, `query_logs` 46 filas/h. `ATTENDED=0`. Cero denegaciones. Cero escrituras a la base. [corrida: 2026-11-12-jueves]
+- Sonda P0 tranquila. Filados ESCO-179 (P3, FDS/datos: trigger de atribución en gan_movimientos) y ESCO-180 (P1, FDS/propuesta: Esco SQL calcula PyG como ingresos − gastos sin costo de venta de ganado; refutación CONFIRMADA). Evidencia añadida a ESCO-177 (196 viva sin fila en el ledger). [corrida: 2026-11-12-jueves]
+- **196 `produccion_etapas_lote` viva desde 2026-11-10 03:09Z sin fila en el ledger** (aplicada por vía que no registra; cabecera «NO APLICADA»; CLAUDE.md raíz sin entrada). Para el lunes: reconciliar. [corrida: 2026-11-12-jueves]
+- Regla constitucional que decidió la severidad: «cifras financieras erradas mostradas a Gerencia = P1 mínimo» aplica también a respuestas de Esco, no solo a pantallas. [corrida: 2026-11-12-jueves]
+
+## Racha del jueves (regla de auto-poda v2) — actualizada 2026-11-12
+| Corrida | Propuestas filadas | Respondidas `si` | Racha sin `si` |
+|---|---|---|---|
+| 2026-10-29-jueves | 1 (ESCO-165) | si | 0 |
+| 2026-11-05-jueves | 1 (ESCO-172) | **si** (implementada, #460) | 0 |
+| **2026-11-12-jueves** | 1 (ESCO-180) | pendiente (sábado 11-14) | 0 |
