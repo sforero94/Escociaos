@@ -2497,3 +2497,5 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 | 2026-10-29-jueves | 1 (ESCO-165) | si | 0 |
 | 2026-11-05-jueves | 1 (ESCO-172) | **si** (implementada, #460) | 0 |
 | **2026-11-12-jueves** | 1 (ESCO-180) | pendiente (sábado 11-14) | 0 |
+
+- 2026-11-13-viernes: corrida BLOQUEADA. Composio (503), Notion oficial (503/timeout) y Supabase_Escritura (timeout) fallaron al conectar; 0 escrituras, 0 PRs, Bot Log sin guardar. Elegibles no verificables; por los reportes 11-09/11-12, 0 `VIERNES`. Si el lunes 11-16 también cae a modo mínimo: P1 por dos corridas seguidas (§7). Filar el lunes el P1 contra la operación del reporte. [corrida: 2026-11-13-viernes]
