@@ -2499,3 +2499,10 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 | **2026-11-12-jueves** | 1 (ESCO-180) | pendiente (sábado 11-14) | 0 |
 
 - 2026-11-13-viernes: corrida BLOQUEADA. Composio (503), Notion oficial (503/timeout) y Supabase_Escritura (timeout) fallaron al conectar; 0 escrituras, 0 PRs, Bot Log sin guardar. Elegibles no verificables; por los reportes 11-09/11-12, 0 `VIERNES`. Si el lunes 11-16 también cae a modo mínimo: P1 por dos corridas seguidas (§7). Filar el lunes el P1 contra la operación del reporte. [corrida: 2026-11-13-viernes]
+
+- 2026-11-13 (turno en vivo de Santiago, durante la corrida del viernes bloqueada): «todas las propuestas en Notion quedan aprobadas por mí y confirmo que los datos de producción en aguacate están correctos». NO se ejecutó nada en esta sesión: los 3 conectores seguían caídos tras su reintento (las conexiones MCP se fijan al arrancar la sesión). Reparto de las fichas abiertas para la sesión del sábado:
+  - ESCO-175 y ESCO-179 son `datos` → rubric V4: NO las aplica ninguna Routine, ni pre-aprobadas; van en la sesión de respuesta del sábado con él presente. Además NO están preparadas (falta el md5 vivo de `esco_sql_lectura` para 175; falta verificar en vivo el trigger y el número libre para 179). Su «aprobado» autoriza, pero todavía no hay migración revisada que ejecutar.
+  - ESCO-176 (decision) y ESCO-180 (propuesta P1): su «aprobado» = escoger la opción recomendada (176 A, 180 B). La implementación es un PR de `codigo` + deploy de `esco-consultas`, no una escritura a la BD; se vuelve VIERNES+preaprobado o la construye él.
+  - ESCO-177 (reconciliación/docs): su confirmación «aguacate correcto» ES la evidencia que faltaba — la carga de 196 (`produccion_etapas_lote`, Principal 2027) es legítima. Acción pendiente: documentar 196 en el `CLAUDE.md` raíz como aplicada fuera de `apply_migration` (precedente 035–039/093). Solo docs, PR.
+  - La aprobación en bloque no es un «go» por ítem para improvisar escrituras: el go se acota al ítem nombrado y a una migración revisada que ya exista como archivo. [corrida: 2026-11-13-viernes]
+
