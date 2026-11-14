@@ -64,8 +64,8 @@ An empty section says `Nada esta semana.`
    `preparada, no aplicada` with the reason, or `sin migración`). For every
    `requiere_deploy` PR, the **merge-and-deploy order**, as each PR body states
    it (migration before or after `npx supabase functions deploy
-   make-server-1ccce916`, which Santiago runs: no session deploys,
-   constitution §6). If two PRs need conflicting orders, say so and recommend
+   make-server-1ccce916`). The Saturday reply session deploys it after the
+   merge, under the constitution §6 deploy protocol; this Routine does not. If two PRs need conflicting orders, say so and recommend
    one. Token: `fusionar #N #M …`. A migration `preparada, no aplicada` also
    gets `ESCO-NNN aplicar`.
 2. **Decisiones para ti** — each `FDS` ficha of `Tipo FDS` `decision`, `datos`
