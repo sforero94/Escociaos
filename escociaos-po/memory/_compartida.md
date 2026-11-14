@@ -2496,7 +2496,7 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 |---|---|---|---|
 | 2026-10-29-jueves | 1 (ESCO-165) | si | 0 |
 | 2026-11-05-jueves | 1 (ESCO-172) | **si** (implementada, #460) | 0 |
-| **2026-11-12-jueves** | 1 (ESCO-180) | pendiente (sábado 11-14) | 0 |
+| **2026-11-12-jueves** | 1 (ESCO-180) | **si** (B, PR #484) | 0 |
 
 - 2026-11-13-viernes: corrida BLOQUEADA. Composio (503), Notion oficial (503/timeout) y Supabase_Escritura (timeout) fallaron al conectar; 0 escrituras, 0 PRs, Bot Log sin guardar. Elegibles no verificables; por los reportes 11-09/11-12, 0 `VIERNES`. Si el lunes 11-16 también cae a modo mínimo: P1 por dos corridas seguidas (§7). Filar el lunes el P1 contra la operación del reporte. [corrida: 2026-11-13-viernes]
 
@@ -2508,3 +2508,8 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 
 
 - 2026-11-14-sabado: reporte de decisiones publicado (Notion `41867755-ed68-810b-975f-dc6f1f3eca55`). 0 PRs `claude/po-*` abiertos. Listas: ESCO-176 (A/B), ESCO-177 (cerrar con su cita del 11-13), ESCO-180 (si A/si B/no). Sin preparar: ESCO-175 y ESCO-179. **ESCO-175 probablemente obsoleta**: la 194 (2026-11-09 22:17Z, posterior al lunes que la filó) revocó EXECUTE de `esco_sql_lectura(text)` a `authenticated`/`anon`/`service_role` (`194_…sql:363`) y el motor nuevo compila IR; el lunes 11-16 verifica la ACL viva y la cierra `Obsoleto` si se confirma. El número 193 que citaba su acción ya estaba ocupado. La aprobación en bloque del 11-13 no elige entre A y B: se pidió confirmar por línea. [corrida: 2026-11-14-sabado]
+
+- 2026-11-14-sabado-respuesta (Santiago presente, en la misma sesión de la Routine): 176 A → PR #482; 177 si → cerrada Arreglado; 180 si B → PR #484; 175 hold al lunes; 179 «1, 3» → migración 197 escrita y ensayada en po_sonda (PR #483), NO aplicada, espera `ESCO-179 aplicar`. Santiago pidió «ejecuta el código hoy tú»: se hizo el código (PRs), no la escritura de datos, porque el fichero revisado no existía antes de su go. [corrida: 2026-11-14-sabado-respuesta]
+- **El grafo de `esco-consultas` NO puede alcanzar `src/supabase/`, `make-server-*` ni `telegram`** (`esco2P4Task6QaEdgeGraph.test.ts`), y cada fichero alcanzado debe estar en la ruta vigilada de `esco-consultas` en `deteccion-deriva-despliegue.yml`, que `scripts/check-deploy-drift.test.mjs` fija como regex literal. Para usar un motor de `src/utils/` desde Esco SQL: imports relativos `.ts` (no `@/`) en toda su cadena + agregarlos a esas DOS listas. Así entró `calculosPyG` y sus 5 dependencias (PR #484). [corrida: 2026-11-14-sabado-respuesta]
+- `gan_movimientos` tiene dos triggers AFTER INSERT OR UPDATE (`fn_aplicar_movimiento_ganado` md5 `ab2d33a9…`, `fn_gan_validar_cabezas_transaccion` md5 `c4db3e2e…`); un UPDATE que no cambia `estado` ni toca filas con `transaccion_ganado_id` no mueve inventario. Verificado leyendo los cuerpos vivos 2026-11-14. [corrida: 2026-11-14-sabado-respuesta]
+- Feature-strategy: ESCO-180 respondida `si` (B). La tabla del auto-podado del jueves: 2026-11-12-jueves → **si**. [corrida: 2026-11-14-sabado-respuesta]
