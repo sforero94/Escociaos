@@ -25,20 +25,20 @@ import type {
   ReportePyG,
   TipoCosto,
   VistaReporte,
-} from '@/types/reportesFinancieros';
-import { fechaEnRango } from '@/utils/periodosReporte';
-import { esConfirmado, gastosSinCategoria, resolverTipoCosto } from '@/utils/clasificacionCostos';
+} from '../types/reportesFinancieros.ts';
+import { fechaEnRango } from './periodosReporte.ts';
+import { esConfirmado, gastosSinCategoria, resolverTipoCosto } from './clasificacionCostos.ts';
 import {
   costearVentasGanado,
   leerInventarioInicial,
   valorInventarioAFecha,
-} from '@/utils/costoVentaGanado';
+} from './costoVentaGanado.ts';
 import {
   advertenciaPendientes,
   detectarDuplicadosGanado,
   redondearPesos,
   resolverAlcance,
-} from '@/utils/reportesFinancierosComun';
+} from './reportesFinancierosComun.ts';
 
 const ETIQUETA_COSECHA = /^(Principal|Traviesa) \d{4}$/;
 

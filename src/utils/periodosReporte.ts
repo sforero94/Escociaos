@@ -9,7 +9,7 @@
 // NUNCA `new Date(fecha).getMonth()`: `fechas.ts` parsea en hora local y una
 // fecha de fin de mes puede correrse un día según la zona horaria del cliente.
 
-import type { PeriodoDef, ModoReporte } from '@/types/reportesFinancieros';
+import type { PeriodoDef, ModoReporte } from '../types/reportesFinancieros.ts';
 
 /**
  * Desfase de año entre una cosecha Principal y el semestre de egresos que

@@ -18,7 +18,7 @@
 import type {
   AdvertenciaReporte,
   TransaccionGanadoCruda,
-} from '@/types/reportesFinancieros';
+} from '../types/reportesFinancieros.ts';
 
 export interface InventarioInicialGanado {
   cabezas: number;

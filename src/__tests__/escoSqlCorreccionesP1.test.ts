@@ -223,8 +223,8 @@ describe('F12 — el punto y coma dentro de un texto', () => {
 });
 
 describe('el prompt sigue completo y numerado', () => {
-  it('trae las 14 reglas en orden, sin saltos', () => {
+  it('trae las 15 reglas en orden, sin saltos', () => {
     const numeros = [...REGLAS.matchAll(/\n(\d+)\. /g)].map((m) => Number(m[1]));
-    expect(numeros).toEqual(Array.from({ length: 14 }, (_, i) => i + 1));
+    expect(numeros).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
   });
 });
