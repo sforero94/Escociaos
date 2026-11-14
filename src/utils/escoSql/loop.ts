@@ -16,6 +16,7 @@ import { construirPrompt } from './prompt.ts';
 import { construirBloque, MAX_BLOQUES, MAX_FILAS_SQL, type Bloque, type FuenteVisual } from './bloques.ts';
 import { FORMATOS } from './formato.ts';
 import { leerRespuestaFinal, type Aclaracion } from './respuesta.ts';
+import { filasPyG, HERRAMIENTA_CONSULTAR_PYG, leerArgumentosPyG, textoResultadoPyG, type ArgumentosPyG, type ReportePyG } from './pyg.ts';
 
 export const MAX_CONSULTAS = 4;
 export const MAX_HISTORIAL_SQL = 10;
@@ -97,6 +98,11 @@ export interface EntradaPregunta {
   historial?: MensajeHistorialSql[];
   llm: ClienteLLM;
   ejecutarSql: (sql: string) => Promise<ResultadoSql>;
+  /**
+   * ESCO-180: P&G oficial. Si falta, la herramienta consultar_pyg no se ofrece y el prompt
+   * manda a /finanzas/reportes en vez de calcular utilidad restando gastos de ingresos.
+   */
+  ejecutarPyg?: (args: ArgumentosPyG) => Promise<ReportePyG>;
   /** Fecha de hoy en Bogotá, AAAA-MM-DD. */
   hoy: string;
   config?: { modelo: string; esfuerzo: Esfuerzo };
@@ -199,7 +205,7 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
   let rondas = 0;
   let numeroLlamada = 0;
 
-  const mensajes: MensajeLLM[] = [{ role: 'system', content: construirPrompt(entrada.hoy) }];
+  const mensajes: MensajeLLM[] = [{ role: 'system', content: construirPrompt(entrada.hoy, { pyg: Boolean(entrada.ejecutarPyg) }) }];
   for (const m of (entrada.historial ?? []).slice(-MAX_HISTORIAL_SQL)) {
     mensajes.push({ role: m.rol === 'assistant' ? 'assistant' : 'user', content: m.texto });
   }
@@ -226,6 +232,7 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
     const herramientas: unknown[] = [];
     if (puedeUsarHerramientas) {
       if (puedeConsultar) herramientas.push(HERRAMIENTA_CONSULTAR_SQL);
+      if (puedeConsultar && entrada.ejecutarPyg) herramientas.push(HERRAMIENTA_CONSULTAR_PYG);
       if (bloques.length < MAX_BLOQUES) herramientas.push(HERRAMIENTA_MOSTRAR_VISUAL);
     }
     const r = await entrada.llm.completar({
@@ -265,6 +272,43 @@ export async function responderPregunta(entrada: EntradaPregunta): Promise<Resul
         } else if ('bloque' in resultado) {
           bloques.push(resultado.bloque);
           responder(`Visual ${bloques.length} preparado desde las filas de la consulta ${resultado.bloque.consulta}.`);
+        }
+        continue;
+      }
+      if (llamada.nombre === 'consultar_pyg' && entrada.ejecutarPyg) {
+        if (consultas.length >= MAX_CONSULTAS) {
+          responder(`No ejecutada: ya usaste las ${MAX_CONSULTAS} consultas permitidas.`);
+          continue;
+        }
+        const n = consultas.length + 1;
+        const args = leerArgumentosPyG(llamada.argumentos);
+        const traza = `-- consultar_pyg ${args ? JSON.stringify(args) : llamada.argumentos.slice(0, 200)}`;
+        const proposito = 'P&G oficial';
+        entrada.onEvento?.({ type: 'consulta_inicio', consulta: n, proposito });
+        if (!args) {
+          consultas.push({ sql: traza, proposito, n_filas: null, truncado: false, error: 'argumentos inválidos', filas_muestra: [], ms: 0 });
+          fuentes.push({ filas: [], n_filas: null, truncado: false, error: 'argumentos_invalidos' });
+          entrada.onEvento?.({ type: 'consulta_fin', consulta: n, ms: 0, ok: false, n_filas: null });
+          responder('Error: consultar_pyg necesita {vista: global|aguacate|ganado|hato, anio} válidos. Vuelve a intentar.');
+          continue;
+        }
+        const inicioPyg = reloj();
+        try {
+          const resumen = await entrada.ejecutarPyg(args);
+          comprobarCancelacion();
+          const filas = filasPyG(resumen);
+          fuentes.push({ filas, n_filas: filas.length, truncado: false });
+          consultas.push({ sql: traza, proposito, n_filas: filas.length, truncado: false, error: null, filas_muestra: filas.slice(0, FILAS_MUESTRA), ms: reloj() - inicioPyg });
+          entrada.onEvento?.({ type: 'consulta_fin', consulta: n, ms: reloj() - inicioPyg, ok: true, n_filas: filas.length });
+          responder(textoResultadoPyG(n, resumen));
+        } catch (e) {
+          comprobarCancelacion();
+          entrada.onEvento?.({ type: 'consulta_fin', consulta: n, ms: reloj() - inicioPyg, ok: false, n_filas: null });
+          if (e instanceof ErrorAccesoSql || (e instanceof ErrorSql && e.codigo === '42501')) throw e;
+          const mensaje = e instanceof Error ? e.message : String(e);
+          fuentes.push({ filas: [], n_filas: null, truncado: false, error: 'consulta_fallida' });
+          consultas.push({ sql: traza, proposito, n_filas: null, truncado: false, error: mensaje, filas_muestra: [], ms: reloj() - inicioPyg });
+          responder(`Error al calcular el P&G: ${mensaje}\nNo calcules la utilidad restando gastos de ingresos: di que no pudiste obtener el P&G y remite a /finanzas/reportes.`);
         }
         continue;
       }

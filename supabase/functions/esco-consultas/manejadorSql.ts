@@ -7,6 +7,7 @@
 import { convertirSqlSeguro, ErrorConsultaSegura } from '../../../src/utils/escoSql/consultaSegura.ts';
 import type { ClienteLLM } from '../../../src/utils/esco2/llm.ts';
 import { ErrorAccesoSql, ErrorSql, responderPregunta, type MensajeHistorialSql, type ResultadoSql, type EventoProgresoSql } from '../../../src/utils/escoSql/loop.ts';
+import { calcularPyG, type ArgumentosPyG, type FilasCrudasPyG, type ReportePyG } from '../../../src/utils/escoSql/pyg.ts';
 
 /** Forma mínima de supabase-js que usa el motor SQL. */
 export interface ClienteRpc {
@@ -43,6 +44,70 @@ export function ejecutorSqlSupabase(cliente: ClienteRpc, usuarioIdActor?: string
   };
 }
 
+// ── ESCO-180: P&G oficial ────────────────────────────────────────────────────
+
+interface ConsultaPostgrest extends PromiseLike<{ data: unknown; error: { code?: string; message?: string } | null }> {
+  eq(columna: string, valor: unknown): ConsultaPostgrest;
+  gte(columna: string, valor: unknown): ConsultaPostgrest;
+  lte(columna: string, valor: unknown): ConsultaPostgrest;
+  order(columna: string, opciones?: { ascending?: boolean }): ConsultaPostgrest;
+  range(desde: number, hasta: number): ConsultaPostgrest;
+}
+
+/** Forma mínima de supabase-js para leer tablas (con el JWT del usuario: la RLS aplica). */
+export interface ClienteTablas {
+  from(tabla: string): { select(columnas: string): ConsultaPostgrest };
+}
+
+export function tieneTablas(cliente: unknown): cliente is ClienteTablas {
+  return typeof (cliente as { from?: unknown })?.from === 'function';
+}
+
+const PAGINA = 1000;
+/** ~1.250 gastos por año y PostgREST corta en 1.000 sin avisar: siempre se pagina. */
+const MAX_PAGINAS = 50;
+
+async function leerTodo(
+  cliente: ClienteTablas,
+  tabla: string,
+  columnas: string,
+  filtrar: (q: ConsultaPostgrest) => ConsultaPostgrest = (q) => q,
+): Promise<Record<string, unknown>[]> {
+  const filas: Record<string, unknown>[] = [];
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    const q = filtrar(cliente.from(tabla).select(columnas)).order('id', { ascending: true }).range(pagina * PAGINA, (pagina + 1) * PAGINA - 1);
+    const { data, error } = await q;
+    if (error) {
+      if (error.code === '42501') throw new ErrorAccesoSql(error.message ?? 'sin permiso');
+      throw new ErrorSql(`no se pudo leer ${tabla}`, error.code);
+    }
+    const lote = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+    filas.push(...lote);
+    if (lote.length < PAGINA) return filas;
+  }
+  // Un P&G calculado sobre datos cortados parece normal y está mal: nunca se devuelve.
+  throw new ErrorSql(`${tabla} excede ${MAX_PAGINAS * PAGINA} filas`);
+}
+
+/** Mismas tablas, columnas y filtros que la pantalla (`useReportesFinancierosData.ts`). */
+export function ejecutorPygSupabase(cliente: ClienteTablas): (args: ArgumentosPyG) => Promise<ReportePyG> {
+  return async (args) => {
+    const [negocios, categoriasGastos, conceptos, categoriasIngresos, gastos, ingresos, ganado, parametros] = await Promise.all([
+      leerTodo(cliente, 'fin_negocios', 'id,nombre'),
+      leerTodo(cliente, 'fin_categorias_gastos', 'id,nombre,tipo_costo'),
+      leerTodo(cliente, 'fin_conceptos_gastos', 'id,nombre,tipo_costo'),
+      leerTodo(cliente, 'fin_categorias_ingresos', 'id,nombre'),
+      leerTodo(cliente, 'fin_gastos', 'id,fecha,negocio_id,valor,estado,categoria_id,concepto_id', (q) => q.gte('fecha', `${args.anio - 1}-01-01`).lte('fecha', `${args.anio}-12-31`)),
+      leerTodo(cliente, 'fin_ingresos', 'id,fecha,negocio_id,valor,categoria_id,cosecha,cantidad'),
+      // Historia COMPLETA y sin el hato: el costo promedio móvil depende de la serie entera.
+      leerTodo(cliente, 'fin_transacciones_ganado', 'id,fecha,tipo,cantidad_cabezas,kilos_pagados,valor_total,es_hato', (q) => q.eq('es_hato', false)),
+      leerTodo(cliente, 'fin_parametros', 'id,clave,anio,negocio_id,valor'),
+    ]);
+    const crudas: FilasCrudasPyG = { negocios, categoriasGastos, conceptos, categoriasIngresos, gastos, ingresos, ganado, parametros };
+    return calcularPyG(args, crudas);
+  };
+}
+
 export interface SalidaSql {
   estado: number;
   cuerpo: Record<string, unknown>;
@@ -67,6 +132,9 @@ export async function manejarSql(entrada: {
       historial: entrada.historial,
       llm: entrada.llm,
       ejecutarSql: ejecutorSqlSupabase(entrada.cliente, entrada.usuarioIdActor),
+      // Solo con el JWT del usuario (web). El camino de actor (Telegram) usa el service role,
+      // que salta la RLS: ahí no se ofrece y el prompt remite a /finanzas/reportes.
+      ejecutarPyg: !entrada.usuarioIdActor && tieneTablas(entrada.cliente) ? ejecutorPygSupabase(entrada.cliente) : undefined,
       hoy: entrada.hoy,
       config: entrada.modelo,
       onEvento: entrada.onEvento,
