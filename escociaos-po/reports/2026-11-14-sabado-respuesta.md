@@ -134,3 +134,23 @@ La 197 no necesita despliegue.
 
 - La entrada **197** en el ledger del `CLAUDE.md` raíz falta. Este commit de memoria solo puede tocar
   `escociaos-po/**`, así que queda como trabajo de docs para un viernes (junto con la 196 de ESCO-177).
+
+## Despliegue (2026-11-14, regla nueva de §6)
+
+Santiago: «Go» (fusionar #485 y desplegar las dos funciones). #485 fusionado (`47325c7`). Credencial de
+red guardada en el entorno Default para `api.supabase.com` (token con solo Edge Functions read-write).
+
+- Paso 1: worktree limpio de `origin/main` `47325c7`.
+- Paso 2: alcance. `make-server-1ccce916`: solo `438d607` (#482) desde el estado desplegado `4df1b65`.
+  `esco-consultas`: solo `af0bc63` (#484) desde `c25af04`. Los hashes de los ficheros de deriva coinciden con
+  producción.
+- Paso 3: ninguno lleva migración.
+- **esco-consultas: DESPLEGADA.** v19, ACTIVE, `verify_jwt=true`, ezbr `34e2b3c2…`, `/health` anónimo 401,
+  con anon 200. Se publicó dos veces (v18 y v19) desde el mismo código por un error de comando; sin efecto.
+- **make-server-1ccce916: NO desplegada; sigue v301 (sin #482).** API: 413 `request entity too large`
+  (≈6 MB de fuente). Docker: el empaquetador no confía en la CA del proxy de la nube. Ningún intento cambió
+  producción. Hay que desplegarla desde el Mac:
+  `npx supabase@2.117.0 functions deploy make-server-1ccce916 --project-ref ywhtjwawnkeqlwxbvgup`.
+
+Consecuencia para la regla: hoy una sesión en la nube puede desplegar `esco-consultas`, pero no
+`make-server-1ccce916`.
