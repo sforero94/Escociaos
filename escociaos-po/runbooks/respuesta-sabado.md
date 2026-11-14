@@ -69,9 +69,12 @@ confirmation before acting on anything.**
   ledger**, so no future Thursday re-proposes it.
 - **`fusionar #N #M`** — merge only the PRs he named, in the order the Saturday
   report listed. Before each merge, check that the PR is still open, green and
-  mergeable; if not, skip it and say why. After merging, state every deploy
-  still needed, with the command and its order against the migrations. **This
-  session never deploys** (constitution §6, ESCO-148).
+  mergeable; if not, skip it and say why. After merging, if a merged PR carries
+  `requiere_deploy`, **deploy it** under the constitution §6 deploy protocol
+  (clean `origin/main`, order against the migrations, CLI only, post-check,
+  rollback on failure). This session counts as a maintenance session, so the
+  merge line is enough. If the session has no credential, or a protocol step
+  fails, report the deploy as pending with the command and the reason.
 
 **3 — Record.** Write `reports/YYYY-MM-DD-sabado-respuesta.md`: the echo table,
 what was done, pre- and post-states, merges, deploys still pending, and what
@@ -99,7 +102,9 @@ deploy pendiente.
 - Compose SQL in the moment, or apply a migration whose file is not in a PR.
 - Apply a `datos` migration with a `TODO`, or with a pre-state that no longer
   matches.
-- Merge a PR he did not name, or deploy the edge function.
+- Merge a PR he did not name.
+- Deploy outside the constitution §6 deploy protocol, or with the connector
+  `deploy_edge_function` path (ESCO-148).
 - Change a rule, cap, eligibility, guardrail, roster or cadence of the
   operation. If he asks for one, that is a change to the constitution, made
   through a PR.
