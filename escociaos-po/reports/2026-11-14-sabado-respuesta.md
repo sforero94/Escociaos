@@ -92,3 +92,45 @@ pero no para aplicar ni fusionar. Para eso hace falta la sesión nueva de `respu
 sí cuenta como atendida.
 
 Estado de producción: **sin cambios**. La 197 no está aplicada y los tres PRs siguen abiertos.
+
+## Continuación — sesión nueva de respuesta (2026-11-14, `ATTENDED=1`)
+
+Sesión nueva de `respuesta-sabado.md`, con Santiago presente. Sus líneas, literales:
+
+- «ESCO-179 aplicar»
+- «fusionar #483 #482 #484»
+
+Eco enviado antes de actuar; Santiago confirmó con «Si».
+
+| Línea | Qué se hizo | Qué NO se hizo |
+|---|---|---|
+| `ESCO-179 aplicar` | Migración 197 **aplicada** a producción, ledger `20261114164552` (`gan_movimientos_autor`), fichero del PR #483 tal cual (sha256 `35147349…`, 0 `TODO`). | No se escribió SQL nuevo. |
+| `fusionar #483 #482 #484` | Fusionados en ese orden (#483 después del apply), squash, con `expectedHeadSha`: #483 → `ac3bec2`, #482 → `438d607`, #484 → `af0bc63`. CI verde en los tres (`verificacion` + Vercel). | Nada desplegado (ESCO-148). |
+
+### ESCO-179 — verificación
+
+1. Fichero del PR: sha256 `35147349400e642bcf973a87604ae3b348eea37898e8e5922df2cc2d36985d39`, 0 `TODO`.
+2. Pre-estado repetido, idéntico al reporte: 62 filas sin autor, huella `732e24aed95c23ed1572372fe94cf0ac`,
+   304 cabezas / 34 filas de inventario, 13 pesos, 2 triggers, md5 de los dos triggers iguales, sin
+   respaldo previo, sin fila en el ledger.
+3. Ensayo `po_sonda` (11 sentencias del fichero, sin comentarios de línea): `deshecho: true`, sin error.
+   62 con Santiago, 0 sin autor, respaldo 62, 304 cabezas, 13 pesos, 3 triggers.
+4. Apply con `apply_migration` (conector Supabase con `project_id`): `success`.
+5. Post-estado (lectura): 62 con Santiago, 0 sin autor, respaldo 62, 304 cabezas / 34 filas, 13 pesos,
+   3 triggers, `set_gan_movimiento_created_by` `SECURITY INVOKER`.
+
+Nota de herramienta: `po_sonda` da `42501` desde el conector de solo lectura (EXECUTE solo
+`service_role`); el ensayo corrió por el conector con `project_id`.
+
+### Despliegues pendientes (los hace Santiago; el orden entre ellos no importa)
+
+1. #482 → `npx supabase functions deploy make-server-1ccce916`
+2. #484 → `npx supabase@2.117.0 functions deploy esco-consultas --project-ref ywhtjwawnkeqlwxbvgup --use-api`.
+   Primera prueba recomendada: «PyG de Ganado 2026», comparada con `/finanzas/reportes` → Ganado.
+
+La 197 no necesita despliegue.
+
+### Pendiente de documentación
+
+- La entrada **197** en el ledger del `CLAUDE.md` raíz falta. Este commit de memoria solo puede tocar
+  `escociaos-po/**`, así que queda como trabajo de docs para un viernes (junto con la 196 de ESCO-177).
