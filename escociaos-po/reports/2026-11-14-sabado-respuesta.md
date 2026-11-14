@@ -154,3 +154,25 @@ red guardada en el entorno Default para `api.supabase.com` (token con solo Edge 
 
 Consecuencia para la regla: hoy una sesión en la nube puede desplegar `esco-consultas`, pero no
 `make-server-1ccce916`.
+
+## Cierre de la jornada (2026-11-14, verificado contra producción)
+
+- **make-server-1ccce916: v302**, ACTIVE, `verify_jwt = false`, ezbr `72951698…`, `/health` anónimo **200**.
+  Santiago la desplegó desde el Mac a las 17:27 UTC, después de fusionar #482 (16:46 UTC).
+- **esco-consultas: v19**, ACTIVE, `verify_jwt = true`, ezbr `34e2b3c2…`, `/health` anónimo **401**.
+- **Migración 197:** ledger `20261114164552`. 62 filas con Santiago, 0 sin autor, `gan_inventario`
+  304 cabezas / 34 filas, 13 pesos, 3 triggers, `set_gan_movimiento_created_by` INVOKER con
+  `search_path` pineado y sin EXECUTE para `anon`/`authenticated`, respaldo de 62 filas sin SELECT
+  para `authenticated`.
+- **PRs:** #483, #482, #484 y #485 fusionados. La entrada 197 ya está en el `CLAUDE.md` raíz (#485).
+- **Fichas:** ESCO-176, 177, 179 y 180 en `Done` / `Arreglado`. **ESCO-175 sigue abierta**, para el lunes.
+- **Bot Log** `BL-105`: `Hecha`.
+
+Pendientes que quedan, ninguno urgente:
+1. El lunes 2026-11-16: verificar la ACL de `esco_sql_lectura(text)` y cerrar ESCO-175 si la 194 la dejó
+   obsoleta.
+2. La primera pregunta real a Esco SQL: «PyG de Ganado 2026», comparada con `/finanzas/reportes` → Ganado.
+3. Un viernes, solo docs: la entrada 196 (`produccion_etapas_lote`) en el `CLAUDE.md` raíz.
+4. Los ficheros `scripts/deploy-drift-state/*.json` todavía apuntan a los commits anteriores
+   (`4df1b65` y `c25af04`). El detector de deriva diario los actualiza; si el lunes marca deriva en
+   las dos funciones, se debe a eso y no a un despliegue incorrecto.
