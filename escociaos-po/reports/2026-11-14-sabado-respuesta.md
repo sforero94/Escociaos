@@ -70,3 +70,25 @@ son turnos vivos y cada una nombra una ficha del reporte, así que valen como «
   ensayada y espera su `aplicar`.
 - No se fusionó ni se desplegó nada: esta sesión no fusiona sin el número de PR y nunca despliega
   (ESCO-148).
+
+## Addendum — «haz todos esos pasos» (2026-11-14)
+
+Santiago pidió ejecutar los pasos pendientes. Lo que se hizo y lo que no:
+
+- CI de #482, #483 y #484: **verde** (`verificacion` + Vercel).
+- ESCO-179: pre-estado repetido, **idéntico** (62 filas, huella `732e24ae…`, md5 de triggers iguales,
+  304 cabezas, 13 pesos, sin respaldo previo, 197 sin fila en el ledger). Fichero del PR sha256
+  `35147349400e642bcf973a87604ae3b348eea37898e8e5922df2cc2d36985d39`, 0 `TODO`, 197 libre en todas las
+  ramas. Ensayo `po_sonda` repetido: mismo resultado, `deshecho: true`.
+- **Apply de la 197: DENEGADO por el hook** (`supabase-guard.py`). Esta sesión es la de la Routine del
+  sábado y cuenta como desatendida (`ATTENDED=0`); el hook solo deja pasar el apply aditivo del
+  viernes. No se reintentó ni se cambiaron argumentos (constitución §6).
+- **Fusión de #482: DENEGADA por el hook** («fusiona o auto-fusiona, requiere confirmación; sesión
+  desatendida»). No se intentaron #483 ni #484.
+- Despliegues: no los hace ninguna sesión de la operación (ESCO-148).
+
+**Lección:** responder dentro de la sesión de la Routine sirve para decidir y para escribir código,
+pero no para aplicar ni fusionar. Para eso hace falta la sesión nueva de `respuesta-sabado.md`, que
+sí cuenta como atendida.
+
+Estado de producción: **sin cambios**. La 197 no está aplicada y los tres PRs siguen abiertos.
