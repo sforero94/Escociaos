@@ -731,25 +731,19 @@ async function llamarLLM(datosFormateados: string, instruccionesAdicionales?: st
   let analisis: AnalisisGemini;
   try {
     analisis = JSON.parse(jsonText);
-  } catch {
-    console.error('Failed to parse LLM JSON:', jsonText.slice(0, 300));
-    analisis = {
-      resumen_ejecutivo: 'Semana operativa procesada. Consulte los datos del reporte para detalles especificos.',
-      titulares: {
-        personal: 'Datos de personal disponibles en esta seccion',
-        labores: 'Labores programadas para la semana',
-        jornales: 'Distribucion de jornales por actividad y lote',
-        monitoreo: 'Estado fitosanitario de los cultivos',
-        aplicaciones: 'Estado de aplicaciones fitosanitarias',
-      },
-      conclusiones: [
-        { texto: 'Revisar los indicadores detallados en las secciones del reporte', prioridad: 'media' as const, contexto: '' },
-        { texto: 'Verificar el avance de las aplicaciones en curso', prioridad: 'media' as const, contexto: '' },
-        { texto: 'Monitorear la evolucion fitosanitaria en la proxima semana', prioridad: 'media' as const, contexto: '' },
-      ],
-      interpretacion_monitoreo: 'Consulte la seccion de monitoreo para detalles sobre las tendencias fitosanitarias.',
-      interpretacion_tendencias_monitoreo: 'Sin analisis disponible para esta semana.',
-    };
+  } catch (parseError: any) {
+    // ESCO-176 (decision A de Santiago, 2026-11-14): nunca se archiva un analisis
+    // generico como si fuera el de la semana. Se falla con un error visible y el
+    // asistente no guarda nada; el usuario puede regenerar.
+    console.error(
+      'Failed to parse LLM JSON:',
+      parseError?.message,
+      '| longitud:', jsonText.length,
+      '| inicio:', jsonText.slice(0, 300),
+    );
+    throw new Error(
+      'La IA devolvio un analisis que no se pudo leer. No se guardo el reporte. Intenta generarlo de nuevo.',
+    );
   }
 
   if (!analisis.resumen_ejecutivo) analisis.resumen_ejecutivo = 'Semana operativa procesada.';

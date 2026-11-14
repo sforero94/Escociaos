@@ -622,7 +622,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       expect(resultado.html).toContain('Priorizar tratamiento contra Monalonion');
     });
 
-    it('usa análisis fallback cuando el LLM retorna JSON inválido', async () => {
+    it('falla con error visible y sin HTML cuando el LLM retorna JSON inválido (ESCO-176)', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
@@ -633,10 +633,25 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      // Should succeed with fallback analysis
-      expect(resultado.success).toBe(true);
-      expect(resultado.html).toContain('ESCOCIA HASS');
-      expect(resultado.html).toContain('Semana operativa procesada');
+      // Nunca un análisis genérico archivado como si fuera el de la semana
+      expect(resultado.success).toBe(false);
+      expect(resultado.html).toBeUndefined();
+      expect(resultado.error).toContain('No se guardo el reporte');
+    });
+
+    it('falla también cuando el JSON del LLM está truncado (ESCO-176)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          choices: [{ message: { content: '{"resumen_ejecutivo": "Esta semana nos enfocamos en la fumigación de plateo' }, finish_reason: 'length' }],
+          usage: { prompt_tokens: 50, completion_tokens: 50, total_tokens: 100 },
+        }),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.success).toBe(false);
+      expect(resultado.html).toBeUndefined();
     });
 
     it('incluye conteo de tokens usados', async () => {
