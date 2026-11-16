@@ -649,3 +649,8 @@ mensual sigue siendo la unica legible.**
 - Navigation: Notion SQL on Mantenimiento uses `"userDefined:ID"`, `"Ultima actualizacion"`, `"Motivo cierre"`; rows mode with 15 rows exceeds the token limit, use SQL with substr. [corrida: 2026-11-09-lunes]
 - Accepted state: the drift-state file can lag the live edge version by one run when a deploy comes after the 18:00Z scheduled run. Not drift. [corrida: 2026-11-09-lunes]
 - Open note: ESCO-78 is Done with Resolucion NULL (September). [corrida: 2026-11-09-lunes]
+
+## Corrida 2026-11-16-lunes
+- sin_hallazgos. Baseline: HEAD ea8f16d · make-server v302 = 438d607 (no make-server diff after it) · esco-consultas v19 = af0bc63 · migrations up to 197; 196 live with no ledger row → ESCO-181. Open PRs: #478 (6 d), #471 (7 d, docs), #324 (draft, 37 d). Nothing waits for a deploy. [corrida: 2026-11-16-lunes]
+- Accepted state: #484 changed only import paths in the shared accounting engines (`@/` → relative `.ts`) so they run under Deno; no accounting-rule change, no parity edit needed. [corrida: 2026-11-16-lunes]
+- Week-over-week: migrations 192 → 197; make-server v297 → v302; esco-consultas v12 → v19; open PRs 2 → 3; 37 commits / 14 PRs in the window. [corrida: 2026-11-16-lunes]
