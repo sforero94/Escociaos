@@ -67,7 +67,7 @@ describe("P5 cliente HTTP unitario", () => {
       .toThrow("disponible");
     expect(fetcher).toHaveBeenCalledOnce();
   });
-  it("historial solo usa contenido de preguntas y respuestas SQL, sin metadata ni herramientas", () => {
+  it("historial solo usa pares SQL; lleva el SQL usado, nunca filas ni herramientas", () => {
     expect(
       historialEscoSql([
         { role: "system", content: "oculto" },

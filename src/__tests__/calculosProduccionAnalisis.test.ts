@@ -17,6 +17,10 @@ import {
   ordenarCosechas,
   evaluarCorteMovimiento,
   construirEvolucionSemanal,
+  construirVistaEtapas,
+  formatoKgEtapa,
+  cambioNetoPorcentaje,
+  formatoCambioNeto,
   conciliarEtapas,
   semanaIsoDeFecha,
   GAPS_PRODUCCION_ANALISIS,
@@ -518,5 +522,95 @@ describe('denominadores y conciliación', () => {
     expect(completa.entrada_kg).not.toBe(
       (completa.clasificado_kg ?? 0) + (completa.despachado_kg ?? 0),
     );
+    expect(completa.nota).toMatch(/canastas × 20 kg/);
+  });
+});
+
+describe('etapas por lote', () => {
+  const p27 = identidadFromParts('Principal', 2027);
+  const p26 = identidadFromParts('Principal', 2026);
+  const entradas = [
+    { cosechaKey: p27.key, lote_id: 'pp', kg: 2057.95 },
+    { cosechaKey: p27.key, lote_id: 'st', kg: 584.4 },
+    { cosechaKey: p27.key, lote_id: 'au', kg: 5358.32 },
+    { cosechaKey: p27.key, lote_id: 'lv', kg: 8202.61 },
+  ];
+  const etapas = [
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'pp', etapa: 'clasificado' as const, kg: 1992, fecha_corte: '2026-10-23' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'st', etapa: 'clasificado' as const, kg: 588, fecha_corte: '2026-10-23' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'au', etapa: 'clasificado' as const, kg: 5362, fecha_corte: '2026-10-23' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'lv', etapa: 'clasificado' as const, kg: 8178, fecha_corte: '2026-10-23' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'pp', etapa: 'despachado' as const, kg: 1932, fecha_corte: '2026-10-27' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'st', etapa: 'despachado' as const, kg: 588, fecha_corte: '2026-10-27' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'au', etapa: 'despachado' as const, kg: 5342, fecha_corte: '2026-10-27' },
+    { ano: 2027, cosecha_tipo: 'Principal' as const, lote_id: 'lv', etapa: 'despachado' as const, kg: 8178, fecha_corte: '2026-10-27' },
+  ];
+
+  it('llena clasificado y despachado y conserva el corte de cada etapa', () => {
+    const vista = construirVistaEtapas(etapas, [p27], entradas);
+    const cosecha = vista.porCosecha[0];
+    expect(cosecha.clasificado.kg).toBe(16120);
+    expect(cosecha.despachado.kg).toBe(16040);
+    expect(cosecha.clasificado.fechas_corte).toEqual(['2026-10-23']);
+    expect(cosecha.despachado.fechas_corte).toEqual(['2026-10-27']);
+    expect(cosecha.diferencia_entrada_clasificacion_kg).toBeCloseTo(83.28, 2);
+    expect(cosecha.diferencia_sin_despacho_kg).toBe(80);
+    expect(cosecha.clasificado.kg! + cosecha.despachado.kg!).not.toBe(
+      entradas.reduce((s, e) => s + (e.kg ?? 0), 0),
+    );
+    const pp = vista.porLote.find((l) => l.lote_id === 'pp')!;
+    expect(pp.clasificado_kg).toBe(1992);
+    expect(pp.despachado_kg).toBe(1932);
+    expect(pp.fecha_clasificado).toBe('2026-10-23');
+    expect(pp.fecha_despachado).toBe('2026-10-27');
+    expect(formatoCambioNeto(pp.despachado_kg, 2057.95)).toBe('−6,1 %');
+    expect(formatoCambioNeto(cosecha.despachado.kg, 16203.28)).toBe('−1,0 %');
+  });
+
+  it('una cosecha sin filas queda en Sin dato y no rellena con cero', () => {
+    const vista = construirVistaEtapas(etapas, [p26, p27], [
+      ...entradas,
+      { cosechaKey: p26.key, lote_id: 'pp', kg: 4200 },
+    ]);
+    const vieja = vista.porCosecha.find((c) => c.cosecha.key === p26.key)!;
+    expect(vieja.clasificado.kg).toBeNull();
+    expect(vieja.despachado.kg).toBeNull();
+    expect(vieja.diferencia_entrada_clasificacion_kg).toBeNull();
+    expect(formatoKgEtapa(vieja.clasificado.kg)).toBe('Sin dato');
+    const ppVieja = vista.porLote.find((l) => l.cosechaKey === p26.key && l.lote_id === 'pp')!;
+    expect(ppVieja.clasificado_kg).toBeNull();
+    expect(ppVieja.despachado_kg).toBeNull();
+  });
+
+  it('un lote sin etapa no se cuenta como cero y los cortes distintos se ven', () => {
+    const vista = construirVistaEtapas(
+      [
+        { ano: 2027, cosecha_tipo: 'Principal', lote_id: 'pp', etapa: 'clasificado', kg: 100, fecha_corte: '2026-10-23' },
+        { ano: 2027, cosecha_tipo: 'Principal', lote_id: 'au', etapa: 'clasificado', kg: 50, fecha_corte: '2026-10-27' },
+        { ano: 2027, cosecha_tipo: 'Principal', lote_id: 'pp', etapa: 'despachado', kg: 90, fecha_corte: '2026-10-27' },
+      ],
+      [p27],
+      [
+        { cosechaKey: p27.key, lote_id: 'pp', kg: 120 },
+        { cosechaKey: p27.key, lote_id: 'au', kg: 80 },
+        { cosechaKey: p27.key, lote_id: 'lv', kg: 40 },
+      ],
+    );
+    const cosecha = vista.porCosecha[0];
+    expect(cosecha.clasificado.kg).toBe(150);
+    expect(cosecha.clasificado.fechas_corte).toEqual(['2026-10-23', '2026-10-27']);
+    expect(cosecha.despachado.kg).toBe(90);
+    const lv = vista.porLote.find((l) => l.lote_id === 'lv')!;
+    expect(lv.clasificado_kg).toBeNull();
+    expect(lv.despachado_kg).toBeNull();
+    expect(lv.diferencia_entrada_clasificacion_kg).toBeNull();
+    const au = vista.porLote.find((l) => l.lote_id === 'au')!;
+    expect(au.fecha_clasificado).toBe('2026-10-27');
+    expect(au.despachado_kg).toBeNull();
+    expect(au.diferencia_sin_despacho_kg).toBeNull();
+    expect(formatoCambioNeto(au.despachado_kg, 80)).toBe('Sin dato');
+    expect(cambioNetoPorcentaje(10, 0)).toBeNull();
+    expect(cambioNetoPorcentaje(null, 100)).toBeNull();
+    expect(formatoCambioNeto(588, 584.4)).toBe('+0,6 %');
   });
 });

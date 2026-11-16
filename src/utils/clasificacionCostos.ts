@@ -7,7 +7,7 @@
 // Clasificar mal un gasto SOLO mueve la línea entre Margen de Contribución y
 // Utilidad Operativa; NUNCA cambia la Utilidad Operativa.
 
-import type { GastoCrudo, TipoCosto } from '@/types/reportesFinancieros';
+import type { GastoCrudo, TipoCosto } from '../types/reportesFinancieros.ts';
 
 /** Lo que se asume cuando ni el concepto ni la categoría dicen nada. */
 export const TIPO_COSTO_POR_DEFECTO: TipoCosto = 'indirecto';

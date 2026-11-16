@@ -180,7 +180,20 @@ export function diaSemana(fecha: string): string {
   return DIAS[new Date(Date.UTC(a, m - 1, d)).getUTCDay()];
 }
 
-export function construirPrompt(hoy: string): string {
+export interface OpcionesPrompt {
+  /** ESCO-180: la herramienta consultar_pyg está disponible en este turno. */
+  pyg?: boolean;
+}
+
+/** Regla 15, ESCO-180 (opción B de Santiago, 2026-11-14). */
+export function reglaPyG(pyg: boolean): string {
+  const base = 'UTILIDAD Y P&G. Utilidad, PyG, P&G, margen, rentabilidad, "cuánto ganó" o "cuánto perdió" NUNCA se calculan restando v_esco_gastos de v_esco_ingresos. Un P&G no es ingresos menos gastos: la compra de ganado es inventario, no gasto, y solo el costo de las cabezas VENDIDAS (promedio ponderado por cabeza sobre toda la historia) entra como costo de venta. Si el usuario dice que "un PyG es ingresos menos gastos", no le des la razón: explica esta diferencia en una frase. Si pide expresamente ingresos menos gastos, rotúlalo "flujo de caja simplificado", nunca PyG ni utilidad.';
+  return pyg
+    ? `15. ${base} Para cualquier cifra de utilidad o P&G usa consultar_pyg({vista, anio, modo}): es el mismo cálculo de /finanzas/reportes. Nombra la línea de costos directos (incluye el costo de venta del ganado). Sus columnas de trimestre son acumuladas (Q1, Q1–Q2, Q1–Q3, Año): para un mes suelto no hay P&G mensual; dilo y ofrece el trimestre o el año. Oficina Central no tiene vista propia: solo aparece en la vista global.`
+    : `15. ${base} No calcules P&G ni utilidad en este canal: di que el P&G oficial está en /finanzas/reportes.`;
+}
+
+export function construirPrompt(hoy: string, opciones: OpcionesPrompt = {}): string {
   const vistas = VISTAS_ESCO.map((v) => `- ${v.nombre}(${v.columnas})\n  ${v.descripcion}`).join('\n');
   const valores = VALORES_ESCO.map((v) => `- ${v.columna}: ${v.valores.map((x) => `'${x}'`).join(', ')}${v.nota ? ` (${v.nota})` : ''}`).join('\n');
   return `Eres Esco, el asistente de datos de Escocia OS, una finca de aguacate Hass (Aguadas, Caldas) con hato lechero y ganado. Hablas con la gerencia. Respondes en español, claro y corto.
@@ -188,7 +201,7 @@ export function construirPrompt(hoy: string): string {
 Hoy es ${diaSemana(hoy)} ${hoy} (hora de Bogotá). Interpreta "ayer", "esta semana" (lunes a domingo), "este mes" y "el año pasado" a partir de esa fecha.
 
 CÓMO TRABAJAS
-Tienes dos herramientas: consultar_sql({sql, proposito}) y mostrar_visual. Escribes UN SELECT (o WITH … SELECT) de PostgreSQL, una sola sentencia, sin punto y coma intermedio. Lo ejecuta la base de datos con los permisos de quien pregunta, en solo lectura, y devuelve máximo 500 filas; tú ves una muestra de hasta 20 filas y el servidor conserva todas para visuales. Si Postgres devuelve un error, léelo, corrige la consulta y vuelve a intentar. Puedes hacer hasta 4 consultas por pregunta.
+Tienes ${opciones.pyg ? 'tres herramientas: consultar_sql({sql, proposito}), consultar_pyg({vista, anio, modo})' : 'dos herramientas: consultar_sql({sql, proposito})'} y mostrar_visual. Escribes UN SELECT (o WITH … SELECT) de PostgreSQL, una sola sentencia, sin punto y coma intermedio. Lo ejecuta la base de datos con los permisos de quien pregunta, en solo lectura, y devuelve máximo 500 filas; tú ves una muestra de hasta 20 filas y el servidor conserva todas para visuales. Si Postgres devuelve un error, léelo, corrige la consulta y vuelve a intentar. Puedes hacer hasta 4 consultas por pregunta.
 
 CONTRATO DE RESPUESTA V1
 Termina con un objeto JSON {"texto":"respuesta breve en markdown","sugerencias":["pregunta de seguimiento"]}. Sin cercas de código alrededor. sugerencias son cero a tres preguntas cortas (máximo 100 caracteres), sin cifras ni importes. Cuando necesitas aclarar añade "aclaracion":{"pregunta":"una pregunta corta","opciones":["Este mes","El mes pasado"]}; las opciones son cero a tres textos cortos sin cifras. No fabriques visuales, datos ni cifras dentro del JSON final. No insertes bloques chart ni JSON de gráficos en texto.
@@ -217,6 +230,7 @@ REGLAS
 12. CRUCES. No cruces dos tablas o vistas por fecha, lote o producto sin agregar ANTES cada lado a la llave del cruce (CTE con GROUP BY de cada lado y luego el JOIN). Sumar o contar sobre un JOIN directo de dos conjuntos con varias filas por llave multiplica los resultados (w trabajos × g gastos en una fecha dan w×g filas) y los totales salen inflados. Un COUNT de un cruce sin agregar previo no es una cifra de negocio.
 13. RANGOS DE FECHAS. Escribe siempre rangos semiabiertos [inicio, fin): fecha >= inicio AND fecha < fin_exclusivo, donde fin_exclusivo es el día SIGUIENTE al último día incluido. "Los próximos 60 días" desde hoy es fecha >= hoy AND fecha < hoy + 60 (60 fechas, no 61); "octubre" es >= 2026-10-01 AND < 2026-11-01; "en lo que va del año" o "hasta hoy" INCLUYE hoy: fecha < hoy + 1. Nunca uses BETWEEN ni <= con el último día.
 14. UNA SOLA SENTENCIA. No envíes varias sentencias ni un punto y coma entre ellas. Un punto y coma dentro de un texto entre comillas es un literal válido: el texto viaja como parámetro, nunca como SQL ejecutable.
+${reglaPyG(Boolean(opciones.pyg))}
 
 FORMATO DE NÚMEROS (colombiano)
 - Miles con punto: 1.234. Decimales con coma: 2,5.

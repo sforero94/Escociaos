@@ -210,12 +210,13 @@ migration. Merging is Santiago's, always.
   produccion YYYY-MM-DD, PR pendiente de fusion` plus the pre/post counts.
 - A finding whose defect could not be reproduced → `Estado = Done`,
   `Resolucion = Obsoleto`, `Motivo cierre` = what was tried.
-- **Deploy.** Friday cannot deploy the edge function: publishing is CLI-only
-  (root `CLAUDE.md`, ESCO-148) and the connector publish path is banned. A PR
-  that needs a deploy carries `requiere_deploy` (constitution §5) and says, in
-  its body, whether the migration goes before or after the deploy. Saturday
-  turns that into the merge-and-deploy order. Open item: a deploy-on-merge
-  GitHub Action is being proposed to Santiago separately (constitution §6).
+- **Deploy.** Friday's own PRs are not merged yet, so Friday never deploys
+  them. A PR that needs a deploy carries `requiere_deploy` (constitution §5)
+  and says, in its body, whether the migration goes before or after the
+  deploy; the Saturday reply session deploys it after the merge. If `main`
+  already carries merged code that production does not have, Friday may deploy
+  `origin/main` under the constitution §6 deploy protocol (CLI only, post-check,
+  rollback on failure). The connector publish path stays banned.
 
 **Phase 3b — Preparar FDS** (2026-10-26)
 

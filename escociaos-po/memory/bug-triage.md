@@ -877,3 +877,10 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - movimientos_diarios_productos.unidad = productos.unidad_medida en 924/924 filas. [corrida: 2026-11-09-lunes]
 - Esco SQL (#464/#467/#468) revisado sin defectos: tope 4 consultas, 42501/PGRST no llegan al modelo, truncado a 500 correcto, límites de historial cliente=servidor (12×4000). [corrida: 2026-11-09-lunes]
 - reportes_semanales no tiene updated_at; mirar storage.objects.updated_at del .html/.pdf. [corrida: 2026-11-09-lunes]
+
+## Corrida 2026-11-16-lunes
+- Baseline main@ea8f16d GREEN: vitest 433 files / 8.956 tests; tsc 0; lint 0 errors / 873 warnings (885 before). [corrida: 2026-11-16-lunes]
+- Reviewed #482, #484, #479, #480/#481: no live defect. Latent (not filed): `construirVistaEtapas` cosecha-level entrada−clasificado mixes populations (entrada of all lotes, clasificado of lotes with rows); harmless while etapas cover every lote with entrada. [corrida: 2026-11-16-lunes]
+- ESCO-175 closed Obsoleto (do not re-audit). 196 live → ESCO-181 docs (stale comments useProduccionData.ts:652, docs/bugs/463-produccion-analisis-gaps.md:46). [corrida: 2026-11-16-lunes]
+- Navigation: `reportes_semanales` columns are `numero_semana`/`ano`. 24 h logs: only non-2xx is the benign rondas_avisos 409. [corrida: 2026-11-16-lunes]
+- BUG_REPORT.md: 1,2,4,5,7 fixed; 6 not reproducible; 3b open, needs Santiago. [corrida: 2026-11-16-lunes]

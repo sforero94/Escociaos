@@ -4,13 +4,13 @@ import type {
   AdvertenciaReporte,
   DatosCrudosReportes,
   VistaReporte,
-} from '@/types/reportesFinancieros';
+} from '../types/reportesFinancieros.ts';
 import {
   NEGOCIO_AGUACATE,
   NEGOCIO_GANADO,
   NEGOCIO_HATO,
   VISTAS,
-} from '@/types/reportesFinancieros';
+} from '../types/reportesFinancieros.ts';
 
 export interface AlcanceVista {
   /** Negocios cuyos gastos e ingresos entran en el reporte. */

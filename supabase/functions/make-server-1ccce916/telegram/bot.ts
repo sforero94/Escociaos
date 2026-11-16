@@ -2561,6 +2561,7 @@ function getBot(): Bot<BotContext> {
     { command: "proponer", description: "Proponer un ajuste de inventario" },
     { command: "aprobar", description: "Aprobar o desestimar ajustes de inventario" },
     { command: "cancelar", description: "Cancelar operación actual" },
+    { command: "esco_nueva", description: "Empezar una conversación nueva con Esco" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));
 

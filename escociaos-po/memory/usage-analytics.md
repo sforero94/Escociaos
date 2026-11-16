@@ -401,3 +401,11 @@ estado de producción es una hipótesis, no un hecho. Esta se refutó con un sol
 - Esco 2.0: medir uso en `function_edge_logs` (path `esco-consultas`), no en `chat_messages`. Hasta 11-05 solo tráfico de prueba. [corrida: 2026-11-05-jueves]
 - Desde 2026-11-16, cero chequeos es señal (último 09-08). RICARENA #88 secado_due escalada desde 10-25 sin secado_real (cae en ESCO-111/150). [corrida: 2026-11-05-jueves]
 - Navegación: `fin_gastos_lote_operaciones` no existe; buscar el nombre real de la tabla de la 187 en information_schema. [corrida: 2026-11-05-jueves]
+
+## Corrida 2026-11-12-jueves
+- Pulso 11-05→11-12: rt 43/57 · chat 44 (19 turnos SQL humanos el 11-10) · produccion 12 + etapas 8 (bot, ESCO-177) · gan_mov 11 · mov_inv 7 · CEROS: pesajes, monitoreos, fin_gastos (último 11-02), chequeos, tratamientos. Escritores: David 52, Santiago 24, Fernando 1. [corrida: 2026-11-12-jueves]
+- Esco SQL web: primer uso real el 11-10 (`chat_messages.metadata->>'motor'='sql'`). En function_edge_logs, user agent Linux x86_64 en ráfagas de 50+ = eval/prueba; Mac o iPhone = Santiago. [corrida: 2026-11-12-jueves]
+- Labores se captura en lote los sábados: un jueves sin registros_trabajo NO es señal. [corrida: 2026-11-12-jueves]
+- RICARENA cerrada (secado por web el 11-08, fecha 10-25). INDIA tiene 2 secado_real de agosto (n=1, histórico): no filar. [corrida: 2026-11-12-jueves]
+- Vigilar el 11-16/11-19: (a) foto de pesaje nueva, (b) chequeo nuevo, (c) fin_gastos sin filas desde 11-02, (d) ronda nueva de monitoreo = prueba real de ESCO-172, (e) retención de Esco SQL (turnos SQL/semana). [corrida: 2026-11-12-jueves]
+- Navegación: novedades_uso usa `ocurrido_at`; hato_capturas_foto usa `creado_en`; gan_movimientos.created_by solo se llena en compra y venta (filado ESCO-179). [corrida: 2026-11-12-jueves]

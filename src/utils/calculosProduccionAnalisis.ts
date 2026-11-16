@@ -308,7 +308,7 @@ export function resumirCosecha(
 
   return {
     cosecha,
-    produccion_kg: Math.round(produccion_kg),
+    produccion_kg,
     kg_por_arbol: arbolesOk ? calcularKgPorArbol(produccion_kg, arboles) : null,
     ton_por_ha: areaOk ? calcularTonPorHa(produccion_kg, areaTotal) : null,
     lotes_con_dato: lotesConDato,
@@ -719,6 +719,201 @@ export function construirEvolucionSemanal(
   };
 }
 
+export type EtapaLote = 'clasificado' | 'despachado';
+
+export interface RegistroEtapaLote {
+  ano: number;
+  cosecha_tipo: CosechaTipo;
+  lote_id: string;
+  etapa: EtapaLote;
+  kg: number;
+  /** YYYY-MM-DD. Corte propio de la etapa. */
+  fecha_corte: string;
+}
+
+export interface EntradaLoteCosecha {
+  cosechaKey: string;
+  lote_id: string;
+  kg: number | null;
+}
+
+export interface EtapaAgregada {
+  kg: number | null;
+  /** Fechas distintas presentes. Vacío si no hay filas. */
+  fechas_corte: string[];
+}
+
+export interface ResumenEtapasCosecha {
+  cosecha: CosechaIdentidad;
+  clasificado: EtapaAgregada;
+  despachado: EtapaAgregada;
+  diferencia_entrada_clasificacion_kg: number | null;
+  diferencia_sin_despacho_kg: number | null;
+  lotes_sin_clasificado: number;
+  lotes_sin_despachado: number;
+}
+
+export interface DetalleEtapaLote {
+  cosechaKey: string;
+  lote_id: string;
+  clasificado_kg: number | null;
+  despachado_kg: number | null;
+  fecha_clasificado: string | null;
+  fecha_despachado: string | null;
+  diferencia_entrada_clasificacion_kg: number | null;
+  diferencia_sin_despacho_kg: number | null;
+}
+
+const MESES_CORTE = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'] as const;
+
+export function formatoFechaCorte(fecha: string | null | undefined): string | null {
+  if (!fecha || anioDeFechaMovimiento(fecha) == null) return null;
+  const [, month, day] = fecha.split('-').map(Number);
+  return `${day} ${MESES_CORTE[month - 1]} ${fecha.slice(0, 4)}`;
+}
+
+export function formatoKgEtapa(valor: number | null): string {
+  if (valor == null) return 'Sin dato';
+  const redondo = Math.round(valor * 100) / 100;
+  const conDecimales = Math.abs(redondo - Math.round(redondo)) > 0.001;
+  return `${redondo.toLocaleString('es-CO', {
+    minimumFractionDigits: conDecimales ? 2 : 0,
+    maximumFractionDigits: 2,
+  })} kg`;
+}
+
+/**
+ * Cambio neto = despachado / entrada − 1.
+ * Null si falta un lado o la entrada es 0. No usa el clasificado.
+ */
+export function cambioNetoPorcentaje(
+  despachadoKg: number | null | undefined,
+  entradaKg: number | null | undefined,
+): number | null {
+  if (despachadoKg == null || entradaKg == null || entradaKg === 0) return null;
+  if (!Number.isFinite(despachadoKg) || !Number.isFinite(entradaKg)) return null;
+  return despachadoKg / entradaKg - 1;
+}
+
+/** Porcentaje con un decimal y signo. Ej. 1.932 / 2.057,95 → −6,1 %. */
+export function formatoCambioNeto(
+  despachadoKg: number | null | undefined,
+  entradaKg: number | null | undefined,
+): string {
+  const ratio = cambioNetoPorcentaje(despachadoKg, entradaKg);
+  if (ratio == null) return 'Sin dato';
+  const pct = Math.round(ratio * 1000) / 10;
+  const texto = Math.abs(pct).toLocaleString('es-CO', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  if (pct > 0) return `+${texto} %`;
+  if (pct < 0) return `−${texto} %`;
+  return `${texto} %`;
+}
+
+export const NOTA_CAMBIO_NETO = 'despachado / entrada − 1; cortes distintos';
+
+/** Las dos diferencias se nombran aparte. No se suman entre sí ni con las etapas. */
+export function textoDiferenciaEtapas(
+  entradaClasificado: number | null,
+  clasificadoDespacho: number | null,
+): string {
+  const partes: string[] = [];
+  if (entradaClasificado != null) {
+    partes.push(`${formatoKgEtapa(entradaClasificado)} entre entrada y clasificado`);
+  }
+  if (clasificadoDespacho != null) {
+    partes.push(`${formatoKgEtapa(clasificadoDespacho)} entre clasificado y despacho`);
+  }
+  return partes.length > 0 ? partes.join(' · ') : 'Sin dato';
+}
+
+function fechasDe(rows: RegistroEtapaLote[]): string[] {
+  return Array.from(new Set(rows.map((r) => r.fecha_corte))).sort();
+}
+
+function sumaEtapa(rows: RegistroEtapaLote[]): number | null {
+  if (rows.length === 0) return null;
+  return rows.reduce((s, r) => s + (Number(r.kg) || 0), 0);
+}
+
+/**
+ * Junta la entrada por lote con las filas de etapa.
+ * Una cosecha sin filas queda en null, nunca en cero.
+ * Cortes distintos de la misma etapa se conservan todos.
+ */
+export function construirVistaEtapas(
+  etapas: RegistroEtapaLote[],
+  cosechas: CosechaIdentidad[],
+  entradas: EntradaLoteCosecha[],
+): { porCosecha: ResumenEtapasCosecha[]; porLote: DetalleEtapaLote[] } {
+  const porCosecha: ResumenEtapasCosecha[] = [];
+  const porLote: DetalleEtapaLote[] = [];
+
+  for (const cosecha of cosechas) {
+    const deCosecha = etapas.filter(
+      (e) => e.ano === cosecha.ano && e.cosecha_tipo === cosecha.tipo,
+    );
+    const entradasCosecha = entradas.filter((e) => e.cosechaKey === cosecha.key);
+    const loteIds = new Set<string>([
+      ...entradasCosecha.map((e) => e.lote_id),
+      ...deCosecha.map((e) => e.lote_id),
+    ]);
+
+    let sumaEntrada: number | null = null;
+    let lotesConEntrada = 0;
+    let sinClasificado = 0;
+    let sinDespachado = 0;
+
+    for (const loteId of loteIds) {
+      const entrada = entradasCosecha.find((e) => e.lote_id === loteId)?.kg ?? null;
+      const clasRows = deCosecha.filter((e) => e.lote_id === loteId && e.etapa === 'clasificado');
+      const despRows = deCosecha.filter((e) => e.lote_id === loteId && e.etapa === 'despachado');
+      const clasificado = sumaEtapa(clasRows);
+      const despachado = sumaEtapa(despRows);
+      if (entrada != null) {
+        sumaEntrada = (sumaEntrada ?? 0) + entrada;
+        lotesConEntrada += 1;
+      }
+      if (clasificado == null) sinClasificado += 1;
+      if (despachado == null) sinDespachado += 1;
+      porLote.push({
+        cosechaKey: cosecha.key,
+        lote_id: loteId,
+        clasificado_kg: clasificado,
+        despachado_kg: despachado,
+        fecha_clasificado: fechasDe(clasRows)[0] ?? null,
+        fecha_despachado: fechasDe(despRows)[0] ?? null,
+        diferencia_entrada_clasificacion_kg:
+          entrada != null && clasificado != null ? entrada - clasificado : null,
+        diferencia_sin_despacho_kg:
+          clasificado != null && despachado != null ? clasificado - despachado : null,
+      });
+    }
+
+    const clasRows = deCosecha.filter((e) => e.etapa === 'clasificado');
+    const despRows = deCosecha.filter((e) => e.etapa === 'despachado');
+    const clasificadoKg = sumaEtapa(clasRows);
+    const despachadoKg = sumaEtapa(despRows);
+    porCosecha.push({
+      cosecha,
+      clasificado: { kg: clasificadoKg, fechas_corte: fechasDe(clasRows) },
+      despachado: { kg: despachadoKg, fechas_corte: fechasDe(despRows) },
+      diferencia_entrada_clasificacion_kg:
+        sumaEntrada != null && clasificadoKg != null && lotesConEntrada > 0
+          ? sumaEntrada - clasificadoKg
+          : null,
+      diferencia_sin_despacho_kg:
+        clasificadoKg != null && despachadoKg != null ? clasificadoKg - despachadoKg : null,
+      lotes_sin_clasificado: sinClasificado,
+      lotes_sin_despachado: sinDespachado,
+    });
+  }
+
+  return { porCosecha, porLote };
+}
+
 export interface ConciliacionEtapas {
   entrada_kg: number | null;
   clasificado_kg: number | null;
@@ -745,10 +940,14 @@ export function conciliarEtapas(
   const faltan: string[] = [];
   if (clasificadoKg == null) faltan.push('clasificación');
   if (despachadoKg == null) faltan.push('despacho');
-  const nota =
+  const base =
     faltan.length > 0
       ? `Diferencia no calculable: falta ${faltan.join(' y ')}. Lo que falta queda en blanco y no es merma.`
-      : 'Diferencia por revisar entre etapas. No es merma: la resta no demuestra una pérdida.';
+      : 'Diferencia por revisar entre etapas. Una diferencia no es necesariamente merma.';
+  const nota =
+    clasificadoKg != null
+      ? `${base} El clasificado son canastas × 20 kg.`
+      : base;
   return {
     entrada_kg: entradaKg,
     clasificado_kg: clasificadoKg,

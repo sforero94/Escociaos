@@ -23,6 +23,37 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-11-16 — corrida lunes (window 2026-11-09 → 2026-11-16)
+
+### Aguacate · Producción
+- The production dashboard separates the harvest year from the date of the movement. Gerencia can filter by date and read one harvest or several at the same time. Principal 2027 is now visible. (edcec8c, #470)
+- The dashboard shows **clasificado**, **despachado** and the net change for each lote and harvest, from the new table `produccion_etapas_lote`. (7ea3e7a, #480; migration renumbered to 196 in 2582524, #481)
+- The "today" guard in production uses local time again, not UTC. (f9daf5e, #473)
+
+### Esco
+- Esco SQL answers are more correct: income includes cattle sales, application costs match the application report, closing dates no longer move back one day, and climate days without data say "sin dato". (5839ff6, #472, migrations 193 and 195)
+- Esco SQL reads the herd's reproductive state the same way as the Hato screen, and reads milk weighings, fortnight litres and the latest monitoring round correctly. (#472, migration 195)
+- Esco SQL answers the P&G with the official accounting engine, so its numbers agree with `/finanzas/reportes`. (af0bc63, #484, esco-consultas v19)
+- The answer contract can show tables, charts and KPI cards built from the query rows. (3ab06fa, #474)
+- Web chat: the SQL engine can stream its progress and keep a snapshot of each turn. Off until `VITE_ESCO_MOTOR_WEB=sql` is set. (74539c6, #475)
+- Telegram: a SQL adapter that sends HTML, CSV and PNG answers is deployed, but Telegram still uses the legacy engine (`ESCO_MOTOR_TELEGRAM` not set). (4175218, #477)
+- Telegram Esco SQL keeps only complete question → answer pairs in its history; `/esco_nueva` starts a new conversation. (4df1b65, #479)
+
+### Reportes
+- When the weekly report cannot make its AI analysis, it now fails visibly instead of archiving a placeholder. (438d607, #482, make-server v302)
+
+### Ganado
+- Every new cattle movement records its author; the 62 older movements are attributed to Santiago. (ac3bec2, #483, migration 197)
+
+### Caution zones
+- Migrations 193/194/195 applied 11-09; 194 closes app access to `esco_sql_lectura(text)` (ESCO-175 closed Obsoleto).
+- Migration 196 `produccion_etapas_lote`: live since 2026-11-10 with no ledger row and no CLAUDE.md entry → ESCO-181 (VIERNES, docs).
+- Migration 197 applied 11-14 and documented (#485).
+- Edge functions: make-server v297 → v302, esco-consultas v12 → v19.
+
+### Requiere despliegue manual
+- None. Both edge functions match `main`. Open PRs: #478 (6 d), #471 (7 d, docs), #324 (draft, 37 d).
+
 ## 2026-11-09 — corrida lunes
 ### Aguacate · Aplicaciones
 - Closing an application now stops before saving and lists every product that is short of stock, instead of failing inside the close (96ebc44d, #448).

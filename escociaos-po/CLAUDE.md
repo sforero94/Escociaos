@@ -714,12 +714,56 @@ from that one idea:
   `supabase/functions/make-server-1ccce916/` in sync; note in the PR if an edge
   function needs redeploying — as the rubric flag `requiere_deploy`, so Saturday
   lists the merge-and-deploy order.
-- **No Routine deploys the edge function, and neither does the Saturday reply
-  session** (2026-10-26). Publishing stays CLI-only, as the root `CLAUDE.md`
-  rule ESCO-148 says: `npx supabase functions deploy make-server-1ccce916`. The
-  connector bundle/publish path is banned. **Open item:** an automatic
-  deploy-on-merge GitHub Action is being proposed to Santiago separately; it is
-  not designed here. `<<por definir: decisión de Santiago sobre el deploy-on-merge>>`
+- **Edge-function deploys** (rule changed 2026-11-14 by Santiago: «Quiero que
+  puedas hacer el deploy en las sesiones de mantenimiento o cuando yo lo
+  autorice expresamente»; it replaces the 2026-10-26 rule «no session deploys»).
+  A deploy is allowed in exactly two cases:
+  1. **A maintenance session** (a Routine run or the Saturday reply session)
+     deploys `origin/main` when `main` carries merged code that production does
+     not have yet. The Saturday Routine itself still deploys nothing
+     (`run-sabado.md`: it only reports).
+  2. **Any session**, when Santiago writes a line that names the function,
+     for example «despliega make-server-1ccce916» or «despliega las dos». The
+     line authorises that function, in that session, once.
+
+  Every deploy follows the protocol below, step by step. Stop at the first
+  failure and deploy nothing.
+  1. **Source = clean `origin/main`.** `git fetch origin main`, then deploy from
+     a clean checkout of `origin/main` (worktree or detached HEAD), never from a
+     PR branch or a stale tree. Lesson v223/v236: a successful deploy from a
+     stale checkout republished old code.
+  2. **Scope.** Run `scripts/check-deploy-drift.mjs` for the function (or read
+     `list_edge_functions` plus `scripts/deploy-drift-state/<slug>.json`). If
+     production already has `main`, there is nothing to deploy. Otherwise list
+     the commits on the function's watched paths between the deployed state
+     and `origin/main`.
+  3. **Order against the database.** For every PR in that range, read its body.
+     If it says a migration goes **before** the deploy, the migration must be in
+     the live ledger. If not, do not deploy. This is the lesson of migration
+     105: merged security code whose database half has not run is a live mine.
+     A PR in the range with no readable deploy order → do not deploy; ask.
+  4. **Mechanism = CLI only** (root `CLAUDE.md`, ESCO-148), exactly these
+     commands:
+     - `npx supabase functions deploy make-server-1ccce916 --project-ref ywhtjwawnkeqlwxbvgup`
+       (reads `verify_jwt = false` from `supabase/config.toml`)
+     - `npx supabase@2.117.0 functions deploy esco-consultas --project-ref ywhtjwawnkeqlwxbvgup --use-api`
+     The connector `deploy_edge_function` / bundle-publish path stays **banned**,
+     in every session, with or without authorisation.
+  5. **Post-check, immediately.** `list_edge_functions` (or the Management API)
+     shows the new version `ACTIVE`, and:
+     - `make-server-1ccce916`: `verify_jwt = false` and anonymous `GET /health` = 200.
+     - `esco-consultas`: `verify_jwt = true` and anonymous `GET /health` = 401.
+  6. **Failure after publishing** (post-check fails) → redeploy the previously
+     deployed commit with the same command, re-run the post-check, and file a
+     P0 against the operation. Never leave a failed post-check in production.
+  7. **Record.** Version, commit, `ezbr_sha256`, post-check results and the
+     authorising line (or «sesión de mantenimiento») go in the run report and
+     on the ficha of every finding the deploy ships. A finding that needed the
+     deploy can close only after the post-check passes.
+
+  The deploy needs `SUPABASE_ACCESS_TOKEN` (or the environment's network
+  credential for `api.supabase.com`). A session without it reports «deploy
+  pendiente: sin credencial» and does not look for a way around it.
 - Respect the nested `CLAUDE.md` files under `src/components/hato/` and
   `src/components/finanzas/` when touching those modules.
 
