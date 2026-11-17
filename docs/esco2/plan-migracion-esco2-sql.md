@@ -14,10 +14,10 @@ against this list.
 | P0 — decisions D1–D7 | Done 2026-11-09 | §7 |
 | P1 — engine fixes | Done. Migrations 193 and 195 applied 2026-11-09 | PR #472, `esco-sql-p1-correcciones-2026-11-09.md` |
 | P2 — answer contract v1 | Done. Backend deployed in `esco-consultas` v15 | PR #474, `esco-sql-p2-contrato-v1.md` |
-| P3 — web adapter | Merged. Flag `VITE_ESCO_MOTOR_WEB=sql` needs a separate activation approval | PR #475, `esco-sql-p3-web.md` |
+| P3 — web adapter | Merged. Flag `VITE_ESCO_MOTOR_WEB=sql` set in Vercel since 2026-11-10 UTC, so production web chat uses SQL | PR #475, `esco-sql-p3-web.md` |
 | P4 — Telegram door | Done. Migration 194 applied 2026-11-09 | PR #476, `esco-sql-p4-liberacion-2026-11-09.md` |
-| P5 — Telegram adapter | Deployed with legacy routing (`ESCO_MOTOR_TELEGRAM` absent). Turning on `sql` needs a separate approval | PR #477, `esco-sql-p5-telegram.md` |
-| P6 — shadow and cutover | In progress. PR #478 merged 2026-11-17 (shared history, cost receipt per turn, comparator v2). `esco-consultas` v20 and `make-server-1ccce916` v303 run it. The two-week campaign starts when the flags are turned on | PR #478, PR #479 |
+| P5 — Telegram adapter | Deployed. `ESCO_MOTOR_TELEGRAM=sql` set 2026-11-17 | PR #477, `esco-sql-p5-telegram.md` |
+| P6 — shadow and cutover | In progress. PR #478 merged 2026-11-17 (shared history, cost receipt per turn, comparator v2). `esco-consultas` v20 and `make-server-1ccce916` v303 run it. Both flags are on since 2026-11-17: the two-week campaign started that day | PR #478, PR #479 |
 | P7 — retirement | Not started | — |
 
 Changes outside the plan that touch the engine: PR #484 (ESCO-180) adds `consultar_pyg`, so Esco SQL
