@@ -3,7 +3,7 @@
 Status: **approved** (2026-11-09). Santiago approved the 7 recommended decisions D1–D7 in chat. Owner: Santiago. Each deploy, migration and secret
 change in this plan needs Santiago's explicit approval at the time it runs.
 
-## 0. Progress (updated 2026-11-16)
+## 0. Progress (updated 2026-11-17)
 
 This plan was approved in PR #471 and reached `main` on 2026-11-16. Sections 1–10 are the approved
 plan, unchanged. This section records what shipped. Check flags and versions against production, not
@@ -17,7 +17,7 @@ against this list.
 | P3 — web adapter | Merged. Flag `VITE_ESCO_MOTOR_WEB=sql` needs a separate activation approval | PR #475, `esco-sql-p3-web.md` |
 | P4 — Telegram door | Done. Migration 194 applied 2026-11-09 | PR #476, `esco-sql-p4-liberacion-2026-11-09.md` |
 | P5 — Telegram adapter | Deployed with legacy routing (`ESCO_MOTOR_TELEGRAM` absent). Turning on `sql` needs a separate approval | PR #477, `esco-sql-p5-telegram.md` |
-| P6 — shadow and cutover | Open. The history fix that changes answers shipped in PR #479. Cost receipts and the 80-capture comparator are in PR #478, not merged, and conflict with `main` | PR #478, PR #479 |
+| P6 — shadow and cutover | In progress. PR #478 merged 2026-11-17 (shared history, cost receipt per turn, comparator v2). `esco-consultas` v20 runs it; `make-server-1ccce916` still v302 until a deploy from the Mac. The two-week campaign has not started | PR #478, PR #479 |
 | P7 — retirement | Not started | — |
 
 Changes outside the plan that touch the engine: PR #484 (ESCO-180) adds `consultar_pyg`, so Esco SQL
