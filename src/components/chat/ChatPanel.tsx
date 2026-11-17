@@ -11,7 +11,7 @@ import { ExportarInformeDialog } from './ExportarInformeDialog';
 import type { ExportData } from './ExportarInformeDialog';
 import { ChatEmptyState } from './ChatEmptyState';
 import { SugerenciasSql } from './BloquesSql';
-import { enviarMensajeSql } from '@/utils/escoSqlChatService';
+import { enviarMensajeSql, ErrorTurnoSqlWeb } from '@/utils/escoSqlChatService';
 import { motorSqlWebHabilitado, leerMetadataSql, leerRespuestaSqlWeb, bloquesParaExportar, trazaSql } from '@/utils/escoSqlChat';
 import type { Bloque } from '@/utils/escoSql/bloques';
 import { generarTituloInforme } from '@/utils/generarTituloInforme';
@@ -274,7 +274,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
       fetchConversations().then(setConversations).catch(() => {});
     } catch (err: unknown) {
       // Detener no es un error: el usuario lo pidió.
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if ((err instanceof DOMException || err instanceof ErrorTurnoSqlWeb) && err.name === 'AbortError') {
         setStreamingContent('');
         setTraza([]);
         trazaRef.current = [];

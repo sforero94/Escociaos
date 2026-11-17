@@ -171,7 +171,10 @@ describe('P2 — contrato HTTP → loop → visual', () => {
     expect(r.cuerpo.texto).toBe('Texto disponible');
     expect(r.cuerpo.bloques).toEqual([]);
     expect(r.cuerpo.consultas).toEqual([]);
-    expect(JSON.stringify(r.cuerpo)).not.toContain('999');
+    // El recibo (P6) trae un turno_id UUID aleatorio y una huella sha256, que pueden
+    // contener «999» por azar. No viene del modelo, así que se excluye de esta búsqueda.
+    const { recibo: _recibo, ...contenido } = r.cuerpo as Record<string, unknown>;
+    expect(JSON.stringify(contenido)).not.toContain('999');
   });
 
   it('extrae sugerencias y aclaración del contenido final sin exponer el JSON en texto', async () => {

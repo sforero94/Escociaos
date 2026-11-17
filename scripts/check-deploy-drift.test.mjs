@@ -561,6 +561,8 @@ describe('P5 dependencias compartidas del bot y presencia del secreto', () => {
     expect(fila).toContain('src/utils/escoSql/formato.ts');
     expect(fila).toContain('src/utils/escoSql/bloques.ts');
     expect(fila).toContain('src/utils/escoSql/respuesta.ts');
+    expect(fila).toContain('src/utils/escoSql/historial.ts');
+    expect(fila).toContain('src/utils/escoSql/turno.ts');
     expect(fila).toContain('src/utils/formatPuro.ts');
     expect(fila).toContain("verify_jwt: 'false'");
     expect(fila).toContain("health_anon: '200'");

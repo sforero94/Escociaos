@@ -188,7 +188,7 @@ describe('QA P4 — IR validada por PostgreSQL, sin pasar por el parser', () => 
     else {
       expect(res.headers.get('content-type')).toContain('text/event-stream');
       const eventos = (await res.text()).split('\n\n').filter(Boolean).map((frame) => JSON.parse(frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')) as Record<string, unknown>);
-      expect(eventos.map((evento) => evento.type)).toEqual(['consulta_inicio', 'consulta_fin', 'texto', 'bloques', 'sugerencias', 'done']);
+      expect(eventos.map((evento) => evento.type)).toEqual(['turno', 'consulta_inicio', 'consulta_fin', 'texto', 'bloques', 'sugerencias', 'done']);
       resultado = eventos[eventos.length - 1].resultado as Record<string, unknown>;
     }
     expect(resultado).toMatchObject({ motor: 'sql', texto: 'Total disponible', respuesta: 'Total disponible', bloques: [{ tipo: 'tarjeta', consulta: 1, items: [{ columna: 'total', valor: servicio ? 2 : 1.5 }] }] });

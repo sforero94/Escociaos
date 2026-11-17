@@ -40,7 +40,7 @@ jobs:
       matrix:
         include:
           - slug: make-server-1ccce916
-            path: supabase/functions/make-server-1ccce916 src/utils/escoSql/formato.ts src/utils/escoSql/bloques.ts src/utils/escoSql/respuesta.ts src/utils/formatPuro.ts
+            path: supabase/functions/make-server-1ccce916 src/utils/escoSql/formato.ts src/utils/escoSql/bloques.ts src/utils/escoSql/respuesta.ts src/utils/escoSql/historial.ts src/utils/escoSql/turno.ts src/utils/formatPuro.ts
             verify_jwt: 'false'
             health_anon: '200'
             expected_secret: ESCO_TELEGRAM_SECRET

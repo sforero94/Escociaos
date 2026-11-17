@@ -1,44 +1,37 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { MAX_HISTORIAL_SQL, textoHistorialSql } from '@/utils/escoSql/loop';
-import {
-  historialEscoSql,
-  textoHistorialTelegramSql,
-} from '../supabase/functions/server/telegram/escoSqlCliente.ts';
+import { MAX_HISTORIAL_SQL } from '@/utils/escoSql/loop';
+import { construirHistorialSql } from '@/utils/escoSql/historial';
+import { historialEscoSql } from '../supabase/functions/server/telegram/escoSqlCliente.ts';
 
 // Historial de Telegram para el motor SQL: mismo contexto que la web en un seguimiento.
+// Desde P6 Telegram y web usan el MISMO helper (src/utils/escoSql/historial.ts).
 
-const sqlUser = (content: string) => ({ role: 'user', content, metadata: { motor: 'sql' } });
-const sqlAsistente = (content: string, sqls: string[] = []) => ({
+let n = 0;
+const fila = (f: Record<string, unknown>) => {
+  n += 1;
+  return { id: `m${String(n).padStart(4, '0')}`, created_at: new Date(Date.UTC(2026, 10, 1, 0, 0, n)).toISOString(), ...f };
+};
+const sqlUser = (content: string) => fila({ role: 'user', content, metadata: { motor: 'sql' } });
+const sqlAsistente = (content: string, sqls: string[] = []) => fila({
   role: 'assistant',
   content,
   metadata: { motor: 'sql', consultas: sqls.map((sql) => ({ sql, proposito: 'p', filas_muestra: [] })) },
 });
 
-describe('textoHistorialTelegramSql', () => {
-  it('es idéntico a textoHistorialSql del motor web', () => {
-    const largo = 'x'.repeat(3990);
-    const casos: [string, { sql: string }[]][] = [
-      ['Sin consultas', []],
-      ['Una consulta', [{ sql: 'SELECT 1' }]],
-      ['Dos consultas', [{ sql: 'SELECT 1' }, { sql: 'SELECT 2' }]],
-      [largo, [{ sql: 'SELECT * FROM v_esco_gastos' }]],
-      ['Bloque enorme', [{ sql: 'SELECT '.padEnd(3950, 'y') }]],
-      [largo, []],
-    ];
-    for (const [respuesta, consultas] of casos) {
-      expect(textoHistorialTelegramSql(respuesta, consultas)).toBe(textoHistorialSql(respuesta, consultas));
-    }
+describe('historialEscoSql de Telegram', () => {
+  it('es el mismo helper que usa la web', () => {
+    expect(historialEscoSql).toBe(construirHistorialSql);
   });
 });
 
 describe('historialEscoSql', () => {
   it('deja fuera los mensajes de Esco 1.0 aunque sean del usuario', () => {
     const h = historialEscoSql([
-      { role: 'user', content: 'Pregunta vieja', metadata: {} },
-      { role: 'assistant', content: 'Respuesta vieja', metadata: { tool_interactions: [] } },
-      { role: 'user', content: 'Pregunta legacy sin metadata' },
+      fila({ role: 'user', content: 'Pregunta vieja', metadata: {} }),
+      fila({ role: 'assistant', content: 'Respuesta vieja', metadata: { tool_interactions: [] } }),
+      fila({ role: 'user', content: 'Pregunta legacy sin metadata' }),
       sqlUser('¿Cuánto gastamos en octubre?'),
       sqlAsistente('Gastaron $95M', ['SELECT sum(valor) FROM v_esco_gastos']),
     ]);
@@ -47,12 +40,14 @@ describe('historialEscoSql', () => {
     expect(h[1].texto).toContain('SELECT sum(valor) FROM v_esco_gastos');
   });
 
-  it('descarta la pregunta de un turno que falló y no guardó respuesta', () => {
+  // La pregunta de un turno fallido ya no se filtra aquí: desde P6 el bot guarda el par
+  // (pregunta + respuesta) junto, y un turno fallido queda con motor 'sql_error'.
+  it('deja fuera un turno marcado sql_error', () => {
     const h = historialEscoSql([
-      sqlUser('Pregunta que falló'),
+      fila({ role: 'user', content: 'Pregunta que falló', metadata: { motor: 'sql_error' } }),
+      fila({ role: 'assistant', content: 'Error', metadata: { motor: 'sql_error' } }),
       sqlUser('Pregunta buena'),
       sqlAsistente('Respuesta buena'),
-      sqlUser('Pregunta en vuelo'),
     ]);
     expect(h).toEqual([
       { rol: 'user', texto: 'Pregunta buena' },
@@ -71,7 +66,7 @@ describe('historialEscoSql', () => {
   it('ignora consultas malformadas en la metadata en vez de inventar SQL', () => {
     const h = historialEscoSql([
       sqlUser('P'),
-      { role: 'assistant', content: 'R', metadata: { motor: 'sql', consultas: [{ sql: 3 }, null, 'x'] } },
+      fila({ role: 'assistant', content: 'R', metadata: { motor: 'sql', consultas: [{ sql: 3 }, null, 'x'] } }),
     ]);
     expect(h[1].texto).toBe('R');
   });
@@ -92,9 +87,10 @@ describe('bot de Telegram (los dos árboles)', () => {
 
   it('lee de la base solo filas SQL y registra /esco_nueva antes del fallback de texto', () => {
     const bot = leer(arboles[0], 'bot.ts');
-    expect(bot).toContain('.contains("metadata", { motor: "sql" })');
+    expect(bot).toContain('.eq("metadata->>motor", "sql")');
     const comando = bot.indexOf('bot.command("esco_nueva"');
-    const fallback = bot.indexOf('bot.on("message:text"');
+    // El fallback de Esco es el ÚLTIMO bot.on("message:text"); los anteriores son de la ronda.
+    const fallback = bot.lastIndexOf('bot.on("message:text"');
     expect(comando).toBeGreaterThan(-1);
     expect(comando).toBeLessThan(fallback);
     expect(bot).toContain('{ command: "esco_nueva"');

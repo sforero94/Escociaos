@@ -21,7 +21,10 @@ function escenario(opciones: { ajena?: boolean; errorGuardar?: boolean } = {}) {
   const cliente = {
     auth: { getSession: async () => ({ data: { session: { access_token: 'jwt-sintetico', user: { id: USUARIO } } } }) },
     from: (tabla: string) => {
-      if (tabla === 'chat_messages') return { insert: insertMensajes };
+      if (tabla === 'chat_messages') {
+        const historia = { eq: () => historia, in: () => historia, order: () => historia, limit: async () => ({ data: [], error: null }) };
+        return { insert: insertMensajes, select: () => historia };
+      }
       if (tabla !== 'chat_conversations') throw new Error(`Tabla inesperada ${tabla}`);
       const cadena = { eq: (columna: string, valor: unknown) => { eqs.push([columna, valor]); return cadena; }, maybeSingle: async () => ({ data: opciones.ajena ? null : { id: CONVERSACION }, error: null }) };
       return { insert: insertarConversacion, select: () => cadena };
@@ -65,7 +68,7 @@ describe('QA P3 — recorrido cliente, SSE y snapshot', () => {
     expect(s.rpc).toHaveBeenCalledOnce();
   });
 
-  it('continúa una conversación previa de legacy con mensajes largos sin incumplir el límite del servidor', async () => {
+  it('continúa una conversación previa sin heredar mensajes legacy de la memoria local', async () => {
     const s = escenario();
     const previo: ChatMessage = { id: 'previo', conversation_id: CONVERSACION, role: 'assistant', content: 'a'.repeat(5000), metadata: {}, created_at: '2026-11-08T17:00:00Z' };
     const r = await enviarMensajeSql(CONVERSACION, 'Seguimiento sintético', [previo], () => {});
@@ -73,7 +76,7 @@ describe('QA P3 — recorrido cliente, SSE y snapshot', () => {
     expect(s.insertarConversacion).not.toHaveBeenCalled();
     expect(s.eqs).toContainEqual(['user_id', USUARIO]);
     const cuerpo = JSON.parse(String(s.fetchReal.mock.calls[0][1]?.body));
-    expect(cuerpo.historial[0].texto.length).toBeLessThanOrEqual(4000);
+    expect(cuerpo.historial).toEqual([]);
     expect(s.guardados).toHaveLength(2);
   });
 

@@ -7,6 +7,7 @@ export interface IdentidadBotonSql {
   telegramId: number;
   chatId: number;
   messageId: number;
+  conversationId?: string;
 }
 interface MensajeSql extends IdentidadBotonSql {
   expiresAt: number;
@@ -14,8 +15,15 @@ interface MensajeSql extends IdentidadBotonSql {
   consultas: ConsultaTelegramSql[];
   consumidos: string[];
 }
+export interface ConversacionTelegramSql {
+  usuarioId: string;
+  telegramId: number;
+  chatId: number;
+  id: string;
+}
 export interface EstadoBotonesSql {
   version: 1;
+  conversacion?: ConversacionTelegramSql;
   mensajes: Record<string, MensajeSql>;
 }
 export interface BotonSql {
@@ -62,13 +70,20 @@ export function crearBotonesSql(
     telegramId: entrada.telegramId,
     chatId: entrada.chatId,
     messageId: entrada.messageId,
+    conversationId: entrada.conversationId,
     expiresAt: ahora + TTL,
     opciones,
     consultas,
     consumidos: [],
   };
   return {
-    estado: { version: 1, mensajes },
+    estado: {
+      version: 1,
+      mensajes,
+      ...(anterior?.conversacion
+        ? { conversacion: anterior.conversacion }
+        : {}),
+    },
     botones: [
       ...opciones.map((text, i) => ({
         text,
@@ -106,7 +121,9 @@ export function consumirBotonSql(
   const entry = s.mensajes?.[m[1]];
   if (
     !entry || !Array.isArray(entry.consumidos) || entry.expiresAt <= ahora ||
-    ["usuarioId", "telegramId", "chatId", "messageId"].some((k) =>
+    ["usuarioId", "telegramId", "chatId", "messageId", "conversationId"].some((
+      k,
+    ) =>
       entry[k as keyof IdentidadBotonSql] !==
         identidad[k as keyof IdentidadBotonSql]
     ) || entry.consumidos.includes(m[2])

@@ -1,78 +1,15 @@
+import { normalizarHistorialEfectivoSql } from "@esco-sql/historial.ts";
+import { hashHistorialSql } from "@esco-sql/turno.ts";
 import {
-  esObjetoSql,
+  ErrorRespuestaEscoSql,
   type HistorialTelegramSql,
+  leerObservabilidadTelegramSql,
   leerRespuestaEscoSql,
   type RespuestaTelegramSql,
 } from "./escoSqlContrato.ts";
 export const seleccionarMotorTelegram = (valor: unknown): boolean =>
   valor === "sql";
-/** Igual que MAX_HISTORIAL_SQL y MAX_TEXTO_HISTORIAL de src/utils/escoSql/loop.ts. */
-const MAX_MENSAJES_HISTORIAL_SQL = 10;
-const MAX_TEXTO_HISTORIAL_SQL = 4000;
-
-/**
- * Copia literal de `textoHistorialSql` (src/utils/escoSql/loop.ts): el texto de la
- * respuesta más el SQL que la produjo, para que un seguimiento («¿y el año pasado?»)
- * llegue con el mismo contexto que en la web. La paridad la fija
- * escoSqlTelegramHistorial.test.ts.
- */
-export function textoHistorialTelegramSql(
-  respuesta: string,
-  consultas: { sql: string }[],
-): string {
-  if (!consultas.length) return respuesta.slice(0, MAX_TEXTO_HISTORIAL_SQL);
-  const bloque = `\n\n[Consultas SQL que usé en este turno]\n${
-    consultas.map((c) => c.sql).join("\n---\n")
-  }`;
-  const sobra = MAX_TEXTO_HISTORIAL_SQL - bloque.length;
-  if (sobra < 200) {
-    return `${respuesta.slice(0, MAX_TEXTO_HISTORIAL_SQL - 200)}${
-      bloque.slice(0, 200)
-    }`;
-  }
-  return `${respuesta.slice(0, sobra)}${bloque}`;
-}
-
-function consultasDeMetadata(metadata: Record<string, unknown>): { sql: string }[] {
-  if (!Array.isArray(metadata.consultas)) return [];
-  return metadata.consultas.filter((c): c is { sql: string } =>
-    esObjetoSql(c) && typeof c.sql === "string" && c.sql.length > 0
-  ).map((c) => ({ sql: c.sql }));
-}
-
-/**
- * Historial que se manda al motor SQL: solo pares pregunta → respuesta SQL completos.
- * Quedan fuera los mensajes de Esco 1.0 (una pregunta vieja sin su respuesta confunde
- * al modelo) y la pregunta de un turno que falló y no guardó respuesta.
- */
-export function historialEscoSql(filas: unknown[]): HistorialTelegramSql[] {
-  const sql = filas.filter(esObjetoSql).filter((f) =>
-    typeof f.content === "string" &&
-    (f.role === "user" || f.role === "assistant") &&
-    esObjetoSql(f.metadata) && f.metadata.motor === "sql"
-  );
-  const pares: HistorialTelegramSql[] = [];
-  for (let i = 0; i < sql.length - 1; i++) {
-    const pregunta = sql[i];
-    const respuesta = sql[i + 1];
-    if (pregunta.role !== "user" || respuesta.role !== "assistant") continue;
-    pares.push(
-      {
-        rol: "user",
-        texto: (pregunta.content as string).slice(0, MAX_TEXTO_HISTORIAL_SQL),
-      },
-      {
-        rol: "assistant",
-        texto: textoHistorialTelegramSql(
-          respuesta.content as string,
-          consultasDeMetadata(respuesta.metadata as Record<string, unknown>),
-        ),
-      },
-    );
-    i++;
-  }
-  return pares.slice(-MAX_MENSAJES_HISTORIAL_SQL);
-}
+export { construirHistorialSql as historialEscoSql } from "@esco-sql/historial.ts";
 export async function idTurnoTelegramSql(
   usuarioId: string,
   chatId: string,
@@ -167,6 +104,8 @@ export async function solicitarEscoSql(
   ) {
     throw Error("Escribe una pregunta de hasta 1000 caracteres.");
   }
+  const historial = normalizarHistorialEfectivoSql(entrada.historial);
+  const historialSha256 = await hashHistorialSql(historial);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45000);
   try {
@@ -184,22 +123,47 @@ export async function solicitarEscoSql(
           motor: "sql",
           usuario_id: entrada.usuarioId,
           pregunta: entrada.pregunta,
-          historial: entrada.historial,
+          historial,
         }),
         signal: controller.signal,
         redirect: "error",
       },
     );
+    const raw = await leerCuerpoAcotado(response);
     if (!response.ok) {
-      throw Error(
+      let observacion = { recibo: null, uso: null } as ReturnType<
+        typeof leerObservabilidadTelegramSql
+      >;
+      try {
+        observacion = leerObservabilidadTelegramSql(JSON.parse(raw));
+      } catch { /* El transporte no inventa un recibo no verificable. */ }
+      if (
+        observacion.recibo &&
+        observacion.recibo.historial_sha256 !== historialSha256
+      ) {
+        throw new ErrorRespuestaEscoSql(
+          "La respuesta de la consulta SQL no corresponde al historial enviado.",
+        );
+      }
+      throw new ErrorRespuestaEscoSql(
         response.status === 403
           ? "Esco está disponible solo para Gerencia activa."
           : "El motor SQL no está disponible. Intenta de nuevo más tarde.",
+        observacion.recibo,
+        observacion.uso,
       );
     }
-    const raw = await leerCuerpoAcotado(response);
-    return leerRespuestaEscoSql(JSON.parse(raw));
+    const resultado = leerRespuestaEscoSql(JSON.parse(raw));
+    if (
+      resultado.recibo && resultado.recibo.historial_sha256 !== historialSha256
+    ) {
+      throw new ErrorRespuestaEscoSql(
+        "La respuesta de la consulta SQL no corresponde al historial enviado.",
+      );
+    }
+    return resultado;
   } catch (error) {
+    if (error instanceof ErrorRespuestaEscoSql) throw error;
     if (
       error instanceof Error &&
       ["La respuesta", "El motor SQL", "Esco está"].some((p) =>
@@ -208,7 +172,7 @@ export async function solicitarEscoSql(
     ) {
       throw error;
     }
-    throw Error(
+    throw new ErrorRespuestaEscoSql(
       "No se pudo completar la consulta SQL. Intenta de nuevo más tarde.",
     );
   } finally {
