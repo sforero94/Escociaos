@@ -40,12 +40,14 @@ describe('historialEscoSql', () => {
     expect(h[1].texto).toContain('SELECT sum(valor) FROM v_esco_gastos');
   });
 
-  it('descarta la pregunta de un turno que falló y no guardó respuesta', () => {
+  // La pregunta de un turno fallido ya no se filtra aquí: desde P6 el bot guarda el par
+  // (pregunta + respuesta) junto, y un turno fallido queda con motor 'sql_error'.
+  it('deja fuera un turno marcado sql_error', () => {
     const h = historialEscoSql([
-      sqlUser('Pregunta que falló'),
+      fila({ role: 'user', content: 'Pregunta que falló', metadata: { motor: 'sql_error' } }),
+      fila({ role: 'assistant', content: 'Error', metadata: { motor: 'sql_error' } }),
       sqlUser('Pregunta buena'),
       sqlAsistente('Respuesta buena'),
-      sqlUser('Pregunta en vuelo'),
     ]);
     expect(h).toEqual([
       { rol: 'user', texto: 'Pregunta buena' },
@@ -87,7 +89,8 @@ describe('bot de Telegram (los dos árboles)', () => {
     const bot = leer(arboles[0], 'bot.ts');
     expect(bot).toContain('.eq("metadata->>motor", "sql")');
     const comando = bot.indexOf('bot.command("esco_nueva"');
-    const fallback = bot.indexOf('bot.on("message:text"');
+    // El fallback de Esco es el ÚLTIMO bot.on("message:text"); los anteriores son de la ronda.
+    const fallback = bot.lastIndexOf('bot.on("message:text"');
     expect(comando).toBeGreaterThan(-1);
     expect(comando).toBeLessThan(fallback);
     expect(bot).toContain('{ command: "esco_nueva"');
