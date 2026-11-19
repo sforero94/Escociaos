@@ -2514,3 +2514,14 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 - `gan_movimientos` tiene dos triggers AFTER INSERT OR UPDATE (`fn_aplicar_movimiento_ganado` md5 `ab2d33a9…`, `fn_gan_validar_cabezas_transaccion` md5 `c4db3e2e…`); un UPDATE que no cambia `estado` ni toca filas con `transaccion_ganado_id` no mueve inventario. Verificado leyendo los cuerpos vivos 2026-11-14. [corrida: 2026-11-14-sabado-respuesta]
 - Feature-strategy: ESCO-180 respondida `si` (B). La tabla del auto-podado del jueves: 2026-11-12-jueves → **si**. [corrida: 2026-11-14-sabado-respuesta]
 - **Responder dentro de la sesión de la Routine del sábado no permite aplicar ni fusionar** (2026-11-14): esa sesión cuenta como desatendida (`ATTENDED=0`) y `supabase-guard.py` denegó el `SUPABASE_APPLY_A_MIGRATION` de la 197 y el `merge_pull_request` de #482, aunque Santiago estaba presente. Sirve para decisiones y código; el apply y las fusiones van en la sesión NUEVA de `respuesta-sabado.md`. Ofrecer esa sesión desde el principio cuando la respuesta trae `aplicar` o `fusionar`. [corrida: 2026-11-14-sabado-respuesta]
+
+## Corrida 2026-11-19-jueves
+- Sonda P0 tranquila salvo el webhook de Telegram: ESCO-182 (P1, VIERNES, banderas requiere_deploy+p1; refutación CONFIRMADA) y su pareja ESCO-183 (P2, FDS/accion_externa: getWebhookInfo + preguntar a la finca). Propuesta ESCO-184 (P3, FDS/propuesta: monitoreo por lote). [corrida: 2026-11-19-jueves]
+- Ruteo de ESCO-182: P1 de código sin decisión pasa V8 → VIERNES. El deploy lo hace Santiago desde el Mac (413 en la nube). [corrida: 2026-11-19-jueves]
+
+## Racha del jueves (regla de auto-poda v2) — actualizada 2026-11-19
+| Corrida | Propuestas filadas | Respondidas `si` | Racha sin `si` |
+|---|---|---|---|
+| 2026-11-05-jueves | 1 (ESCO-172) | si | 0 |
+| 2026-11-12-jueves | 1 (ESCO-180) | si (B) | 0 |
+| **2026-11-19-jueves** | 1 (ESCO-184) | pendiente | 0 |

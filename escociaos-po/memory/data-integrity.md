@@ -885,3 +885,11 @@ Clima: 09-21..27 todos 288 lecturas, ok salvo 09-26 reconstruido 0,00. Candado 1
 - Rondas de monitoreo go by lote pair (R34 lotes 3–4 open while R35 lotes 1–2 opens): two open rondas is normal. [corrida: 2026-11-16-lunes]
 - Navigation: `clima_avisos` has no `creado_en`; `string_agg` over `pg_trigger.tgenabled` needs `::text` (42725). [corrida: 2026-11-16-lunes]
 - Baselines: hato_eventos 806 · activas 67 · chv 1.513 · pesajes 807 (last 10-28) · alertas 150 (3 pendiente) · respuesta_trazas 21 · hato_correcciones 30 · monitoreos 4.358 / 35 rondas · mov_inv 223 · inventario_operaciones 13 · compras 51 · productos 347 · md 215 / mdp 956 · aplicaciones 27 / cierres 24 · rt 3.474 · fin_gastos 4.641 · fin_ingresos 252 · gan 78 · globalgap_correcciones 1.159 · clima_resumen 1.996 · ledger max 197. n_tup_del: compras 11, gan_movimientos 4, rondas_monitoreo 19. Clima 90 d: ok 64 / parcial 14 / reconstruido 10 (none after 183). [corrida: 2026-11-16-lunes]
+
+## Corrida 2026-11-19-jueves (sonda P0, ventana desde 11-16 12:00Z)
+- Sonda P0 sin hallazgos. Ledger máx sigue en 20261114164552 (197); 0 filas posteriores; ficheros hasta 197 en main cd9d4d7. [corrida: 2026-11-19-jueves]
+- Única escritura de dominio en 72 h: 1 carga de pesaje por foto (hato_capturas_foto ok, 47 filas, 11-17 13:07Z, Telegram) con DOS fechas (11-04: 24, 11-11: 23). 0 duplicados, 0 fuera de rango. Pesajes: última fecha 2026-11-11. [corrida: 2026-11-19-jueves]
+- El trigger de la 197 sigue sin ejercitarse (0 inserts en gan_movimientos). Confirmar el autor en el próximo insert. [corrida: 2026-11-19-jueves]
+- Clima 2026-11-18 cobertura_parcial (274 lecturas, hueco 75 min); temperatura y sol en NULL de forma correcta. [corrida: 2026-11-19-jueves]
+- Nueva línea base pg_stat: hato_capturas_foto n_tup_del 2 / live 12 (descarte de la 171). [corrida: 2026-11-19-jueves]
+- Líneas base: hato_eventos 806 (último write 11-09) · pesajes 854 · monitoreos 4.358 · mov_inv 223 · md 215 · rt 3.474 · fin_gastos 4.641 · fin_ingresos 252 · gan 304 = log · compras 51 · libro vs stock 1 (TecniFeed Boro) · logs_auditoria 0. [corrida: 2026-11-19-jueves]

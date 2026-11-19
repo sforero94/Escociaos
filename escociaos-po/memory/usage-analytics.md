@@ -409,3 +409,11 @@ estado de producción es una hipótesis, no un hecho. Esta se refutó con un sol
 - RICARENA cerrada (secado por web el 11-08, fecha 10-25). INDIA tiene 2 secado_real de agosto (n=1, histórico): no filar. [corrida: 2026-11-12-jueves]
 - Vigilar el 11-16/11-19: (a) foto de pesaje nueva, (b) chequeo nuevo, (c) fin_gastos sin filas desde 11-02, (d) ronda nueva de monitoreo = prueba real de ESCO-172, (e) retención de Esco SQL (turnos SQL/semana). [corrida: 2026-11-12-jueves]
 - Navegación: novedades_uso usa `ocurrido_at`; hato_capturas_foto usa `creado_en`; gan_movimientos.created_by solo se llena en compra y venta (filado ESCO-179). [corrida: 2026-11-12-jueves]
+
+## Corrida 2026-11-19-jueves
+- Pulso 11-12→11-18: pesajes 47/0 (foto 11-17 = sesiones 11-04 y 11-11) · rt 43/43 · mov_inv 21 · compras 14 · monitoreos 14 (R35) · chat 14 · fin_gastos 4. Cero: gan_mov, produccion, hato_eventos, fin_ingresos (última 11-01), tratamientos, chequeos. Escriben 3 humanos (admin de campo 65, hato 47, contabilidad 4); Santiago solo Esco. [corrida: 2026-11-19-jueves]
+- Cadencia de foto de pesaje ~15 días, 2 sesiones por foto (10-12, 11-02, 11-17). Próxima esperada ~12-02. [corrida: 2026-11-19-jueves]
+- Cadencia de chequeo 61–105 días; 72 días el 11-19 no es señal; lo es después de ~12-22. [corrida: 2026-11-19-jueves]
+- MONITOREO: desde 10-28 la visita va por mitades (lotes 1–2 / 3–4, 6–10 días). Comparar cobertura por par de lotes, no por ronda. Propuesta filada ESCO-184 (con feature-strategy). [corrida: 2026-11-19-jueves]
+- Esco SQL: 26 turnos, todos de Santiago (11-09 13, 11-10 6, 11-14 7), luego 0 hasta 11-19; 0 turnos Telegram desde la activación P6 del 11-17; ningún turno con recibo P6 todavía. Snapshot Telegram en telegram_sessions.session->'escoSql'->'mensajes' (no es log de turnos). [corrida: 2026-11-19-jueves]
+- Navegación: salud del webhook en function_edge_logs (url '%telegram/webhook%'), causa en function_logs ('[Session] read <chat_id>'). compras sin created_by; chat_conversations sin columna de canal. 2026-11-16 fue festivo en Colombia. [corrida: 2026-11-19-jueves]

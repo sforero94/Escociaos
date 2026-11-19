@@ -99,3 +99,9 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 - DESCARTADO: "chequeo vencido 65 días". Intervalos históricos 61–105 días (mediana ~70). rechequeo_due es UNA fila de rebaño, no 32. No proponer enrutarlo salvo que Santiago lo pida. [corrida: 2026-11-12-jueves]
 - Baseline ganado ceba 2026: compras 131 cab / $454,4M; ventas 169 cab / $868,0M; gastos Ganado (v_esco_gastos) $108,5M. [corrida: 2026-11-12-jueves]
 - Columnas: hato_alertas no tiene `mensaje`; chat_messages = (conversation_id, role, content, metadata, created_at); los turnos de Esco SQL viven en chat_messages. [corrida: 2026-11-12-jueves]
+
+## Corrida 2026-11-19-jueves
+- 1 propuesta (ESCO-184): estado actual de monitoreo POR LOTE (rondaActualPorLote + edad máxima N, sugerido 21 d). R33 lotes 1-2 (10-28), R34 lotes 3-4 (11-03, fecha_fin NULL), R35 lotes 1-2 (11-13), 6 sublotes cada una vs 12 en R31/R32. rondaActualId farm-wide en 4 consumidores: usePriorizacionMonitoreo.ts:189, priorizacion-scouting.ts:224/538, chat.tsx:3735, v_esco_monitoreo.es_ultima_ronda (195:224). [corrida: 2026-11-19-jueves]
+- DESCARTADO: subir GAP_DIAS a ~12 para unir mitades: encadena 10-28→11-03→11-13 en una ronda y duplica lecturas de lotes 1-2. No proponer. [corrida: 2026-11-19-jueves]
+- Baseline: 5 lotes activos / 13 sublotes (Santa Rosa 1 sublote, sin monitoreo desde al menos R31). [corrida: 2026-11-19-jueves]
+- No propuesto: Esco SQL (0 turnos Telegram desde 11-17, web 5 días sin uso), alertas gerencia (ESCO-150), pesaje en pares (by design). [corrida: 2026-11-19-jueves]
