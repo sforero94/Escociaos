@@ -43,10 +43,11 @@ lo lee.
   cuando hay fecha. No dibuja ceros en huecos ni después del último movimiento.
   Abierta/cerrada no está en el registro.
 
-## Etapas por lote (migración 196, sin aplicar)
+## Etapas por lote (migración 196, aplicada)
 
 `produccion_etapas_lote` guarda clasificado o despachado por lote y cosecha,
-con su `fecha_corte`. No trae datos y no se aplica sola. El tablero la lee;
+con su `fecha_corte`. Está aplicada en producción (sin fila en el ledger) y
+tiene 8 filas cargadas por Escocia Bot el 2026-11-10. El tablero la lee;
 si la tabla todavía no existe, esas columnas quedan en «Sin dato».
 
 El clasificado son canastas × 20 kg. Una diferencia contra la entrada o contra
