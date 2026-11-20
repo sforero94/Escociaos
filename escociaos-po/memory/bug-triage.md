@@ -884,3 +884,9 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - ESCO-175 closed Obsoleto (do not re-audit). 196 live → ESCO-181 docs (stale comments useProduccionData.ts:652, docs/bugs/463-produccion-analisis-gaps.md:46). [corrida: 2026-11-16-lunes]
 - Navigation: `reportes_semanales` columns are `numero_semana`/`ano`. 24 h logs: only non-2xx is the benign rondas_avisos 409. [corrida: 2026-11-16-lunes]
 - BUG_REPORT.md: 1,2,4,5,7 fixed; 6 not reproducible; 3b open, needs Santiago. [corrida: 2026-11-16-lunes]
+
+## Corrida 2026-11-20-viernes
+- Cuatro cargadores QA ejecutan el `telegram/bot.ts` real con una lista blanca de módulos locales: `helpers/escoSqlP5QaFixture.ts`, `helpers/escoSqlP6TurnoQaBot.ts`, `escoTelegramHandlerCompleto.test.ts`, `telegramPesajeRecuperacion.test.ts`. Un import `./x.ts` nuevo en `bot.ts` hay que agregarlo en los cuatro o fallan con «Unentered dependency». [corrida: 2026-11-20-viernes]
+- Privacidad ya fijada por `escoTelegramHandlerCompleto`: en el camino del webhook no se registra el mensaje de error ni la descripción de la API de Telegram; solo clase, causa y código. [corrida: 2026-11-20-viernes]
+- Desde ESCO-182 (PR #487, tras su deploy) `handleWebhook` responde 200 ante un update fallido y registra `el update falló al procesarse y se descarta (clase=…, causa=…, codigo=…)`. Un 500 del webhook después de ese deploy es un defecto nuevo. [corrida: 2026-11-20-viernes]
+- La guarda `telegramWebhookSecretoGuard` marca literales de 9–11 dígitos cerca de "telegram"/"chat", también en pruebas: construir ids sintéticos en tiempo de ejecución (`'7'.repeat(10)`). [corrida: 2026-11-20-viernes]

@@ -2525,3 +2525,10 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 | 2026-11-05-jueves | 1 (ESCO-172) | si | 0 |
 | 2026-11-12-jueves | 1 (ESCO-180) | si (B) | 0 |
 | **2026-11-19-jueves** | 1 (ESCO-184) | pendiente | 0 |
+
+## Racha del viernes — 2026-11-20
+| Corrida | Conjunto elegible | FDS preparadas | Racha de vacios |
+|---|---|---|---|
+| 2026-11-20-viernes | 2 (ESCO-181, 182) | 2 (ESCO-183, 184) | **0** |
+- Preflight verde, `ATTENDED=0`, cero denegaciones, cero escrituras a la base. PRs #486 (ESCO-181) y #487 (ESCO-182, `requiere_deploy`). [corrida: 2026-11-20-viernes]
+- Baseline main@c3970c3: lint 0 errores / 873 warnings, tsc limpio, vitest 447 ficheros / 9.155 pruebas. [corrida: 2026-11-20-viernes]

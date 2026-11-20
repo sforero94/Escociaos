@@ -141,3 +141,7 @@ esta corrida** — filado como hallazgo contra la operacion.
 - Líneas base: lint 0 errores / 907 warnings (921 el 10-09) · tsc limpio · 320 ficheros / 7.567 pruebas · `as any` cliente 71 · npm audit --omit=dev 9 (sin cambio) · npm outdated 53. [corrida: 2026-11-05-jueves]
 
 - **No re-filar**: code-quality/esco2/compositor-muerto (ESCO-173) quedó cerrada como Obsoleto. Santiago la descartó el 2026-11-08: «Ignora esco 173 - estoy trabajando en un revamp». No vuelvas a proponer limpiezas de código muerto en `src/utils/esco2/` ni en `docs/esco2/` mientras dure el revamp de Esco 2.0; es un área activa del dueño. [corrida: 2026-11-06-viernes]
+
+## Corrida 2026-11-20-viernes
+- Una migración puede estar viva sin fila en el ledger (196, como 035–039/093). Para la deriva del ledger mira también el hueco en la lista del `CLAUDE.md` raíz; confirma con `to_regclass` + `pg_policies`, no con `list_migrations`, y busca comentarios rancios con `grep -rn 'no está aplicada\|sin aplicar' src docs`. [corrida: 2026-11-20-viernes]
+- Baseline main@c3970c3: lint 0 errores / 873 warnings (907 el 2026-11-05), tsc limpio, vitest 447 / 9.155. [corrida: 2026-11-20-viernes]
