@@ -258,7 +258,7 @@ export async function fixture(options: Options = {}) {
       if (specifier === '../chat.tsx') return chatExports;
       if (specifier === '@resvg/resvg-wasm') return resvg;
       const local = specifier.startsWith('.') ? resolve(dirname(file), specifier) : '';
-      if (local && (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('escoCohorteAplicaciones.ts') || (/\/telegram\/escoSql[^/]*\.ts$/.test(local) || /\/telegram\/vendor\/escoSql(?:Wasm|Font|FontCoverage)\.ts$/.test(local)))) return load(local);
+      if (local && (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('webhookRespuesta.ts') || specifier.endsWith('escoCohorteAplicaciones.ts') || (/\/telegram\/escoSql[^/]*\.ts$/.test(local) || /\/telegram\/vendor\/escoSql(?:Wasm|Font|FontCoverage)\.ts$/.test(local)))) return load(local);
       if (['@esco-sql/formato.ts', '@esco-sql/bloques.ts', '@esco-sql/respuesta.ts', '@esco-sql/historial.ts', '@esco-sql/turno.ts'].includes(specifier)) return load(resolve('src/utils/escoSql', specifier.slice('@esco-sql/'.length)));
       if (local && /\/utils\/escoSql\/(?:formato|bloques|respuesta|historial|turno)\.ts$/.test(local)) return load(local);
 

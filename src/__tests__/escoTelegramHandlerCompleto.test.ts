@@ -183,7 +183,7 @@ async function fixture(options: Options = {}) {
       if (specifier === 'npm:@supabase/supabase-js@2') return { createClient: (url: string, key: string) =>
         createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: closedFetch } }) };
       if (specifier === '../chat.tsx') return chatExports;
-      if (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('escoCohorteAplicaciones.ts') || /^\.\/escoSql(?:Contrato|Cliente|Sesion|Acceso|Render|Flujo)\.ts$/.test(specifier)) return load(resolve(dirname(file), specifier));
+      if (specifier.endsWith('resolverUsuarioTelegram.ts') || specifier.endsWith('webhookRespuesta.ts') || specifier.endsWith('escoCohorteAplicaciones.ts') || /^\.\/escoSql(?:Contrato|Cliente|Sesion|Acceso|Render|Flujo)\.ts$/.test(specifier)) return load(resolve(dirname(file), specifier));
       if (['@esco-sql/formato.ts', '@esco-sql/bloques.ts', '@esco-sql/respuesta.ts'].includes(specifier)) return load(resolve('src/utils/escoSql', specifier.slice('@esco-sql/'.length)));
       if (file.startsWith(resolve('src/utils/escoSql')) && ['./formato.ts', './respuesta.ts', './bloques.ts'].includes(specifier)) return load(resolve(dirname(file), specifier));
       return new Proxy({}, { get: (_target, key) => key === '__esModule' ? true : forbidden(`${specifier}:${String(key)}`) });
@@ -306,15 +306,16 @@ describe('Telegram handleWebhook → real grammY gates → real llmToolLoop (clo
   it('does not expose private Telegram API rejection descriptions or bot tokens in webhook responses/logs', async () => {
     const f = await fixture({ telegramFailure: true });
     const response = await f.send();
-    expect(response.status).toBe(500);
+    // ESCO-182: a failing update answers 200 so Telegram does not redeliver it and hold the queue.
+    expect(response.status).toBe(200);
     const body = await response.text();
-    expect(JSON.parse(body)).toEqual({ error: 'Webhook error' });
+    expect(JSON.parse(body)).toEqual({ ok: true });
     expect(f.telegram.filter(call => call.method === 'sendMessage').length).toBeGreaterThan(0);
     expect.soft(body).not.toContain(PRIVATE[6]);
     expect.soft(body).not.toContain('123:synthetic');
     expect.soft(JSON.stringify(f.logs())).not.toContain(PRIVATE[6]);
     expect.soft(JSON.stringify(f.logs())).not.toContain('123:synthetic');
-    expect(f.logs()).toContainEqual(['[Telegram] Webhook error:', 'WEBHOOK_PROCESSING_FAILED']);
+    expect(JSON.stringify(f.logs())).toContain('el update falló al procesarse y se descarta (clase=');
     closed(f);
   });
   it.each([null, PRIVATE[6], [], { update_id: Number.MAX_SAFE_INTEGER + 1 }, { update_id: 2, message: { message_id: 2, date: 1,

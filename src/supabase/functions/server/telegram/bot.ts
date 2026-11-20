@@ -47,6 +47,7 @@ import { contextoDesdeHistorial, type ContextoCohorte } from "../escoCohorteApli
 import { llmToolLoop, getSystemPrompt, conservarCohorteAplicaciones } from "../chat.tsx";
 import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 import { procesarRespuestaAlertaTelegram } from "./responderAlertaHato.ts";
+import { procesarUpdateTelegram } from "./webhookRespuesta.ts";
 import { seleccionarMotorTelegram } from "./escoSqlCliente.ts";
 import { autorizarPerfilEscoSql, adaptarIdentidadEscoSql } from "./escoSqlAcceso.ts";
 import { obtenerConversacionTelegramSql } from "./escoSqlConversacion.ts";
@@ -227,9 +228,20 @@ function getBot(): Bot<BotContext> {
       (ctx.message?.text ?? "").startsWith("/start ");
 
     if (!user && !isStart) {
-      await ctx.reply(
-        "No estás registrado. Pide un código de acceso a tu administrador.",
-      );
+      // ESCO-182: sin mensaje (my_chat_member, callback, etc.) no hay a quién
+      // contestar. Y el aviso nunca puede lanzar: si el reply falla, el update
+      // fallaba entero y Telegram lo reenviaba durante horas.
+      if (!ctx.message) return;
+      try {
+        await ctx.reply(
+          "No estás registrado. Pide un código de acceso a tu administrador.",
+        );
+      } catch (err) {
+        console.warn(
+          "[Telegram] No se pudo avisar a un chat no registrado:",
+          err instanceof Error ? err.name : typeof err,
+        );
+      }
       return;
     }
 
@@ -2760,17 +2772,17 @@ export async function handleWebhook(c: HonoContext): Promise<Response> {
     return c.json({ error: "No autorizado." }, 401);
   }
 
-  try {
-    let update: unknown;
-    try { update = await c.req.json(); } catch { return c.json({error:"Update inválido."},400); }
-    if(!update||typeof update!=="object"||Array.isArray(update)||!Number.isSafeInteger((update as {update_id?:unknown}).update_id))return c.json({error:"Update inválido."},400);
-    const incoming=(update as {message?:unknown}).message;
-    if(incoming!==undefined&&(!incoming||typeof incoming!=="object"||Array.isArray(incoming)||("text" in incoming&&typeof (incoming as {text:unknown}).text!=="string")))return c.json({error:"Update inválido."},400);
+  let update: unknown;
+  try { update = await c.req.json(); } catch { return c.json({error:"Update inválido."},400); }
+  if(!update||typeof update!=="object"||Array.isArray(update)||!Number.isSafeInteger((update as {update_id?:unknown}).update_id))return c.json({error:"Update inválido."},400);
+  const incoming=(update as {message?:unknown}).message;
+  if(incoming!==undefined&&(!incoming||typeof incoming!=="object"||Array.isArray(incoming)||("text" in incoming&&typeof (incoming as {text:unknown}).text!=="string")))return c.json({error:"Update inválido."},400);
+
+  // ESCO-182: un update que falla al procesarse responde 200 y queda en el
+  // log. Con 500, Telegram lo reenvía y retiene todos los siguientes.
+  const respuesta = await procesarUpdateTelegram(async () => {
     const bot = getBot();
     await bot.handleUpdate(update as Parameters<typeof bot.handleUpdate>[0]);
-  } catch {
-    console.error("[Telegram] Webhook error:", "WEBHOOK_PROCESSING_FAILED");
-    return c.json({ error: "Webhook error" }, 500);
-  }
-  return c.json({ ok: true });
+  }, (linea) => console.error(linea));
+  return c.json(respuesta.cuerpo, respuesta.estado);
 }

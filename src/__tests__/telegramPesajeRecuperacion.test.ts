@@ -111,7 +111,7 @@ function fixture(tree: string, options: Options = {}) {
       if (specifier.endsWith('importHato/ocrPesaje.ts')) return { construirRosterPesaje: () => [], SEMANAS_PESAJE: [1, 2, 3, 4, 5] };
       if (specifier.startsWith('.')) {
         const target = resolve(dirname(file), specifier);
-        if (['bot.ts', 'conversations/pesajeLeche.ts', 'conversations/eventoHato.ts', 'resolverUsuarioTelegram.ts'].includes(relative(base, target))) return load(target);
+        if (['bot.ts', 'conversations/pesajeLeche.ts', 'conversations/eventoHato.ts', 'resolverUsuarioTelegram.ts', 'webhookRespuesta.ts'].includes(relative(base, target))) return load(target);
       }
       return new Proxy({}, { get(_target, key) { return key === '__esModule' ? true : forbidden(`${specifier}:${String(key)}`); } });
     };

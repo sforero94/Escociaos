@@ -526,6 +526,7 @@ export async function fixture(options: Options = {}) {
       if (
         local &&
         (specifier.endsWith("resolverUsuarioTelegram.ts") ||
+          specifier.endsWith("webhookRespuesta.ts") ||
           specifier.endsWith("escoCohorteAplicaciones.ts") ||
           (/\/telegram\/escoSql[^/]*\.ts$/.test(local) ||
             /\/telegram\/vendor\/escoSql(?:Wasm|Font|FontCoverage)\.ts$/.test(
