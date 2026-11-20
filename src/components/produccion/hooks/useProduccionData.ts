@@ -649,8 +649,8 @@ export function useProduccionData() {
     const anos = anosCampanaDeCosechas(seleccion.cosechas);
     if (anos.length === 0) return [];
 
-    // La tabla entra con la migración 196, que todavía no está aplicada.
-    // El tipo generado de Supabase no la conoce.
+    // La tabla entra con la migración 196, ya aplicada en producción.
+    // El tipo generado de Supabase todavía no la conoce.
     const { data, error } = await (supabase as unknown as {
       from: (table: string) => {
         select: (columns: string) => {
