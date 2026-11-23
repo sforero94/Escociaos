@@ -654,3 +654,9 @@ mensual sigue siendo la unica legible.**
 - sin_hallazgos. Baseline: HEAD ea8f16d · make-server v302 = 438d607 (no make-server diff after it) · esco-consultas v19 = af0bc63 · migrations up to 197; 196 live with no ledger row → ESCO-181. Open PRs: #478 (6 d), #471 (7 d, docs), #324 (draft, 37 d). Nothing waits for a deploy. [corrida: 2026-11-16-lunes]
 - Accepted state: #484 changed only import paths in the shared accounting engines (`@/` → relative `.ts`) so they run under Deno; no accounting-rule change, no parity edit needed. [corrida: 2026-11-16-lunes]
 - Week-over-week: migrations 192 → 197; make-server v297 → v302; esco-consultas v12 → v19; open PRs 2 → 3; 37 commits / 14 PRs in the window. [corrida: 2026-11-16-lunes]
+
+## Corrida 2026-11-23-lunes
+- sin_hallazgos. Baseline: HEAD 4a043ea · make-server v304, ezbr fc5a6f72… = drift-state of 80c50dc (= v303 bundle) · esco-consultas v21, ezbr a0885ae3… = drift-state of 80c50dc (= v20 bundle) · migrations up to 197 · Vercel prod = HEAD · open PRs #487 (ESCO-182, deploy after merge), #486 (ESCO-181). Nothing waits for a deploy. [corrida: 2026-11-23-lunes]
+- Accepted state: root CLAUDE.md records make-server v303 / esco-consultas v20, live is v304 / v21 with identical ezbr hashes — benign redeploy, not drift, not a doc finding. [corrida: 2026-11-23-lunes]
+- Both Esco SQL flags on (web since 2026-11-10, Telegram since 2026-11-17). P6 two-week campaign ends ~2026-12-01; check then for an acceptance or rollback commit. [corrida: 2026-11-23-lunes]
+- Next monthly cadence signal: Monday 2026-12-07. [corrida: 2026-11-23-lunes]

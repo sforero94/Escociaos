@@ -23,6 +23,26 @@ per run is needed. **Do not invent a fourth outlet.**
 
 ---
 
+## 2026-11-23 — corrida lunes (window 2026-11-16 → 2026-11-23)
+
+### Esco
+- Esco SQL keeps one shared conversation history for the web chat and for Telegram (last 10 messages), and each answer carries a cost receipt for its turn. (e247b70, #478; esco-consultas v20, make-server v303)
+- Esco SQL is now the engine on both channels: Telegram since 2026-11-17 (`ESCO_MOTOR_TELEGRAM=sql`), and the web chat since 2026-11-10 (`VITE_ESCO_MOTOR_WEB=sql`). Rollback: unset the flag. (196cfcc)
+- Web chat: the stop button now also stops a SQL turn cleanly. (e247b70, #478)
+
+### Interno
+- Release notes for P6, the make-server v303 deploy and the flag dates are in CLAUDE.md. (47ce13f, 0101249, 196cfcc)
+- Migration plan to the SQL engine, with the state of each phase. (ed197cb)
+- Drift-state files updated to `80c50dc` for both edge functions. (4c6aa04, cd9d4d7)
+- The edge functions were redeployed as make-server v304 and esco-consultas v21 on 2026-11-17 with the same bundles (same ezbr hashes as v303/v20).
+
+### Caution zones
+- Edge functions: make-server v302 → v304 and esco-consultas v19 → v21. Both match `main`.
+- No migrations. The ledger top is still 197.
+
+### Requiere despliegue manual
+- None. Open PRs: #487 (ESCO-182 Telegram webhook fix; needs a make-server deploy after merge), #486 (ESCO-181 docs).
+
 ## 2026-11-16 — corrida lunes (window 2026-11-09 → 2026-11-16)
 
 ### Aguacate · Producción

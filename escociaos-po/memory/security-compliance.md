@@ -435,3 +435,10 @@ usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus
 - 196 is live with correct RLS (4 policies, anon none); docs gap filed as ESCO-181 by orchestrator (not a security finding). [corrida: 2026-11-16-lunes]
 - Baselines: 119 tables / 119 RLS / 327 policies / 16 SECURITY DEFINER (0 unpinned). Advisors security 69 lints; rls_enabled_no_policy 60 (7 public + 53 respaldos, +backup_197). Users 6G+4A, 0 inactive. Write always-true 0 (11th run). npm audit same 9 packages. 0 secrets in 41 commits since 11-09. [corrida: 2026-11-16-lunes]
 - Navigation: SUPABASE_GET_SECURITY_ADVISORS spills large output to the sandbox; reproduce categories by SQL (workbench forbidden). [corrida: 2026-11-16-lunes]
+
+## Corrida 2026-11-23-lunes
+- sin_hallazgos. Baselines unchanged: 119/119 RLS, 327 policies, 16 DEFINER (0 unpinned), 69 security lints in 4 categories, rls_enabled_no_policy 60, roster 6G+4A (0 inactive), auth.users 10, write always-true 0 (12th run), npm audit 9 packages, 0 secrets in 50 commits. [corrida: 2026-11-23-lunes]
+- Accepted state, P6 (e247b70): Telegram SQL path runs only on the free-text fallback after the consultas check; autorizarPerfilEscoSql re-reads link + Gerencia + activo on every turn and callback; context key esco-sql-context:v1:<usuarioId>:<telegramId>:<chatId> with identity check and exigirDueno; puertaServicio.ts constant-time compare, fails closed. Re-sweep only if escoSqlAcceso.ts, escoSqlContexto.ts or puertaServicio.ts change. [corrida: 2026-11-23-lunes]
+- Navigation: edge_logs has no function paths; use source='function_edge_logs' and regexp_extract(log_attributes['request.url'],'functions/v1/([a-z0-9-]+/?[a-z_/-]*)'). get_advisors('security') via Supabase_Escritura is readable whole (69 lints). [corrida: 2026-11-23-lunes]
+- Privacy trap: split_part(key,':',1) on telegram_sessions returns raw chat ids — group by prefix without printing keys. [corrida: 2026-11-23-lunes]
+- Note: 0 SQL chat turns since 2026-11-14; the P6 surface has had no live traffic. [corrida: 2026-11-23-lunes]

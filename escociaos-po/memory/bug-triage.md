@@ -890,3 +890,9 @@ justo en el paso rojo-antes-del-verde, que es donde mas caro sale.
 - Privacidad ya fijada por `escoTelegramHandlerCompleto`: en el camino del webhook no se registra el mensaje de error ni la descripción de la API de Telegram; solo clase, causa y código. [corrida: 2026-11-20-viernes]
 - Desde ESCO-182 (PR #487, tras su deploy) `handleWebhook` responde 200 ante un update fallido y registra `el update falló al procesarse y se descarta (clase=…, causa=…, codigo=…)`. Un 500 del webhook después de ese deploy es un defecto nuevo. [corrida: 2026-11-20-viernes]
 - La guarda `telegramWebhookSecretoGuard` marca literales de 9–11 dígitos cerca de "telegram"/"chat", también en pruebas: construir ids sintéticos en tiempo de ejecución (`'7'.repeat(10)`). [corrida: 2026-11-20-viernes]
+
+## Corrida 2026-11-23-lunes
+- Baseline main@4a043ea GREEN: vitest 447 files / 9.155 tests, tsc 0, lint 0 / 873. [corrida: 2026-11-23-lunes]
+- A 406 on GET /rest/v1/telegram_conversations?select=session&key=eq.<id> is benign (grammY supabaseStorage reads with .single(); no stored key → 406). Do not report. [corrida: 2026-11-23-lunes]
+- Reviewed #478 (P6). Passed: history limits match (server 12×4000, client 10×4000); history hash identical both sides; sql_pending/sql_error stay out of history; Telegram turn ids deterministic per message:<id> (retry cannot duplicate); observarClienteSql cannot fire USO_SQL_INVALIDO (llm.ts defaults usage to 0). Only defect: deleted-context-conversation dead end, filed this run (P3, VIERNES). [corrida: 2026-11-23-lunes]
+- BUG_REPORT 3b still open; code moved to fetchDatosReporteSemanal.ts:533-538; only Calculada application still Aplicacion Enmienda with 0 compras. [corrida: 2026-11-23-lunes]
