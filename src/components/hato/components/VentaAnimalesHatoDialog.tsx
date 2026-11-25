@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/select';
 import { useVentaAnimalesHato, type AnimalPickerVenta } from '../hooks/useVentaAnimalesHato';
 import { useFinCatalogosVenta } from '../hooks/useFinCatalogosVenta';
-import { validarCabezasVentaAnimales } from '@/utils/hatoProduccion';
+import { preseleccionVentaAnimales, validarCabezasVentaAnimales } from '@/utils/hatoProduccion';
 import type { TipoVentaAnimalesHato } from '@/types/hato';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
@@ -54,12 +54,12 @@ function etiquetaAnimal(a: AnimalPickerVenta): string {
 interface VentaAnimalesHatoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** `HojaDeVida` abre este diálogo desde LA FICHA de un animal puntual --
-   * se pre-selecciona en el picker (y precarga `cabezas=1`) como punto de
-   * partida, pero sigue siendo editable: decisión 6 del dueño es que el
-   * vínculo de animal es OPCIONAL, así que Gerencia puede desmarcarlo o
-   * agregar más animales a la misma venta. `undefined` cuando el diálogo
-   * se abre sin contexto de un animal (uso futuro genérico). */
+  /** `HojaDeVida` abre este diálogo desde LA FICHA de un animal puntual.
+   * Solo se pre-selecciona (con `cabezas=1`) en una venta de DESCARTE; en
+   * una de TERNEROS lo que se vende es la cría, no el animal de la ficha
+   * (ver `preseleccionVentaAnimales`). Sigue siendo editable: decisión 6 del
+   * dueño es que el vínculo de animal es OPCIONAL. `undefined` cuando el
+   * diálogo se abre sin contexto de un animal. */
   animalIdPreseleccionado?: string;
   /** Se llama tras un guardado exitoso -- el caller (HojaDeVida) decide
    * cómo refrescar. */
@@ -89,17 +89,34 @@ export function VentaAnimalesHatoDialog({
   // una apertura anterior (mismo patrón que MuerteAnimalDialog/EditarAnimalDialog).
   useEffect(() => {
     if (open) {
+      const inicial = preseleccionVentaAnimales('terneros', animalIdPreseleccionado);
       setTipo('terneros');
-      setCabezas(animalIdPreseleccionado ? 1 : undefined);
+      setCabezas(inicial.cabezas);
       setValor(undefined);
       setFecha(hoyISO());
       setRegionId('');
       setMedioPagoId('');
       setCompradorId('');
       setNombre('');
-      setAnimalIds(animalIdPreseleccionado ? new Set([animalIdPreseleccionado]) : new Set());
+      setAnimalIds(new Set(inicial.animalIds));
     }
   }, [open, animalIdPreseleccionado]);
+
+  // Cambiar el tipo re-aplica la pre-selección: pasar a descarte marca el
+  // animal de la ficha; volver a terneros lo quita (y no toca otros
+  // animales que el usuario haya marcado a mano).
+  const handleTipoChange = (nuevo: TipoVentaAnimalesHato) => {
+    setTipo(nuevo);
+    if (!animalIdPreseleccionado) return;
+    const pre = preseleccionVentaAnimales(nuevo, animalIdPreseleccionado);
+    setAnimalIds((prev) => {
+      const next = new Set(prev);
+      if (pre.animalIds.length > 0) next.add(animalIdPreseleccionado);
+      else next.delete(animalIdPreseleccionado);
+      return next;
+    });
+    setCabezas(pre.cabezas);
+  };
 
   const toggleAnimal = (id: string) => {
     setAnimalIds((prev) => {
@@ -185,7 +202,7 @@ export function VentaAnimalesHatoDialog({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="venta-tipo">Tipo de venta *</Label>
-                <Select value={tipo} onValueChange={(v) => setTipo(v as TipoVentaAnimalesHato)}>
+                <Select value={tipo} onValueChange={(v) => handleTipoChange(v as TipoVentaAnimalesHato)}>
                   <SelectTrigger id="venta-tipo">
                     <SelectValue />
                   </SelectTrigger>
@@ -289,6 +306,11 @@ export function VentaAnimalesHatoDialog({
                     </label>
                   ))}
                 </div>
+              )}
+              {tipo === 'terneros' && (
+                <p className="text-xs text-gray-500">
+                  Enlaza solo la ficha del ternero, si tiene. Un animal enlazado queda marcado como vendido.
+                </p>
               )}
               {cabezasVsAnimales && <p className="text-xs text-red-600">{cabezasVsAnimales}</p>}
             </div>

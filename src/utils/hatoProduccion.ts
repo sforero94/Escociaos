@@ -40,7 +40,7 @@ import type {
 } from '@/utils/calculosHato';
 import { derivarEstadoReproductivo, calcularProductividad } from '@/utils/calculosHato';
 import { clasificarCategoriaHato } from '@/utils/hatoCategorias';
-import type { EstadoAnimalHato, EtapaHato, HatoPesajeLeche, OrigenDatoProduccionQuincenal } from '@/types/hato';
+import type { EstadoAnimalHato, EtapaHato, HatoPesajeLeche, OrigenDatoProduccionQuincenal, TipoVentaAnimalesHato } from '@/types/hato';
 
 // ============================================================================
 // SOW 3 (captura) -- helpers puros del formulario quincenal y del diálogo de
@@ -132,6 +132,23 @@ export function validarCabezasVentaAnimales(cabezas: number | null | undefined):
   if (cabezas == null || !Number.isFinite(cabezas)) return 'Las cabezas son obligatorias';
   if (!Number.isInteger(cabezas) || cabezas < 1) return 'Las cabezas deben ser un número entero mayor o igual a 1';
   return null;
+}
+
+/**
+ * Qué animal pre-selecciona el diálogo de venta abierto desde la Hoja de
+ * Vida de `animalIdFicha`. Solo una venta de DESCARTE vende el animal de la
+ * ficha. Una venta de TERNEROS abierta desde la ficha de una vaca vende su
+ * cría, no a ella: pre-seleccionarla marca a la madre 'vendida' (caso
+ * GALLEGA #148, 2026-10-16, corregido por la migración 199).
+ */
+export function preseleccionVentaAnimales(
+  tipo: TipoVentaAnimalesHato,
+  animalIdFicha: string | undefined,
+): { animalIds: string[]; cabezas: number | undefined } {
+  if (tipo === 'descarte' && animalIdFicha) {
+    return { animalIds: [animalIdFicha], cabezas: 1 };
+  }
+  return { animalIds: [], cabezas: undefined };
 }
 
 // ============================================================================

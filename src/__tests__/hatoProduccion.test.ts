@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  preseleccionVentaAnimales,
   ordenarConNulosAlFinal,
   ventanaSemanasDe,
   ventanaDiasRanking,
@@ -1402,5 +1403,17 @@ describe('calcularPrecioBrutoLitro', () => {
   it('sin bruto, null', () => {
     expect(calcularPrecioBrutoLitro(null, 5938)).toBeNull();
     expect(calcularPrecioBrutoLitro(0, 5938)).toBeNull();
+  });
+});
+
+describe('preseleccionVentaAnimales', () => {
+  it('venta de terneros desde la ficha de una vaca no marca a la madre', () => {
+    expect(preseleccionVentaAnimales('terneros', 'vaca-1')).toEqual({ animalIds: [], cabezas: undefined });
+  });
+  it('venta de descarte pre-selecciona el animal de la ficha', () => {
+    expect(preseleccionVentaAnimales('descarte', 'vaca-1')).toEqual({ animalIds: ['vaca-1'], cabezas: 1 });
+  });
+  it('sin ficha no pre-selecciona nada', () => {
+    expect(preseleccionVentaAnimales('descarte', undefined)).toEqual({ animalIds: [], cabezas: undefined });
   });
 });
