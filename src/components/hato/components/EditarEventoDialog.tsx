@@ -134,13 +134,20 @@ export function EditarEventoDialog({
   };
 
   const handleEliminar = async () => {
-    const resultado = await eliminar(evento.id);
+    const resultado = await eliminar(evento);
     setConfirmEliminarOpen(false);
     if (!resultado.ok) {
       toast.error(resultado.error ?? 'Error desconocido eliminando el evento');
       return;
     }
-    toast.success('Evento eliminado');
+    if (resultado.avisoCria) {
+      toast.warning(resultado.avisoCria, { duration: 12000 });
+    } else if (resultado.criaBorrada) {
+      const numero = resultado.criaBorrada.numero != null ? ` #${resultado.criaBorrada.numero}` : '';
+      toast.success(`Parto eliminado, con la ficha de la ternera${numero}`);
+    } else {
+      toast.success('Evento eliminado');
+    }
     onGuardado();
     onOpenChange(false);
   };
@@ -289,11 +296,16 @@ export function EditarEventoDialog({
         open={confirmEliminarOpen}
         onOpenChange={setConfirmEliminarOpen}
         title="¿Eliminar este evento?"
-        description={
+        description={[
           avisoCaducidad
             ? `${avisoCaducidad} Queda registrado en el historial de correcciones.`
-            : 'Esta acción no se puede deshacer directamente, aunque queda registrada en el historial de correcciones.'
-        }
+            : 'Esta acción no se puede deshacer directamente, aunque queda registrada en el historial de correcciones.',
+          esParto && evento.cria_id
+            ? 'Si la ficha de la ternera la creó el sistema con este parto y no tiene otros registros, también se elimina.'
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' ')}
         confirmLabel="Eliminar"
         onConfirm={handleEliminar}
         destructive

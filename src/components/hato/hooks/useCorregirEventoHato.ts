@@ -14,6 +14,14 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import type { ConfianzaFecha, CriaDestino, HatoEventoRow, TipoServicioHato } from '@/types/hato';
+import {
+  eliminarEventoHato,
+  REFERENCIAS_CRIA,
+  sumarReferencias,
+  type CriaLeida,
+  type ResultadoConteo,
+  type ResultadoEliminarEvento,
+} from '@/utils/hato/eliminarPartoConCria';
 
 export interface EdicionEventoHato {
   fecha: string;
@@ -73,13 +81,42 @@ export function useCorregirEventoHato() {
     [],
   );
 
-  const eliminar = useCallback(async (eventoId: string): Promise<ResultadoCorreccionEventoHato> => {
+  /** Borra UN evento. Si es un parto con ficha automática de la ternera
+   * (ESCO-135), borra también esa ficha cuando sigue intacta (ESCO-186,
+   * `eliminarPartoConCria.ts`); si no, la conserva y devuelve un aviso. */
+  const eliminar = useCallback(async (evento: HatoEventoRow): Promise<ResultadoEliminarEvento> => {
     setGuardando(true);
     try {
       const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-      const { error } = await supabase.from('hato_eventos').delete().eq('id', eventoId);
-      if (error) throw error;
-      return { ok: true };
+      return await eliminarEventoHato(evento, {
+        leerCria: async (criaId) => {
+          const { data, error } = await supabase
+            .from('hato_animales')
+            .select('id, numero, madre_id, nombre, estado, import_meta')
+            .eq('id', criaId)
+            .maybeSingle();
+          return { cria: (data ?? null) as CriaLeida | null, error: error ? error.message : null };
+        },
+        contarReferencias: async (criaId, eventoId) => {
+          const conteos = await Promise.all(
+            REFERENCIAS_CRIA.map((ref) => {
+              let q = supabase.from(ref.tabla).select('id', { count: 'exact', head: true }).eq(ref.columna, criaId);
+              if (ref.excluirEvento) q = q.neq('id', eventoId);
+              if (ref.soloHato) q = q.eq('es_hato', true);
+              return q;
+            }),
+          );
+          return sumarReferencias(conteos as ResultadoConteo[]);
+        },
+        borrarEvento: async (eventoId) => {
+          const { error } = await supabase.from('hato_eventos').delete().eq('id', eventoId);
+          return error ? error.message : null;
+        },
+        borrarCria: async (criaId) => {
+          const { error } = await supabase.from('hato_animales').delete().eq('id', criaId);
+          return error ? error.message : null;
+        },
+      });
     } catch (err) {
       return {
         ok: false,
