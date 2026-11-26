@@ -105,3 +105,9 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 - DESCARTADO: subir GAP_DIAS a ~12 para unir mitades: encadena 10-28→11-03→11-13 en una ronda y duplica lecturas de lotes 1-2. No proponer. [corrida: 2026-11-19-jueves]
 - Baseline: 5 lotes activos / 13 sublotes (Santa Rosa 1 sublote, sin monitoreo desde al menos R31). [corrida: 2026-11-19-jueves]
 - No propuesto: Esco SQL (0 turnos Telegram desde 11-17, web 5 días sin uso), alertas gerencia (ESCO-150), pesaje en pares (by design). [corrida: 2026-11-19-jueves]
+
+## Corrida 2026-11-26-jueves
+- 1 propuesta: ESCO-190, chequeo por foto multipágina, «Agregar al chequeo existente» (fusión por animal) contra el reemplazo único de la RPC 065:119-122 y reemplazoChequeo.ts. Ficha de datos hermana ESCO-189. [corrida: 2026-11-26-jueves]
+- Columnas: hato_capturas_foto usa creado_en/actualizado_en (no created_at), fotos_recibidas, storage_rutas; hato_chequeos no tiene updated_at. [corrida: 2026-11-26-jueves]
+- Workaround sin código: subir TODAS las páginas en una sola tanda y confirmar el reemplazo recupera el chequeo completo (septiembre: 2 fotos → 34 filas). [corrida: 2026-11-26-jueves]
+- Descartado con datos: Esco (0 turnos humanos desde 11-14), monitoreo por mitades (ESCO-184 abierta), aplicaciones cerradas (ESCO-188 abierta), pesaje en cero (en cadencia). [corrida: 2026-11-26-jueves]

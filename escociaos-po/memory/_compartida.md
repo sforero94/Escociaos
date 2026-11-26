@@ -2533,3 +2533,12 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 - Preflight verde, `ATTENDED=0`, cero denegaciones, cero escrituras a la base. PRs #486 (ESCO-181) y #487 (ESCO-182, `requiere_deploy`). [corrida: 2026-11-20-viernes]
 - Baseline main@c3970c3: lint 0 errores / 873 warnings, tsc limpio, vitest 447 ficheros / 9.155 pruebas. [corrida: 2026-11-20-viernes]
 - 2026-11-21-sabado: reporte de decisiones publicado (Notion `41f67755-ed68-81f4-a4a5-f6579a1d6bf7`). PRs #487 (ESCO-182, deploy de make-server desde el Mac después del merge) y #486 (ESCO-181, docs), checks verdes. ESCO-183 accion_externa y ESCO-184 propuesta (recomendada si A N=21). [corrida: 2026-11-21-sabado]
+
+## Racha del jueves (regla de auto-poda v2) — actualizada 2026-11-26
+| Corrida | Propuestas filadas | Respondidas `si` | Racha sin `si` |
+|---|---|---|---|
+| 2026-11-12-jueves | 1 (ESCO-180) | si (B) | 0 |
+| 2026-11-19-jueves | 1 (ESCO-184) | pendiente | 0 |
+| **2026-11-26-jueves** | 1 (ESCO-190) | pendiente | 0 |
+- ESCO-184 sigue sin respuesta (no hubo sesión de respuesta del sábado 11-21). Si 184 y 190 reciben `no` y el 12-03 tampoco trae un `si`, la racha llega a 3. [corrida: 2026-11-26-jueves]
+- Preflight verde, ATTENDED=0, cero denegaciones, cero escrituras a la base. ESCO-189 (P2 FDS accion_externa) y ESCO-190 (P2 FDS propuesta); evidencia nueva en ESCO-188. [corrida: 2026-11-26-jueves]

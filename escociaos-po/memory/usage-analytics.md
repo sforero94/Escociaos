@@ -417,3 +417,11 @@ estado de producción es una hipótesis, no un hecho. Esta se refutó con un sol
 - MONITOREO: desde 10-28 la visita va por mitades (lotes 1–2 / 3–4, 6–10 días). Comparar cobertura por par de lotes, no por ronda. Propuesta filada ESCO-184 (con feature-strategy). [corrida: 2026-11-19-jueves]
 - Esco SQL: 26 turnos, todos de Santiago (11-09 13, 11-10 6, 11-14 7), luego 0 hasta 11-19; 0 turnos Telegram desde la activación P6 del 11-17; ningún turno con recibo P6 todavía. Snapshot Telegram en telegram_sessions.session->'escoSql'->'mensajes' (no es log de turnos). [corrida: 2026-11-19-jueves]
 - Navegación: salud del webhook en function_edge_logs (url '%telegram/webhook%'), causa en function_logs ('[Session] read <chat_id>'). compras sin created_by; chat_conversations sin columna de canal. 2026-11-16 fue festivo en Colombia. [corrida: 2026-11-19-jueves]
+
+## Corrida 2026-11-26-jueves
+- Chequeo 2026-11-24 = 2º chequeo vivo, 1º por foto: 6 subidas de 1 foto, 1 commit, 13 vacas guardadas; la página de 19 vacas nunca se comiteó (ESCO-189, propuesta ESCO-190). La cadencia del próximo chequeo cuenta desde 11-24. [corrida: 2026-11-26-jueves]
+- Un commit de chequeo por foto REEMPLAZA todas las vacas de esa fecha (fn_hato_commit_chequeo borra por chequeo_id; verificarReemplazoChequeo pide confirmar). Para medir cobertura, contar hato_chequeo_vacas por chequeo contra las vacas aún activas del chequeo anterior, nunca solo «existe un chequeo». [corrida: 2026-11-26-jueves]
+- hato_capturas_foto.celdas_leidas_ocr = FILAS (vacas) leídas, no celdas; fotos_recibidas distingue subida de una o varias páginas; detalle NULL. Contar commits en function_edge_logs (url '%hato/chequeo/commit%'); cada fila 'pendiente' es un preview no aprobado. [corrida: 2026-11-26-jueves]
+- Tratamientos 2026-11-24: 7/7 con paso de seguimiento (vs ESCO-104 ~80% sin paso). Re-medir en la próxima visita antes de llamarlo tendencia. [corrida: 2026-11-26-jueves]
+- Líneas base hato: activas 67 · sin raza 57 · sin fnac 14 · sin madre 25 · total 181. La completitud se mueve otra vez tras ~6 semanas quieta. [corrida: 2026-11-26-jueves]
+- Vigilar 11-30/12-03: (a) foto de pesaje ~12-02, (b) nueva media ronda de monitoreo (última 11-14), (c) turnos humanos de Esco (0 desde 11-14), (d) si el chequeo 11-24 se resube con las dos páginas. [corrida: 2026-11-26-jueves]
