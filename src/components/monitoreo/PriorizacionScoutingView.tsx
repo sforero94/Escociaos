@@ -47,12 +47,14 @@ import {
 
 import type {
   CoberturaRonda,
+  LecturaLote,
   PriorizacionEntry,
   SubloteNoRevisado,
   Tendencia,
   TierPriorizacion,
 } from '../../utils/priorizacionMonitoreo';
 import { formatPercentage } from '../../utils/format';
+import { formatearFechaCorta } from '../../utils/fechas';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
@@ -279,6 +281,7 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
           value={entry.diasDesdeUltimaFumigacion === null ? 'Sin dato' : `hace ${entry.diasDesdeUltimaFumigacion} días`}
         />
         <DetailStat label="Rondas de respaldo" value={`${entry.numRondas}`} />
+        <DetailStat label="Leído" value={formatearFechaCorta(entry.fechaLectura)} />
       </dl>
 
       {entry.temporadaAlta ? (
@@ -373,6 +376,10 @@ function fragmentosDetalle(entry: PriorizacionEntry): string[] {
   } else if (entry.gravedad) {
     frags.push(`Gravedad ${entry.gravedad.texto}`);
   }
+  // ESCO-184: cada lote tiene su propia ronda vigente, así que la fecha de la
+  // lectura va en cada fila — dos lotes de la misma lista pueden haberse leído
+  // con semanas de diferencia.
+  frags.push(`leído ${formatearFechaCorta(entry.fechaLectura)}`);
   return frags;
 }
 
@@ -488,7 +495,7 @@ function FilaLoteExpandible({
           />
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{lote.lote_nombre}</span>
           <span className="shrink-0 text-muted-foreground" style={{ fontSize: '10.5px' }}>
-            {lote.entries.length} sublotes
+            {lote.entries.length} sublotes · leído {formatearFechaCorta(peor.fechaLectura)}
           </span>
           <span className="flex shrink-0 flex-col items-end" style={{ gap: '0.125rem' }}>
             <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -991,36 +998,56 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
 }
 
 // ============================================================================
-// Cobertura de la ronda actual (issue #96, item 4) — expone el denominador
-// que antes quedaba implícito: cuántos sublotes EN PRODUCCIÓN tienen lectura
-// en la ronda más reciente, y cuáles no. Deliberadamente en tono NEUTRO (gris,
-// nunca rojo/ámbar): "no revisado" es una brecha de cobertura, no una señal
-// de severidad -- mezclar los dos lenguajes visuales confundiría "todavía no
-// se visitó" con "hay una plaga grave", que es justo la distinción que este
-// item del issue pide hacer explícita.
+// Cobertura por lote (issue #96 item 4, ESCO-184) — expone el denominador que
+// antes quedaba implícito: cuántos sublotes EN PRODUCCIÓN tienen lectura
+// vigente, y cuáles no. Cada lote se mide contra SU ronda más reciente, no
+// contra la ronda más reciente de la finca: una ronda puede visitar sólo
+// media finca. Deliberadamente en tono NEUTRO (gris, nunca rojo/ámbar):
+// "no revisado" es una brecha de cobertura, no una señal de severidad.
 // ============================================================================
 
-/** Línea de resumen ("12 de 12 sublotes revisados en la Ronda 28") — vive
- * siempre visible bajo el encabezado, sin depender de que haya combinaciones
- * priorizadas ese día (a diferencia de `resumen`, que sí depende de `entries`). */
+/** Texto de la lectura de un lote: "leído 13 nov 2026" si está vigente,
+ * "no revisado desde 3 nov 2026" si su última lectura pasó el límite, y
+ * "sin lecturas recientes" si no tiene ninguna. Nunca un 0%. */
+function textoLecturaLote(lote: LecturaLote): string {
+  if (!lote.fechaLectura) return 'sin lecturas recientes';
+  const fecha = formatearFechaCorta(lote.fechaLectura);
+  return lote.vigente ? `leído ${fecha}` : `no revisado desde ${fecha}`;
+}
+
+/** Resumen de cobertura — siempre visible bajo el encabezado, sin depender de
+ * que haya combinaciones priorizadas ese día. Una línea de total y una línea
+ * por lote con su fecha de lectura. */
 function CoberturaResumen({ cobertura }: { cobertura: CoberturaRonda }) {
   const completo = cobertura.noRevisados.length === 0;
-  const rondaTxt = cobertura.rondaNombre ? `en la ${cobertura.rondaNombre}` : 'en la ronda más reciente';
 
   return (
     <div
-      className="flex items-center gap-2 rounded-md border text-xs text-muted-foreground"
+      className="flex flex-col gap-1 rounded-md border text-xs text-muted-foreground"
       style={{ borderColor: 'var(--border)', backgroundColor: 'var(--muted)', padding: '0.5rem 0.75rem' }}
     >
-      {completo ? (
-        <CircleCheck className="size-3.5 shrink-0" aria-hidden="true" />
-      ) : (
-        <EyeOff className="size-3.5 shrink-0" aria-hidden="true" />
-      )}
-      <span>
-        {cobertura.revisados} de {cobertura.totalEnAlcance} sublotes revisados {rondaTxt}
-        {completo ? '' : ` — ${cobertura.noRevisados.length} sin revisar todavía`}.
-      </span>
+      <div className="flex items-center gap-2">
+        {completo ? (
+          <CircleCheck className="size-3.5 shrink-0" aria-hidden="true" />
+        ) : (
+          <EyeOff className="size-3.5 shrink-0" aria-hidden="true" />
+        )}
+        <span>
+          {cobertura.revisados} de {cobertura.totalEnAlcance} sublotes con lectura vigente (de{' '}
+          {cobertura.diasMaxLectura} días o menos)
+          {completo ? '' : ` — ${cobertura.noRevisados.length} sin revisar`}.
+        </span>
+      </div>
+      {cobertura.lotes.length > 0 ? (
+        <ul className="flex flex-col" style={{ paddingLeft: '1.375rem', gap: '0.125rem' }}>
+          {cobertura.lotes.map((lote) => (
+            <li key={lote.lote_id} className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-foreground">{lote.lote_nombre ?? lote.lote_id}</span>
+              <span className="shrink-0">{textoLecturaLote(lote)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -1049,15 +1076,26 @@ function agruparNoRevisadosPorLote(noRevisados: SubloteNoRevisado[]): LoteNoRevi
  * MISMA posición donde el resto de filas muestra el % de incidencia: la señal
  * visual de "acá no hay dato" depende de que el lugar del dato sea reconocible. */
 function FilaSubloteNoRevisado({ sublote }: { sublote: SubloteNoRevisado }) {
+  const detalle =
+    sublote.motivo === 'lote_sin_lectura_vigente'
+      ? sublote.ultimaLectura
+        ? `no revisado desde ${formatearFechaCorta(sublote.ultimaLectura)}`
+        : 'sin lecturas recientes'
+      : 'el lote se leyó, este sublote no';
   return (
     <div
       className="flex items-center gap-2"
       style={{ padding: '0.4rem 0.75rem 0.4rem 1.75rem', borderTop: '1px solid var(--border)' }}
     >
-      <span className="min-w-0 flex-1 truncate text-xs text-foreground">{sublote.sublote_nombre ?? sublote.sublote_id}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs text-foreground">{sublote.sublote_nombre ?? sublote.sublote_id}</span>
+        <span className="block truncate text-muted-foreground" style={{ fontSize: '10.5px' }}>
+          {detalle}
+        </span>
+      </span>
       <span
         className="shrink-0 text-sm font-semibold text-muted-foreground"
-        aria-label="Sin lectura en la ronda actual"
+        aria-label="Sin lectura vigente"
       >
         —
       </span>
@@ -1099,8 +1137,8 @@ function SeccionNoRevisado({ noRevisados }: { noRevisados: SubloteNoRevisado[] }
               </span>
             </span>
             <span className="mt-0.5 block text-xs font-normal">
-              Sin ninguna lectura en la ronda más reciente — no significa que no haya plagas, sólo que
-              todavía no se visitó.
+              Sin lectura vigente en la ronda más reciente de su lote — no significa que no haya
+              plagas, sólo que no se ha visitado.
             </span>
           </span>
           <ChevronDown
@@ -1192,8 +1230,8 @@ function InfoGeneral() {
 
 export interface PriorizacionScoutingViewProps {
   entries: PriorizacionEntry[];
-  /** Resumen de cobertura de la ronda actual (issue #96, item 4). `null`
-   * mientras no haya ninguna ronda registrada todavía en la finca. */
+  /** Resumen de cobertura por lote (issue #96 item 4, ESCO-184). `null`
+   * mientras carga. */
   cobertura: CoberturaRonda | null;
   loading: boolean;
   error: string | null;

@@ -23,8 +23,8 @@ export interface RondaHistorica {
   fecha_monitoreo: string;
   /** FK a `rondas_monitoreo` — identifica la ronda real (una ronda puede
    * abarcar varias fechas calendario según el lote). Usado para exigir que
-   * `incidenciaActual` venga de la ronda más reciente de la finca, no de
-   * cualquier lectura histórica vieja. */
+   * `incidenciaActual` venga de la ronda más reciente DEL LOTE (y vigente),
+   * no de cualquier lectura histórica vieja. */
   ronda_id: string;
   /** Incidencia de esa ronda, en porcentaje (0-100), no fracción 0-1. */
   incidencia: number;
@@ -79,13 +79,21 @@ export interface PriorizacionInput {
   /** Eventos de fumigación reales; puede venir vacío si no hay datos (el campo de
    * contexto correspondiente será `null`, nunca se asume "recién fumigado"). */
   ultimasFumigaciones: EventoFumigacion[];
-  /** id de `rondas_monitoreo` más reciente de la finca (la última ronda, sin
-   * importar si ya cerró). Una serie (sublote, plaga) SIN lectura en esta
-   * ronda se excluye por completo del resultado -- mostrar la última lectura
-   * disponible sin importar su antigüedad generaría alertas sobre datos
-   * viejos (ver caso real: Cucarron marceño en La Vega mostrando un 43% de
-   * hace 3 meses como si fuera el estado actual). */
-  rondaActualId: string;
+  /** Ronda vigente de cada lote: `lote_id` -> id de `rondas_monitoreo`.
+   * ESCO-184: el estado actual se calcula POR LOTE, no con una sola ronda de
+   * la finca -- una ronda puede visitar sólo media finca, y con la regla
+   * vieja los lotes que esa ronda no visitó desaparecían sin aviso. Se arma
+   * con `rondaActualPorLoteDe` (ronda más reciente con lectura en el lote, y
+   * sólo si no tiene más de `DIAS_MAX_LECTURA_VIGENTE` días).
+   *
+   * Un lote AUSENTE del mapa no tiene lectura vigente y sus series se
+   * excluyen por completo; una serie (sublote, plaga) SIN lectura en la ronda
+   * de su lote también. Mostrar la última lectura disponible sin importar su
+   * antigüedad generaría alertas sobre datos viejos (caso real: Cucarron
+   * marceño en La Vega mostrando un 43% de hace 3 meses como si fuera el
+   * estado actual). Un lote sin lectura vigente se muestra como "no revisado
+   * desde <fecha>" (ver `calcularCoberturaRonda`), nunca como 0%. */
+  rondaActualPorLote: ReadonlyMap<string, string>;
   /** Fecha de referencia para calcular la semana ISO actual y "días desde la última
    * fumigación". Por defecto `new Date()` — inyectable para tests determinísticos. */
   fechaReferencia?: Date;
@@ -142,6 +150,10 @@ export interface PriorizacionEntry {
 
   numRondas: number;
 
+  /** Fecha ISO (yyyy-mm-dd) de la lectura que da `incidenciaActual` -- la UI
+   * la muestra como "leído <fecha>" (ESCO-184). */
+  fechaLectura: string;
+
   /** Explicación de una línea en español, indicando explícitamente qué lógica la
    * produjo (umbral económico vs. tercil estadístico) — requisito explícito del
    * diseño (§6) para que nada se muestre con más autoridad de la que tiene. */
@@ -153,16 +165,27 @@ export interface PriorizacionEntry {
 }
 
 // ============================================================================
-// Cobertura de ronda (issue #96, item 4) — universo de sublotes EN PRODUCCIÓN
-// vs. lo que efectivamente tiene lectura en la ronda más reciente.
+// Lectura vigente por lote + cobertura (issue #96 item 4, ESCO-184).
 //
-// Problema que resuelve: `priorizarMonitoreo` (más abajo) descarta en
-// silencio cualquier (sublote, plaga) sin lectura en `rondaActualId` -- regla
-// necesaria (ver comentario en `PriorizacionInput.rondaActualId`), pero que
-// como efecto secundario hace indistinguible "este sublote no tiene presión
-// de plagas" de "a este sublote nadie lo visitó esta ronda". Estas funciones
-// exponen esa segunda pregunta por separado, sin tocar la regla dura de
-// `priorizarMonitoreo`.
+// ESCO-184 (decisión del dueño, 2026-11-26, N = 14 días): el "estado actual"
+// del monitoreo se calcula POR LOTE. Para cada lote se toma la ronda más
+// reciente que tiene alguna lectura EN ESE LOTE, y se rotula "leído <fecha>".
+// Si esa lectura tiene más de `DIAS_MAX_LECTURA_VIGENTE` días, el lote se
+// rotula "no revisado desde <fecha>" -- nunca 0%. La regla sirve igual si una
+// ronda visita la finca entera o sólo media finca: no supone ningún protocolo.
+//
+// Antes la regla usaba UNA sola ronda para toda la finca (la más reciente).
+// Cuando la Ronda 35 visitó sólo Piedra Paula y Salto de Tequendama, Australia
+// y La Vega (leídos 10 días antes en la Ronda 34) desaparecieron de la
+// priorización y la tarjeta de cobertura los contaba como "no revisados", como
+// si nadie los hubiera visitado nunca.
+//
+// Problema que resuelve la cobertura: `priorizarMonitoreo` (más abajo)
+// descarta en silencio cualquier (sublote, plaga) sin lectura vigente -- regla
+// necesaria (ver comentario en `PriorizacionInput.rondaActualPorLote`), pero
+// que como efecto secundario hace indistinguible "este sublote no tiene
+// presión de plagas" de "a este sublote nadie lo visitó". Estas funciones
+// exponen esa segunda pregunta por separado.
 //
 // Aclaración del dueño del producto (2026-08, no reabrir): la finca pasó de 8
 // lotes productivos a 4 -- un lote que ya no produce NO es un hueco de
@@ -174,9 +197,107 @@ export interface PriorizacionEntry {
 // distinta; este módulo no hardcodea ningún lote/id/conteo.
 // ============================================================================
 
+/** Días máximos desde la última lectura de un lote para considerarla vigente
+ * (ESCO-184, decisión del dueño: 14 días). Una lectura más vieja se muestra
+ * como "no revisado desde <fecha>", nunca como el estado actual. */
+export const DIAS_MAX_LECTURA_VIGENTE = 14;
+
+/** Lectura más reciente de un lote: qué ronda y de qué fecha. */
+export interface LecturaLote {
+  lote_id: string;
+  lote_nombre?: string;
+  /** Ronda más reciente con alguna lectura en el lote; `null` si no hay
+   * ninguna lectura en el historial cargado. */
+  ronda_id: string | null;
+  /** Fecha ISO (yyyy-mm-dd) de la última lectura del lote en esa ronda;
+   * `null` si no hay ninguna lectura en el historial cargado. */
+  fechaLectura: string | null;
+  /** true si `diasDesdeLectura <= diasMax`. Un lote sin lectura nunca es vigente. */
+  vigente: boolean;
+  /** Días calendario entre `fechaLectura` y la fecha de referencia; `null` sin lectura. */
+  diasDesdeLectura: number | null;
+}
+
+/** Fecha ISO (yyyy-mm-dd) como medianoche LOCAL. `new Date('2026-11-03')` la
+ * leería como medianoche UTC, que en Bogotá cae el día anterior. */
+function fechaLocal(iso: string): Date {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Días calendario entre una fecha ISO y la fecha de referencia (ambas a medianoche local). */
+function diasEntre(iso: string, referencia: Date): number {
+  const ref = new Date(referencia.getFullYear(), referencia.getMonth(), referencia.getDate());
+  return Math.round((ref.getTime() - fechaLocal(iso).getTime()) / 86400000);
+}
+
+/**
+ * Lectura más reciente de cada lote presente en `historiales`. Para cada lote
+ * toma la ronda cuya última fecha de lectura EN ESE LOTE es la más reciente
+ * (empate: el `ronda_id` mayor, para que el resultado sea determinístico).
+ * Puro: no hace fetch.
+ */
+export function calcularLecturasPorLote(
+  historiales: HistorialSublotePlaga[],
+  fechaReferencia: Date,
+  diasMax: number = DIAS_MAX_LECTURA_VIGENTE
+): Map<string, LecturaLote> {
+  // lote_id -> ronda_id -> última fecha de lectura de esa ronda en el lote
+  const porLote = new Map<string, { lote_nombre?: string; rondas: Map<string, string> }>();
+  for (const hist of historiales) {
+    let lote = porLote.get(hist.lote_id);
+    if (!lote) {
+      lote = { lote_nombre: hist.lote_nombre, rondas: new Map() };
+      porLote.set(hist.lote_id, lote);
+    }
+    if (lote.lote_nombre === undefined && hist.lote_nombre !== undefined) lote.lote_nombre = hist.lote_nombre;
+    for (const r of hist.rondas) {
+      if (!r.ronda_id) continue; // lectura sin ronda: no define la ronda vigente de nadie
+      const previa = lote.rondas.get(r.ronda_id);
+      if (previa === undefined || r.fecha_monitoreo > previa) lote.rondas.set(r.ronda_id, r.fecha_monitoreo);
+    }
+  }
+
+  const resultado = new Map<string, LecturaLote>();
+  for (const [loteId, lote] of porLote) {
+    let rondaId: string | null = null;
+    let fecha: string | null = null;
+    for (const [rid, f] of lote.rondas) {
+      if (fecha === null || f > fecha || (f === fecha && rid > (rondaId as string))) {
+        rondaId = rid;
+        fecha = f;
+      }
+    }
+    const dias = fecha === null ? null : diasEntre(fecha, fechaReferencia);
+    resultado.set(loteId, {
+      lote_id: loteId,
+      lote_nombre: lote.lote_nombre,
+      ronda_id: rondaId,
+      fechaLectura: fecha,
+      vigente: dias !== null && dias <= diasMax,
+      diasDesdeLectura: dias,
+    });
+  }
+  return resultado;
+}
+
+/** Mapa `lote_id` -> ronda vigente, sólo para los lotes con lectura vigente.
+ * Es la entrada `rondaActualPorLote` de `priorizarMonitoreo`. */
+export function rondaActualPorLoteDe(
+  historiales: HistorialSublotePlaga[],
+  fechaReferencia: Date,
+  diasMax: number = DIAS_MAX_LECTURA_VIGENTE
+): Map<string, string> {
+  const mapa = new Map<string, string>();
+  for (const [loteId, lectura] of calcularLecturasPorLote(historiales, fechaReferencia, diasMax)) {
+    if (lectura.vigente && lectura.ronda_id !== null) mapa.set(loteId, lectura.ronda_id);
+  }
+  return mapa;
+}
+
 /** Un sublote EN PRODUCCIÓN (su lote padre tiene `lotes.activo = true`) --
- * universo con el que se mide cobertura de la ronda. Ya resuelto por el
- * caller (join con `lotes.activo`), no se deriva ni se infiere aquí. */
+ * universo con el que se mide cobertura. Ya resuelto por el caller (join con
+ * `lotes.activo`), no se deriva ni se infiere aquí. */
 export interface SubloteEnAlcance {
   sublote_id: string;
   sublote_nombre?: string;
@@ -184,81 +305,125 @@ export interface SubloteEnAlcance {
   lote_nombre?: string;
 }
 
-/** Sublote en alcance (lote en producción) SIN ninguna lectura -- de ninguna
- * plaga -- en la ronda más reciente (`rondaActualId`). Estado explícito y
- * distinto tanto de "sin presión" (una lectura real con incidencia baja o
- * cero) como de una fila de prioridad viva: por eso esta interfaz NO tiene
- * ningún campo de incidencia -- no hay número que mostrar. El consumidor debe
- * renderizar `—`, nunca `0%`, mismo criterio ya documentado para el Mapa de
- * Calor en CLAUDE.md ("ausencia de fila = no revisado, nunca 0%"). */
+/** Por qué un sublote en alcance no tiene lectura vigente:
+ * - `lote_sin_lectura_vigente`: el lote entero no tiene lectura de los últimos
+ *   `diasMax` días (o ninguna en el historial cargado).
+ * - `sin_lectura_en_ronda_del_lote`: el lote sí se leyó, pero la ronda vigente
+ *   del lote no pasó por este sublote. */
+export type MotivoNoRevisado = 'lote_sin_lectura_vigente' | 'sin_lectura_en_ronda_del_lote';
+
+/** Sublote en alcance (lote en producción) SIN lectura vigente -- de ninguna
+ * plaga. Estado explícito y distinto tanto de "sin presión" (una lectura real
+ * con incidencia baja o cero) como de una fila de prioridad viva: por eso esta
+ * interfaz NO tiene ningún campo de incidencia -- no hay número que mostrar.
+ * El consumidor debe renderizar `—`, nunca `0%`, mismo criterio ya documentado
+ * para el Mapa de Calor en CLAUDE.md ("ausencia de fila = no revisado, nunca 0%"). */
 export interface SubloteNoRevisado {
   sublote_id: string;
   sublote_nombre?: string;
   lote_id: string;
   lote_nombre?: string;
+  motivo: MotivoNoRevisado;
+  /** Fecha ISO de la última lectura de ESTE sublote en el historial cargado
+   * (cualquier ronda); `null` si no tiene ninguna. */
+  ultimaLectura: string | null;
 }
 
-/** Resumen de cobertura de la ronda más reciente sobre el universo de
- * sublotes en producción -- ver `calcularCoberturaRonda`. */
+/** Resumen de cobertura por lote sobre el universo de sublotes en producción
+ * -- ver `calcularCoberturaRonda`. */
 export interface CoberturaRonda {
-  rondaActualId: string;
-  /** Nombre legible de la ronda (columna `rondas_monitoreo.nombre`, p. ej.
-   * "Ronda 28"), si el caller lo tiene disponible -- puro passthrough, esta
-   * función no lo calcula. `null` cuando no hay dato. */
-  rondaNombre: string | null;
+  /** Días máximos usados para decidir si una lectura es vigente. */
+  diasMaxLectura: number;
   totalEnAlcance: number;
+  /** Sublotes con lectura en la ronda vigente de su lote. */
   revisados: number;
   noRevisados: SubloteNoRevisado[];
+  /** Una fila por lote en alcance, en el orden en que aparecen en
+   * `sublotesEnAlcance`. Un lote sin ninguna lectura en el historial cargado
+   * sale con `ronda_id`/`fechaLectura`/`diasDesdeLectura` en `null`. */
+  lotes: LecturaLote[];
 }
 
 /**
- * Calcula la cobertura de la ronda más reciente sobre el universo de
- * sublotes EN PRODUCCIÓN. Puro: reutiliza el mismo `historiales` ya cargado
- * que consume `priorizarMonitoreo` -- no hace ningún fetch adicional ni
- * reimplementa el agrupamiento por (sublote, plaga).
+ * Calcula la cobertura por lote sobre el universo de sublotes EN PRODUCCIÓN.
+ * Puro: reutiliza el mismo `historiales` ya cargado que consume
+ * `priorizarMonitoreo` -- no hace ningún fetch adicional ni reimplementa el
+ * agrupamiento por (sublote, plaga).
  *
  * Regla dura idéntica a `priorizarMonitoreo`: un sublote sólo cuenta como
- * "revisado" si tiene al menos una lectura (de cualquier plaga individual o
- * pooled -- el pooling del complejo de ácaros es indiferente aquí, basta con
- * que ronda_id coincida) en `rondaActualId`. Una lectura de una ronda
- * anterior NUNCA cuenta como cobertura de la ronda actual -- la misma razón
- * por la que `priorizarMonitoreo` nunca muestra una incidencia vieja como si
- * fuera vigente.
+ * "revisado" si su lote tiene lectura vigente y el sublote tiene al menos una
+ * lectura (de cualquier plaga) en la ronda vigente de su lote. Una lectura
+ * más vieja NUNCA cuenta como cobertura -- la misma razón por la que
+ * `priorizarMonitoreo` nunca muestra una incidencia vieja como si fuera vigente.
  */
 export function calcularCoberturaRonda(
   sublotesEnAlcance: SubloteEnAlcance[],
   historiales: HistorialSublotePlaga[],
-  rondaActualId: string,
-  rondaNombre: string | null = null
+  fechaReferencia: Date,
+  diasMax: number = DIAS_MAX_LECTURA_VIGENTE
 ): CoberturaRonda {
-  const revisadosSet = new Set<string>();
+  const lecturas = calcularLecturasPorLote(historiales, fechaReferencia, diasMax);
+
+  // sublote_id -> rondas con lectura, y última fecha de lectura del sublote
+  const rondasPorSublote = new Map<string, Set<string>>();
+  const ultimaPorSublote = new Map<string, string>();
   for (const hist of historiales) {
-    if (hist.rondas.some((r) => r.ronda_id === rondaActualId)) {
-      revisadosSet.add(hist.sublote_id);
+    let set = rondasPorSublote.get(hist.sublote_id);
+    if (!set) {
+      set = new Set();
+      rondasPorSublote.set(hist.sublote_id, set);
+    }
+    for (const r of hist.rondas) {
+      if (!r.ronda_id) continue;
+      set.add(r.ronda_id);
+      const previa = ultimaPorSublote.get(hist.sublote_id);
+      if (previa === undefined || r.fecha_monitoreo > previa) ultimaPorSublote.set(hist.sublote_id, r.fecha_monitoreo);
     }
   }
 
   const noRevisados: SubloteNoRevisado[] = [];
+  const lotes: LecturaLote[] = [];
+  const lotesVistos = new Set<string>();
   let revisados = 0;
   for (const sublote of sublotesEnAlcance) {
-    if (revisadosSet.has(sublote.sublote_id)) {
-      revisados += 1;
-    } else {
-      noRevisados.push({
-        sublote_id: sublote.sublote_id,
-        sublote_nombre: sublote.sublote_nombre,
-        lote_id: sublote.lote_id,
-        lote_nombre: sublote.lote_nombre,
-      });
+    const lectura = lecturas.get(sublote.lote_id);
+    if (!lotesVistos.has(sublote.lote_id)) {
+      lotesVistos.add(sublote.lote_id);
+      lotes.push(
+        lectura
+          ? { ...lectura, lote_nombre: sublote.lote_nombre ?? lectura.lote_nombre }
+          : {
+              lote_id: sublote.lote_id,
+              lote_nombre: sublote.lote_nombre,
+              ronda_id: null,
+              fechaLectura: null,
+              vigente: false,
+              diasDesdeLectura: null,
+            }
+      );
     }
+
+    const loteVigente = lectura !== undefined && lectura.vigente && lectura.ronda_id !== null;
+    if (loteVigente && rondasPorSublote.get(sublote.sublote_id)?.has(lectura.ronda_id as string)) {
+      revisados += 1;
+      continue;
+    }
+    noRevisados.push({
+      sublote_id: sublote.sublote_id,
+      sublote_nombre: sublote.sublote_nombre,
+      lote_id: sublote.lote_id,
+      lote_nombre: sublote.lote_nombre,
+      motivo: loteVigente ? 'sin_lectura_en_ronda_del_lote' : 'lote_sin_lectura_vigente',
+      ultimaLectura: ultimaPorSublote.get(sublote.sublote_id) ?? null,
+    });
   }
 
   return {
-    rondaActualId,
-    rondaNombre,
+    diasMaxLectura: diasMax,
     totalEnAlcance: sublotesEnAlcance.length,
     revisados,
     noRevisados,
+    lotes,
   };
 }
 
@@ -556,13 +721,16 @@ export function priorizarMonitoreo(input: PriorizacionInput): PriorizacionEntry[
 
     const rondasOrdenadas = serie.rondas; // ya vienen ordenadas por construirSeries
 
-    // Sólo se prioriza si hay una lectura de la ronda más reciente de la finca.
-    // Mostrar la última lectura disponible sin importar su antigüedad generaría
-    // alertas sobre datos viejos (caso real: Cucarron marceño en La Vega con un
-    // 43% de hace 3 meses mostrado como si fuera el estado actual, disparando
-    // una alerta y potencialmente una aplicación sobre un dato obsoleto).
-    const idxActual = rondasOrdenadas.findIndex((r) => r.ronda_id === input.rondaActualId);
-    if (idxActual === -1) continue; // sin lectura de la ronda actual: nada "actual" que priorizar
+    // Sólo se prioriza si hay una lectura de la ronda vigente DEL LOTE
+    // (ESCO-184). Mostrar la última lectura disponible sin importar su
+    // antigüedad generaría alertas sobre datos viejos (caso real: Cucarron
+    // marceño en La Vega con un 43% de hace 3 meses mostrado como si fuera el
+    // estado actual, disparando una alerta y potencialmente una aplicación
+    // sobre un dato obsoleto).
+    const rondaDelLote = input.rondaActualPorLote.get(serie.lote_id);
+    if (rondaDelLote === undefined) continue; // lote sin lectura vigente: "no revisado", nunca 0%
+    const idxActual = rondasOrdenadas.findIndex((r) => r.ronda_id === rondaDelLote);
+    if (idxActual === -1) continue; // sin lectura en la ronda del lote: nada "actual" que priorizar
 
     const ultima = rondasOrdenadas[idxActual];
     // Dato individual = monitoreo más reciente: con una sola ronda igual se
@@ -643,6 +811,7 @@ export function priorizarMonitoreo(input: PriorizacionInput): PriorizacionEntry[
       weekOfYear,
       diasDesdeUltimaFumigacion,
       numRondas: idxActual + 1,
+      fechaLectura: ultima.fecha_monitoreo,
       why,
       bracket,
     });

@@ -13,7 +13,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { priorizarMonitoreo as priorizarFrontend, calcularCoberturaRonda as coberturaFrontend } from '@/utils/priorizacionMonitoreo';
+import {
+  priorizarMonitoreo as priorizarFrontend,
+  calcularCoberturaRonda as coberturaFrontend,
+  calcularLecturasPorLote as lecturasFrontend,
+  rondaActualPorLoteDe as rondaPorLoteFrontend,
+} from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga as HistorialFrontend,
   UmbralEconomico as UmbralFrontend,
@@ -22,7 +27,14 @@ import type {
   RondaHistorica as RondaFrontend,
   SubloteEnAlcance as SubloteEnAlcanceFrontend,
 } from '@/utils/priorizacionMonitoreo';
-import { priorizarMonitoreo as priorizarEdge, calcularCoberturaRonda as coberturaEdge } from '../supabase/functions/server/priorizacion-scouting';
+import {
+  priorizarMonitoreo as priorizarEdge,
+  calcularCoberturaRonda as coberturaEdge,
+  calcularLecturasPorLote as lecturasEdge,
+  rondaActualPorLoteDe as rondaPorLoteEdge,
+  DIAS_MAX_LECTURA_VIGENTE as DIAS_MAX_EDGE,
+} from '../supabase/functions/server/priorizacion-scouting';
+import { DIAS_MAX_LECTURA_VIGENTE as DIAS_MAX_FRONTEND } from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga as HistorialEdge,
   UmbralEconomico as UmbralEdge,
@@ -360,6 +372,11 @@ const escenarios: Scenario[] = [
   },
 ];
 
+/** Todos los lotes de los historiales leídos en la misma ronda. */
+function rondaUnica(historiales: Array<{ lote_id: string }>): Map<string, string> {
+  return new Map(historiales.map((h) => [h.lote_id, RONDA_ACTUAL_ID]));
+}
+
 describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => {
   for (const escenario of escenarios) {
     it(`produce el mismo ranking para: ${escenario.nombre}`, () => {
@@ -369,7 +386,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilFrontend[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoFrontend[],
         fechaReferencia: FECHA_REF,
-        rondaActualId: RONDA_ACTUAL_ID,
+        rondaActualPorLote: rondaUnica(escenario.historiales),
       };
       const inputEdge = {
         historiales: escenario.historiales as HistorialEdge[],
@@ -377,7 +394,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilEdge[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoEdge[],
         fechaReferencia: FECHA_REF,
-        rondaActualId: RONDA_ACTUAL_ID,
+        rondaActualPorLote: rondaUnica(escenario.historiales),
       };
 
       const resultadoFrontend = priorizarFrontend(inputFrontend);
@@ -408,7 +425,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilFrontend[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoFrontend[],
         fechaReferencia: FECHA_REF,
-        rondaActualId: RONDA_ACTUAL_ID,
+        rondaActualPorLote: rondaUnica(escenario.historiales),
       });
       const resultadoEdge = priorizarEdge({
         historiales: escenario.historiales as HistorialEdge[],
@@ -416,7 +433,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilEdge[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoEdge[],
         fechaReferencia: FECHA_REF,
-        rondaActualId: RONDA_ACTUAL_ID,
+        rondaActualPorLote: rondaUnica(escenario.historiales),
       });
       expect(resultadoEdge.map((e) => e.why)).toEqual(resultadoFrontend.map((e) => e.why));
     }
@@ -461,14 +478,12 @@ describe('Paridad frontend <-> edge function (calcularCoberturaRonda)', () => {
     const resultadoFrontend = coberturaFrontend(
       sublotesEnAlcance as SubloteEnAlcanceFrontend[],
       historiales as HistorialFrontend[],
-      RONDA_ACTUAL_ID,
-      'Ronda 28'
+      FECHA_REF
     );
     const resultadoEdge = coberturaEdge(
       sublotesEnAlcance as SubloteEnAlcanceEdge[],
       historiales as HistorialEdge[],
-      RONDA_ACTUAL_ID,
-      'Ronda 28'
+      FECHA_REF
     );
 
     expect(resultadoEdge).toEqual(resultadoFrontend);
@@ -476,4 +491,55 @@ describe('Paridad frontend <-> edge function (calcularCoberturaRonda)', () => {
     expect(resultadoFrontend.revisados).toBe(1);
     expect(resultadoFrontend.noRevisados.map((s) => s.sublote_id).sort()).toEqual(['sub-nunca', 'sub-viejo']);
   });
+});
+
+// ============================================================================
+// Paridad del estado por lote (ESCO-184): umbral, lectura por lote y mapa
+// lote -> ronda vigente. Fixture: la finca el 2026-11-26 (R35 leyó dos
+// lotes el 12-13 nov, R34 leyó los otros dos el 3 nov).
+// ============================================================================
+describe('Paridad frontend <-> edge function (estado por lote)', () => {
+  function lectura(fecha: string, rondaId: string | null, incidencia = 5) {
+    return { fecha_monitoreo: fecha, ronda_id: rondaId as string, incidencia, arboles_monitoreados: 100, arboles_afectados: incidencia };
+  }
+  const historialesNov: Array<HistorialFrontend & HistorialEdge> = [
+    historial({ lote_id: 'pp', sublote_id: 'pp-1', rondas: [lectura('2026-10-30', 'R33'), lectura('2026-11-13', 'R35', 9)] }),
+    historial({ lote_id: 'salto', sublote_id: 'salto-1', rondas: [lectura('2026-11-12', 'R35', 7)] }),
+    historial({ lote_id: 'aus', sublote_id: 'aus-1', rondas: [lectura('2026-11-03', 'R34', 12), lectura('2026-11-20', null, 50)] }),
+    historial({ lote_id: 'vega', sublote_id: 'vega-1', rondas: [lectura('2026-11-03', 'R34', 4)] }),
+  ];
+  const sublotesNov: Array<SubloteEnAlcanceFrontend & SubloteEnAlcanceEdge> = [
+    { sublote_id: 'pp-1', lote_id: 'pp', lote_nombre: 'Piedra Paula' },
+    { sublote_id: 'salto-1', lote_id: 'salto', lote_nombre: 'Salto de Tequendama' },
+    { sublote_id: 'aus-1', lote_id: 'aus', lote_nombre: 'Australia' },
+    { sublote_id: 'vega-1', lote_id: 'vega', lote_nombre: 'La Vega' },
+    { sublote_id: 'sr-1', lote_id: 'sr', lote_nombre: 'Santa Rosa' },
+  ];
+
+  it('las dos copias usan el mismo umbral de 14 días', () => {
+    expect(DIAS_MAX_EDGE).toBe(DIAS_MAX_FRONTEND);
+    expect(DIAS_MAX_FRONTEND).toBe(14);
+  });
+
+  for (const [ref, dias] of [[new Date(2026, 10, 26), 14], [new Date(2026, 10, 19), 21]] as const) {
+    it(`misma lectura por lote, mismo mapa y misma cobertura (ref ${ref.toISOString().slice(0, 10)}, N=${dias})`, () => {
+      expect(Object.fromEntries(lecturasEdge(historialesNov as HistorialEdge[], ref, dias))).toEqual(
+        Object.fromEntries(lecturasFrontend(historialesNov as HistorialFrontend[], ref, dias)),
+      );
+      const mapaFrontend = rondaPorLoteFrontend(historialesNov as HistorialFrontend[], ref, dias);
+      const mapaEdge = rondaPorLoteEdge(historialesNov as HistorialEdge[], ref, dias);
+      expect(Object.fromEntries(mapaEdge)).toEqual(Object.fromEntries(mapaFrontend));
+      expect(coberturaEdge(sublotesNov as SubloteEnAlcanceEdge[], historialesNov as HistorialEdge[], ref, dias)).toEqual(
+        coberturaFrontend(sublotesNov as SubloteEnAlcanceFrontend[], historialesNov as HistorialFrontend[], ref, dias),
+      );
+
+      const base = { umbrales: [], perfilesEstacionales: [], ultimasFumigaciones: [], fechaReferencia: ref };
+      const rankingFrontend = priorizarFrontend({ ...base, historiales: historialesNov as HistorialFrontend[], rondaActualPorLote: mapaFrontend });
+      const rankingEdge = priorizarEdge({ ...base, historiales: historialesNov as HistorialEdge[], rondaActualPorLote: mapaEdge });
+      expect(pickRankingFields(rankingEdge as unknown as Array<Record<string, unknown>>)).toEqual(
+        pickRankingFields(rankingFrontend as unknown as Array<Record<string, unknown>>),
+      );
+      expect(rankingEdge.map((e) => e.fechaLectura)).toEqual(rankingFrontend.map((e) => e.fechaLectura));
+    });
+  }
 });
