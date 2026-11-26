@@ -130,6 +130,22 @@ describe('calcularFumigacion', () => {
     expect(sinCaneca.numero_canecas).toBe(10);
   });
 
+  it('ESCO-188: un producto en Unidades NO se divide por 1.000', () => {
+    // 10 canecas × 0,8 unidades/caneca = 8 unidades. Con la división de cc/gramos daba
+    // 0,008 → 0,01, cien a mil veces menos que lo real (el caso de Evergreen pro).
+    const r = calcularFumigacion(
+      lote(),
+      mezcla([
+        producto({ producto_id: 'pU', dosis_por_caneca: 0.8, unidad_dosis: 'unidades' }),
+        producto({ producto_id: 'pG', dosis_por_caneca: 800, unidad_dosis: 'gramos' }),
+      ]),
+    );
+    expect(r.productos).toEqual([
+      { producto_id: 'pU', cantidad_necesaria: 8 },
+      { producto_id: 'pG', cantidad_necesaria: 8 },
+    ]);
+  });
+
   it('un producto sin dosis_por_caneca aporta 0', () => {
     const r = calcularFumigacion(lote(), mezcla([producto({ dosis_por_caneca: undefined })]));
     expect(r.productos[0].cantidad_necesaria).toBe(0);

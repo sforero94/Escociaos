@@ -29,6 +29,7 @@ import {
 import { formatearNumero } from '../../utils/format';
 import { cn } from '../ui/utils';
 import { crearAlternativo } from '../../utils/productosAlternativos';
+import { rotuloUnidadDosis, unidadDosisParaProducto } from '../../utils/unidadDosis';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -345,7 +346,7 @@ export function MezclaPlanSection({
       ...(usaDosisPorCaneca
         ? {
             dosis_por_caneca: 0,
-            unidad_dosis: (producto.estado_fisico === 'liquido' ? 'cc' : 'gramos') as 'cc' | 'gramos',
+            unidad_dosis: unidadDosisParaProducto(producto),
           }
         : {
             dosis_grandes: 0,
@@ -747,7 +748,7 @@ function MezclaCard({
                         }
                       />
                       <InputGroupAddon align="inline-end">
-                        {producto.unidad_dosis === 'cc' ? 'cc' : 'g'}
+                        {rotuloUnidadDosis(producto.unidad_dosis)}
                       </InputGroupAddon>
                     </InputGroup>
                   </Field>
@@ -954,7 +955,7 @@ function AlternativosLinea({
                     onActualizarDosis(alt.producto_id, 'dosis_por_caneca', parseFloat(e.target.value) || 0)
                   }
                 />
-                <InputGroupAddon align="inline-end">{alt.unidad_dosis === 'cc' ? 'cc' : 'g'}</InputGroupAddon>
+                <InputGroupAddon align="inline-end">{rotuloUnidadDosis(alt.unidad_dosis)}</InputGroupAddon>
               </InputGroup>
             </Field>
           ) : (
