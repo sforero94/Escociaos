@@ -1,4 +1,4 @@
--- 200: bloquear_edicion_aplicaciones_cerradas — ESCRITA, SIN APLICAR.
+-- 201: bloquear_edicion_aplicaciones_cerradas — ESCRITA, SIN APLICAR.
 -- Aplicar solo con el sí explícito de Santiago. Ensayar antes con po_sonda.
 --
 -- ESCO-188, decisión de Santiago (2026-11-26): "No quiero que se puedan editar
@@ -57,11 +57,11 @@ BEGIN
     SELECT 1 FROM pg_enum
     WHERE enumtypid = 'public.estado_aplicacion'::regtype AND enumlabel = 'Cerrada'
   ) THEN
-    RAISE EXCEPTION '200: el ENUM estado_aplicacion no tiene la etiqueta Cerrada';
+    RAISE EXCEPTION '201: el ENUM estado_aplicacion no tiene la etiqueta Cerrada';
   END IF;
 
   IF to_regprocedure('public.fn_bloquear_edicion_aplicacion_cerrada()') IS NOT NULL THEN
-    RAISE EXCEPTION '200: la función ya existe; no reejecutar';
+    RAISE EXCEPTION '201: la función ya existe; no reejecutar';
   END IF;
 
   FOREACH v_tabla IN ARRAY ARRAY[
@@ -70,14 +70,14 @@ BEGIN
     'aplicaciones_lotes', 'aplicaciones_compras'
   ] LOOP
     IF to_regclass('public.' || v_tabla) IS NULL THEN
-      RAISE EXCEPTION '200: falta la tabla %', v_tabla;
+      RAISE EXCEPTION '201: falta la tabla %', v_tabla;
     END IF;
     IF EXISTS (
       SELECT 1 FROM pg_trigger
       WHERE tgrelid = ('public.' || v_tabla)::regclass
         AND tgname = 'trg_bloquear_edicion_aplicacion_cerrada'
     ) THEN
-      RAISE EXCEPTION '200: el trigger ya existe en %', v_tabla;
+      RAISE EXCEPTION '201: el trigger ya existe en %', v_tabla;
     END IF;
   END LOOP;
 
@@ -91,7 +91,7 @@ BEGIN
           OR (table_name = 'aplicaciones_productos_alternativos'
               AND column_name = 'aplicacion_producto_id')
           OR (table_name = 'aplicaciones' AND column_name = 'estado'))) <> 7 THEN
-    RAISE EXCEPTION '200: faltan columnas que la función necesita';
+    RAISE EXCEPTION '201: faltan columnas que la función necesita';
   END IF;
 END $$;
 
@@ -138,7 +138,7 @@ BEGIN
     WHERE p.id = NEW.aplicacion_producto_id
        OR (TG_OP = 'UPDATE' AND p.id = OLD.aplicacion_producto_id);
   ELSE
-    RAISE EXCEPTION '200: tabla no prevista %', TG_TABLE_NAME;
+    RAISE EXCEPTION '201: tabla no prevista %', TG_TABLE_NAME;
   END IF;
 
   IF EXISTS (
@@ -155,7 +155,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.fn_bloquear_edicion_aplicacion_cerrada() IS
-  'ESCO-188 (migración 200): rechaza que una sesión del navegador edite una aplicación Cerrada o su plan. postgres y service_role pasan. No bloquea DELETE.';
+  'ESCO-188 (migración 201): rechaza que una sesión del navegador edite una aplicación Cerrada o su plan. postgres y service_role pasan. No bloquea DELETE.';
 
 REVOKE EXECUTE ON FUNCTION public.fn_bloquear_edicion_aplicacion_cerrada() FROM PUBLIC, anon, authenticated;
 
@@ -198,12 +198,12 @@ BEGIN
   IF (SELECT count(*) FROM pg_trigger
       WHERE tgname = 'trg_bloquear_edicion_aplicacion_cerrada'
         AND tgenabled = 'O') <> 7 THEN
-    RAISE EXCEPTION '200: no quedaron los 7 triggers activos';
+    RAISE EXCEPTION '201: no quedaron los 7 triggers activos';
   END IF;
 
   IF (SELECT prosecdef FROM pg_proc
       WHERE oid = 'public.fn_bloquear_edicion_aplicacion_cerrada()'::regprocedure) THEN
-    RAISE EXCEPTION '200: la función quedó SECURITY DEFINER';
+    RAISE EXCEPTION '201: la función quedó SECURITY DEFINER';
   END IF;
 
   IF NOT EXISTS (
@@ -211,12 +211,12 @@ BEGIN
     WHERE oid = 'public.fn_bloquear_edicion_aplicacion_cerrada()'::regprocedure
       AND 'search_path=public, pg_temp' = ANY (proconfig)
   ) THEN
-    RAISE EXCEPTION '200: search_path no quedó pineado';
+    RAISE EXCEPTION '201: search_path no quedó pineado';
   END IF;
 
   IF has_function_privilege('anon', 'public.fn_bloquear_edicion_aplicacion_cerrada()', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.fn_bloquear_edicion_aplicacion_cerrada()', 'EXECUTE') THEN
-    RAISE EXCEPTION '200: EXECUTE no quedó revocado';
+    RAISE EXCEPTION '201: EXECUTE no quedó revocado';
   END IF;
 
   -- fn_cerrar_aplicacion (106) tiene que seguir existiendo y ser INVOKER.
@@ -224,7 +224,7 @@ BEGIN
     SELECT 1 FROM pg_proc
     WHERE proname = 'fn_cerrar_aplicacion' AND NOT prosecdef
   ) THEN
-    RAISE EXCEPTION '200: fn_cerrar_aplicacion no está como se esperaba';
+    RAISE EXCEPTION '201: fn_cerrar_aplicacion no está como se esperaba';
   END IF;
 END $$;
 
