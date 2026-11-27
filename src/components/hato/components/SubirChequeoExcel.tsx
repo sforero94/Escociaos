@@ -539,12 +539,13 @@ export function SubirChequeoExcel({
 
             {resultado && !commitResultado && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 min-w-0">
                     <Label htmlFor="fecha-chequeo">Fecha del chequeo</Label>
                     <Input
                       id="fecha-chequeo"
                       type="date"
+                      className="w-full min-w-0"
                       value={revision.fechaChequeoTexto}
                       onChange={(e) => revision.setFechaChequeoTexto(e.target.value)}
                       disabled={comprometiendo || !puedeEscribir}
@@ -563,17 +564,25 @@ export function SubirChequeoExcel({
                       </p>
                     )}
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 min-w-0">
                     <Label htmlFor="veterinario-chequeo">Veterinario (opcional)</Label>
                     <Input
                       id="veterinario-chequeo"
                       value={veterinario}
                       onChange={(e) => setVeterinario(e.target.value)}
+                      className="w-full min-w-0"
                       placeholder="Nombre del veterinario"
                       disabled={comprometiendo || !puedeEscribir}
                     />
                   </div>
                 </div>
+                {chequeoGuardado && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    Ya hay un chequeo guardado del {chequeoGuardado.fecha} con {chequeoGuardado.filas} vaca(s). Al
+                    aprobar eliges: <strong>Agregar</strong> estas vacas a ese chequeo (otra página de la misma
+                    planilla), o <strong>Reemplazar todo</strong>.
+                  </div>
+                )}
               </div>
             )}
 
@@ -613,6 +622,11 @@ export function SubirChequeoExcel({
               </Button>
             ) : (
               <>
+                {bloqueoAprobacion && !comprometiendo && (
+                  <p className="order-last text-xs text-red-700 sm:order-none sm:mr-auto sm:self-center" role="status">
+                    No se puede aprobar: {bloqueoAprobacion}
+                  </p>
+                )}
                 <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={comprometiendo}>
                   Cerrar
                 </Button>
