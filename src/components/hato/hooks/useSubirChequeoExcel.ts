@@ -130,7 +130,16 @@ export interface CommitChequeoRespuesta {
   filasEscritas: number;
   eventosEscritos: number;
   torosCreados: number;
+  /** Filas del chequeo guardado que el modo «agregar» dejó intactas. 0 en
+   * «reemplazar». Puede faltar si responde una versión vieja del servidor. */
+  filasConservadas?: number;
+  modo?: ModoCommitChequeo;
 }
+
+/** ESCO-190. `agregar` reescribe solo las vacas de esta subida y conserva el
+ * resto del chequeo de esa fecha (planilla de varias páginas). `reemplazar`
+ * es el comportamiento original: borra todo el chequeo de esa fecha. */
+export type ModoCommitChequeo = 'agregar' | 'reemplazar';
 
 /** Error del commit cuando el servidor rechaza por 409 (el hato cambió
  * entre la vista previa y la aprobación) -- trae la lista de filas
@@ -277,7 +286,13 @@ export function useSubirChequeoExcel() {
    * 409 sin escribir nada.
    */
   const comprometer = useCallback(
-    async (opciones?: { veterinario?: string; fecha?: string; filas?: FilaChequeoNormalizada[]; reemplazoConfirmado?: ReemplazoChequeo }) => {
+    async (opciones?: {
+      veterinario?: string;
+      fecha?: string;
+      filas?: FilaChequeoNormalizada[];
+      reemplazoConfirmado?: ReemplazoChequeo;
+      modo?: ModoCommitChequeo;
+    }) => {
       if (!resultado) throw new Error('No hay una vista previa cargada para aprobar.');
       const veterinario = opciones?.veterinario;
       const fechaChequeo = opciones?.fecha ?? resultado.chequeoFecha;
@@ -303,8 +318,10 @@ export function useSubirChequeoExcel() {
       setCommitResultado(null);
       try {
         await verificarReemplazoChequeo(fechaChequeo, opciones?.reemplazoConfirmado);
+        const modo: ModoCommitChequeo = opciones?.modo ?? 'reemplazar';
+        const ruta = modo === 'agregar' ? 'agregar' : 'commit';
         const token = await obtenerTokenSesion();
-        const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/commit`, {
+        const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/${ruta}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -317,6 +334,12 @@ export function useSubirChequeoExcel() {
           }),
         });
 
+        // Sin la ruta desplegada, Hono responde 404. No se escribió nada.
+        if (modo === 'agregar' && res.status === 404) {
+          throw new Error(
+            'El servidor todavía no tiene el modo «Agregar al chequeo existente». No se guardó nada. Avísale a Santiago.',
+          );
+        }
         const resultadoCuerpo = await leerCuerpoEdgeFunction<{
           success?: boolean;
           error?: string;

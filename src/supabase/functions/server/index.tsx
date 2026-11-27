@@ -9,7 +9,7 @@ import { handleGenerarReporteSemanal } from "./generar-reporte-semanal-endpoint.
 import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill, handleClimaActualizar, handleClimaReintentoSinDato, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
-import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
+import { handleHatoChequeoCommit, handleHatoChequeoAgregar } from "./hato-chequeo-commit.ts";
 import { handleHatoChequeoFoto } from "./hato-chequeo-foto.ts";
 import { handleHatoProduccionQuincenaFoto } from "./hato-produccion-quincena-foto.ts";
 import { handleHatoPesajeFoto } from "./hato-pesaje-foto.ts";
@@ -151,6 +151,14 @@ app.post("/make-server-1ccce916/hato/chequeo/preview", async (c) => {
 // fn_hato_commit_chequeo, migración 065). Nunca re-parsea el .xlsx.
 app.post("/make-server-1ccce916/hato/chequeo/commit", async (c) => {
   return await handleHatoChequeoCommit(c);
+});
+
+// Hato Lechero: ESCO-190 -- "Agregar al chequeo existente". Mismo pipeline
+// que /commit, pero reescribe SOLO las vacas que trae el payload y conserva
+// las demás filas del chequeo de esa fecha (RPC fn_hato_commit_chequeo_agregar,
+// migración 202). Es la ruta de la planilla de varias páginas.
+app.post("/make-server-1ccce916/hato/chequeo/agregar", async (c) => {
+  return await handleHatoChequeoAgregar(c);
 });
 
 // Hato Lechero: Fase 3b -- carga del chequeo POR FOTO (OCR con modelo de

@@ -36,6 +36,21 @@
 // (copias GENERADAS de `src/utils/importHato/`, ver
 // docs/hato/regenerar-copias-importhato.py) -- y `descomponerSX` en
 // `./calculos-hato.ts`.
+//
+// ESCO-190 (2026-11-26) -- DOS MODOS, DOS RUTAS, DOS FUNCIONES:
+// - `/hato/chequeo/commit` (modo `reemplazar`): `fn_hato_commit_chequeo`
+//   (065/069). Si ya hay un chequeo con esa fecha, borra TODAS sus filas y
+//   eventos derivados y escribe las del payload. Es el "Reemplazar todo".
+// - `/hato/chequeo/agregar` (modo `agregar`): `fn_hato_commit_chequeo_agregar`
+//   (migración 202). Mismo pipeline, pero borra y reescribe SOLO las vacas
+//   que trae el payload; las demás filas del chequeo se conservan. Es lo que
+//   hace posible subir la planilla de 2-3 páginas en varias tandas: la
+//   segunda foto ya no pisa a la primera (el chequeo del 2026-11-24 quedó con
+//   13 vacas por eso).
+// Una ruta aparte y no un campo del body a propósito: un cliente viejo
+// sigue reemplazando por /commit, y la ruta nueva sin la migración 202
+// aplicada responde 500 sin escribir nada. Ningún orden de despliegue abre
+// un camino que borre lo que no debía.
 
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -187,9 +202,26 @@ async function resolverToroId(
 }
 
 // ---------------------------------------------------------------------------
-// Handler principal
+// Handlers -- dos rutas finas sobre el mismo pipeline (ver ESCO-190 arriba)
 // ---------------------------------------------------------------------------
+export type ModoCommitChequeo = 'reemplazar' | 'agregar';
+
+const RPC_POR_MODO: Record<ModoCommitChequeo, string> = {
+  reemplazar: 'fn_hato_commit_chequeo',
+  agregar: 'fn_hato_commit_chequeo_agregar',
+};
+
+/** "Reemplazar todo": borra el chequeo entero de esa fecha y escribe el payload. */
 export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
+  return await procesarCommitChequeo(c, 'reemplazar');
+}
+
+/** "Agregar al chequeo existente": reescribe solo las vacas del payload. */
+export async function handleHatoChequeoAgregar(c: Context): Promise<Response> {
+  return await procesarCommitChequeo(c, 'agregar');
+}
+
+async function procesarCommitChequeo(c: Context, modo: ModoCommitChequeo): Promise<Response> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -414,7 +446,7 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   const payload = construirPayloadCommit(chequeo, vacas, eventos, toroCache);
 
   // --- 6. Una sola llamada, una sola transacción ------------------------
-  const { data: resultadoRpc, error: errorRpc } = await supabase.rpc('fn_hato_commit_chequeo', {
+  const { data: resultadoRpc, error: errorRpc } = await supabase.rpc(RPC_POR_MODO[modo], {
     payload,
     p_created_by: acceso.userId,
   });
@@ -424,7 +456,14 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
     return respuestaError(c, 500, { error });
   }
 
-  const resultado = resultadoRpc as { chequeoId: string; filasEscritas: number; eventosEscritos: number };
+  // `filasConservadas` solo lo devuelve la función de `agregar`: las filas de
+  // OTRAS vacas que ya estaban en el chequeo y quedaron intactas.
+  const resultado = resultadoRpc as {
+    chequeoId: string;
+    filasEscritas: number;
+    eventosEscritos: number;
+    filasConservadas?: number;
+  };
 
   // Desenlace REAL de la carga por foto: acá es donde "la foto produjo
   // algo" deja de ser una conjetura. En la ruta `.xlsx` no hace nada.
@@ -441,6 +480,8 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
     chequeoId: resultado.chequeoId,
     filasEscritas: resultado.filasEscritas,
     eventosEscritos: resultado.eventosEscritos,
+    filasConservadas: resultado.filasConservadas ?? 0,
+    modo,
     torosCreados,
   });
 }

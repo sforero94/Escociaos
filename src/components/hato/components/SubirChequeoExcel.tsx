@@ -59,11 +59,17 @@ import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera, PenLi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
-import { ErrorConfirmacionReemplazoChequeo, type ReemplazoChequeo } from '@/utils/hato/reemplazoChequeo';
+import {
+  ErrorConfirmacionReemplazoChequeo,
+  clasificarContraChequeoExistente,
+  type AnimalChequeoExistente,
+  type ReemplazoChequeo,
+} from '@/utils/hato/reemplazoChequeo';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubirChequeoExcel } from '../hooks/useSubirChequeoExcel';
+import { useSubirChequeoExcel, type ModoCommitChequeo } from '../hooks/useSubirChequeoExcel';
 import { useRevisionChequeo } from '../hooks/useRevisionChequeo';
 import { ChequeoDiffReview, type FilaPromovidaOcr } from './ChequeoDiffReview';
 import { CrearAnimalDialog } from './CrearAnimalDialog';
@@ -141,6 +147,11 @@ export function SubirChequeoExcel({
   const [fotos, setFotos] = useState<File[]>([]);
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
   const [reemplazo, setReemplazo] = useState<ReemplazoChequeo | null>(null);
+  // ESCO-190: chapetas que ya estaban en el chequeo guardado y que el usuario
+  // decide NO pisar con la lectura nueva («Agregar» deja su fila guardada).
+  const [conservarGuardada, setConservarGuardada] = useState<Set<number>>(new Set());
+  // Segundo paso de «Reemplazar todo»: lista las vacas que se borran.
+  const [confirmandoReemplazoTodo, setConfirmandoReemplazoTodo] = useState(false);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -148,6 +159,8 @@ export function SubirChequeoExcel({
       setFotos([]);
       setAvisoFotos(null);
       setReemplazo(null);
+      setConservarGuardada(new Set());
+      setConfirmandoReemplazoTodo(false);
       setVeterinario('');
       setFilaParaFicha(null);
       setFilaParaReactivar(null);
@@ -177,21 +190,43 @@ export function SubirChequeoExcel({
             ? 'No hay filas aprobables: las Nuevas necesitan ficha y las No reconocidas necesitan resolverse.'
             : null;
 
-  const handleAprobar = async (reemplazoConfirmado?: ReemplazoChequeo) => {
+  // Contra el chequeo guardado de la misma fecha (si existe): qué vacas se
+  // conservan, cuáles vienen otra vez y cuáles son nuevas.
+  const clasificacion = reemplazo
+    ? clasificarContraChequeoExistente(reemplazo.animales, revision.filasAprobables)
+    : null;
+  // «Agregar» manda todas las filas aprobables menos las vacas repetidas que
+  // el usuario decidió dejar como estaban.
+  const filasParaAgregar = revision.filasAprobables.filter(
+    (f) => f.numero == null || !conservarGuardada.has(f.numero),
+  );
+
+  const handleAprobar = async (reemplazoConfirmado?: ReemplazoChequeo, modoCommit?: ModoCommitChequeo) => {
     if (bloqueoAprobacion) return;
+    const filas = modoCommit === 'agregar' ? filasParaAgregar : revision.filasAprobables;
+    if (filas.length === 0) return;
     try {
       await comprometer({
         veterinario: veterinario.trim() || undefined,
         // La fecha VALIDADA (ya propagada a las filas por la revisión) y las
         // filas CORREGIDAS -- nunca las del archivo.
         fecha: revision.fechaChequeoValida ?? undefined,
-        filas: revision.filasAprobables,
+        filas,
         reemplazoConfirmado,
+        modo: modoCommit,
       });
       setReemplazo(null);
+      setConfirmandoReemplazoTodo(false);
     } catch (err) {
-      if (err instanceof ErrorConfirmacionReemplazoChequeo) setReemplazo(err.chequeo);
-      else setReemplazo(null);
+      if (err instanceof ErrorConfirmacionReemplazoChequeo) {
+        // Otra página pudo guardarse entretanto: se vuelve a preguntar con
+        // la lista fresca, desde el primer paso.
+        setReemplazo(err.chequeo);
+        setConfirmandoReemplazoTodo(false);
+      } else {
+        setReemplazo(null);
+        setConfirmandoReemplazoTodo(false);
+      }
       // El error/las filas rechazadas ya quedan en el hook (`errorCommit`/
       // `filasRechazadas`), se muestran abajo.
     }
@@ -448,6 +483,8 @@ export function SubirChequeoExcel({
                 <p>
                   Chequeo guardado — {commitResultado.filasEscritas} fila(s), {commitResultado.eventosEscritos} evento(s)
                   {commitResultado.torosCreados > 0 && ` (${commitResultado.torosCreados} toro(s) nuevo(s) en el catálogo)`}.
+                  {commitResultado.modo === 'agregar' && commitResultado.filasConservadas != null
+                    && ` Se conservaron ${commitResultado.filasConservadas} vaca(s) que ya estaban en el chequeo.`}
                 </p>
               </div>
             )}
@@ -564,27 +601,139 @@ export function SubirChequeoExcel({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={reemplazo !== null} onOpenChange={(abierto) => { if (!abierto) setReemplazo(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Reemplazar el chequeo existente?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Ya existe un chequeo del {reemplazo?.fecha} con {reemplazo?.filas} filas.
-              Se reemplazarán todas esas filas y sus eventos derivados por las {filasAprobables} filas que estás aprobando.
-              Si falta una página, cancela y agrega todas las fotos antes de continuar.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={comprometiendo}>Volver a revisar</AlertDialogCancel>
-            <AlertDialogAction disabled={comprometiendo} onClick={(event) => {
-              // Mantener abierto durante la nueva lectura: cerrar y reabrir
-              // al cambiar el conteo superpone el overlay saliente de Radix.
-              event.preventDefault();
-              if (reemplazo) void handleAprobar(reemplazo);
-            }}>
-              {comprometiendo ? 'Verificando...' : 'Reemplazar chequeo'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+      <AlertDialog
+        open={reemplazo !== null}
+        onOpenChange={(abierto) => {
+          if (!abierto) {
+            setReemplazo(null);
+            setConfirmandoReemplazoTodo(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="overflow-y-auto">
+          {reemplazo && clasificacion && !confirmandoReemplazoTodo && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Ya existe un chequeo del {reemplazo.fecha}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tiene {reemplazo.filas} vaca(s) guardadas. Si es otra página de la misma planilla, agrégala:
+                  las vacas guardadas se conservan.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="space-y-3 text-sm">
+                <p>
+                  <span className="font-medium">Se agregan:</span> {clasificacion.nuevas.length} vaca(s) nueva(s).
+                </p>
+                <p>
+                  <span className="font-medium">Se conservan:</span> {clasificacion.seConservan.length} vaca(s) ya guardadas que esta subida no trae.
+                </p>
+                {clasificacion.seActualizan.length > 0 && (
+                  <div className="space-y-2">
+                    <p>
+                      <span className="font-medium">Ya estaban y vienen otra vez:</span> {clasificacion.seActualizan.length}.
+                      Marca las que quieres actualizar con la lectura nueva. Las desmarcadas quedan como estaban.
+                    </p>
+                    <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-primary/15 p-2">
+                      {clasificacion.seActualizan.map((a) => {
+                        if (a.numero == null) return null;
+                        const numero = a.numero;
+                        const usarNueva = !conservarGuardada.has(numero);
+                        return (
+                          <li key={a.animalId} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`usar-nueva-${numero}`}
+                              checked={usarNueva}
+                              disabled={comprometiendo}
+                              onCheckedChange={(v) => {
+                                setConservarGuardada((prev) => {
+                                  const sig = new Set(prev);
+                                  if (v === true) sig.delete(numero);
+                                  else sig.add(numero);
+                                  return sig;
+                                });
+                              }}
+                            />
+                            <Label htmlFor={`usar-nueva-${numero}`} className="font-normal">
+                              #{numero} {a.nombre ?? ''} — usar la lectura nueva
+                            </Label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {filasParaAgregar.length === 0 && (
+                  <p className="text-red-700">No queda ninguna fila para guardar. Marca al menos una vaca.</p>
+                )}
+              </div>
+              <AlertDialogFooter className="gap-2">
+                <AlertDialogCancel disabled={comprometiendo}>Volver a revisar</AlertDialogCancel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  disabled={comprometiendo}
+                  onClick={() => setConfirmandoReemplazoTodo(true)}
+                >
+                  Reemplazar todo…
+                </Button>
+                <AlertDialogAction
+                  disabled={comprometiendo || filasParaAgregar.length === 0}
+                  onClick={(event) => {
+                    // Mantener abierto durante la nueva lectura: cerrar y reabrir
+                    // al cambiar el conteo superpone el overlay saliente de Radix.
+                    event.preventDefault();
+                    void handleAprobar(reemplazo, 'agregar');
+                  }}
+                >
+                  {comprometiendo ? 'Guardando...' : `Agregar al chequeo (${filasParaAgregar.length})`}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
+          {reemplazo && clasificacion && confirmandoReemplazoTodo && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Reemplazar todo el chequeo del {reemplazo.fecha}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {clasificacion.seConservan.length > 0
+                    ? `Se borran las filas y los eventos derivados de estas ${clasificacion.seConservan.length} vaca(s), que esta subida no trae:`
+                    : 'Esta subida trae todas las vacas guardadas. No se borra ninguna; todas se reescriben con la lectura nueva.'}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {clasificacion.seConservan.length > 0 && (
+                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+                  {clasificacion.seConservan.map((a: AnimalChequeoExistente) => (
+                    <li key={a.animalId}>
+                      {a.numero != null ? `#${a.numero}` : 'sin chapeta'} {a.nombre ?? ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <AlertDialogFooter className="gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={comprometiendo}
+                  onClick={() => setConfirmandoReemplazoTodo(false)}
+                >
+                  Volver
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={comprometiendo}
+                  onClick={() => void handleAprobar(reemplazo, 'reemplazar')}
+                >
+                  {comprometiendo
+                    ? 'Guardando...'
+                    : clasificacion.seConservan.length > 0
+                      ? `Borrar ${clasificacion.seConservan.length} y reemplazar`
+                      : 'Reemplazar todo'}
+                </Button>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
 
