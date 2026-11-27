@@ -28,12 +28,28 @@
 //   * una chapeta provisional (800-999) NO se vuelve escribible corrigiendo
 //     celdas: ese animal necesita su renumeración real primero.
 //
-// Layout: tabla de una fila por vaca, pensada para pantalla grande (es donde
-// se confirma un chequeo de ~35 filas) y con scroll horizontal propio en
-// móvil, donde el plan sólo espera la SUBIDA, no la corrección.
+// Layout: en pantalla ancha (>= md, 768 px), tabla de una fila por vaca. En
+// el celular, una tarjeta por vaca con cada campo bajo su etiqueta: Martha
+// revisa y corrige la planilla desde el teléfono, así que la tabla con scroll
+// horizontal (que cortaba nombres y selects) no sirve ahí.
+//
+// Se monta UNO de los dos layouts, nunca los dos con uno oculto por CSS: los
+// ids de `idCeldaCorreccion` tienen que ser únicos en el documento, porque
+// "Me equivoqué de número" enfoca la caravana con `getElementById`.
 
-import { useState } from 'react';
-import { AlertTriangle, Info, PencilLine, RotateCcw, UserPlus, Loader2, PenLine, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  Info,
+  PencilLine,
+  RotateCcw,
+  UserPlus,
+  Loader2,
+  PenLine,
+  Check,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
 import { EstadoChip } from './EstadoChip';
@@ -63,6 +79,28 @@ export type FilaPromovidaOcr = ReporteOcrChequeo['filasPromovidas'][number];
  * `numero` de la fila correcta sin acoplarse a un ref por fila. */
 export function idCeldaCorreccion(fila: number, campo: CampoCorreccionChequeo): string {
   return `chequeo-celda-${campo}-${fila}`;
+}
+
+const CONSULTA_PANTALLA_ANCHA = '(min-width: 768px)';
+
+/** `true` en pantalla ancha (>= md). Sin `matchMedia` (jsdom, SSR) devuelve
+ * `true`: la tabla es el layout por defecto y el que cubren las pruebas. */
+function pantallaAnchaAhora(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+  return window.matchMedia(CONSULTA_PANTALLA_ANCHA).matches;
+}
+
+function usePantallaAncha(): boolean {
+  const [ancha, setAncha] = useState(pantallaAnchaAhora);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const consulta = window.matchMedia(CONSULTA_PANTALLA_ANCHA);
+    const alCambiar = () => setAncha(consulta.matches);
+    alCambiar();
+    consulta.addEventListener('change', alCambiar);
+    return () => consulta.removeEventListener('change', alCambiar);
+  }, []);
+  return ancha;
 }
 
 // Render de `numero` unificado con el resto del módulo (F/U4,
@@ -106,11 +144,15 @@ const COLUMNAS: { campo: CampoCorreccionChequeo; ancho: string; titulo: string }
 const TOTAL_COLUMNAS = COLUMNAS.length + 2; // + clasificación + acciones
 
 const CLASE_CELDA_BASE = 'w-full px-2 py-1 text-xs border rounded bg-white focus:outline-none focus:ring-2 disabled:opacity-50';
+// En la tarjeta del celular: 16 px (iOS hace zoom al enfocar un campo de
+// menos de 16 px) y alto suficiente para el dedo.
+const CLASE_CELDA_TACTIL = 'w-full min-w-0 px-3 py-2 text-base border rounded-md bg-white focus:outline-none focus:ring-2 disabled:opacity-50';
 
-function claseCelda(corregido: boolean, conError: boolean): string {
-  if (conError) return `${CLASE_CELDA_BASE} border-red-200 bg-red-50`;
-  if (corregido) return `${CLASE_CELDA_BASE} border-amber-200 bg-amber-50`;
-  return `${CLASE_CELDA_BASE} border-gray-200`;
+function claseCelda(corregido: boolean, conError: boolean, tactil = false): string {
+  const base = tactil ? CLASE_CELDA_TACTIL : CLASE_CELDA_BASE;
+  if (conError) return `${base} border-red-200 bg-red-50`;
+  if (corregido) return `${base} border-amber-200 bg-amber-50`;
+  return `${base} border-gray-200`;
 }
 
 interface CeldaProps {
@@ -122,6 +164,8 @@ interface CeldaProps {
   corregido: boolean;
   mensajeError: string | undefined;
   editable: boolean;
+  /** Variante de la tarjeta del celular (texto de 16 px, más alta). */
+  tactil?: boolean;
   onCorregir: (fila: number, campo: CampoCorreccionChequeo, texto: string) => void;
 }
 
@@ -133,13 +177,14 @@ function CeldaCorregible({
   corregido,
   mensajeError,
   editable,
+  tactil = false,
   onCorregir,
 }: CeldaProps) {
   // Mientras el humano no toque el campo, el input muestra el valor
   // NORMALIZADO vigente (que puede venir de otra corrección de la misma fila,
   // p. ej. el tipo de servicio que dedujo el texto del toro).
   const valor = tecleado ?? valorParaEdicion(fila, meta.campo);
-  const clase = claseCelda(corregido, mensajeError !== undefined);
+  const clase = claseCelda(corregido, mensajeError !== undefined, tactil);
   const titulo = mensajeError ?? meta.ayuda;
   // Id estable, único por fila+campo -- es lo que le permite al botón
   // "Corregir la caravana" (Path B, §4.6) enfocar este campo sin un ref por
@@ -202,20 +247,16 @@ interface FilaProps {
   onReactivarAnimal: (filaPromovida: FilaPromovidaOcr) => void;
 }
 
-function FilaDiffEditable({
-  diff,
-  fila,
-  correccionesTexto,
-  camposCorregidos,
-  erroresPorCampo,
-  editable,
-  filaPromovida,
-  onCorregir,
-  onDeshacer,
-  onCrearFicha,
-  onReactivarAnimal,
-}: FilaProps) {
-  const corregidos = new Set(camposCorregidos);
+/**
+ * Lo que la revisión necesita saber de una fila, calculado UNA vez y
+ * compartido por la fila de la tabla, la tarjeta del celular y el bloque de
+ * detalle -- así las dos vistas nunca discrepan sobre qué avisar.
+ */
+function analizarFila(
+  diff: FilaDiffChequeo,
+  fila: FilaChequeoNormalizada,
+  erroresPorCampo: Map<CampoCorreccionChequeo, string>,
+) {
   // El diff puede añadir avisos del cotejo contra datos frescos (SX), que
   // no existen en la fila normalizada que salió del archivo.
   const issues = [...fila.issues, ...diff.issues.filter((issue) =>
@@ -239,6 +280,47 @@ function FilaDiffEditable({
     diff.clasificacion === 'nuevo' ||
     diff.conflictoEstadoRegistrado !== null;
 
+  return { issuesCorreccion, issuesParseo, filaEscritaAMano, requiereIdentidad, hayDetalle };
+}
+
+function ChipsFila({ diff, filaEscritaAMano }: { diff: FilaDiffChequeo; filaEscritaAMano: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <EstadoChip chip={chipClasificacionDiff(diff.clasificacion)} />
+      {diff.numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
+      {filaEscritaAMano && <EstadoChip chip={chipFilaEscritaAMano()} />}
+    </div>
+  );
+}
+
+function BotonDeshacer({ fila, editable, onDeshacer }: { fila: number; editable: boolean; onDeshacer: (fila: number) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onDeshacer(fila)}
+      disabled={!editable}
+      title="Descartar las correcciones de esta fila y volver a lo que decía el archivo"
+      className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 disabled:opacity-50"
+    >
+      <RotateCcw className="w-4 h-4" />
+      Deshacer
+    </button>
+  );
+}
+
+/** Avisos, paneles de identidad y diferencias de una fila. Igual en la tabla y en la tarjeta. */
+function DetalleFilaDiff({
+  diff,
+  fila,
+  erroresPorCampo,
+  editable,
+  filaPromovida,
+  onCorregir,
+  onCrearFicha,
+  onReactivarAnimal,
+}: FilaProps) {
+  const { issuesCorreccion, issuesParseo, requiereIdentidad } = analizarFila(diff, fila, erroresPorCampo);
+
   const enfocarCaravana = () => {
     const el = document.getElementById(idCeldaCorreccion(diff.fila, 'numero'));
     el?.focus();
@@ -246,14 +328,165 @@ function FilaDiffEditable({
   };
 
   return (
+    <div className="space-y-1">
+      {diff.conflictoEstadoRegistrado && (
+        <p className="text-xs text-red-700">
+          <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> "Estado registrado" impreso decía{' '}
+          <span className="font-medium">{diff.conflictoEstadoRegistrado.impreso}</span>, pero el sistema cree
+          ahora <span className="font-medium">{diff.conflictoEstadoRegistrado.actual}</span> -- algo cambió
+          desde que se imprimió esta planilla (un evento de Telegram, una corrección). Verifica contra la vaca
+          real antes de aprobar.
+        </p>
+      )}
+
+      {diff.motivoNoReconocido && (
+        <p className="text-xs text-red-600">
+          <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> {diff.motivoNoReconocido}
+          {diff.numeroEsProvisional && (
+            <>
+              {' '}
+              Este animal necesita primero su renumeración real (Hato → ficha del animal → Editar); corregir
+              celdas acá no lo vuelve escribible.
+            </>
+          )}
+        </p>
+      )}
+
+      {/* Fila escrita a mano todavía sin identidad (plan de novedades
+          §4.4/§6.5): un aviso corto SIEMPRE que no exista un panel
+          más específico abajo -- `numero_ilegible` no trae
+          candidatos con los que armar ninguno, y `numero_fuera_del_roster`
+          sin `sugerenciaActiva` tampoco, así que el hint genérico es
+          lo único que hay para decir. Cuando SÍ hay panel
+          (`numero_animal_inactivo`, o `numero_fuera_del_roster` CON
+          sugerencia), ese panel ya cubre "hace falta identidad" con
+          más contexto -- repetir el hint sería ruido. */}
+      {requiereIdentidad &&
+        (!filaPromovida ||
+          filaPromovida.motivo === 'numero_ilegible' ||
+          (filaPromovida.motivo === 'numero_fuera_del_roster' && !filaPromovida.sugerenciaActiva)) && (
+          <p className="text-xs text-amber-700">
+            <PenLine className="w-4 h-4 inline-flex flex-shrink-0" /> Escribe la caravana para identificarla.
+          </p>
+        )}
+
+      {requiereIdentidad && filaPromovida?.motivo === 'numero_animal_inactivo' && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 space-y-2">
+          <p className="text-xs text-amber-800">
+            <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> La fila escrita a mano dice{' '}
+            <strong>
+              #{filaPromovida.numeroImpreso} {filaPromovida.nombreImpreso}
+            </strong>
+            . Esa caravana la lleva {filaPromovida.candidatosInactivos.length > 1 ? 'más de un animal' : 'un animal'}{' '}
+            que el sistema tiene como inactivo. Nadie puede aprobar esta fila hasta que decidas qué pasó.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!editable}
+              onClick={() => onReactivarAnimal(filaPromovida)}
+              className="border-amber-400 text-amber-800 hover:bg-amber-100"
+            >
+              El animal sigue en el hato (reactivar)
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!editable}
+              onClick={enfocarCaravana}
+            >
+              Me equivoqué de número
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {requiereIdentidad && filaPromovida?.motivo === 'numero_fuera_del_roster' && filaPromovida.sugerenciaActiva && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          <Info className="w-4 h-4 flex-shrink-0" />
+          <p>
+            Coincide con la novilla/ternera activa{' '}
+            <strong>
+              #{filaPromovida.sugerenciaActiva.numero} {filaPromovida.sugerenciaActiva.nombre ?? '(sin nombre)'}
+            </strong>
+            . Sugerencia, no asignación.
+          </p>
+          <button
+            type="button"
+            disabled={!editable}
+            onClick={() => onCorregir(diff.fila, 'numero', String(filaPromovida.sugerenciaActiva!.numero))}
+            className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+          >
+            <Check className="w-4 h-4" />
+            Usar esta caravana
+          </button>
+        </div>
+      )}
+
+      {diff.clasificacion === 'nuevo' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-blue-800">
+            La caravana {etiquetaNumero(diff.numero)} no tiene ficha en el hato, así que el commit no la puede
+            escribir. Crea la ficha (caravana física por debajo de 800) y el diff se recalcula.
+          </p>
+          <button
+            type="button"
+            onClick={() => onCrearFicha(diff)}
+            disabled={!editable}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
+          >
+            <UserPlus className="w-4 h-4" />
+            Crear ficha del animal
+          </button>
+        </div>
+      )}
+
+      {[...erroresPorCampo.entries()].map(([campo, mensaje]) => (
+        <p key={campo} className="text-xs text-red-600">
+          <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> {mensaje} La corrección no se aplicó:
+          se conserva el valor anterior hasta que se pueda leer.
+        </p>
+      ))}
+
+      {diff.diferencias.length > 0 && (
+        <ul className="text-xs text-gray-600 space-y-1">
+          {diff.diferencias.map((d) => (
+            <li key={d.campo}>
+              <span className="font-medium">{d.campo}:</span> {String(d.anterior ?? '—')} →{' '}
+              <span className="text-amber-700">{String(d.nuevo ?? '—')}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {issuesCorreccion.map((issue, i) => (
+        <p key={`c${i}`} className="text-xs text-amber-700">
+          <PencilLine className="w-4 h-4 inline-flex flex-shrink-0" /> {issue.motivo}
+        </p>
+      ))}
+
+      {issuesParseo.map((issue, i) => (
+        <p key={`p${i}`} className="text-xs text-gray-400">
+          ⚠ {issue.motivo}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function FilaDiffEditable(props: FilaProps) {
+  const { diff, fila, correccionesTexto, camposCorregidos, erroresPorCampo, editable, onCorregir, onDeshacer } = props;
+  const corregidos = new Set(camposCorregidos);
+  const { filaEscritaAMano, hayDetalle } = analizarFila(diff, fila, erroresPorCampo);
+
+  return (
     <>
       <tr className="border-t border-gray-100 bg-white">
         <td className="px-2 py-1 align-middle whitespace-nowrap">
-          <div className="flex flex-wrap items-center gap-1">
-            <EstadoChip chip={chipClasificacionDiff(diff.clasificacion)} />
-            {diff.numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
-            {filaEscritaAMano && <EstadoChip chip={chipFilaEscritaAMano()} />}
-          </div>
+          <ChipsFila diff={diff} filaEscritaAMano={filaEscritaAMano} />
           <p className="text-xs text-gray-400">fila {diff.fila}</p>
         </td>
         {COLUMNAS.map(({ campo }) => (
@@ -272,16 +505,7 @@ function FilaDiffEditable({
         ))}
         <td className="px-2 py-1 align-middle whitespace-nowrap text-right">
           {camposCorregidos.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onDeshacer(diff.fila)}
-              disabled={!editable}
-              title="Descartar las correcciones de esta fila y volver a lo que decía el archivo"
-              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 disabled:opacity-50"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Deshacer
-            </button>
+            <BotonDeshacer fila={diff.fila} editable={editable} onDeshacer={onDeshacer} />
           )}
         </td>
       </tr>
@@ -289,156 +513,68 @@ function FilaDiffEditable({
       {hayDetalle && (
         <tr className="bg-gray-50">
           <td colSpan={TOTAL_COLUMNAS} className="px-3 py-2">
-            <div className="space-y-1">
-              {diff.conflictoEstadoRegistrado && (
-                <p className="text-xs text-red-700">
-                  <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> "Estado registrado" impreso decía{' '}
-                  <span className="font-medium">{diff.conflictoEstadoRegistrado.impreso}</span>, pero el sistema cree
-                  ahora <span className="font-medium">{diff.conflictoEstadoRegistrado.actual}</span> -- algo cambió
-                  desde que se imprimió esta planilla (un evento de Telegram, una corrección). Verifica contra la vaca
-                  real antes de aprobar.
-                </p>
-              )}
-
-              {diff.motivoNoReconocido && (
-                <p className="text-xs text-red-600">
-                  <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> {diff.motivoNoReconocido}
-                  {diff.numeroEsProvisional && (
-                    <>
-                      {' '}
-                      Este animal necesita primero su renumeración real (Hato → ficha del animal → Editar); corregir
-                      celdas acá no lo vuelve escribible.
-                    </>
-                  )}
-                </p>
-              )}
-
-              {/* Fila escrita a mano todavía sin identidad (plan de novedades
-                  §4.4/§6.5): un aviso corto SIEMPRE que no exista un panel
-                  más específico abajo -- `numero_ilegible` no trae
-                  candidatos con los que armar ninguno, y `numero_fuera_del_roster`
-                  sin `sugerenciaActiva` tampoco, así que el hint genérico es
-                  lo único que hay para decir. Cuando SÍ hay panel
-                  (`numero_animal_inactivo`, o `numero_fuera_del_roster` CON
-                  sugerencia), ese panel ya cubre "hace falta identidad" con
-                  más contexto -- repetir el hint sería ruido. */}
-              {requiereIdentidad &&
-                (!filaPromovida ||
-                  filaPromovida.motivo === 'numero_ilegible' ||
-                  (filaPromovida.motivo === 'numero_fuera_del_roster' && !filaPromovida.sugerenciaActiva)) && (
-                  <p className="text-xs text-amber-700">
-                    <PenLine className="w-4 h-4 inline-flex flex-shrink-0" /> Escribe la caravana para identificarla.
-                  </p>
-                )}
-
-              {requiereIdentidad && filaPromovida?.motivo === 'numero_animal_inactivo' && (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 space-y-2">
-                  <p className="text-xs text-amber-800">
-                    <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> La fila escrita a mano dice{' '}
-                    <strong>
-                      #{filaPromovida.numeroImpreso} {filaPromovida.nombreImpreso}
-                    </strong>
-                    . Esa caravana la lleva {filaPromovida.candidatosInactivos.length > 1 ? 'más de un animal' : 'un animal'}{' '}
-                    que el sistema tiene como inactivo. Nadie puede aprobar esta fila hasta que decidas qué pasó.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={!editable}
-                      onClick={() => onReactivarAnimal(filaPromovida)}
-                      className="border-amber-400 text-amber-800 hover:bg-amber-100"
-                    >
-                      El animal sigue en el hato (reactivar)
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={!editable}
-                      onClick={enfocarCaravana}
-                    >
-                      Me equivoqué de número
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {requiereIdentidad && filaPromovida?.motivo === 'numero_fuera_del_roster' && filaPromovida.sugerenciaActiva && (
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                  <Info className="w-4 h-4 flex-shrink-0" />
-                  <p>
-                    Coincide con la novilla/ternera activa{' '}
-                    <strong>
-                      #{filaPromovida.sugerenciaActiva.numero} {filaPromovida.sugerenciaActiva.nombre ?? '(sin nombre)'}
-                    </strong>
-                    . Sugerencia, no asignación.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={!editable}
-                    onClick={() => onCorregir(diff.fila, 'numero', String(filaPromovida.sugerenciaActiva!.numero))}
-                    className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
-                  >
-                    <Check className="w-4 h-4" />
-                    Usar esta caravana
-                  </button>
-                </div>
-              )}
-
-              {diff.clasificacion === 'nuevo' && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-blue-800">
-                    La caravana {etiquetaNumero(diff.numero)} no tiene ficha en el hato, así que el commit no la puede
-                    escribir. Crea la ficha (caravana física por debajo de 800) y el diff se recalcula.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => onCrearFicha(diff)}
-                    disabled={!editable}
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    Crear ficha del animal
-                  </button>
-                </div>
-              )}
-
-              {[...erroresPorCampo.entries()].map(([campo, mensaje]) => (
-                <p key={campo} className="text-xs text-red-600">
-                  <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> {mensaje} La corrección no se aplicó:
-                  se conserva el valor anterior hasta que se pueda leer.
-                </p>
-              ))}
-
-              {diff.diferencias.length > 0 && (
-                <ul className="text-xs text-gray-600 space-y-1">
-                  {diff.diferencias.map((d) => (
-                    <li key={d.campo}>
-                      <span className="font-medium">{d.campo}:</span> {String(d.anterior ?? '—')} →{' '}
-                      <span className="text-amber-700">{String(d.nuevo ?? '—')}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {issuesCorreccion.map((issue, i) => (
-                <p key={`c${i}`} className="text-xs text-amber-700">
-                  <PencilLine className="w-4 h-4 inline-flex flex-shrink-0" /> {issue.motivo}
-                </p>
-              ))}
-
-              {issuesParseo.map((issue, i) => (
-                <p key={`p${i}`} className="text-xs text-gray-400">
-                  ⚠ {issue.motivo}
-                </p>
-              ))}
-            </div>
+            <DetalleFilaDiff {...props} />
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+/** Campos que ocupan el ancho completo de la tarjeta (texto largo). */
+const CAMPOS_ANCHO_COMPLETO = new Set<CampoCorreccionChequeo>(['nombre', 'estado']);
+
+/**
+ * La misma fila, como tarjeta para el celular: cada campo con su etiqueta
+ * arriba y un input de 16 px (iOS no hace zoom al enfocarlo). Usa los mismos
+ * ids de celda que la tabla, así que solo una de las dos vistas puede estar
+ * montada a la vez.
+ */
+function TarjetaDiffEditable(props: FilaProps) {
+  const { diff, fila, correccionesTexto, camposCorregidos, erroresPorCampo, editable, onCorregir, onDeshacer } = props;
+  const corregidos = new Set(camposCorregidos);
+  const { filaEscritaAMano, hayDetalle } = analizarFila(diff, fila, erroresPorCampo);
+
+  return (
+    <article className="rounded-xl border border-gray-200 bg-white" aria-label={`Fila ${diff.fila}`}>
+      <header className="flex items-start justify-between gap-2 border-b border-gray-100 px-3 py-2">
+        <div className="min-w-0">
+          <ChipsFila diff={diff} filaEscritaAMano={filaEscritaAMano} />
+          <p className="text-xs text-gray-400">fila {diff.fila}</p>
+        </div>
+        {camposCorregidos.length > 0 && (
+          <BotonDeshacer fila={diff.fila} editable={editable} onDeshacer={onDeshacer} />
+        )}
+      </header>
+      <div className="grid grid-cols-2 gap-3 px-3 py-3">
+        {COLUMNAS.map(({ campo }) => {
+          const meta = CAMPOS_POR_CLAVE.get(campo)!;
+          return (
+            <div key={campo} className={`min-w-0 ${CAMPOS_ANCHO_COMPLETO.has(campo) ? 'col-span-2' : ''}`}>
+              <label htmlFor={idCeldaCorreccion(diff.fila, campo)} className="mb-1 block text-xs font-medium text-gray-600">
+                {meta.etiqueta}
+              </label>
+              <CeldaCorregible
+                meta={meta}
+                fila={fila}
+                numeroFila={diff.fila}
+                tecleado={correccionesTexto?.[campo]}
+                corregido={corregidos.has(campo)}
+                mensajeError={erroresPorCampo.get(campo)}
+                editable={editable}
+                tactil
+                onCorregir={onCorregir}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {hayDetalle && (
+        <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 rounded-b-xl">
+          <DetalleFilaDiff {...props} />
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -464,6 +600,10 @@ export function ChequeoDiffReview({
   onReactivarAnimal: (filaPromovida: FilaPromovidaOcr) => void;
 }) {
   const [filtro, setFiltro] = useState<FiltroFilas>('todas');
+  const ancha = usePantallaAncha();
+  // En el celular la explicación larga empuja las vacas fuera de la pantalla:
+  // arranca cerrada ahí y abierta en el computador.
+  const [ayudaAbierta, setAyudaAbierta] = useState(pantallaAnchaAhora);
   const {
     diff,
     filasCorregidas,
@@ -520,6 +660,21 @@ export function ChequeoDiffReview({
   const filasVisibles = [...diff.filas]
     .sort((a, b) => a.fila - b.fila)
     .filter((f) => coincideFiltro(f, f.clasificacion));
+
+  // Las mismas props para la fila de la tabla y para la tarjeta del celular.
+  const propsFila = (filaDiff: FilaDiffChequeo, fila: FilaChequeoNormalizada): FilaProps => ({
+    diff: filaDiff,
+    fila,
+    correccionesTexto: correcciones[filaDiff.fila],
+    camposCorregidos: camposCorregidosPorFila[filaDiff.fila] ?? [],
+    erroresPorCampo: erroresPorFila.get(filaDiff.fila) ?? new Map(),
+    editable,
+    filaPromovida: filasPromovidasPorFila.get(filaDiff.fila),
+    onCorregir: corregirCampo,
+    onDeshacer: deshacerFila,
+    onCrearFicha,
+    onReactivarAnimal,
+  });
 
   return (
     <div className="space-y-4">
@@ -640,9 +795,21 @@ export function ChequeoDiffReview({
 
       <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
         <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <div>
-          <p>
-            Nada se ha guardado todavía. Al aprobar se escriben solo las filas <strong>Con cambios</strong> y{' '}
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">Nada se ha guardado todavía.</p>
+          <button
+            type="button"
+            onClick={() => setAyudaAbierta((v) => !v)}
+            aria-expanded={ayudaAbierta}
+            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
+          >
+            {ayudaAbierta ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {ayudaAbierta ? 'Ocultar' : 'Cómo funciona'}
+          </button>
+          {ayudaAbierta && (
+            <>
+          <p className="mt-1">
+            Al aprobar se escriben solo las filas <strong>Con cambios</strong> y{' '}
             <strong>Sin cambios</strong>, con las correcciones que hagas acá. Las <strong>Nuevas</strong> necesitan que
             crees la ficha del animal; las <strong>No reconocidas</strong> se resuelven corrigiendo la caravana o
             renumerando al animal — ninguna de las dos se aprueba en silencio.
@@ -652,10 +819,15 @@ export function ChequeoDiffReview({
             registrada como decisión humana en la fila. Sin corrección posible acá:{' '}
             {CAMPOS_NO_CORREGIBLES.map((c) => `${c.etiqueta} (${c.motivo})`).join(' · ')}
           </p>
+            </>
+          )}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* En el celular las cuatro pestañas no caben: se desplazan de lado en
+            vez de partirse o cortar el texto. */}
+        <div className="w-full md:w-auto overflow-x-auto">
         <ToggleGroup
           type="single"
           variant="outline"
@@ -663,11 +835,12 @@ export function ChequeoDiffReview({
           onValueChange={(v) => v && setFiltro(v as FiltroFilas)}
         >
           {FILTROS.map((f) => (
-            <ToggleGroupItem key={f.valor} value={f.valor} className="text-xs px-3">
+            <ToggleGroupItem key={f.valor} value={f.valor} className="text-xs px-3 whitespace-nowrap">
               {f.etiqueta}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
+        </div>
         <p className="text-xs text-gray-500">
           {filasVisibles.length} de {resumen.totalFilas} fila(s)
           {resumenCorrecciones.camposCorregidos > 0 && (
@@ -681,54 +854,58 @@ export function ChequeoDiffReview({
         </p>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-28">
-                  Clasificación
-                </th>
-                {COLUMNAS.map((c) => (
-                  <th
-                    key={c.campo}
-                    title={CAMPOS_POR_CLAVE.get(c.campo)!.ayuda}
-                    className={`px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 ${c.ancho}`}
-                  >
-                    {c.titulo}
+      {/* Una sola vista montada a la vez: las dos usan los mismos ids de celda
+          (`idCeldaCorreccion`), y "Me equivoqué de número" enfoca por id. */}
+      {ancha ? (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-28">
+                    Clasificación
                   </th>
-                ))}
-                <th className="px-2 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 w-24" />
-              </tr>
-            </thead>
-            <tbody>
-              {filasVisibles.map((filaDiff) => {
-                const fila = filasPorNumero.get(filaDiff.fila);
-                if (!fila) return null;
-                return (
-                  <FilaDiffEditable
-                    key={filaDiff.fila}
-                    diff={filaDiff}
-                    fila={fila}
-                    correccionesTexto={correcciones[filaDiff.fila]}
-                    camposCorregidos={camposCorregidosPorFila[filaDiff.fila] ?? []}
-                    erroresPorCampo={erroresPorFila.get(filaDiff.fila) ?? new Map()}
-                    editable={editable}
-                    filaPromovida={filasPromovidasPorFila.get(filaDiff.fila)}
-                    onCorregir={corregirCampo}
-                    onDeshacer={deshacerFila}
-                    onCrearFicha={onCrearFicha}
-                    onReactivarAnimal={onReactivarAnimal}
-                  />
-                );
-              })}
-            </tbody>
-          </table>
+                  {COLUMNAS.map((c) => (
+                    <th
+                      key={c.campo}
+                      title={CAMPOS_POR_CLAVE.get(c.campo)!.ayuda}
+                      className={`px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 ${c.ancho}`}
+                    >
+                      {c.titulo}
+                    </th>
+                  ))}
+                  <th className="px-2 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 w-24" />
+                </tr>
+              </thead>
+              <tbody>
+                {filasVisibles.map((filaDiff) => {
+                  const fila = filasPorNumero.get(filaDiff.fila);
+                  if (!fila) return null;
+                  return (
+                    <FilaDiffEditable key={filaDiff.fila} {...propsFila(filaDiff, fila)} />
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {filasVisibles.length === 0 && (
+            <p className="px-3 py-3 text-sm text-gray-500">Ninguna fila coincide con este filtro.</p>
+          )}
         </div>
-        {filasVisibles.length === 0 && (
-          <p className="px-3 py-3 text-sm text-gray-500">Ninguna fila coincide con este filtro.</p>
-        )}
-      </div>
+      ) : (
+        <div className="space-y-3">
+          {filasVisibles.map((filaDiff) => {
+            const fila = filasPorNumero.get(filaDiff.fila);
+            if (!fila) return null;
+            return <TarjetaDiffEditable key={filaDiff.fila} {...propsFila(filaDiff, fila)} />;
+          })}
+          {filasVisibles.length === 0 && (
+            <p className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-500">
+              Ninguna fila coincide con este filtro.
+            </p>
+          )}
+        </div>
+      )}
 
       {(resultado.terneras.length > 0 || resultado.subtablas.length > 0) && (
         <p className="text-xs text-gray-500">
