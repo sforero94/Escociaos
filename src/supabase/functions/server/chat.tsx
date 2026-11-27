@@ -44,6 +44,9 @@ import {
 } from './ganado-inventario.ts';
 import {
   priorizarMonitoreo,
+  calcularLecturasPorLote,
+  rondaActualPorLoteDe,
+  DIAS_MAX_LECTURA_VIGENTE,
   type HistorialSublotePlaga,
   type UmbralEconomico,
   type PerfilEstacional,
@@ -751,7 +754,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_pest_risk_priorizacion',
-    description: 'Obtiene el ranking de prioridad de monitoreo por lote/sublote x plaga: cuales combinaciones ameritan revision esta semana y por que (umbral economico Cartama superado, tendencia, estacionalidad historica). Distingue plagas con umbral economico validado de las que usan un nivel estadistico de referencia (tercil historico). NO es lo mismo que web_search_agronomic (esa busca informacion externa; esta usa el ranking en vivo de ESTA finca).',
+    description: 'Obtiene el ranking de prioridad de monitoreo por lote/sublote x plaga: cuales combinaciones ameritan revision esta semana y por que (umbral economico Cartama superado, tendencia, estacionalidad historica). Distingue plagas con umbral economico validado de las que usan un nivel estadistico de referencia (tercil historico). El estado actual es POR LOTE: cada lote usa su ronda mas reciente (fecha_lectura); lotes_lectura lista cada lote activo y si su lectura esta vigente (14 dias o menos). Un lote no vigente se reporta como "no revisado desde <fecha>", nunca como 0%. NO es lo mismo que web_search_agronomic (esa busca informacion externa; esta usa el ranking en vivo de ESTA finca).',
     parameters: {
       type: 'object',
       properties: {
@@ -3717,7 +3720,7 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
   const desdeMonitoreos = fechaHaceNDias(LOOKBACK_MONITOREOS_DIAS_PRIORIZACION);
   const desdeFumigaciones = fechaHaceNDias(LOOKBACK_FUMIGACIONES_DIAS_PRIORIZACION);
 
-  const [monitoreosRows, umbralesRows, perfilesRows, movimientosRows, rondaActualRows] = await Promise.all([
+  const [monitoreosRows, umbralesRows, perfilesRows, movimientosRows, lotesActivosRows] = await Promise.all([
     supabaseQuery(
       'monitoreos',
       `select=fecha_monitoreo,ronda_id,lote_id,sublote_id,plaga_enfermedad_id,arboles_monitoreados,arboles_afectados,incidencia,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${e(desdeMonitoreos)}&order=fecha_monitoreo.asc&limit=5000`,
@@ -3728,14 +3731,20 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
       'movimientos_diarios',
       `select=lote_id,fecha_movimiento&lote_id=not.is.null&fecha_movimiento=gte.${e(desdeFumigaciones)}`,
     ) as Promise<Array<{ lote_id: string; fecha_movimiento: string }>>,
-    supabaseQuery('rondas_monitoreo', 'select=id&order=fecha_inicio.desc&limit=1') as Promise<Array<{ id: string }>>,
+    supabaseQuery('lotes', 'select=id,nombre&activo=eq.true&order=nombre.asc') as Promise<Array<{ id: string; nombre: string }>>,
   ]);
 
-  // Sin ninguna ronda registrada todavía: nada que priorizar.
-  const rondaActualId = rondaActualRows[0]?.id;
-  if (!rondaActualId) {
-    return JSON.stringify({ total_registros: 0, total_evaluado: 0, filtros: { lote_name: lote_name ?? null, pest_name: pest_name ?? null, top_n: topN }, top: [] });
-  }
+  // ESCO-184: el estado actual es POR LOTE. Cada lote usa su ronda más
+  // reciente con lectura en ese lote; si esa lectura tiene más de
+  // DIAS_MAX_LECTURA_VIGENTE días, el lote queda "no revisado desde <fecha>"
+  // y sus sublotes no entran al ranking (nunca 0%). Ya no se usa la ronda
+  // global más reciente: una ronda que sólo visitó media finca dejaba la otra
+  // mitad fuera del ranking aunque su lectura fuera reciente.
+  // "Hoy" se toma en hora de Bogotá: el servidor corre en UTC.
+  const [anioRef, mesRef, diaRef] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()).split('-').map(Number);
+  const fechaReferencia = new Date(anioRef, mesRef - 1, diaRef);
 
   const historiales = agruparHistorialesPriorizacion(monitoreosRows);
   const umbrales: UmbralEconomico[] = umbralesRows.map((u) => ({
@@ -3761,7 +3770,19 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
     umbrales,
     perfilesEstacionales,
     ultimasFumigaciones,
-    rondaActualId,
+    rondaActualPorLote: rondaActualPorLoteDe(historiales, fechaReferencia),
+    fechaReferencia,
+  });
+
+  const lecturas = calcularLecturasPorLote(historiales, fechaReferencia);
+  const lotes_lectura = lotesActivosRows.map((l) => {
+    const lectura = lecturas.get(l.id);
+    return {
+      lote: l.nombre,
+      fecha_lectura: lectura?.fechaLectura ?? null,
+      vigente: lectura?.vigente ?? false,
+      dias_desde_lectura: lectura?.diasDesdeLectura ?? null,
+    };
   });
 
   let filtered = ranked;
@@ -3780,6 +3801,7 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
     lote: r.lote_nombre,
     sublote: r.sublote_nombre,
     plaga: r.pest_nombre,
+    fecha_lectura: r.fechaLectura,
     grupo_key: r.grupo_key,
     tier: r.tier,
     estado: r.tier === 'A' ? r.estadoUmbral : r.gravedad?.texto,
@@ -3800,6 +3822,9 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
     total_registros: filtered.length,
     total_evaluado: ranked.length,
     filtros: { lote_name: lote_name ?? null, pest_name: pest_name ?? null, top_n: topN },
+    dias_max_lectura_vigente: DIAS_MAX_LECTURA_VIGENTE,
+    lotes_lectura,
+    nota: `Estado actual por lote: cada lote se lee en su ronda más reciente (fecha_lectura). Un lote con vigente=false no se revisó en los últimos ${DIAS_MAX_LECTURA_VIGENTE} días: di "no revisado desde <fecha_lectura>" (o "sin lecturas recientes" si es null), nunca 0% ni "sin plagas".`,
     top,
   });
 }

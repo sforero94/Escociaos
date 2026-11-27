@@ -23,10 +23,13 @@
 //   hace el pooling internamente usando `pest_umbral_economico.grupo_key`, agrupado
 //   por `ronda_id` (no por fecha calendario -- una ronda puede abarcar varias
 //   fechas según el lote).
-// - Se pasa también el `id` de la ronda más reciente (`rondas_monitoreo` ordenada
-//   por `fecha_inicio` desc) como `rondaActualId`: `priorizarMonitoreo` excluye
-//   cualquier (sublote, plaga) sin lectura en esa ronda, para no mostrar una
-//   lectura vieja como si fuera el estado actual.
+// - Estado actual POR LOTE (ESCO-184): `rondaActualPorLoteDe` toma, para cada
+//   lote, la ronda más reciente con lectura en ese lote, y sólo si no tiene más
+//   de `DIAS_MAX_LECTURA_VIGENTE` (14) días. `priorizarMonitoreo` excluye toda
+//   (sublote, plaga) sin lectura en la ronda vigente de su lote, para no mostrar
+//   una lectura vieja como si fuera el estado actual. Ya no se consulta
+//   `rondas_monitoreo`: una ronda puede visitar sólo media finca, y usar la
+//   ronda más reciente de la finca escondía los lotes que esa ronda no visitó.
 // - Cobertura de la ronda (issue #96, item 4): además de priorizar, este hook
 //   arma el universo `sublotesEnAlcance` -- todo sublote cuyo lote padre tiene
 //   `lotes.activo = true` (`sublotes` no tiene columna `activo` propia, así
@@ -38,7 +41,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { fechaAISODate } from '@/utils/fechas';
-import { priorizarMonitoreo, calcularCoberturaRonda } from '@/utils/priorizacionMonitoreo';
+import { priorizarMonitoreo, calcularCoberturaRonda, rondaActualPorLoteDe } from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga,
   UmbralEconomico,
@@ -122,12 +125,10 @@ function agruparHistoriales(rows: MonitoreoRawRow[]): HistorialSublotePlaga[] {
 
 /** Resultado de una carga: la lista priorizada (ver `bracket` en
  * PriorizacionEntry para el criterio de orden) más el resumen de cobertura
- * de la ronda actual sobre el universo de sublotes en producción.
- * `cobertura` es `null` únicamente cuando todavía no existe ninguna ronda
- * registrada en la finca (nada que priorizar ni que cubrir). */
+ * por lote sobre el universo de sublotes en producción. */
 export interface ResultadoPriorizacion {
   entries: PriorizacionEntry[];
-  cobertura: CoberturaRonda | null;
+  cobertura: CoberturaRonda;
 }
 
 export interface UsePriorizacionMonitoreoReturn {
@@ -148,7 +149,7 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
     setError(null);
 
     try {
-      const [monitoreosRes, umbralesRes, perfilesRes, movimientosRes, rondaActualRes, lotesActivosRes] = await Promise.all([
+      const [monitoreosRes, umbralesRes, perfilesRes, movimientosRes, lotesActivosRes] = await Promise.all([
         supabase
           .from('monitoreos')
           .select(
@@ -167,11 +168,6 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
           .select('lote_id, fecha_movimiento')
           .not('lote_id', 'is', null)
           .gte('fecha_movimiento', fechaHaceNDias(LOOKBACK_FUMIGACIONES_DIAS)),
-        supabase
-          .from('rondas_monitoreo')
-          .select('id, nombre')
-          .order('fecha_inicio', { ascending: false })
-          .limit(1),
         // Universo de cobertura (issue #96, item 4): sólo lotes EN PRODUCCIÓN.
         // `sublotes` no tiene columna `activo` propia -- el filtro sale de
         // `lotes` y se propaga por `lote_id` más abajo.
@@ -182,13 +178,7 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
       if (umbralesRes.error) throw new Error(`Umbral económico: ${umbralesRes.error.message}`);
       if (perfilesRes.error) throw new Error(`Perfil estacional: ${perfilesRes.error.message}`);
       if (movimientosRes.error) throw new Error(`Movimientos diarios: ${movimientosRes.error.message}`);
-      if (rondaActualRes.error) throw new Error(`Ronda actual: ${rondaActualRes.error.message}`);
       if (lotesActivosRes.error) throw new Error(`Lotes en producción: ${lotesActivosRes.error.message}`);
-
-      // Sin ninguna ronda registrada todavía: nada que priorizar ni que cubrir.
-      const rondaActualId: string | undefined = rondaActualRes.data?.[0]?.id;
-      if (!rondaActualId) return { entries: [], cobertura: null };
-      const rondaActualNombre: string | null = rondaActualRes.data?.[0]?.nombre ?? null;
 
       const historiales = agruparHistoriales((monitoreosRes.data ?? []) as MonitoreoRawRow[]);
 
@@ -238,15 +228,20 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
         );
       }
 
+      // Una sola fecha de referencia para el ranking y la cobertura, así los
+      // dos cuentan los días igual.
+      const fechaReferencia = new Date();
+
       const entries = priorizarMonitoreo({
         historiales,
         umbrales,
         perfilesEstacionales,
         ultimasFumigaciones,
-        rondaActualId,
+        rondaActualPorLote: rondaActualPorLoteDe(historiales, fechaReferencia),
+        fechaReferencia,
       });
 
-      const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, rondaActualId, rondaActualNombre);
+      const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, fechaReferencia);
 
       return { entries, cobertura };
     } catch (err: unknown) {

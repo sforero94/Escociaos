@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { priorizarMonitoreo, calcularCoberturaRonda } from '@/utils/priorizacionMonitoreo';
+import {
+  priorizarMonitoreo,
+  calcularCoberturaRonda,
+  calcularLecturasPorLote,
+  rondaActualPorLoteDe,
+  DIAS_MAX_LECTURA_VIGENTE,
+} from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga,
   UmbralEconomico,
@@ -37,6 +43,11 @@ function rondas(valores: Array<[string, number]>): RondaHistorica[] {
     arboles_monitoreados: 100,
     arboles_afectados: Math.round(incidencia),
   }));
+}
+
+/** Todos los lotes de `historiales` leídos en la misma ronda (la "actual"). */
+function rondaUnica(historiales: HistorialSublotePlaga[], rondaId: string = RONDA_ACTUAL_ID): Map<string, string> {
+  return new Map(historiales.map((h) => [h.lote_id, rondaId]));
 }
 
 function historial(overrides: Partial<HistorialSublotePlaga> & { rondas: RondaHistorica[] }): HistorialSublotePlaga {
@@ -87,7 +98,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     expect(resultado[0].pest_id).toBe('pest-thrips');
@@ -152,7 +163,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales,
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     // Confirmamos primero que las condiciones de fondo son las esperadas.
@@ -217,7 +228,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     const thrips = resultado.find((e) => e.pest_id === 'pest-thrips')!;
@@ -292,7 +303,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     const entradasAcaro = resultado.filter((e) => e.grupo_key === 'acaro_complex');
@@ -334,7 +345,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     expect(resultado).toHaveLength(2);
@@ -374,7 +385,7 @@ describe('priorizarMonitoreo', () => {
         perfilesEstacionales: [],
         ultimasFumigaciones: [],
         fechaReferencia: FECHA_REF,
-        rondaActualId: RONDA_ACTUAL_ID,
+        rondaActualPorLote: rondaUnica(historiales),
       })
     ).not.toThrow();
 
@@ -384,7 +395,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     const nueva = resultado.find((e) => e.pest_id === 'pest-nueva');
@@ -417,7 +428,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [], // sin ningún perfil estacional
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     expect(resultado).toHaveLength(1);
@@ -458,7 +469,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales,
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     expect(resultado[0].historicalTier).toBe('High');
@@ -485,7 +496,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones,
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     expect(resultado[0].diasDesdeUltimaFumigacion).toBeNull();
@@ -514,7 +525,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones,
       fechaReferencia: FECHA_REF,
-      rondaActualId: RONDA_ACTUAL_ID,
+      rondaActualPorLote: rondaUnica(historiales),
     });
 
     expect(resultado[0].diasDesdeUltimaFumigacion).toBe(5);
@@ -522,135 +533,216 @@ describe('priorizarMonitoreo', () => {
 });
 
 // ============================================================================
-// calcularCoberturaRonda — issue #96, item 4: "no revisado en la ronda
-// actual" debe ser un estado explícito, distinto de "sin presión" (una
-// lectura real de incidencia baja/0) y distinto de un lote fuera de
-// producción (que no forma parte del universo `sublotesEnAlcance` en
-// absoluto -- no es un hueco de cobertura, ver comentario de cabecera en
-// priorizacionMonitoreo.ts).
+// ESCO-184 — estado actual POR LOTE. Cada lote se lee en su ronda más
+// reciente con lectura en ese lote. Si esa lectura tiene más de
+// DIAS_MAX_LECTURA_VIGENTE (14) días, el lote queda "no revisado desde
+// <fecha>", nunca 0%. Una ronda que visitó media finca ya no deja la otra
+// mitad sin estado.
 // ============================================================================
-describe('calcularCoberturaRonda', () => {
+
+/** Lectura de un sublote en una ronda con nombre explícito (ronda_id != fecha). */
+function lectura(fecha: string, rondaId: string | null, incidencia = 5): RondaHistorica {
+  return {
+    fecha_monitoreo: fecha,
+    ronda_id: rondaId as string,
+    incidencia,
+    arboles_monitoreados: 100,
+    arboles_afectados: incidencia,
+  };
+}
+
+// Réplica de la finca el 2026-11-26: R35 (13-nov) leyó Piedra Paula y Salto;
+// R34 (3-nov) leyó Australia y La Vega.
+function historialesNoviembre(): HistorialSublotePlaga[] {
+  return [
+    historial({ lote_id: 'pp', lote_nombre: 'Piedra Paula', sublote_id: 'pp-1', rondas: [lectura('2026-10-30', 'R33'), lectura('2026-11-13', 'R35', 9)] }),
+    historial({ lote_id: 'salto', lote_nombre: 'Salto de Tequendama', sublote_id: 'salto-1', rondas: [lectura('2026-11-12', 'R35', 7)] }),
+    historial({ lote_id: 'aus', lote_nombre: 'Australia', sublote_id: 'aus-1', rondas: [lectura('2026-10-20', 'R33'), lectura('2026-11-03', 'R34', 12)] }),
+    historial({ lote_id: 'vega', lote_nombre: 'La Vega', sublote_id: 'vega-1', rondas: [lectura('2026-11-03', 'R34', 4)] }),
+  ];
+}
+
+describe('calcularLecturasPorLote / rondaActualPorLoteDe', () => {
+  it('el umbral por defecto es 14 días', () => {
+    expect(DIAS_MAX_LECTURA_VIGENTE).toBe(14);
+  });
+
+  it('N=14 al 2026-11-26: los lotes de R35 quedan vigentes y los de R34 "no revisado desde 2026-11-03"', () => {
+    const ref = new Date(2026, 10, 26);
+    const lecturas = calcularLecturasPorLote(historialesNoviembre(), ref);
+
+    expect(lecturas.get('pp')).toMatchObject({ ronda_id: 'R35', fechaLectura: '2026-11-13', vigente: true, diasDesdeLectura: 13 });
+    expect(lecturas.get('salto')).toMatchObject({ ronda_id: 'R35', fechaLectura: '2026-11-12', vigente: true });
+    expect(lecturas.get('aus')).toMatchObject({ ronda_id: 'R34', fechaLectura: '2026-11-03', vigente: false, diasDesdeLectura: 23 });
+    expect(lecturas.get('vega')).toMatchObject({ ronda_id: 'R34', fechaLectura: '2026-11-03', vigente: false });
+
+    const mapa = rondaActualPorLoteDe(historialesNoviembre(), ref);
+    expect([...mapa.entries()].sort()).toEqual([['pp', 'R35'], ['salto', 'R35']]);
+  });
+
+  it('N=21 al 2026-11-19: las dos rondas están vigentes, cada lote con la suya', () => {
+    const ref = new Date(2026, 10, 19);
+    const mapa = rondaActualPorLoteDe(historialesNoviembre(), ref, 21);
+    expect(Object.fromEntries(mapa)).toEqual({ pp: 'R35', salto: 'R35', aus: 'R34', vega: 'R34' });
+  });
+
+  it('una lectura sin ronda (ronda_id null) nunca define la ronda de un lote', () => {
+    const ref = new Date(2026, 10, 26);
+    const hist = [
+      historial({ lote_id: 'x', sublote_id: 'x-1', rondas: [lectura('2026-10-01', 'R30'), lectura('2026-11-25', null, 40)] }),
+    ];
+    const l = calcularLecturasPorLote(hist, ref).get('x')!;
+    expect(l.ronda_id).toBe('R30');
+    expect(l.fechaLectura).toBe('2026-10-01');
+    expect(l.vigente).toBe(false);
+  });
+
+  it('un lote que sólo tiene lecturas sin ronda queda sin ronda y sin fecha', () => {
+    const ref = new Date(2026, 10, 26);
+    const hist = [historial({ lote_id: 'y', sublote_id: 'y-1', rondas: [lectura('2026-11-25', null)] })];
+    expect(calcularLecturasPorLote(hist, ref).get('y')).toMatchObject({ ronda_id: null, fechaLectura: null, vigente: false, diasDesdeLectura: null });
+    expect(rondaActualPorLoteDe(hist, ref).size).toBe(0);
+  });
+});
+
+describe('priorizarMonitoreo con ronda por lote', () => {
+  it('un lote con lectura vencida no entra al ranking; los vigentes sí, cada uno con su fecha de lectura', () => {
+    const ref = new Date(2026, 10, 26);
+    const historiales = historialesNoviembre();
+    const resultado = priorizarMonitoreo({
+      historiales,
+      umbrales: [],
+      perfilesEstacionales: [],
+      ultimasFumigaciones: [],
+      fechaReferencia: ref,
+      rondaActualPorLote: rondaActualPorLoteDe(historiales, ref),
+    });
+    expect(resultado.map((e) => e.lote_id).sort()).toEqual(['pp', 'salto']);
+    expect(resultado.find((e) => e.lote_id === 'pp')!.fechaLectura).toBe('2026-11-13');
+    expect(resultado.find((e) => e.lote_id === 'salto')!.fechaLectura).toBe('2026-11-12');
+  });
+
+  it('con N=21 entran los cuatro lotes: una ronda de media finca ya no deja fuera la otra mitad', () => {
+    const ref = new Date(2026, 10, 19);
+    const historiales = historialesNoviembre();
+    const resultado = priorizarMonitoreo({
+      historiales,
+      umbrales: [],
+      perfilesEstacionales: [],
+      ultimasFumigaciones: [],
+      fechaReferencia: ref,
+      rondaActualPorLote: rondaActualPorLoteDe(historiales, ref, 21),
+    });
+    expect(resultado.map((e) => e.lote_id).sort()).toEqual(['aus', 'pp', 'salto', 'vega']);
+    expect(resultado.find((e) => e.lote_id === 'aus')!.incidenciaActual).toBe(12);
+  });
+});
+
+describe('calcularCoberturaRonda (por lote)', () => {
   function subloteEnAlcance(overrides: Partial<SubloteEnAlcance> & { sublote_id: string }): SubloteEnAlcance {
-    return {
-      lote_id: 'lote-1',
-      lote_nombre: 'Lote 1',
-      ...overrides,
-    };
+    return { lote_id: 'lote-1', lote_nombre: 'Lote 1', ...overrides };
   }
 
-  it('un sublote con lectura (de cualquier plaga) en la ronda actual cuenta como revisado', () => {
-    const sublotesEnAlcance: SubloteEnAlcance[] = [
-      subloteEnAlcance({ sublote_id: 'sub-1', sublote_nombre: 'Sublote 1' }),
-    ];
-    const historiales: HistorialSublotePlaga[] = [
-      historial({
-        sublote_id: 'sub-1',
-        pest_id: 'pest-x',
-        rondas: rondas([
-          ['2026-06-01', 5],
-          ['2026-06-15', 6],
-        ]),
-      }),
-    ];
-
-    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
-
+  it('un sublote con lectura (de cualquier plaga) en la ronda vigente de su lote cuenta como revisado', () => {
+    const cobertura = calcularCoberturaRonda(
+      [subloteEnAlcance({ sublote_id: 'sub-1', sublote_nombre: 'Sublote 1' })],
+      [historial({ sublote_id: 'sub-1', rondas: rondas([['2026-06-01', 5], ['2026-06-15', 6]]) })],
+      FECHA_REF
+    );
+    expect(cobertura.diasMaxLectura).toBe(14);
     expect(cobertura.totalEnAlcance).toBe(1);
     expect(cobertura.revisados).toBe(1);
     expect(cobertura.noRevisados).toEqual([]);
+    expect(cobertura.lotes).toEqual([
+      { lote_id: 'lote-1', lote_nombre: 'Lote 1', ronda_id: '2026-06-15', fechaLectura: '2026-06-15', vigente: true, diasDesdeLectura: 0 },
+    ]);
   });
 
-  it('un sublote en alcance sin NINGÚN historial cae en no revisado, sin ningún campo de incidencia', () => {
-    const sublotesEnAlcance: SubloteEnAlcance[] = [
-      subloteEnAlcance({ sublote_id: 'sub-nunca-visitado', sublote_nombre: 'Sublote Fantasma' }),
-    ];
-
-    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, [], RONDA_ACTUAL_ID);
-
-    expect(cobertura.totalEnAlcance).toBe(1);
+  it('un lote sin ningún historial: sus sublotes quedan "sin lectura vigente", sin ningún campo de incidencia', () => {
+    const cobertura = calcularCoberturaRonda(
+      [subloteEnAlcance({ sublote_id: 'sub-nunca', sublote_nombre: 'Sublote Fantasma' })],
+      [],
+      FECHA_REF
+    );
     expect(cobertura.revisados).toBe(0);
     expect(cobertura.noRevisados).toEqual([
-      { sublote_id: 'sub-nunca-visitado', sublote_nombre: 'Sublote Fantasma', lote_id: 'lote-1', lote_nombre: 'Lote 1' },
+      {
+        sublote_id: 'sub-nunca',
+        sublote_nombre: 'Sublote Fantasma',
+        lote_id: 'lote-1',
+        lote_nombre: 'Lote 1',
+        motivo: 'lote_sin_lectura_vigente',
+        ultimaLectura: null,
+      },
     ]);
-    // La interfaz SubloteNoRevisado no tiene campo de incidencia -- comprobación
-    // en tiempo de ejecución de que nadie coló uno vía spread/`as any`.
+    expect(cobertura.lotes[0]).toMatchObject({ ronda_id: null, fechaLectura: null, vigente: false, diasDesdeLectura: null });
     expect(cobertura.noRevisados[0]).not.toHaveProperty('incidenciaActual');
   });
 
-  it('regla dura: una lectura de una ronda ANTERIOR nunca cuenta como cobertura de la ronda actual (no confundir "no revisado" con dato viejo)', () => {
-    const sublotesEnAlcance: SubloteEnAlcance[] = [
-      subloteEnAlcance({ sublote_id: 'sub-viejo', sublote_nombre: 'Sublote con dato viejo' }),
-    ];
-    const historiales: HistorialSublotePlaga[] = [
-      historial({
-        sublote_id: 'sub-viejo',
-        pest_id: 'pest-x',
-        // Sólo rondas anteriores -- ninguna coincide con RONDA_ACTUAL_ID.
-        rondas: rondas([
-          ['2026-05-01', 40],
-          ['2026-05-15', 35],
-        ]),
-      }),
-    ];
-
-    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
-
+  it('regla dura: un lote cuya lectura más reciente tiene más de 14 días queda "no revisado desde <fecha>", nunca revisado', () => {
+    const cobertura = calcularCoberturaRonda(
+      [subloteEnAlcance({ sublote_id: 'sub-viejo' })],
+      [historial({ sublote_id: 'sub-viejo', rondas: rondas([['2026-05-01', 40], ['2026-05-15', 35]]) })],
+      FECHA_REF
+    );
     expect(cobertura.revisados).toBe(0);
-    expect(cobertura.noRevisados.map((s) => s.sublote_id)).toEqual(['sub-viejo']);
+    expect(cobertura.noRevisados[0]).toMatchObject({ motivo: 'lote_sin_lectura_vigente', ultimaLectura: '2026-05-15' });
+    expect(cobertura.lotes[0]).toMatchObject({ fechaLectura: '2026-05-15', vigente: false, diasDesdeLectura: 31 });
   });
 
-  it('un sublote fuera de alcance (ej. su lote ya no produce) no aparece ni en revisados ni en noRevisados -- no es un hueco de cobertura', () => {
-    // Universo de alcance sólo incluye sub-activo; sub-inactivo NO se pasa,
-    // simulando un lote con `activo = false` que el caller ya filtró antes
-    // de construir sublotesEnAlcance.
-    const sublotesEnAlcance: SubloteEnAlcance[] = [
-      subloteEnAlcance({ sublote_id: 'sub-activo', sublote_nombre: 'Sublote activo' }),
-    ];
-    const historiales: HistorialSublotePlaga[] = [
-      historial({
-        sublote_id: 'sub-activo',
-        pest_id: 'pest-x',
-        rondas: rondas([['2026-06-15', 6]]),
-      }),
-      // Lectura de un sublote que pertenece a un lote fuera de producción --
-      // no forma parte del universo, así que no debe alterar los conteos.
-      historial({
-        sublote_id: 'sub-inactivo',
-        pest_id: 'pest-x',
-        rondas: rondas([['2026-06-15', 90]]),
-      }),
-    ];
+  it('un sublote sin lectura en la ronda vigente de su lote (el lote sí se leyó) se marca aparte', () => {
+    const cobertura = calcularCoberturaRonda(
+      [
+        subloteEnAlcance({ sublote_id: 'sub-a' }),
+        subloteEnAlcance({ sublote_id: 'sub-b' }),
+        subloteEnAlcance({ sublote_id: 'sub-c' }),
+      ],
+      [
+        historial({ sublote_id: 'sub-a', pest_id: 'pest-x', rondas: rondas([['2026-06-15', 6]]) }),
+        historial({ sublote_id: 'sub-b', pest_id: 'pest-y', rondas: rondas([['2026-06-01', 4]]) }),
+      ],
+      FECHA_REF
+    );
+    expect(cobertura.totalEnAlcance).toBe(3);
+    expect(cobertura.revisados).toBe(1);
+    const porId = Object.fromEntries(cobertura.noRevisados.map((s) => [s.sublote_id, s]));
+    expect(porId['sub-b']).toMatchObject({ motivo: 'sin_lectura_en_ronda_del_lote', ultimaLectura: '2026-06-01' });
+    expect(porId['sub-c']).toMatchObject({ motivo: 'sin_lectura_en_ronda_del_lote', ultimaLectura: null });
+  });
 
-    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
-
+  it('un sublote fuera de alcance (lote que ya no produce) no aparece ni en revisados ni en noRevisados', () => {
+    const cobertura = calcularCoberturaRonda(
+      [subloteEnAlcance({ sublote_id: 'sub-activo' })],
+      [
+        historial({ sublote_id: 'sub-activo', rondas: rondas([['2026-06-15', 6]]) }),
+        historial({ sublote_id: 'sub-inactivo', lote_id: 'lote-inactivo', rondas: rondas([['2026-06-15', 90]]) }),
+      ],
+      FECHA_REF
+    );
     expect(cobertura.totalEnAlcance).toBe(1);
     expect(cobertura.revisados).toBe(1);
     expect(cobertura.noRevisados).toEqual([]);
+    expect(cobertura.lotes.map((l) => l.lote_id)).toEqual(['lote-1']);
   });
 
-  it('totalEnAlcance/revisados: cobertura parcial cuenta sólo los sublotes efectivamente en alcance', () => {
-    const sublotesEnAlcance: SubloteEnAlcance[] = [
-      subloteEnAlcance({ sublote_id: 'sub-a', sublote_nombre: 'A' }),
-      subloteEnAlcance({ sublote_id: 'sub-b', sublote_nombre: 'B' }),
-      subloteEnAlcance({ sublote_id: 'sub-c', sublote_nombre: 'C' }),
+  it('noviembre 2026, N=14: 2 lotes vigentes y 2 "no revisado desde 2026-11-03"; cuenta por lote, no por ronda global', () => {
+    const sublotes: SubloteEnAlcance[] = [
+      { sublote_id: 'pp-1', lote_id: 'pp', lote_nombre: 'Piedra Paula' },
+      { sublote_id: 'salto-1', lote_id: 'salto', lote_nombre: 'Salto de Tequendama' },
+      { sublote_id: 'aus-1', lote_id: 'aus', lote_nombre: 'Australia' },
+      { sublote_id: 'vega-1', lote_id: 'vega', lote_nombre: 'La Vega' },
     ];
-    const historiales: HistorialSublotePlaga[] = [
-      historial({ sublote_id: 'sub-a', pest_id: 'pest-x', rondas: rondas([['2026-06-15', 6]]) }),
-      historial({ sublote_id: 'sub-b', pest_id: 'pest-y', rondas: rondas([['2026-06-01', 4]]) }), // ronda vieja
-    ];
-
-    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
-
-    expect(cobertura.totalEnAlcance).toBe(3);
-    expect(cobertura.revisados).toBe(1);
-    expect(cobertura.noRevisados.map((s) => s.sublote_id).sort()).toEqual(['sub-b', 'sub-c']);
-  });
-
-  it('pasa a través rondaNombre tal cual (no lo calcula, sólo lo expone)', () => {
-    const cobertura = calcularCoberturaRonda([], [], RONDA_ACTUAL_ID, 'Ronda 28');
-    expect(cobertura.rondaNombre).toBe('Ronda 28');
-
-    const sinNombre = calcularCoberturaRonda([], [], RONDA_ACTUAL_ID);
-    expect(sinNombre.rondaNombre).toBeNull();
+    const cobertura = calcularCoberturaRonda(sublotes, historialesNoviembre(), new Date(2026, 10, 26));
+    expect(cobertura.revisados).toBe(2);
+    expect(cobertura.noRevisados.map((s) => [s.sublote_id, s.motivo, s.ultimaLectura])).toEqual([
+      ['aus-1', 'lote_sin_lectura_vigente', '2026-11-03'],
+      ['vega-1', 'lote_sin_lectura_vigente', '2026-11-03'],
+    ]);
+    expect(cobertura.lotes.map((l) => [l.lote_nombre, l.fechaLectura, l.vigente])).toEqual([
+      ['Piedra Paula', '2026-11-13', true],
+      ['Salto de Tequendama', '2026-11-12', true],
+      ['Australia', '2026-11-03', false],
+      ['La Vega', '2026-11-03', false],
+    ]);
   });
 });
