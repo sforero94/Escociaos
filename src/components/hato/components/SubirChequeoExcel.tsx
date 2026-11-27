@@ -313,7 +313,8 @@ export function SubirChequeoExcel({
                   onArchivo={(files) => seleccionarArchivo(files[0])}
                   acceptArchivo=".xlsx,.xls"
                   label="Cargar chequeo"
-                  labelOpcionArchivo="Subir archivo .xlsx"
+                  labelOpcionGaleria="Subir foto"
+                  labelOpcionArchivo="Subir Excel (.xlsx)"
                 />
                 {modo === 'foto' && fotos.length > 0 && (
                   <span className="text-xs text-gray-500">

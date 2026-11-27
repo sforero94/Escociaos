@@ -319,7 +319,8 @@ export function ChequeosList() {
               <CapturaArchivo
                 label="Subir chequeo"
                 acceptArchivo=".xlsx,.xls"
-                labelOpcionArchivo="Subir archivo .xlsx"
+                labelOpcionGaleria="Subir foto"
+                labelOpcionArchivo="Subir Excel (.xlsx)"
                 onFotos={(files) => {
                   setArchivoParaSubir(null);
                   setFotosParaSubir(files);

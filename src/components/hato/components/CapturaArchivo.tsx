@@ -30,9 +30,18 @@
 // `onManual` es opcional a propósito -- los otros dos consumidores
 // (chequeo, liquidación) no lo pasan y siguen viendo el menú de dos
 // opciones de siempre.
+//
+// ESCO-190 (2026-11-27): opción OPCIONAL "Subir foto" (`labelOpcionGaleria`).
+// "Tomar foto" lleva `capture`, así que en el celular abre la cámara y NO
+// deja elegir una foto ya tomada. En el chequeo "Subir archivo" solo acepta
+// `.xlsx`, así que tampoco había forma de subir la foto de una página que ya
+// estaba en la galería. Cuando se pasa `labelOpcionGaleria`, aparece un ítem
+// con un input `accept="image/*"` SIN `capture` (la galería), y lo elegido
+// entra por el mismo `onFotos`. Pesaje y liquidación no la necesitan: su
+// "Subir archivo" ya acepta imágenes.
 
 import { useRef } from 'react';
-import { Camera, Upload, ChevronDown, Pencil } from 'lucide-react';
+import { Camera, Upload, ChevronDown, Pencil, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -67,6 +76,11 @@ export interface CapturaArchivoProps {
   labelOpcionFoto?: string;
   labelOpcionArchivo?: string;
   labelOpcionManual?: string;
+  /** Opción OPCIONAL "Subir foto": elegir de la galería una foto ya tomada.
+   * Cuando se pasa, aparece como segundo ítem; lo elegido entra por
+   * `onFotos`, igual que "Tomar foto". Solo hace falta cuando
+   * `acceptArchivo` no acepta imágenes (el chequeo, que es `.xlsx`). */
+  labelOpcionGaleria?: string;
   className?: string;
 }
 
@@ -82,10 +96,12 @@ export function CapturaArchivo({
   labelOpcionFoto = 'Tomar foto',
   labelOpcionArchivo = 'Subir archivo',
   labelOpcionManual = 'Ingresar a mano',
+  labelOpcionGaleria,
   className,
 }: CapturaArchivoProps) {
   const fotoInputRef = useRef<HTMLInputElement>(null);
   const archivoInputRef = useRef<HTMLInputElement>(null);
+  const galeriaInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <>
@@ -103,6 +119,12 @@ export function CapturaArchivo({
             <Camera className="w-4 h-4" />
             {labelOpcionFoto}
           </DropdownMenuItem>
+          {labelOpcionGaleria && (
+            <DropdownMenuItem onClick={() => galeriaInputRef.current?.click()}>
+              <ImageIcon className="w-4 h-4" />
+              {labelOpcionGaleria}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => archivoInputRef.current?.click()}>
             <Upload className="w-4 h-4" />
             {labelOpcionArchivo}
@@ -133,6 +155,21 @@ export function CapturaArchivo({
           e.target.value = '';
         }}
       />
+      {/* Galería: `image/*` SIN `capture`, para elegir una foto ya tomada. */}
+      {labelOpcionGaleria && (
+        <input
+          ref={galeriaInputRef}
+          type="file"
+          accept="image/*"
+          multiple={multipleFotos}
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) onFotos(files);
+            e.target.value = '';
+          }}
+        />
+      )}
       <input
         ref={archivoInputRef}
         type="file"
