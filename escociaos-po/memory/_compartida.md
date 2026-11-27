@@ -2542,3 +2542,12 @@ Regla: tres jueves seguidos sin ningún `si` → recomendar mover feature-strate
 | **2026-11-26-jueves** | 1 (ESCO-190) | pendiente | 0 |
 - ESCO-184 sigue sin respuesta (no hubo sesión de respuesta del sábado 11-21). Si 184 y 190 reciben `no` y el 12-03 tampoco trae un `si`, la racha llega a 3. [corrida: 2026-11-26-jueves]
 - Preflight verde, ATTENDED=0, cero denegaciones, cero escrituras a la base. ESCO-189 (P2 FDS accion_externa) y ESCO-190 (P2 FDS propuesta); evidencia nueva en ESCO-188. [corrida: 2026-11-26-jueves]
+
+## Racha del viernes — 2026-11-27
+| Corrida | Conjunto elegible | FDS preparadas | Racha de vacios |
+|---|---|---|---|
+| 2026-11-27-viernes | 1 (ESCO-185) | 2 (ESCO-187 borrador #494, ESCO-189) | **0** |
+- Preflight verde, `ATTENDED=0`, cero denegaciones, cero escrituras a la base. PR #495 (ESCO-185, `requiere_deploy`), borrador #494 (migración 204). [corrida: 2026-11-27-viernes]
+- Las sesiones vivas del 2026-11-26 abrieron #490–#493 para fichas FDS (186, 188, 184, 190) y aplicaron la migración 202 sin fusionar #493 (ledger `20261126173424`). El lunes debe vigilar la regla de 7 días (vence 2026-12-03). [corrida: 2026-11-27-viernes]
+- Números 200–203 ocupados en ramas abiertas; 204 en `claude/po-fds-187-camila-carla`. El próximo libre es 205. [corrida: 2026-11-27-viernes]
+- `hato_correcciones` usa `fila_id` (no `registro_id`). `po_sonda` vía `SUPABASE_BETA_RUN_SQL_QUERY` funciona con un bloque `DO` como paso. [corrida: 2026-11-27-viernes]
