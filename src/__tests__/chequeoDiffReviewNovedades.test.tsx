@@ -327,3 +327,51 @@ describe('ChequeoDiffReview -- nuevo/no_reconocido siguen sin atajo de aprobaci�
     expect(html).not.toContain('Usar esta caravana');
   });
 });
+
+describe('ChequeoDiffReview -- layout del celular', () => {
+  // Este archivo corre en Node (sin `window`): se simula solo `matchMedia`.
+  function conPantalla(ancha: boolean, fn: () => void) {
+    vi.stubGlobal('window', {
+      matchMedia: (q: string) => ({
+        matches: ancha,
+        media: q,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+    try {
+      fn();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  it('bajo 768 px pinta una tarjeta por vaca y ninguna tabla', () => {
+    conPantalla(false, () => {
+      const html = render([filaDiff(50), filaDiff(51)], [filaNormalizada(50), filaNormalizada(51)], []);
+      expect(html).not.toContain('<table');
+      expect((html.match(/<article/g) ?? []).length).toBe(2);
+      // La ayuda larga arranca cerrada en el celular.
+      expect(html).toContain('Cómo funciona');
+      expect(html).not.toContain('Corregir un valor');
+    });
+  });
+
+  it('cada celda de la tarjeta conserva un id único (Me equivoqué de número enfoca por id)', () => {
+    conPantalla(false, () => {
+      const html = render([filaDiff(52)], [filaNormalizada(52)], []);
+      const ids = [...html.matchAll(/id="(chequeo-celda-[^"]+)"/g)].map((m) => m[1]);
+      expect(ids.length).toBeGreaterThan(0);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+
+  it('en pantalla ancha sigue la tabla y la ayuda abierta', () => {
+    conPantalla(true, () => {
+      const html = render([filaDiff(53)], [filaNormalizada(53)], []);
+      expect(html).toContain('<table');
+      expect(html).not.toContain('<article');
+      expect(html).toContain('Ocultar');
+    });
+  });
+});
