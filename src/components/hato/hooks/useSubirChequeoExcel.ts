@@ -108,6 +108,11 @@ export interface ReporteOcrChequeo {
   /** Vacas activas que no aparecieron en ninguna foto -- así una página
    * faltante o una foto cortada se detecta sola. */
   vacasSinLeer: { numero: number | null; nombre: string | null; motivo: string }[];
+  /** Una entrada por fila confirmada. `celdasNoConfiables` nombra las
+   * columnas que el OCR leyó con confianza baja o ilegible: esas celdas
+   * entran VACÍAS al pipeline, y la revisión las marca en vez de dejar que
+   * un vacío borre el dato ya guardado. `filaExcel` = `FilaChequeoNormalizada.fila`. */
+  filasConfirmadas?: { filaExcel: number; numero: number | null; celdasNoConfiables: string[] }[];
   advertencias: string[];
   resumen: {
     vacasEnRoster: number;

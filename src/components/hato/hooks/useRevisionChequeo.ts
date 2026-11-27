@@ -44,6 +44,7 @@ import {
 import {
   aplicarCorreccionesHoja,
   compararClasificaciones,
+  conservarDatosGuardados,
   detectarTorosNuevos,
   seleccionarFilasAprobables,
   validarFechaChequeo,
@@ -57,6 +58,16 @@ import { obtenerFechaHoy } from '@/utils/fechas';
 import type { HatoConfig } from '@/utils/calculosHato';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
 import type { PreviewChequeoRespuesta } from './useSubirChequeoExcel';
+
+/** Columna del OCR → campo de la fila. `toro` marca también el tipo de
+ * servicio, porque los dos salen de la misma celda. */
+const CAMPO_POR_COLUMNA_OCR: Record<string, CampoCorreccionChequeo[]> = {
+  pl: ['pl'],
+  num_partos: ['numPartos'],
+  fecha_servicio: ['fechaServicio'],
+  toro: ['toro', 'tipoServicio'],
+  estado: ['estado'],
+};
 
 interface EstadoHatoFresco {
   config: HatoConfig;
@@ -236,10 +247,41 @@ export function useRevisionChequeo(resultado: PreviewChequeoRespuesta | null): R
     return aplicarCorreccionesHoja(filasOriginales, correcciones, estado.config, fechaChequeoValida);
   }, [estado, filasOriginales, correcciones, fechaChequeoValida]);
 
-  const diffFresco = useMemo(() => {
+  // Celdas que el OCR leyó con confianza baja o ilegible, por fila de la
+  // planilla. Solo existen en la ruta por foto; en la ruta .xlsx el mapa
+  // queda vacío y no cambia nada.
+  const celdasDudosasPorFila = useMemo(() => {
+    const mapa = new Map<number, Set<CampoCorreccionChequeo>>();
+    for (const f of resultado?.ocr?.filasConfirmadas ?? []) {
+      const campos = new Set<CampoCorreccionChequeo>();
+      for (const c of f.celdasNoConfiables) {
+        const campo = CAMPO_POR_COLUMNA_OCR[c];
+        if (campo) for (const x of campo) campos.add(x);
+      }
+      if (campos.size > 0) mapa.set(f.filaExcel, campos);
+    }
+    return mapa;
+  }, [resultado]);
+
+  // Una celda vacía o dudosa NUNCA borra un dato ya guardado: se conserva el
+  // valor y la vaca pasa a "Requieren atención". Borrar exige escoger
+  // "Sin dato" a mano.
+  const filasConservadas = useMemo(() => {
     if (!estado || !aplicado) return null;
-    return construirDiffChequeo(aplicado.filas, estado.animales, estado.ultimosChequeos);
-  }, [estado, aplicado]);
+    return conservarDatosGuardados(
+      aplicado.filas,
+      estado.animales,
+      estado.ultimosChequeos,
+      correcciones,
+      estado.config,
+      celdasDudosasPorFila,
+    );
+  }, [estado, aplicado, correcciones, celdasDudosasPorFila]);
+
+  const diffFresco = useMemo(() => {
+    if (!estado || !filasConservadas) return null;
+    return construirDiffChequeo(filasConservadas, estado.animales, estado.ultimosChequeos);
+  }, [estado, filasConservadas]);
 
   /** Diff del estado fresco SIN correcciones -- solo para detectar que el hato
    * cambió desde la vista previa. Nunca se muestra como el diff vigente. */
@@ -249,7 +291,7 @@ export function useRevisionChequeo(resultado: PreviewChequeoRespuesta | null): R
   }, [estado, filasOriginales]);
 
   const diff = diffFresco ?? resultado?.diffChequeos ?? REVISION_VACIA_DIFF;
-  const filasCorregidas = aplicado?.filas ?? filasOriginales;
+  const filasCorregidas = filasConservadas ?? aplicado?.filas ?? filasOriginales;
 
   const derivasDesdePreview = useMemo(() => {
     if (!resultado || !diffFrescoSinCorregir) return [];
