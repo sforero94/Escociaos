@@ -30,16 +30,14 @@ function mismasVacas(a: AnimalChequeoExistente[], b: AnimalChequeoExistente[]): 
   return b.every((x) => ids.has(x.animalId));
 }
 
-/** Se consulta en cada intento, incluso después de confirmar. Un error de
- * lectura nunca significa que la fecha está libre. La confirmación vale solo
- * si el chequeo guardado sigue igual: mismo id, misma fecha y las mismas vacas.
- * Si otra página se guardó mientras tanto, se vuelve a preguntar. */
-export async function verificarReemplazoChequeo(fecha: string, confirmado?: ReemplazoChequeo): Promise<void> {
+/** Lee el chequeo guardado de una fecha. `null` = no hay chequeo en esa
+ * fecha. Un error de lectura LANZA: nunca significa que la fecha está libre. */
+export async function leerChequeoDeFecha(fecha: string): Promise<ReemplazoChequeo | null> {
   // Las tablas hato aún no están en el tipo generado de Database.
   const supabase = getSupabase() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const { data, error } = await supabase.from('hato_chequeos').select('id').eq('fecha', fecha).maybeSingle();
   if (error) throw new Error(`No se pudo verificar si ya existe el chequeo: ${error.message}`);
-  if (!data) return;
+  if (!data) return null;
   const { data: filas, error: errorFilas } = await supabase.from('hato_chequeo_vacas')
     .select('animal_id, hato_animales(numero, nombre)').eq('chequeo_id', data.id);
   if (errorFilas || !Array.isArray(filas)) {
@@ -53,15 +51,38 @@ export async function verificarReemplazoChequeo(fecha: string, confirmado?: Reem
     numero: f.hato_animales?.numero ?? null,
     nombre: f.hato_animales?.nombre ?? null,
   }));
-  const actual: ReemplazoChequeo = { id: data.id, fecha, filas: animales.length, animales };
+  return { id: data.id, fecha, filas: animales.length, animales };
+}
+
+/** Se consulta en cada intento, incluso después de confirmar. Un error de
+ * lectura nunca significa que la fecha está libre. La confirmación vale solo
+ * si el chequeo guardado sigue igual: mismo id, misma fecha y las mismas vacas.
+ * Si otra página se guardó mientras tanto, se vuelve a preguntar. */
+export async function verificarReemplazoChequeo(fecha: string, confirmado?: ReemplazoChequeo): Promise<void> {
+  const actual = await leerChequeoDeFecha(fecha);
+  if (!actual) return;
   if (
     confirmado?.fecha !== fecha
-    || confirmado.id !== data.id
+    || confirmado.id !== actual.id
     || confirmado.filas !== actual.filas
-    || !mismasVacas(confirmado.animales ?? [], animales)
+    || !mismasVacas(confirmado.animales ?? [], actual.animales)
   ) {
     throw new ErrorConfirmacionReemplazoChequeo(actual);
   }
+}
+
+/** Vacas que el OCR no encontró en ninguna foto, MENOS las que el chequeo
+ * guardado de la misma fecha ya tiene. Una planilla de 2-3 páginas se sube
+ * página por página: la segunda no debe decir que faltan las vacas que la
+ * primera ya guardó. Empareja por chapeta (única entre activas, migración
+ * 066). Función pura. */
+export function vacasFaltantesSinGuardar<T extends { numero: number | null }>(
+  vacasSinLeer: T[],
+  guardadas: AnimalChequeoExistente[] | null | undefined,
+): T[] {
+  if (!guardadas || guardadas.length === 0) return vacasSinLeer;
+  const numeros = new Set(guardadas.map((a) => a.numero).filter((n): n is number => n != null));
+  return vacasSinLeer.filter((v) => v.numero == null || !numeros.has(v.numero));
 }
 
 export interface ClasificacionContraExistente {

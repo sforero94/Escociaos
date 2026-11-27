@@ -76,6 +76,7 @@ import {
   calcularFechaSecar,
   calcularPartoProbable,
   parseSX,
+  parseUltimaCria,
   parseValorNumerico,
   type HatoConfig,
   type ParseIssue,
@@ -83,7 +84,13 @@ import {
 } from '@/utils/calculosHato';
 import { parseToro } from '@/utils/importHato/parseToro';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
-import type { ClasificacionFilaDiff, ResultadoDiffChequeo } from '@/utils/importHato/diffChequeo';
+import type {
+  AnimalHatoActual,
+  ClasificacionFilaDiff,
+  ResultadoDiffChequeo,
+  UltimoChequeoVacaActual,
+} from '@/utils/importHato/diffChequeo';
+import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 
 // ============================================================================
 // 1. Catálogo de campos corregibles
@@ -728,6 +735,233 @@ export function aplicarCorreccionesHoja(
     camposPorFila,
     resumen: { filasCorregidas, camposCorregidos, fechaChequeoFijadaAMano },
   };
+}
+
+// ============================================================================
+// 6b. Una celda vacía de la foto NO borra un dato ya guardado
+// ============================================================================
+// Por qué existe: el OCR solo deja pasar una celda con confianza `alta`; una
+// celda `baja`/`ilegible` entra como celda VACÍA (ver `ocrChequeo.ts`). El
+// diff compara esa celda vacía contra el último chequeo guardado y la cuenta
+// como un cambio "valor → sin dato". Aprobar escribía el vacío encima del dato
+// real. Casos medidos (chequeo 2026-11-24): INDIA perdió fecha de servicio,
+// toro y tipo; MAGNIFICA perdió PL 17 y el toro Jericó.
+//
+// Regla: un campo vacío en la hoja toma el valor del último chequeo guardado
+// de ESA vaca, y la fila lleva un issue (no de corrección manual) para que la
+// vaca quede en «Requieren atención». Solo se borra cuando una persona elige
+// «Sin dato» o vacía la celda a propósito (`correcciones[fila][campo] === ''`).
+//
+// Se aplica a las dos rutas (foto y Excel): en el Excel una celda vacía tiene
+// el mismo efecto destructivo, y conservar + avisar es igual de correcto ahí.
+//
+// Lo que NO se conserva, aunque esté vacío, porque el dato viejo dejó de ser
+// cierto: el servicio de una vaca que parió después de él, que ahora se lee
+// vacía o cuyo parto probable ya pasó. En esos casos la fila queda marcada
+// para que una persona decida, en vez de arrastrar un servicio vencido.
+
+export const PREFIJO_ISSUE_DATO_CONSERVADO = 'SIN DATO EN LA FOTO';
+export const PREFIJO_ISSUE_DATO_NO_CONSERVADO = 'REVISAR';
+
+type CampoConservable = 'pl' | 'numPartos' | 'fechaServicio' | 'toro' | 'tipoServicio' | 'estado';
+
+const ETIQUETA_CONSERVABLE: Record<CampoConservable, string> = {
+  pl: 'PL',
+  numPartos: '# Partos',
+  fechaServicio: 'Fecha de servicio',
+  toro: 'Toro',
+  tipoServicio: 'Tipo de servicio',
+  estado: 'Estado',
+};
+
+function issueConservado(
+  campo: CampoConservable,
+  valor: string,
+  crudo: string | null,
+  dudoso: boolean,
+): ParseIssue {
+  return {
+    crudo: crudo ?? '',
+    motivo:
+      `${PREFIJO_ISSUE_DATO_CONSERVADO} [${campo}] ${ETIQUETA_CONSERVABLE[campo]}: se conserva el valor guardado «${valor}». ` +
+      (dudoso ? 'La foto tenía letra dudosa en esa celda. ' : '') +
+      'Teclea el valor si cambió, o elige «Sin dato» (o vacía la celda) si de verdad ya no aplica.',
+  };
+}
+
+function issueNoConservado(campo: CampoConservable, valor: string, motivo: string): ParseIssue {
+  return {
+    crudo: '',
+    motivo:
+      `${PREFIJO_ISSUE_DATO_NO_CONSERVADO} [${campo}] ${ETIQUETA_CONSERVABLE[campo]}: la foto no trae dato y el valor guardado ` +
+      `«${valor}» no se conserva porque ${motivo}. Teclea el valor real o confirma que quedó sin dato.`,
+  };
+}
+
+function issueBorradoAProposito(campo: CampoConservable, valor: string): ParseIssue {
+  return {
+    crudo: '',
+    motivo:
+      `${PREFIJO_ISSUE_CORRECCION_MANUAL} [${campo}] ${ETIQUETA_CONSERVABLE[campo]}: «${valor}» → «sin dato». ` +
+      'Una persona eligió borrar el valor guardado en la ventana de revisión del chequeo.',
+  };
+}
+
+function copiarFila(f: FilaChequeoNormalizada): FilaChequeoNormalizada {
+  return { ...f, raw: { ...f.raw }, fechasServicio: [...f.fechasServicio], issues: [...f.issues] };
+}
+
+/**
+ * Rellena los campos vacíos de cada fila con el valor del último chequeo
+ * guardado de esa vaca (ver el bloque 6b). Puro: no muta la entrada.
+ *
+ * Se corre DESPUÉS de `aplicarCorreccionesHoja`, porque lee las correcciones
+ * crudas para distinguir "la persona vació la celda" (`''`) de "nadie la
+ * tocó" (`undefined`) -- `aplicarCorreccionesFila` descarta un `''` que
+ * coincide con un original vacío y la diferencia se perdería.
+ *
+ * Una fila sin identidad segura se devuelve sin tocar: sin fecha de chequeo,
+ * número nulo o provisional, número repetido en la hoja, sin animal, sin
+ * chequeo previo, o con un chequeo guardado POSTERIOR al de la hoja.
+ */
+export function conservarDatosGuardados(
+  filas: FilaChequeoNormalizada[],
+  animales: AnimalHatoActual[],
+  ultimos: UltimoChequeoVacaActual[],
+  correcciones: CorreccionesPorFila,
+  config: HatoConfig,
+  celdasDudosasPorFila?: Map<number, Set<CampoCorreccionChequeo>>,
+): FilaChequeoNormalizada[] {
+  const animalesPorNumero = new Map<number, AnimalHatoActual>();
+  for (const a of animales) animalesPorNumero.set(a.numero, a);
+  const ultimoPorAnimal = new Map<string, UltimoChequeoVacaActual>();
+  for (const u of ultimos) ultimoPorAnimal.set(u.animalId, u);
+
+  const vecesPorNumero = new Map<number, number>();
+  for (const f of filas) {
+    if (f.numero != null) vecesPorNumero.set(f.numero, (vecesPorNumero.get(f.numero) ?? 0) + 1);
+  }
+
+  return filas.map((original) => {
+    const fila = copiarFila(original);
+    if (!fila.chequeoFecha || fila.numero == null || esNumeroProvisional(fila.numero)) return fila;
+    if ((vecesPorNumero.get(fila.numero) ?? 0) > 1) return fila;
+    const animal = animalesPorNumero.get(fila.numero);
+    if (!animal) return fila;
+    const ultimo = ultimoPorAnimal.get(animal.id);
+    if (!ultimo || !ultimo.chequeoFecha) return fila;
+    if (ultimo.chequeoFecha > fila.chequeoFecha) return fila;
+
+    const mismaFecha = ultimo.chequeoFecha === fila.chequeoFecha;
+    const tocado = correcciones[fila.fila] ?? {};
+    const dudosas = celdasDudosasPorFila?.get(fila.fila);
+    const borradoAProposito = (campo: CampoConservable) => tocado[campo] === '';
+    const yaAuditado = (campo: CampoConservable) =>
+      fila.issues.some((i) => i.motivo.startsWith(`${PREFIJO_ISSUE_CORRECCION_MANUAL} [${campo}]`));
+    const registrarBorrado = (campo: CampoConservable, valor: string) => {
+      if (!yaAuditado(campo)) fila.issues.push(issueBorradoAProposito(campo, valor));
+    };
+    const esDudoso = (campo: CampoConservable) => dudosas?.has(campo) ?? false;
+
+    // --- # Partos ---------------------------------------------------------
+    const criaFila = parseUltimaCria(fila.raw.ultimaCria).fecha;
+    const parioDespuesDelChequeo = criaFila != null && criaFila > ultimo.chequeoFecha;
+    if (fila.numPartos == null && ultimo.numPartos != null) {
+      const valor = String(ultimo.numPartos);
+      if (borradoAProposito('numPartos')) {
+        registrarBorrado('numPartos', valor);
+      } else if (parioDespuesDelChequeo) {
+        fila.issues.push(
+          issueNoConservado('numPartos', valor, `la vaca tiene una cría del ${criaFila}, posterior al último chequeo`),
+        );
+      } else {
+        fila.numPartos = ultimo.numPartos;
+        fila.issues.push(issueConservado('numPartos', valor, fila.raw.np, esDudoso('numPartos')));
+      }
+    }
+
+    // --- Fecha de servicio (y SECAR / Parto probable) ---------------------
+    let servicioConservado = false;
+    if (fila.fechasServicio.length === 0 && ultimo.fechaServicio) {
+      const valor = ultimo.fechaServicio;
+      let bloqueo: string | null = null;
+      if (criaFila != null && criaFila >= ultimo.fechaServicio) {
+        bloqueo = `la vaca parió (${criaFila}) después de ese servicio`;
+      } else if (fila.numPartos != null && ultimo.numPartos != null && fila.numPartos > ultimo.numPartos) {
+        bloqueo = 'el número de partos subió desde el último chequeo';
+      } else if (fila.estado === 'vacia_apta' || fila.estado === 'vacia_problema') {
+        bloqueo = 'la hoja la lee vacía';
+      } else if (ultimo.fechaProbableParto && ultimo.fechaProbableParto < fila.chequeoFecha) {
+        bloqueo = `su parto probable (${ultimo.fechaProbableParto}) ya pasó`;
+      }
+
+      if (borradoAProposito('fechaServicio')) {
+        registrarBorrado('fechaServicio', valor);
+      } else if (bloqueo) {
+        fila.issues.push(issueNoConservado('fechaServicio', valor, bloqueo));
+      } else {
+        fila.fechasServicio = [ultimo.fechaServicio];
+        fila.fechaSecar = ultimo.fechaSecar ?? calcularFechaSecar(ultimo.fechaServicio, null, config);
+        fila.fechaProbableParto = ultimo.fechaProbableParto ?? calcularPartoProbable(ultimo.fechaServicio, config);
+        servicioConservado = true;
+        fila.issues.push(issueConservado('fechaServicio', valor, fila.raw.fechaServicio, esDudoso('fechaServicio')));
+      }
+    }
+
+    // --- Toro y tipo: solo junto a ESE mismo servicio ----------------------
+    const mismoServicio =
+      servicioConservado ||
+      (ultimo.fechaServicio != null && fila.fechasServicio.at(-1) === ultimo.fechaServicio);
+    if (mismoServicio) {
+      if (fila.toroNombre == null && ultimo.toro) {
+        if (borradoAProposito('toro')) {
+          registrarBorrado('toro', ultimo.toro);
+        } else {
+          fila.toroNombre = ultimo.toro;
+          fila.issues.push(issueConservado('toro', ultimo.toro, fila.raw.toro, esDudoso('toro')));
+        }
+      }
+      if (fila.tipoServicio == null && ultimo.tipoServicio) {
+        if (borradoAProposito('tipoServicio')) {
+          registrarBorrado('tipoServicio', ultimo.tipoServicio);
+        } else {
+          fila.tipoServicio = ultimo.tipoServicio;
+          fila.issues.push(
+            issueConservado('tipoServicio', ultimo.tipoServicio, fila.raw.toro, esDudoso('tipoServicio')),
+          );
+        }
+      }
+    }
+
+    // --- PL y Estado: solo si es el MISMO chequeo (otra página del mismo día)
+    // Entre chequeos distintos el PL cambia (es la leche de ese día) y el
+    // estado es la lectura del veterinario de ese día: arrastrarlos inventaría
+    // una medición.
+    if (mismaFecha) {
+      if (fila.pl == null && ultimo.pl != null) {
+        const valor = String(ultimo.pl);
+        if (borradoAProposito('pl')) {
+          registrarBorrado('pl', valor);
+        } else {
+          fila.pl = ultimo.pl;
+          fila.issues.push(issueConservado('pl', valor, fila.raw.pl, esDudoso('pl')));
+        }
+      }
+      const estadoVacio = fila.estado == null || fila.estado === 'vacio';
+      const servicioNuevo =
+        fila.fechasServicio.length > 0 && fila.fechasServicio.at(-1) !== ultimo.fechaServicio;
+      if (estadoVacio && !servicioNuevo && ultimo.estado != null && ultimo.estado !== 'vacio') {
+        if (borradoAProposito('estado')) {
+          registrarBorrado('estado', ultimo.estado);
+        } else {
+          fila.estado = ultimo.estado;
+          fila.issues.push(issueConservado('estado', ultimo.estado, fila.raw.estado, esDudoso('estado')));
+        }
+      }
+    }
+
+    return fila;
+  });
 }
 
 // ============================================================================

@@ -62,6 +62,8 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import {
   ErrorConfirmacionReemplazoChequeo,
   clasificarContraChequeoExistente,
+  leerChequeoDeFecha,
+  vacasFaltantesSinGuardar,
   type AnimalChequeoExistente,
   type ReemplazoChequeo,
 } from '@/utils/hato/reemplazoChequeo';
@@ -152,6 +154,23 @@ export function SubirChequeoExcel({
   const [conservarGuardada, setConservarGuardada] = useState<Set<number>>(new Set());
   // Segundo paso de «Reemplazar todo»: lista las vacas que se borran.
   const [confirmandoReemplazoTodo, setConfirmandoReemplazoTodo] = useState(false);
+  // El chequeo ya guardado de la fecha de esta subida (si existe). Se lee en
+  // cuanto hay fecha: sirve para no listar como «faltantes» las vacas que
+  // otra página ya guardó. Un error de lectura deja `null` y la lista sale
+  // completa, que es el lado seguro.
+  const [chequeoGuardado, setChequeoGuardado] = useState<ReemplazoChequeo | null>(null);
+  const fechaParaLeer = resultado ? revision.fechaChequeoValida : null;
+  useEffect(() => {
+    if (!fechaParaLeer) {
+      setChequeoGuardado(null);
+      return;
+    }
+    let vigente = true;
+    leerChequeoDeFecha(fechaParaLeer)
+      .then((c) => { if (vigente) setChequeoGuardado(c); })
+      .catch(() => { if (vigente) setChequeoGuardado(null); });
+    return () => { vigente = false; };
+  }, [fechaParaLeer]);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -170,6 +189,10 @@ export function SubirChequeoExcel({
     }
     onOpenChange(nextOpen);
   };
+
+  const vacasSinLeerOcr = resultado?.ocr?.vacasSinLeer ?? [];
+  const vacasFaltantes = vacasFaltantesSinGuardar(vacasSinLeerOcr, chequeoGuardado?.animales);
+  const vacasYaGuardadas = vacasSinLeerOcr.length - vacasFaltantes.length;
 
   const filasAprobables = revision.filasAprobables.length;
   const hayErroresCorreccion = revision.erroresCorreccion.length > 0;
@@ -420,16 +443,22 @@ export function SubirChequeoExcel({
                   </p>
                 )}
 
-                {resultado.ocr.vacasSinLeer.length > 0 && (
+                {vacasFaltantes.length > 0 && (
                   <div className="mt-2">
                     <p className="text-xs font-medium text-red-700">
-                      No aparecieron en ninguna foto ({resultado.ocr.vacasSinLeer.length}) — ¿falta fotografiar una
+                      No aparecieron en ninguna foto ({vacasFaltantes.length}) — ¿falta fotografiar una
                       página?
                     </p>
                     <p className="text-xs text-gray-600">
-                      {resultado.ocr.vacasSinLeer.map((v) => v.nombre ?? `#${v.numero ?? '?'}`).join(' · ')}
+                      {vacasFaltantes.map((v) => v.nombre ?? `#${v.numero ?? '?'}`).join(' · ')}
                     </p>
                   </div>
+                )}
+                {vacasYaGuardadas > 0 && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    {vacasYaGuardadas} vaca(s) no salen en estas fotos pero ya están guardadas en el chequeo del{' '}
+                    {chequeoGuardado?.fecha}.
+                  </p>
                 )}
 
                 {/* Filas de la hoja de holgura, escritas a mano (plan de

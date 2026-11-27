@@ -3,6 +3,7 @@ import {
   verificarReemplazoChequeo,
   ErrorConfirmacionReemplazoChequeo,
   clasificarContraChequeoExistente,
+  vacasFaltantesSinGuardar,
   type AnimalChequeoExistente,
 } from '@/utils/hato/reemplazoChequeo';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
@@ -121,5 +122,31 @@ describe('clasificarContraChequeoExistente', () => {
     const r = clasificarContraChequeoExistente(existentes, [fila(1), fila(2), fila(3), fila(7)]);
     expect(r.seConservan.length + r.seActualizan.length).toBe(existentes.length);
     expect(r.seConservan).toEqual([]);
+  });
+});
+
+describe('vacasFaltantesSinGuardar', () => {
+  const guardadas: AnimalChequeoExistente[] = [
+    { animalId: 'a1', numero: 1, nombre: 'UNO' },
+    { animalId: 'a2', numero: 2, nombre: 'DOS' },
+  ];
+  const sinLeer = [
+    { numero: 1, nombre: 'UNO', motivo: 'no_aparece' },
+    { numero: 3, nombre: 'TRES', motivo: 'no_aparece' },
+    { numero: null, nombre: null, motivo: 'no_aparece' },
+  ];
+
+  it('quita las vacas que el chequeo guardado ya tiene', () => {
+    expect(vacasFaltantesSinGuardar(sinLeer, guardadas).map(v => v.numero)).toEqual([3, null]);
+  });
+
+  it('sin chequeo guardado devuelve la lista completa', () => {
+    expect(vacasFaltantesSinGuardar(sinLeer, null)).toEqual(sinLeer);
+    expect(vacasFaltantesSinGuardar(sinLeer, [])).toEqual(sinLeer);
+  });
+
+  it('una vaca sin chapeta nunca se da por guardada', () => {
+    const r = vacasFaltantesSinGuardar(sinLeer, [...guardadas, { animalId: 'a0', numero: null, nombre: null }]);
+    expect(r.some(v => v.numero == null)).toBe(true);
   });
 });
