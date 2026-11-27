@@ -190,6 +190,17 @@ async function enviarResultado(
   }
   return last;
 }
+// ESCO-185: la conversación de contexto puede haberse borrado desde la web.
+// Falla cerrado (nunca crea otra en silencio), pero dice cómo salir.
+const CONTEXTO_SQL_PERDIDO = new Set([
+  "ESCO_SQL_CONVERSATION_UNAVAILABLE",
+  "ESCO_SQL_CONTEXT_INVALID",
+]);
+function esContextoSqlPerdido(error: unknown): boolean {
+  return error instanceof Error && CONTEXTO_SQL_PERDIDO.has(error.message);
+}
+const MENSAJE_CONTEXTO_SQL_PERDIDO =
+  "La conversación SQL anterior ya no está disponible. Escribe /esco_nueva para empezar una nueva.";
 async function conversacionActual(
   ctx: ContextoFlujoSql,
   deps: DependenciasFlujoSql,
@@ -283,7 +294,15 @@ export async function manejarPreguntaTelegramSql(
       return;
     }
     await ctx.replyWithChatAction("typing");
-    const conversationId = await conversacionActual(ctx, deps, actor);
+    let conversationId: string;
+    try {
+      conversationId = await conversacionActual(ctx, deps, actor);
+    } catch (error) {
+      if (!esContextoSqlPerdido(error)) throw error;
+      deps.registrar?.("ESCO_SQL_CONTEXT_LOST");
+      await ctx.reply(MENSAJE_CONTEXTO_SQL_PERDIDO);
+      return;
+    }
     const historial = historialEscoSql(
       await deps.leerHistorial(conversationId),
     );
@@ -436,7 +455,14 @@ export async function manejarCallbackTelegramSql(
       return;
     }
     // También los botones de solo lectura vuelven a comprobar el dueño del contexto.
-    await conversacionActual(ctx, deps, actor, true);
+    try {
+      await conversacionActual(ctx, deps, actor, true);
+    } catch (error) {
+      if (!esContextoSqlPerdido(error)) throw error;
+      deps.registrar?.("ESCO_SQL_CONTEXT_LOST");
+      await ctx.reply(MENSAJE_CONTEXTO_SQL_PERDIDO);
+      return;
+    }
     const messageId = ctx.callbackQuery?.message?.message_id;
     const data = ctx.callbackQuery?.data;
     const accion = ctx.chat && ctx.from && messageId && data
