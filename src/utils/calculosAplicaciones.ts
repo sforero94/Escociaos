@@ -2,6 +2,7 @@
 // Funciones de cálculo para aplicaciones de agroinsumos
 
 import { acumularProductosMezclas, calcularFaltanteProducto } from './calculosNecesidadProductos.ts';
+import { cantidadPorDosisCaneca } from './unidadDosis.ts';
 
 import type {
   LoteSeleccionado,
@@ -52,6 +53,7 @@ export function unidadAplicacion(tipo: string | null | undefined): 'canecas' | '
  * - Litros de mezcla = (# árboles × calibración L/árbol)
  * - # canecas = Litros de mezcla / Tamaño caneca
  * - Cantidad de cada producto = (# canecas × dosis por caneca) / 1000
+ *   (sin ÷1000 cuando la dosis está en unidades, ESCO-188)
  */
 // Structural overloads expose only arithmetic inputs to read-only consumers.
 // No commercial catalog fields or placeholder metadata are needed to use the engine.
@@ -62,7 +64,7 @@ export interface LoteFumigacionMinimo {
 export interface LoteFertilizacionMinimo {
   lote_id: string; nombre?: string; conteo_arboles: LoteSeleccionado['conteo_arboles'];
 }
-type MezclaFumigacionMinima = { productos: Pick<ProductoEnMezcla, 'producto_id' | 'dosis_por_caneca'>[] };
+type MezclaFumigacionMinima = { productos: (Pick<ProductoEnMezcla, 'producto_id' | 'dosis_por_caneca'> & { unidad_dosis?: string | null })[] };
 type MezclaFertilizacionMinima = { productos: Pick<ProductoEnMezcla, 'producto_id' | 'dosis_grandes' | 'dosis_medianos' | 'dosis_pequenos' | 'dosis_clonales'>[] };
 type CalculoMinimo = Omit<CalculosPorLote, 'lote_nombre'> & { lote_nombre?: string };
 export function calcularFumigacion(lote: LoteSeleccionado, mezcla: Mezcla): CalculosPorLote;
@@ -85,8 +87,8 @@ export function calcularFumigacion(
   const productos = mezcla.productos.map(producto => {
     const dosis_por_caneca = producto.dosis_por_caneca || 0;
     
-    // La dosis está en cc o gramos, dividimos entre 1000 para convertir a litros o kilos
-    const cantidad_necesaria = (numero_canecas * dosis_por_caneca) / 1000;
+    // cc o gramos se dividen entre 1000 (litros o kilos); unidades se cuentan tal cual
+    const cantidad_necesaria = cantidadPorDosisCaneca(numero_canecas, dosis_por_caneca, producto.unidad_dosis);
 
     return {
       producto_id: producto.producto_id,

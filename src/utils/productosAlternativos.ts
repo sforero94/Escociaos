@@ -16,6 +16,7 @@ import type {
   TipoAplicacionLocal,
   UnidadMedida,
 } from '../types/aplicaciones';
+import { leerUnidadDosis, unidadDosisParaProducto } from './unidadDosis';
 
 /** Fila a insertar en `aplicaciones_productos_alternativos`. */
 export interface InsertAlternativo {
@@ -57,7 +58,7 @@ export function crearAlternativo(producto: ProductoCatalogo, porCaneca: boolean)
     return {
       ...base,
       dosis_por_caneca: 0,
-      unidad_dosis: producto.estado_fisico === 'liquido' ? 'cc' : 'gramos',
+      unidad_dosis: unidadDosisParaProducto(producto),
     };
   }
   return { ...base, dosis_grandes: 0, dosis_medianos: 0, dosis_pequenos: 0, dosis_clonales: 0 };
@@ -150,8 +151,7 @@ export function agruparAlternativosPorLinea(filas: FilaAlternativoBD[]): Map<str
       producto_categoria: fila.productos?.categoria ?? '',
       producto_unidad: fila.productos?.unidad_medida ?? 'Unidades',
       dosis_por_caneca: nullAUndefined(fila.dosis_por_caneca),
-      unidad_dosis:
-        fila.unidad_dosis === 'cc' || fila.unidad_dosis === 'gramos' ? fila.unidad_dosis : undefined,
+      unidad_dosis: leerUnidadDosis(fila.unidad_dosis),
       dosis_grandes: nullAUndefined(fila.dosis_grandes),
       dosis_medianos: nullAUndefined(fila.dosis_medianos),
       dosis_pequenos: nullAUndefined(fila.dosis_pequenos),

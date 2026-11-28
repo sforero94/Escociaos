@@ -8,6 +8,13 @@ export type TamanoCaneca = 20 | 200 | 500 | 1000;
 export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
 export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
 
+/**
+ * Unidad de la dosis por caneca (fumigación y drench). `cc` y `gramos` se dividen
+ * entre 1000 para llegar a litros o kilos; `unidades` (productos cuya unidad de
+ * inventario es Unidades) se cuenta tal cual.
+ */
+export type UnidadDosis = 'cc' | 'gramos' | 'unidades';
+
 // 🚨 NUEVO: Tipo ENUM para unidades de medida (normalizado en toda la BD)
 export type UnidadMedida = 'Litros' | 'Kilos' | 'Unidades';
 
@@ -59,9 +66,9 @@ export interface ProductoEnMezcla {
   producto_unidad: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
   
   // Dosis según tipo de aplicación
-  // Para fumigación: cc o gramos por caneca de 200L
+  // Para fumigación: cc, gramos o unidades por caneca de 200L
   dosis_por_caneca?: number;
-  unidad_dosis?: 'cc' | 'gramos';
+  unidad_dosis?: UnidadDosis;
   
   // Para fertilización: kilos por árbol según tamaño
   dosis_grandes?: number;
@@ -90,7 +97,7 @@ export interface ProductoAlternativo {
   producto_categoria: string;
   producto_unidad: UnidadMedida;
   dosis_por_caneca?: number;
-  unidad_dosis?: 'cc' | 'gramos';
+  unidad_dosis?: UnidadDosis;
   dosis_grandes?: number;
   dosis_medianos?: number;
   dosis_pequenos?: number;

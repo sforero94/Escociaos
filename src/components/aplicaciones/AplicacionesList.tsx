@@ -43,6 +43,7 @@ import { KPICard } from './shared/KPICard';
 import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
 import { formatearNumero, formatShortDate } from '@/utils/format';
 import { cn } from '@/components/ui/utils';
+import { aplicacionEsEditable } from '@/utils/aplicacionCerrada';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   'Fumigación': 'Fumigación',
@@ -640,13 +641,17 @@ export function AplicacionesList() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
-                            >
-                              <Edit2 className="size-4" aria-hidden="true" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
+                            {aplicacionEsEditable(aplicacion.estado) && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
+                                >
+                                  <Edit2 className="size-4" aria-hidden="true" />
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            )}
                             <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
                               <Trash2 className="size-4" aria-hidden="true" />
                               Eliminar
@@ -699,12 +704,14 @@ export function AplicacionesList() {
 
                           <DropdownMenuSeparator />
 
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
-                          >
-                            <Edit2 className="size-4" aria-hidden="true" />
-                            Editar
-                          </DropdownMenuItem>
+                          {aplicacionEsEditable(aplicacion.estado) && (
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
+                            >
+                              <Edit2 className="size-4" aria-hidden="true" />
+                              Editar
+                            </DropdownMenuItem>
+                          )}
 
                           <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
                             <Trash2 className="size-4" aria-hidden="true" />
@@ -755,6 +762,7 @@ export function AplicacionesList() {
           aplicacion={aplicacionDetalle}
           onClose={() => setAplicacionDetalle(null)}
           onEditar={() => {
+            if (!aplicacionEsEditable(aplicacionDetalle.estado)) return;
             setAplicacionDetalle(null);
             navigate(`/aplicaciones/calculadora/${aplicacionDetalle.id}`);
           }}

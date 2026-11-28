@@ -32,6 +32,8 @@ import {
   construirFilasAlternativos,
   validarAlternativos,
 } from '@/utils/productosAlternativos';
+import { leerUnidadDosis } from '@/utils/unidadDosis';
+import { aplicacionEsEditable, MENSAJE_APLICACION_CERRADA } from '@/utils/aplicacionCerrada';
 
 // ============================================================================
 // CONFIGURACIÓN DE PASOS — 2, no 3 (W01-calculadora-v2.md). "Configuración" y "Mezcla"
@@ -176,7 +178,7 @@ export function CalculadoraAplicaciones() {
               producto_categoria: p.producto_categoria,
               producto_unidad: p.producto_unidad,
               dosis_por_caneca: p.dosis_por_caneca || undefined,
-              unidad_dosis: p.unidad_dosis || undefined,
+              unidad_dosis: leerUnidadDosis(p.unidad_dosis),
               dosis_grandes: p.dosis_grandes || undefined,
               dosis_medianos: p.dosis_medianos || undefined,
               dosis_pequenos: p.dosis_pequenos || undefined,
@@ -494,11 +496,19 @@ export function CalculadoraAplicaciones() {
         // MODO EDICIÓN: ACTUALIZAR APLICACIÓN EXISTENTE
         // =============================================================
 
-        const { data: aplicacionExistente } = await supabase
+        const { data: aplicacionExistente, error: errorExistente } = await supabase
           .from('aplicaciones')
-          .select('codigo_aplicacion')
+          .select('codigo_aplicacion, estado')
           .eq('id', id)
           .single();
+        if (errorExistente) throw errorExistente;
+
+        // Una aplicación cerrada no se edita desde la app (ESCO-188). Se lee el estado
+        // de la base justo antes de escribir, no el de la pantalla, porque la pestaña pudo
+        // quedar abierta mientras otra persona cerraba la aplicación.
+        if (!aplicacionEsEditable(aplicacionExistente?.estado)) {
+          throw new Error(MENSAJE_APLICACION_CERRADA);
+        }
 
         codigoAplicacion = aplicacionExistente?.codigo_aplicacion || '';
 
@@ -809,6 +819,27 @@ export function CalculadoraAplicaciones() {
           <Spinner className="size-10 text-primary mx-auto mb-4" />
           <h2 className="text-xl text-foreground mb-2">Cargando aplicación...</h2>
           <p className="text-sm text-muted-foreground">Estamos recuperando los datos de la aplicación</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Una aplicación cerrada no se abre en la calculadora (ESCO-188): ni para mirar, porque
+  // la calculadora es un editor y cualquier botón de guardar es una puerta abierta.
+  if (modoEdicion && !aplicacionEsEditable(estadoAplicacionActual)) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-8 text-center max-w-md space-y-4">
+          <h2 className="text-xl text-foreground">Aplicación cerrada</h2>
+          <p className="text-sm text-muted-foreground">{MENSAJE_APLICACION_CERRADA}</p>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+            <Button type="button" onClick={() => navigate(`/aplicaciones/${id}/reporte`)}>
+              Ver reporte
+            </Button>
+            <Button type="button" variant="outline" onClick={() => navigate('/aplicaciones')}>
+              Volver a aplicaciones
+            </Button>
+          </div>
         </div>
       </div>
     );
